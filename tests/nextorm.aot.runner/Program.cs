@@ -121,6 +121,27 @@ Run("extreme-group", () =>
         .ToList();
     return string.Join(";", rows.OrderBy(row => row.Id).Select(row => row.Id));
 });
+Run("correlated-any", () =>
+{
+    // Correlated subquery: the inner query references the outer row's Id. Regression gate for the
+    // outer-reference marker defect (#370 S11): the marker node is non-generic, so building it never
+    // resolves a constructor or property of a type closed at run time.
+    var ids = context.From<SimpleEntity>()
+        .Where(row => context.From<IComplexEntity>().Where(inner => inner.Int == row.Id).Any())
+        .OrderBy(row => row.Id)
+        .Select(row => row.Id)
+        .ToList();
+    return string.Join(";", ids);
+});
+Run("correlated-count", () =>
+{
+    // Correlated aggregate terminal: the inner Count is rewritten into a scalar subquery over the
+    // outer-reference marker.
+    var rows = context.From<SimpleEntity>()
+        .Select(row => new { row.Id, N = context.From<IComplexEntity>().Where(inner => inner.Int == row.Id).Count() })
+        .ToList();
+    return string.Join(";", rows.OrderBy(row => row.Id).Select(row => $"{row.Id}:{row.N}"));
+});
 RunComponentSlices(args[0]);
 return 0;
 

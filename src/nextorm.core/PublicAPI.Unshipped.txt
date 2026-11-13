@@ -15,3 +15,8 @@ NextORM.Core.PostgresFunctions.vector_dims<T>(T value) -> int?
 NextORM.Core.PostgresFunctions.vector_multiply<T>(T left, T right) -> T
 NextORM.Core.PostgresFunctions.vector_norm<T>(T value) -> double?
 NextORM.Core.PostgresFunctions.vector_subtract<T>(T left, T right) -> T
+*REMOVED*NextORM.Core.OuterRefMarker<T>
+*REMOVED*NextORM.Core.OuterRefMarker<T>.I.get -> int
+*REMOVED*NextORM.Core.OuterRefMarker<T>.OuterRefMarker(int i) -> void
+*REMOVED*NextORM.Core.OuterRefMarker<T>.Ref.get -> T?
+*REMOVED*static NextORM.Core.ReplaceConstantsExpressionVisitor.GetOuterRefMarkerCI(System.Type! type) -> System.Reflection.ConstructorInfo!

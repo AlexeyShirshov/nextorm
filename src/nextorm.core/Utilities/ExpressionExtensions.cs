@@ -1,6 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
-using System.Reflection;
 
 namespace NextORM.Core;
 
@@ -232,20 +231,10 @@ public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
                 idx = _queryProvider!.AddOuterReference(node);
             }
 
-            return Expression.Property(Expression.New(GetOuterRefMarkerCI(node.Type), Expression.Constant(idx)), "Ref");
+            return OuterReference.Create(idx, node.Type);
         }
 
         return base.VisitMember(node);
-    }
-    /// <summary>
-    /// Returns the constructor of <c>OuterRefMarker&lt;T&gt;</c> closed over
-    /// <paramref name="type"/>, used to build an outer-reference marker node.
-    /// </summary>
-    /// <param name="type">The type of the outer reference.</param>
-    /// <returns>The constructor taking the reference index.</returns>
-    public static ConstructorInfo GetOuterRefMarkerCI(Type type)
-    {
-        return typeof(OuterRefMarker<>).MakeGenericType(type).GetConstructor([typeof(int)])!;
     }
 }
 /// <summary>

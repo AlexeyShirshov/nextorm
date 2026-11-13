@@ -77,7 +77,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
     /// <summary>
     /// Rewrites a member access of a currently-pushed outer parameter (for example the XML column a
-    /// correlated <c>CROSS/OUTER APPLY</c> source is built from) into an <see cref="OuterRefMarker{T}"/>
+    /// correlated <c>CROSS/OUTER APPLY</c> source is built from) into an <see cref="OuterRefMarker"/>
     /// registered on the command this visitor prepares. Used by
     /// <see cref="XmlNodesExpression.TryCreate"/> for the <c>xml.nodes()</c> rowset operand, whose
     /// rendered form is <c>alias.column</c>.
@@ -776,10 +776,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             var foreignKey = Expression.Property(navigation, leg.ForeignKeys[component].PropertyInfo);
 
             var index = _queryProvider!.AddOuterReference(outerKey);
-            var markerConstructor = ReplaceConstantsExpressionVisitor.GetOuterRefMarkerCI(outerKey.Type);
-            var marker = Expression.Property(
-                Expression.New(markerConstructor, Expression.Constant(index)),
-                nameof(OuterRefMarker<int>.Ref));
+            var marker = OuterReference.Create(index, outerKey.Type);
 
             var (left, right) = AlignNavigationKeys(foreignKey, marker);
             var parentEquality = Expression.Equal(left, right);
@@ -1326,10 +1323,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
 
         var index = _queryProvider!.AddOuterReference(outerKey);
-        var markerConstructor = ReplaceConstantsExpressionVisitor.GetOuterRefMarkerCI(outerKey.Type);
-        var marker = Expression.Property(
-            Expression.New(markerConstructor, Expression.Constant(index)),
-            nameof(OuterRefMarker<int>.Ref));
+        var marker = OuterReference.Create(index, outerKey.Type);
 
         var (left, right) = AlignNavigationKeys(innerKey, marker);
         return (hop.RelatedType, Expression.Lambda(Expression.Equal(left, right), navigation));
@@ -1459,7 +1453,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         return false;
     }
 
-    /// <summary>True when the expression already contains an <see cref="OuterRefMarker{T}"/> from an ancestor scope.</summary>
+    /// <summary>True when the expression already contains an <see cref="OuterRefMarker"/> from an ancestor scope.</summary>
     private static bool ContainsOuterRefMarker(Expression expression)
     {
         var detector = new OuterRefMarkerDetector();
@@ -1473,7 +1467,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
         protected override Expression VisitNew(NewExpression node)
         {
-            if (node.Type.IsGenericType && node.Type.GetGenericTypeDefinition() == typeof(OuterRefMarker<>))
+            if (node.Type == typeof(OuterRefMarker))
                 Found = true;
 
             return base.VisitNew(node);
@@ -1684,7 +1678,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
     /// <summary>
     /// Builds the command the expression <paramref name="body"/> represents while the currently pushed
-    /// outer parameters are in scope: their member accesses become <see cref="OuterRefMarker{T}"/>
+    /// outer parameters are in scope: their member accesses become <see cref="OuterRefMarker"/>
     /// nodes registered on the command this visitor was created for. Used by a correlated
     /// <c>CROSS/OUTER APPLY</c> source, whose derived query is not part of a projection and therefore
     /// never reaches <see cref="ReplaceQueryCommand"/>.

@@ -23,7 +23,9 @@ public sealed class AotNativeRunTests
         "selectgroup-having",
         "extreme-min",
         "extreme-max",
-        "extreme-group"
+        "extreme-group",
+        "correlated-any",
+        "correlated-count"
     ];
 
     [Fact]
@@ -253,6 +255,22 @@ public sealed class AotNativeRunTests
                     .SelectWhereMin(row => row.Id, groupBy: row => row.Id % 2)
                     .ToList();
                 return string.Join(";", rows.OrderBy(row => row.Id).Select(row => row.Id));
+            }),
+            ["correlated-any"] = CaptureJit(() =>
+            {
+                var ids = context.From<SimpleEntity>()
+                    .Where(row => context.From<IComplexEntity>().Where(inner => inner.Int == row.Id).Any())
+                    .OrderBy(row => row.Id)
+                    .Select(row => row.Id)
+                    .ToList();
+                return string.Join(";", ids);
+            }),
+            ["correlated-count"] = CaptureJit(() =>
+            {
+                var rows = context.From<SimpleEntity>()
+                    .Select(row => new { row.Id, N = context.From<IComplexEntity>().Where(inner => inner.Int == row.Id).Count() })
+                    .ToList();
+                return string.Join(";", rows.OrderBy(row => row.Id).Select(row => $"{row.Id}:{row.N}"));
             })
         };
         return results;

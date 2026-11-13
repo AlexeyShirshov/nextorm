@@ -729,7 +729,7 @@ internal static class SqlSourceRenderer
 
         protected override Expression VisitNew(NewExpression node)
         {
-            if (node.Type.IsGenericType && node.Type.GetGenericTypeDefinition() == typeof(OuterRefMarker<>))
+            if (node.Type == typeof(OuterRefMarker))
             {
                 Found = true;
                 return node;

@@ -121,3 +121,48 @@ Either is a Stream A decision; S10 does not take it. The two correlated scenario
 harness until it is resolved, and this record is the AC1 input for that decision. The measured failures are
 preserved: `.pdca/370/rv1/attempts/s10-correlated-fail-any.log` (both scenarios) and
 `s10-correlated-fail-count.log` (`correlated-count` alone, full stack through `ReplaceConstantsExpressionVisitor`).
+
+## S11 resolution: the marker carries no generic instantiation
+
+The blocker is closed by the first candidate, with one simplification that removes the remaining
+reflection instead of moving it.
+
+The marker is now a **non-generic internal** `OuterRefMarker(int index)` whose `Ref` member is typed
+`object?`. The element type is carried by the conversion that wraps the marker, so the emitted node is:
+
+```text
+(T)new OuterRefMarker(idx).Ref
+```
+
+`OuterReference.Create(index, valueType)` builds it from metadata of the statically known marker type
+only — a constructor and a property resolved once from `typeof(OuterRefMarker)` — and the conversion to
+`T` is a castclass/unbox on the type handle the tree already holds. Nothing in the node is closed over a
+user type at run time, so a native image keeps everything it needs.
+
+What changed with it:
+
+- `ReplaceConstantsExpressionVisitor.GetOuterRefMarkerCI` (public, `MakeGenericType` over a runtime type)
+  is gone; `ReplaceConstantsExpressionVisitor.VisitMember` emits the node through `OuterReference.Create`.
+- Both correlated navigation-key builders in `CorrelatedQueryExpressionVisitor` use the same helper, and
+  the two marker detectors recognise the non-generic marker.
+- `MemberTranslator` recognises the value shape (conversion-wrapped or bare) and unwraps the conversion
+  for the projection-member form; `SqlSourceRenderer.ApplyOuterReferenceDetector` and
+  `InMemoryCorrelatedPlan` (which rewrites the marker into `SqlFunctions.Parameter<T>`) follow.
+- `OuterRefMarker<T>` and `ReplaceConstantsExpressionVisitor.GetOuterRefMarkerCI` leave the public
+  surface (`*REMOVED*` in `PublicAPI.Unshipped.txt`). The user authorised public API changes for this
+  step: the marker is query-machinery, never constructed by a consumer, and was the only obstacle to
+  native correlated execution.
+
+Measured (`linux-x64`, canonical publish, 14-scenario harness):
+
+| Measurement | Before S11 | After S11 |
+|---|---:|---:|
+| Registry unique / raw | 201 / 207 | **198 / 204** |
+| Product rows only | 192 | **188** |
+| Native scenarios passing (JIT-equal) | 12 / 12 | **14 / 14** |
+
+`correlated-any` and `correlated-count` now run in the native image and match the JIT values
+(`scenario=correlated-any status=pass values=1`,
+`scenario=correlated-count status=pass values=1:2;2:0;3:0;...;10:0`). The four product rows the step
+removes are the two `Expression.Property(..., "Ref")` (`IL2026`) sites and the two
+`Type.MakeGenericType` (`IL3050`) sites; the new marker file itself produces no diagnostic.
