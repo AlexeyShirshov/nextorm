@@ -25,7 +25,7 @@ Measured native results (JIT values are equal in every case):
 
 | Provider | Instrument | Native result |
 |---|---|---|
-| SQLite | `tests/nextorm.aot.runner`, 18 scenarios + 4 component slices | **18/18** |
+| SQLite | `tests/nextorm.aot.runner`, 19 scenarios + 4 component slices | **19/19** |
 | PostgreSQL | `examples/nextorm.aotexamples.postgres.aviasales`, 10 queries | **10/10** |
 | SQL Server | `examples/nextorm.aotexamples.mssql.adventureworks`, 11 queries | **11/11** |
 | MySQL | `tests/nextorm.aot.sqlprobe --provider mysql`, 7 shapes | **7/7** |
@@ -37,12 +37,15 @@ The output is a self-contained native executable. The packages do **not** carry 
 
 ## What is not verified
 
-- **Correlated subqueries are covered for six shapes.** `Any`, `Count`, `Sum` over a nullable
-  selector, a projection terminal (`FirstOrDefault`), correlation depth 2 and `exists(...)` all run in
-  the native runner and produce the JIT-equal values. A reference navigation used *inside* a
-  correlated body and a correlated `APPLY` source are not part of the measured native surface yet —
-  `APPLY` is not expressible on the SQLite instrument at all and is covered by the provider SQL
-  generation suites instead.
+- **Correlated subqueries are covered for seven shapes.** `Any`, `Count`, `Sum` over a nullable
+  selector, a projection terminal (`FirstOrDefault`), correlation depth 2, `exists(...)` and a member
+  of a join-projection item all run in the native runner and produce the JIT-equal values.
+- **A reference navigation used inside a correlated body fails at execution** — under JIT and native
+  alike — with `variable 'navigation0' … is not defined`; the navigation alias is not rewritten into
+  an outer reference before a nested lambda is compiled. Tracked as
+  [#304](https://github.com/AlexeyShirshov/nextorm/issues/304).
+- **A correlated `APPLY` source is not expressible on the SQLite instrument.** The portable lowering is
+  `LEFT JOIN` plus `EXISTS`/a scalar subquery; native `APPLY` execution needs the provider instrument.
 - A **tuple-typed ClickHouse result column** whose element types fall outside the driver's fixed
   registration sample fails closed with a clear `NotSupportedException` at preparation; project the
   tuple elements as separate columns or read the tuple as text instead.
@@ -72,13 +75,13 @@ compilation — are fixed and are no longer observed in any probe.
 
 ## Residual diagnostics
 
-The canonical publish of the native runner reports **202 unique AOT/trim diagnostics** (208 raw;
-measured 2026-11-13, against the 18-scenario runner). They are neither suppressed nor rooted:
+The canonical publish of the native runner reports **204 unique AOT/trim diagnostics** (210 raw;
+measured 2026-11-13, against the 19-scenario runner). They are neither suppressed nor rooted:
 
 | Code | Count | Nature |
 |---|---|---|
 | `IL3050` | 110 | runtime code generation — `Expression.Lambda`, `Type.MakeGenericType`, `MethodInfo.MakeGenericMethod`, `Expression.NewArrayInit`, `System.Text.Json` |
-| `IL2026` | 29 | `RequiresUnreferencedCode` APIs |
+| `IL2026` | 31 | `RequiresUnreferencedCode` APIs |
 | `IL2070` | 27 | reflection over a runtime-typed `Type` |
 | `IL2075` | 15 | member access on a runtime-typed value |
 | `IL2060` | 15 | statically unanalyzable generic instantiation |

@@ -181,6 +181,16 @@ Run("correlated-exists", () =>
         .ToList();
     return string.Join(";", ids);
 });
+Run("correlated-outer-member", () =>
+{
+    // A member of a join-projection item read inside a correlated body: the outer reference is the
+    // projection (`p.Item2`), so the marker's `Ref` is followed by a member access.
+    var rows = context.From<AotNavOrder>()
+        .Join<AotNavPerson>((order, person) => order.BuyerId == person.Id)
+        .Select(projection => new { projection.Item1.Id, N = context.From<AotNavOrder>().Where(inner => inner.BuyerId == projection.Item2.Id).Count() })
+        .ToList();
+    return string.Join(";", rows.OrderBy(row => row.Id).Select(row => $"{row.Id}:{row.N}"));
+});
 RunComponentSlices(args[0]);
 return 0;
 
@@ -278,4 +288,27 @@ public interface IComplexEntity
     string? String { get; set; }
     [Column("m")]
     decimal? Numeric { get; set; }
+}
+
+[SqlTable("orders")]
+public sealed class AotNavOrder
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    [Column("buyer_id")]
+    public int BuyerId { get; set; }
+    [Column("approver_id")]
+    public int ApproverId { get; set; }
+    public AotNavPerson? Buyer { get; set; }
+}
+
+[SqlTable("person")]
+public sealed class AotNavPerson
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    [Column("name")]
+    public string? Name { get; set; }
 }

@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Diagnostics;
 using System.Text;
 using FluentAssertions;
@@ -29,7 +31,8 @@ public sealed class AotNativeRunTests
         "correlated-scalar-first",
         "correlated-sum",
         "correlated-nested-depth2",
-        "correlated-exists"
+        "correlated-exists",
+        "correlated-outer-member"
     ];
 
     [Fact]
@@ -307,6 +310,14 @@ public sealed class AotNativeRunTests
                     .Select(outer => outer.Id)
                     .ToList();
                 return string.Join(";", ids);
+            }),
+            ["correlated-outer-member"] = CaptureJit(() =>
+            {
+                var rows = context.From<AotNavOrder>()
+                    .Join<AotNavPerson>((order, person) => order.BuyerId == person.Id)
+                    .Select(projection => new { projection.Item1.Id, N = context.From<AotNavOrder>().Where(inner => inner.BuyerId == projection.Item2.Id).Count() })
+                    .ToList();
+                return string.Join(";", rows.OrderBy(row => row.Id).Select(row => $"{row.Id}:{row.N}"));
             })
         };
         return results;
@@ -381,4 +392,27 @@ public sealed class AotNativeRunTests
         .Replace("\t", "\\t").Replace("\r", "\\r").Replace("\n", "\\n");
 
     private readonly record struct JitScenarioResult(string Status, string Values, string Exception, string Message);
+}
+
+[SqlTable("orders")]
+public sealed class AotNavOrder
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    [Column("buyer_id")]
+    public int BuyerId { get; set; }
+    [Column("approver_id")]
+    public int ApproverId { get; set; }
+    public AotNavPerson? Buyer { get; set; }
+}
+
+[SqlTable("person")]
+public sealed class AotNavPerson
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    [Column("name")]
+    public string? Name { get; set; }
 }
