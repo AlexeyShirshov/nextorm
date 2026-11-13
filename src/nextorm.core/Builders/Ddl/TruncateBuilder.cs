@@ -13,11 +13,13 @@ public sealed class TruncateBuilder<TEntity>
 {
     private readonly IDataContext _dataContext;
     private readonly IEntityMetadata _metadata;
+    private readonly MappingScope _mappingScope;
 
-    internal TruncateBuilder(IDataContext dataContext, IEntityMetadata metadata)
+    internal TruncateBuilder(IDataContext dataContext, IEntityMetadata metadata, MappingScope mappingScope = default)
     {
         _dataContext = dataContext;
         _metadata = metadata;
+        _mappingScope = mappingScope;
     }
 
     /// <summary>The context the truncate executes on.</summary>
@@ -66,7 +68,7 @@ public sealed class TruncateBuilder<TEntity>
     internal MutationCommand BuildBatchCommand() => BuildCommand();
 
     private TruncateCommand BuildCommand()
-        => new(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto);
+        => new(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _mappingScope);
 
     private NotSupportedException Unsupported()
         => new(

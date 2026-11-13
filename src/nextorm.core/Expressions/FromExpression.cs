@@ -37,12 +37,20 @@ public sealed class FromExpression
      /// <param name="table">The table name.</param>
      /// <param name="isAutoMapped">Whether <paramref name="table"/> was derived from the entity type name.</param>
      /// <param name="sourceIsInterface">Whether the entity source type is an interface.</param>
-     public FromExpression(string table, bool isAutoMapped = false, bool sourceIsInterface = false)
-     {
+      public FromExpression(string table, bool isAutoMapped = false, bool sourceIsInterface = false)
+      {
           Table = table;
           IsAutoMapped = isAutoMapped;
           SourceIsInterface = sourceIsInterface;
-     }
+      }
+      /// <summary>Creates a mapped table source with a schema qualifier.</summary>
+      internal FromExpression(string table, string? schema, bool isAutoMapped, bool sourceIsInterface)
+      {
+           Table = table;
+           Schema = schema;
+           IsAutoMapped = isAutoMapped;
+           SourceIsInterface = sourceIsInterface;
+      }
      /// <summary>Creates a source from a derived-table subquery.</summary>
      /// <param name="subQuery">The subquery that produces the rows.</param>
      public FromExpression(QueryCommand subQuery)
@@ -98,7 +106,9 @@ public sealed class FromExpression
           XmlNodes = xmlNodes;
      }
      /// <summary>The explicit table name, or <c>null</c> when the source is not a plain named table.</summary>
-     public readonly string? Table;
+      public readonly string? Table;
+      /// <summary>The mapped schema qualifier, when present.</summary>
+      internal readonly string? Schema;
      /// <summary>
      /// Whether <see cref="Table"/> was derived from the entity type name (and is therefore subject
      /// to the active <see cref="INamingConvention"/>) rather than declared explicitly.
@@ -234,7 +244,8 @@ public sealed class FromExpression
      /// <summary>Copies every source slot and applies the given overrides, falling back to the source's own.</summary>
      private FromExpression(FromExpression source, string? tableName, string? schema, string? database, string? server, string? tableExpression, EntityBinding? sourceBinding = null)
      {
-          Table = source.Table;
+           Table = source.Table;
+           Schema = source.Schema;
           IsAutoMapped = source.IsAutoMapped;
           SourceIsInterface = source.SourceIsInterface;
           SubQuery = source.SubQuery;

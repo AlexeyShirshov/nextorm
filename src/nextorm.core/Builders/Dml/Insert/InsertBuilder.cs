@@ -20,6 +20,7 @@ public sealed partial class InsertBuilder<TEntity>
 {
     private readonly IDataContext _dataContext;
     private readonly IEntityMetadata _metadata;
+    private readonly MappingScope _mappingScope;
     private readonly List<ColumnAccumulator> _columns = [];
     private DynamicColumnSet? _dynamicColumns;
     private int _rowCount;
@@ -46,6 +47,9 @@ public sealed partial class InsertBuilder<TEntity>
     {
         _dataContext = dataContext;
         _metadata = metadata;
+        _mappingScope = dataContext is DataContext scopedContext
+            ? scopedContext.EntityScopeResolver.Resolve(typeof(TEntity))
+            : MappingScope.Default;
     }
 
     /// <summary>The context the insert executes on; used by <see cref="InsertReturningBuilder{TEntity, TResult}"/>.</summary>
@@ -634,7 +638,7 @@ public sealed partial class InsertBuilder<TEntity>
     private InsertCommand BuildCommand(IPropertyMetadata? identityColumn, IReadOnlyList<IPropertyMetadata>? returningColumns = null, OutputIntoClause? outputInto = null)
     {
         if (_source is not null)
-            return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, [], 1, identityColumn, returningColumns, _source, _selectColumns, outputInto: outputInto);
+            return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, [], 1, identityColumn, returningColumns, _source, _selectColumns, outputInto: outputInto) { MappingScope = _mappingScope };
 
         if (_columns.Count == 0 && _dynamicColumns is null)
         {
@@ -643,7 +647,7 @@ public sealed partial class InsertBuilder<TEntity>
             if (HasWritableColumns())
                 throw new InvalidOperationException("No values were specified for the insert.");
 
-            return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, [], 1, identityColumn, returningColumns, outputInto: outputInto);
+            return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, [], 1, identityColumn, returningColumns, outputInto: outputInto) { MappingScope = _mappingScope };
         }
 
         foreach (var column in _columns)
@@ -656,7 +660,7 @@ public sealed partial class InsertBuilder<TEntity>
         for (var i = 0; i < columns.Length; i++)
             columns[i] = new InsertColumn(_columns[i].Property, _columns[i].Values);
 
-        return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, identityColumn, returningColumns, outputInto: outputInto, dynamicColumns: _dynamicColumns);
+        return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, identityColumn, returningColumns, outputInto: outputInto, dynamicColumns: _dynamicColumns) { MappingScope = _mappingScope };
     }
 
     private bool HasWritableColumns()

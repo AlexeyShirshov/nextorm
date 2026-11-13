@@ -13,6 +13,21 @@ Two forms share the same builder:
 * **key upsert** — `OnKeys()` + `WhenMatchedUpdate()` + `WhenNotMatchedInsert()`. Every SQL provider expresses it in its native form, and it is the only form the in-memory provider applies (to the registered sequence).
 * **full `MERGE`** — `WhenMatched()`/`WhenNotMatched()`/`WhenNotMatchedBySource()`, each finished with `ThenUpdate`/`ThenInsert`/`ThenDelete`/`ThenDoNothing`. Native on SQL Server and PostgreSQL (an execution-time server prerequisite: the server must be 15+); the other providers reject it.
 
+## Runtime mapping scope
+
+Use `WithScope(MappingScope)` when the same entity mapping targets a tenant- or shard-specific table. The scope selects metadata for this command only; it does not change the context's default mapping. Entity, batch and query sources can use the same scope:
+
+```csharp
+var scope = new MappingScope("tenant_a");
+ctx.CreateMergeBuilder<Order>()
+    .Using(order)
+    .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
+    .WithScope(scope)
+    .Merge();
+```
+
+`CreateTruncateBuilder<TEntity>()` resolves the context's configured entity scope as well, so the truncate target uses the corresponding table and schema.
+
 ## Upsert (key merge)
 
 [`CreateMergeBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateMergeBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) writes a source row set into the table and lets the database decide, per declared key, whether to update the existing row or insert a new one. The source is a single mapped entity or a batch, the match key is resolved from the entity mapping with `OnKeys()`, and both branches — `WhenMatchedUpdate()` (set every non-key writable column from the source) and `WhenNotMatchedInsert()` — are required:

@@ -16,7 +16,9 @@ internal sealed class DeleteCommand : MutationCommand
     /// <param name="keys">The declared key values of the key form, or <see langword="null"/> for the predicate/all-rows forms.</param>
     /// <param name="returningColumns">The mapped columns to return through <c>RETURNING</c>/<c>OUTPUT</c>, or <see langword="null"/> for a plain delete.</param>
     /// <param name="outputInto">The <c>OUTPUT ... INTO</c> target, or <see langword="null"/>.</param>
-    public DeleteCommand(Type entityType, string tableName, bool isTableNameAuto, QueryCommand? condition, IReadOnlyList<KeyValue>? keys, IReadOnlyList<IPropertyMetadata>? returningColumns = null, OutputIntoClause? outputInto = null)
+    /// <param name="schema">The mapped target schema, when the target uses a non-default mapping scope.</param>
+    /// <param name="mappingScope">The resolved mapping scope for the target.</param>
+    public DeleteCommand(Type entityType, string tableName, bool isTableNameAuto, QueryCommand? condition, IReadOnlyList<KeyValue>? keys, IReadOnlyList<IPropertyMetadata>? returningColumns = null, OutputIntoClause? outputInto = null, string? schema = null, MappingScope mappingScope = default)
         : base(SqlStatementType.Delete, entityType)
     {
         TableName = tableName;
@@ -25,6 +27,8 @@ internal sealed class DeleteCommand : MutationCommand
         Keys = keys;
         ReturningColumns = returningColumns;
         OutputInto = outputInto;
+        Schema = schema;
+        MappingScope = mappingScope;
     }
 
     /// <summary>The mapped table name, before the naming convention and identifier quoting are applied.</summary>
@@ -32,6 +36,12 @@ internal sealed class DeleteCommand : MutationCommand
 
     /// <summary>Whether <see cref="TableName"/> was auto-derived and the naming convention applies to it.</summary>
     public bool IsTableNameAuto { get; }
+
+    /// <summary>The mapped schema/owner, or <see langword="null"/> for an unqualified table.</summary>
+    internal string? Schema { get; }
+
+    /// <summary>The resolved mapping variant for this target.</summary>
+    internal MappingScope MappingScope { get; }
 
     /// <summary>The predicate command whose prepared condition forms the <c>WHERE</c>, or <see langword="null"/>.</summary>
     public QueryCommand? Condition { get; }

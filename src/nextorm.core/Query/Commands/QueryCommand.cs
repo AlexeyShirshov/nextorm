@@ -22,6 +22,8 @@ internal readonly struct QueryShape
     public LambdaExpression? Condition { get; init; }
     /// <summary>The selective query-filter scope disabled for this command, or <c>null</c> for none.</summary>
     public QueryFilterScope? FilterScope { get; init; }
+    /// <summary>The runtime mapping variant selected for this command.</summary>
+    public MappingScope MappingScope { get; init; }
     /// <summary>Joins accumulated by the builder.</summary>
     public JoinExpression[]? Joins { get; init; }
     /// <summary>Paging (limit/offset) applied to the query.</summary>
@@ -137,6 +139,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     internal bool IdentitySlotAliases { get; set; }
     private bool _dontCache;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
+    internal MappingScope MappingScope { get; set; } = MappingScope.Default;
     internal int ColumnsPlanHash;
     internal int JoinPlanHash;
     internal int SortingPlanHash;
@@ -404,6 +407,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         IdentitySlotAliases = source.IdentitySlotAliases;
         _condition = forCache ? null : source._condition;
         _filterScope = source._filterScope;
+        MappingScope = source.MappingScope;
         // Own a private array, exactly like the definition constructor: preparation writes the prepared
         // copy back into the array (PrepareJoin), so sharing it would let one command's preparation
         // rewrite a source's or sibling's joins. The cache clone deep-clones instead.
@@ -464,6 +468,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _srcType = shape.SrcType;
         _condition = shape.Condition;
         _filterScope = shape.FilterScope ?? QueryFilterScope.None;
+        MappingScope = shape.MappingScope;
         _joins = shape.Joins is { } joins
             ? (ownJoins ? joins : CloneJoinArray(joins)!)
             : null;

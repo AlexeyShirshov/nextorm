@@ -67,6 +67,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
     {
         if (x.EntityType != y.EntityType) return false;
 
+        if (x.MappingScope != y.MappingScope) return false;
+
         if (x.ResultType != y.ResultType) return false;
 
         if (x.SingleRow != y.SingleRow) return false;
@@ -445,6 +447,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
             if (obj.EntityType is not null)
                 hash.Add(obj.EntityType);
+
+            hash.Add(obj.MappingScope);
 
             if (obj.ResultPlanHash != 0)
                 hash.Add(obj.ResultPlanHash);

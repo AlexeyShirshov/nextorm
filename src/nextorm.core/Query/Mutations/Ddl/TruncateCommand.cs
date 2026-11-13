@@ -10,11 +10,13 @@ internal sealed class TruncateCommand : MutationCommand
     /// <param name="entityType">The CLR entity type whose table is truncated.</param>
     /// <param name="tableName">The mapped (still unconventioned, unquoted) table name.</param>
     /// <param name="isTableNameAuto">Whether <paramref name="tableName"/> was derived from the CLR type name.</param>
-    public TruncateCommand(Type entityType, string tableName, bool isTableNameAuto)
+    /// <param name="mappingScope">The runtime mapping variant for this command.</param>
+    public TruncateCommand(Type entityType, string tableName, bool isTableNameAuto, MappingScope mappingScope = default)
         : base(SqlStatementType.Truncate, entityType)
     {
         TableName = tableName;
         IsTableNameAuto = isTableNameAuto;
+        MappingScope = mappingScope;
     }
 
     /// <summary>The mapped table name, before the naming convention and identifier quoting are applied.</summary>
@@ -22,4 +24,5 @@ internal sealed class TruncateCommand : MutationCommand
 
     /// <summary>Whether <see cref="TableName"/> was auto-derived and the naming convention applies to it.</summary>
     public bool IsTableNameAuto { get; }
+    public MappingScope MappingScope { get; }
 }

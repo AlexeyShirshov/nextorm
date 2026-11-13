@@ -21,6 +21,7 @@ namespace NextORM.Core;
 public static class DataContextCache
 {
     private readonly static TimedDictionary<Type, IEntityMetadata> _metadata = new();
+    private readonly static ConcurrentDictionary<(Type Type, MappingScope Scope), IEntityMetadata> _scopedMetadata = new();
     private readonly static TimedDictionary<Type, IEntityMetadata> _tvpMetadata = new();
     private readonly static ConcurrentDictionary<Type, byte> _autoPublishedJunctionMetadata = new();
     private readonly static TimedDictionary<Type, SelectExpression[]> _selectListCache = new();
@@ -50,6 +51,9 @@ public static class DataContextCache
     /// <c>From&lt;T&gt;</c> call and reused for the rest of the process.
     /// </summary>
     public static IDictionary<Type, IEntityMetadata> Metadata => _metadata;
+
+    /// <summary>Metadata variants for non-default mapping scopes; default mappings stay in <see cref="Metadata"/>.</summary>
+    internal static ConcurrentDictionary<(Type Type, MappingScope Scope), IEntityMetadata> ScopedMetadata => _scopedMetadata;
     /// <summary>
     /// Auto-resolved entity metadata kept by the table-valued parameter binder for a row type that was
     /// never registered as a query source, keyed by that type. It is deliberately separate from
@@ -141,6 +145,7 @@ public static class DataContextCache
     {
         InvalidateJsonRowWriterCaches();
         _metadata.Clear();
+        _scopedMetadata.Clear();
         _tvpMetadata.Clear();
         _autoPublishedJunctionMetadata.Clear();
         _selectListCache.Clear();

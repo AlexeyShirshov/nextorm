@@ -1,4 +1,44 @@
 #nullable enable
+NextORM.Core.EntityBuilder<TEntity>.WithScope(NextORM.Core.MappingScope scope) -> NextORM.Core.EntityBuilder<TEntity>!
+NextORM.Core.EntityMetadataBuilder<T>.Schema(string! schema) -> NextORM.Core.EntityMetadataBuilder<T>!
+NextORM.Core.DataContextBuilder.EntityMetadataProvider.get -> NextORM.Core.IEntityMetadataProvider!
+NextORM.Core.DataContextBuilder.EntityScopeResolver.get -> NextORM.Core.IEntityScopeResolver!
+NextORM.Core.DataContextBuilder.UseEntityMetadataProvider(NextORM.Core.IEntityMetadataProvider! provider) -> NextORM.Core.DataContextBuilder!
+NextORM.Core.DataContextBuilder.UseScopeResolver(NextORM.Core.IEntityScopeResolver! resolver) -> NextORM.Core.DataContextBuilder!
+NextORM.Core.DefaultEntityScopeResolver
+NextORM.Core.DefaultEntityScopeResolver.DefaultEntityScopeResolver() -> void
+NextORM.Core.DefaultEntityScopeResolver.Resolve(System.Type! entityType) -> NextORM.Core.MappingScope
+NextORM.Core.DefaultEntityScopeResolver.Resolve(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingScope
+NextORM.Core.DefaultEntityScopeResolver.Resolve(System.Type! entityType, object! entity) -> NextORM.Core.MappingScope
+NextORM.Core.DefaultEntityMetadataProvider
+NextORM.Core.DefaultEntityMetadataProvider.DefaultEntityMetadataProvider() -> void
+NextORM.Core.DefaultEntityMetadataProvider.GetColumnName(System.Reflection.PropertyInfo! property, in NextORM.Core.MappingScope scope, NextORM.Core.INamingConvention? convention) -> string!
+NextORM.Core.DefaultEntityMetadataProvider.GetMetadata(System.Type! entityType, in NextORM.Core.MappingScope scope) -> NextORM.Core.IEntityMetadata!
+NextORM.Core.IEntityMetadataProvider
+NextORM.Core.IEntityMetadataProvider.GetColumnName(System.Reflection.PropertyInfo! property, in NextORM.Core.MappingScope scope, NextORM.Core.INamingConvention? convention) -> string!
+NextORM.Core.IEntityMetadataProvider.GetMetadata(System.Type! entityType, in NextORM.Core.MappingScope scope) -> NextORM.Core.IEntityMetadata!
+NextORM.Core.IEntityMetadata.Schema.get -> string?
+NextORM.Core.IEntityScopeResolver
+NextORM.Core.IEntityScopeResolver.Resolve(System.Type! entityType) -> NextORM.Core.MappingScope
+NextORM.Core.IEntityScopeResolver.Resolve(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingScope
+NextORM.Core.IEntityScopeResolver.Resolve(System.Type! entityType, object! entity) -> NextORM.Core.MappingScope
+NextORM.Core.MappingScope
+NextORM.Core.MappingScope.Equals(NextORM.Core.MappingScope other) -> bool
+NextORM.Core.MappingScope.Key.get -> string?
+NextORM.Core.MappingScope.Key.init -> void
+NextORM.Core.MappingScope.MappingScope() -> void
+NextORM.Core.MappingScope.MappingScope(string? Key) -> void
+NextORM.Core.MappingScope.ParameterPrefix.get -> string!
+NextORM.Core.MappingScope.Deconstruct(out string? Key) -> void
+~override NextORM.Core.MappingScope.Equals(object obj) -> bool
+~override NextORM.Core.MappingScope.ToString() -> string
+override NextORM.Core.MappingScope.GetHashCode() -> int
+static readonly NextORM.Core.MappingScope.Default -> NextORM.Core.MappingScope
+static NextORM.Core.MappingScope.operator !=(NextORM.Core.MappingScope left, NextORM.Core.MappingScope right) -> bool
+static NextORM.Core.MappingScope.operator ==(NextORM.Core.MappingScope left, NextORM.Core.MappingScope right) -> bool
+NextORM.Core.PrefixedParameterProvider
+NextORM.Core.PrefixedParameterProvider.GetParamName() -> string!
+NextORM.Core.PrefixedParameterProvider.PrefixedParameterProvider(NextORM.Core.IParameterProvider! inner, string! prefix) -> void
 NextORM.Core.PostgresFunctions.cosine_distance<T>(T left, T right) -> double?
 NextORM.Core.PostgresFunctions.l1_distance<T>(T left, T right) -> double?
 NextORM.Core.PostgresFunctions.l2_distance<T>(T left, T right) -> double?
@@ -6,3 +46,4 @@ NextORM.Core.PostgresFunctions.l2_normalize<T>(T value) -> T
 NextORM.Core.PostgresFunctions.negative_inner_product<T>(T left, T right) -> double?
 NextORM.Core.PostgresFunctions.vector_dims<T>(T value) -> int?
 NextORM.Core.PostgresFunctions.vector_norm<T>(T value) -> double?
+NextORM.Core.MergeBuilder<TEntity>.WithScope(NextORM.Core.MappingScope scope) -> NextORM.Core.MergeBuilder<TEntity>!

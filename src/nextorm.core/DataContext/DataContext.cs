@@ -16,6 +16,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 {
     private bool _disposed;
     private readonly ContextEnvironment _environment;
+    internal IEntityMetadataProvider EntityMetadataProvider { get; }
+    internal IEntityScopeResolver EntityScopeResolver { get; }
     private readonly Version? _serverVersion;
     private readonly NextORM.Core.EagerLoadMode _eagerLoadMode;
     private readonly QueryCache _queryCache;
@@ -65,6 +67,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             optionsBuilder.KeywordCase,
             optionsBuilder.MultilineBatchSql,
             optionsBuilder.CommandTimeout);
+        EntityMetadataProvider = optionsBuilder.EntityMetadataProvider;
+        EntityScopeResolver = optionsBuilder.EntityScopeResolver;
 
         QueryCacheEnabled = optionsBuilder.QueryCacheEnabled;
 
@@ -124,7 +128,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             GetDialect,
             GetType(),
             new ProviderHooks(MapColumn, _createParam, _createParamSimple),
-            new LoggingOptions(_environment.Logger, _environment.ResultSetEnumeratorLogger, _environment.LogSensitiveData, QueryFilterLogger: _environment.QueryFilterLogger));
+            new LoggingOptions(_environment.Logger, _environment.ResultSetEnumeratorLogger, _environment.LogSensitiveData, QueryFilterLogger: _environment.QueryFilterLogger),
+            EntityMetadataProvider,
+            EntityScopeResolver);
     }
 
     /// <summary>
@@ -1307,10 +1313,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     private (string Sql, List<Parameter> Parameters) BuildInsertSql(InsertCommand command, IParameterProvider parameterProvider, string parameterNamePrefix, MutationRenderKind renderKind = MutationRenderKind.AdHoc, OutputIntoClause? captureInto = null)
     {
         if (command.Source is null)
-            return SqlMutationBuilder.MakeInsert(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, parameterProvider: parameterProvider, renderKind: renderKind, captureInto: captureInto);
+            return SqlMutationBuilder.MakeInsert(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, parameterProvider: parameterProvider, renderKind: renderKind, captureInto: captureInto, metadataProvider: EntityMetadataProvider);
 
         var (withSql, sourceSql, sourceParameters, maxRecursionStmt) = _planner.RenderSource(command.Source, parameterProvider, null, null, parameterNamePrefix);
-        var (insertSql, parameters) = SqlMutationBuilder.MakeInsert(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, sourceSql, sourceParameters, parameterProvider, renderKind, captureInto);
+        var (insertSql, parameters) = SqlMutationBuilder.MakeInsert(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, sourceSql, sourceParameters, parameterProvider, renderKind, captureInto, EntityMetadataProvider);
 
         // A data-modifying CTE (or a hoisted read CTE) must precede INSERT, not sit inside the SELECT; the
         // recursion limit is a statement tail, so it is appended after the whole INSERT ... SELECT.
@@ -1338,7 +1344,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // key form ANDs it to the key equalities so the row must match the key and the filter.
         var (whereSql, _) = _planner.RenderPredicate(command.Source, provider, parameters, parameterNamePrefix, lowering);
 
-        return SqlMutationBuilder.MakeUpdate(Dialect, QuoteIdentifiers, NamingConvention, command, setSql, parameters, whereSql, provider, KeywordCase, renderKind, lowering, captureInto);
+        return SqlMutationBuilder.MakeUpdate(Dialect, QuoteIdentifiers, NamingConvention, command, setSql, parameters, whereSql, provider, KeywordCase, renderKind, lowering, captureInto, EntityMetadataProvider);
     }
 
     private (string Sql, List<Parameter> Parameters) BuildMutationSql(MutationCommand command)
@@ -1425,10 +1431,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             }
 
             if (command.Source is null)
-                return SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, keyProvider, null, null, keyAccumulator, null, null, keyFilterSql, this, renderKind, keyUpdateFragment: keyUpdateFragment, keyInsertFragment: keyInsertFragment, captureInto: captureInto);
+                return SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, keyProvider, null, null, keyAccumulator, null, null, keyFilterSql, this, renderKind, keyUpdateFragment: keyUpdateFragment, keyInsertFragment: keyInsertFragment, captureInto: captureInto, metadataProvider: EntityMetadataProvider);
 
             var (withInsert, sourceInsert, sourceInsertParameters, keyMaxRecursionStmt) = _planner.RenderSource(command.Source);
-            var (insertSql, insertParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, keyProvider, sourceInsert, sourceInsertParameters, keyAccumulator, null, null, keyFilterSql, this, renderKind, keyUpdateFragment: keyUpdateFragment, keyInsertFragment: keyInsertFragment, captureInto: captureInto);
+            var (insertSql, insertParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, keyProvider, sourceInsert, sourceInsertParameters, keyAccumulator, null, null, keyFilterSql, this, renderKind, keyUpdateFragment: keyUpdateFragment, keyInsertFragment: keyInsertFragment, captureInto: captureInto, metadataProvider: EntityMetadataProvider);
             return (AppendMaxRecursionStmt(withInsert is null ? insertSql : withInsert + insertSql, keyMaxRecursionStmt), insertParameters);
         }
 
@@ -1486,14 +1492,14 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
         if (command.Source is null)
         {
-            var (sql, parameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, null, null, accumulator, matchConditionSql, branchConditions, targetFilterSql, this, renderKind, branchAssignments, captureInto: captureInto);
+            var (sql, parameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, null, null, accumulator, matchConditionSql, branchConditions, targetFilterSql, this, renderKind, branchAssignments, captureInto: captureInto, metadataProvider: EntityMetadataProvider);
             return (sql, parameters);
         }
 
         var (withSql, sourceSql, _, maxRecursionStmt) = _planner.RenderSource(command.Source, provider, accumulator);
         // The source parameters already sit in the shared accumulator, so MakeMerge must not re-add them;
         // passing them again would duplicate every @pN.
-        var (fullSql, fullParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, sourceSql, null, accumulator, matchConditionSql, branchConditions, targetFilterSql, this, renderKind, branchAssignments, captureInto: captureInto);
+        var (fullSql, fullParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, sourceSql, null, accumulator, matchConditionSql, branchConditions, targetFilterSql, this, renderKind, branchAssignments, captureInto: captureInto, metadataProvider: EntityMetadataProvider);
         // MERGE is terminated with ';' (SQL Server): OPTION goes before that terminator, not after it.
         return (AppendMaxRecursionStmt(withSql is null ? fullSql : withSql + fullSql, maxRecursionStmt), fullParameters);
     }
@@ -1534,7 +1540,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             throw new NotSupportedException(
                 $"{GetType().Name} does not support TRUNCATE; remove every row with CreateDeleteBuilder<T>().All() instead.");
 
-        return (SqlMutationBuilder.MakeTruncate(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase), []);
+        return (SqlMutationBuilder.MakeTruncate(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, EntityMetadataProvider), []);
     }
 
     private (string Sql, List<Parameter> Parameters) BuildSqliteFts5Sql(SqliteFts5Command command)
@@ -1746,11 +1752,11 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         var lowering = MutationParameterLowering.For(Dialect, renderKind);
 
         if (command.Condition is null)
-            return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, null, [], KeywordCase, provider, renderKind, lowering, captureInto);
+            return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, null, [], KeywordCase, provider, renderKind, lowering, captureInto, EntityMetadataProvider);
 
         var parameters = new List<Parameter>();
         var (whereSql, _) = _planner.RenderPredicate(command.Condition, provider, parameters, parameterNamePrefix, lowering);
-        return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, whereSql, parameters, KeywordCase, provider, renderKind, lowering, captureInto);
+        return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, whereSql, parameters, KeywordCase, provider, renderKind, lowering, captureInto, EntityMetadataProvider);
     }
 
     // Renders a side-effecting DML step of a batch with the batch's shared parameter provider, so its

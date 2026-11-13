@@ -66,6 +66,9 @@ public sealed record VisitorOptions(
     /// </summary>
     public string ParameterNamePrefix { get; init; } = string.Empty;
 
+    internal MappingScope MappingScope { get; init; } = MappingScope.Default;
+    internal IEntityMetadataProvider? MetadataProvider { get; init; }
+
     /// <summary>
     /// The render-local capture of planner-owned parameter occurrences, or <see langword="null"/> when
     /// this render is not producing a parameter template. Internal: it threads the engine's occurrence

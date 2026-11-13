@@ -33,6 +33,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     private QueryCommand? _query;
     private Expression<Func<TEntity, bool>>? _condition;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
+    private MappingScope _mappingScope = MappingScope.Default;
     private LambdaExpression? _group;
     private LimitByClause? _limitBy
     {
@@ -486,6 +487,18 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// the join chain can hand the pre-join builder's scope to its joined projection builder.
     /// </summary>
     internal QueryFilterScope FilterScope { get => _filterScope; set => _filterScope = value; }
+    /// <summary>Returns a copy of this builder bound to the supplied runtime mapping scope.</summary>
+    /// <param name="scope">The mapping variant used to resolve metadata for this query.</param>
+    /// <returns>A builder that carries <paramref name="scope"/> into its query command.</returns>
+    public EntityBuilder<TEntity> WithScope(MappingScope scope)
+    {
+        if (_mappingScope == scope)
+            return this;
+
+        var copy = Clone();
+        copy._mappingScope = scope;
+        return copy;
+    }
     /// <summary>
     /// Returns a builder whose selective filter scope is the union of this builder's scope and
     /// <paramref name="scope"/>, without mutating this builder. Used by the DML builders to fold their
@@ -665,6 +678,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             SrcType = _sourceEntityType,
             Condition = _condition,
             FilterScope = _filterScope,
+            MappingScope = _mappingScope,
             Joins = _joins?.ToArray(),
             Paging = Paging,
             Sorting = _sorting?.ToArray(),
@@ -740,6 +754,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         // Structural identity of the collection-valued projection slot graph this entity query materializes
         // (#249 / T353). Empty for every ordinary command, so unrelated plan keys are untouched.
         cmd.CollectionSlotShape = _collectionSlotShape;
+        cmd.MappingScope = _mappingScope;
 
         // Eager-load strategy and graph identity: only commands that actually carry eager loads record
         // them, so a command with no eager loads is never touched. The requested override (or null to
@@ -813,6 +828,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             SrcType = _sourceEntityType ?? typeof(TEntity),
             Condition = _condition,
             FilterScope = _filterScope,
+            MappingScope = _mappingScope,
             Joins = _joins?.ToArray(),
             Paging = Paging,
             Sorting = _sorting?.ToArray(),
@@ -2758,6 +2774,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             BindArrayJoinElement = _bindArrayJoinElement,
         });
 
+        cmd.MappingScope = _mappingScope;
         cmd.From = from ?? ResolveSource();
 
         if (Ctes is not null)
@@ -3515,6 +3532,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         CopyProjectionIndependentStateTo(dst);
         dst._condition = _condition;
         dst._filterScope = _filterScope;
+        dst._mappingScope = _mappingScope;
         dst._having = _having;
         dst._arrayJoins = _arrayJoins is null ? null : [.. _arrayJoins];
         dst._windows = _windows;
@@ -3580,6 +3598,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         dst.CommandTimeout = CommandTimeout;
         dst.Ctes = Ctes;
         dst._collectionSlotShape = _collectionSlotShape;
+        dst._mappingScope = _mappingScope;
     }
     /// <summary>
     /// Creates a typed copy of this raw-source builder with <paramref name="binding"/> attached to the

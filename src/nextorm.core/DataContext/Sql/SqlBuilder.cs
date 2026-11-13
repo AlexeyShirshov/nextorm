@@ -1483,7 +1483,7 @@ internal readonly struct SqlBuilder
             var column = entityColumns[i];
             payload[i] = column.RangeColumns is not null
                 ? column.PropertyName!
-                : column.PropertyInfo!.GetPropertyColumnName(_ctx.NamingConvention);
+                : column.PropertyInfo!.GetPropertyColumnName(_ctx.NamingConvention, column.PropertyInfo!.DeclaringType, _ctx.MappingScope, _ctx.MetadataProvider);
         }
 
         return (payload, MakeExtremeRowKeyAliases(cmd.ExtremeRowColumns), MakeExtremeRowKeyAliases(cmd.ExtremeRowGroupByColumns));
@@ -1500,7 +1500,7 @@ internal readonly struct SqlBuilder
             if (columns[i].Expression is not MemberExpression { Member: PropertyInfo property })
                 throw new InvalidOperationException("The native extreme-row renderer requires direct mapped key columns.");
 
-            aliases[i] = property.GetPropertyColumnName(_ctx.NamingConvention);
+            aliases[i] = property.GetPropertyColumnName(_ctx.NamingConvention, property.DeclaringType, _ctx.MappingScope, _ctx.MetadataProvider);
         }
 
         return aliases;

@@ -21,15 +21,19 @@ public sealed class UpdateBuilder<TEntity>
 {
     private readonly IDataContext _dataContext;
     private readonly IEntityMetadata _metadata;
+    private readonly IEntityMetadata _targetMetadata;
+    private readonly MappingScope _mappingScope;
     private readonly List<UpdateAssignment> _assignments = [];
     private DynamicColumnSet? _dynamicColumns;
     private EntityBuilder<TEntity>? _filter;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
 
-    internal UpdateBuilder(IDataContext dataContext, IEntityMetadata metadata)
+    internal UpdateBuilder(IDataContext dataContext, IEntityMetadata metadata, MappingScope mappingScope = default, IEntityMetadata? targetMetadata = null)
     {
         _dataContext = dataContext;
         _metadata = metadata;
+        _mappingScope = mappingScope;
+        _targetMetadata = targetMetadata ?? metadata;
     }
 
     /// <summary>The context the update executes on.</summary>
@@ -284,7 +288,7 @@ public sealed class UpdateBuilder<TEntity>
             throw new InvalidOperationException("An update needs at least one assignment; call Set(...) or Set(entity).");
 
         var source = FilterSource().ToCommand();
-        return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, keys, dynamicColumns: _dynamicColumns);
+        return new UpdateCommand(typeof(TEntity), _targetMetadata.TableName!, _targetMetadata.IsTableNameAuto, _assignments, source, keys, dynamicColumns: _dynamicColumns, tableSchema: _targetMetadata.Schema);
     }
 
     /// <summary>Builds the update command for use as a side-effecting step of a batch.</summary>
@@ -301,7 +305,7 @@ public sealed class UpdateBuilder<TEntity>
             throw new InvalidOperationException("An update needs at least one assignment; call Set(...) or Set(entity).");
 
         var source = FilterSource().ToCommand();
-        return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, null, returningColumns, outputInto, _dynamicColumns);
+        return new UpdateCommand(typeof(TEntity), _targetMetadata.TableName!, _targetMetadata.IsTableNameAuto, _assignments, source, null, returningColumns, outputInto, _dynamicColumns, _targetMetadata.Schema);
     }
 
     /// <summary>Builds the update command for an <c>OUTPUT ... INTO</c>-only terminal: the updated rows are written into the target and nothing is returned to the client.</summary>
@@ -313,7 +317,7 @@ public sealed class UpdateBuilder<TEntity>
             throw new InvalidOperationException("An update needs at least one assignment; call Set(...) or Set(entity).");
 
         var source = FilterSource().ToCommand();
-        return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, null, null, outputInto, _dynamicColumns);
+        return new UpdateCommand(typeof(TEntity), _targetMetadata.TableName!, _targetMetadata.IsTableNameAuto, _assignments, source, null, null, outputInto, _dynamicColumns, _targetMetadata.Schema);
     }
 
     // The source command that carries the UPDATE's WHERE and drives the assignments. It always carries
@@ -321,7 +325,13 @@ public sealed class UpdateBuilder<TEntity>
     // mutated), so both the predicate form (where the pre-join Where is the user's condition) and the
     // key form (where only the injected target filter remains) honor IgnoreFilters.
     private EntityBuilder<TEntity> FilterSource()
-        => (_filter ?? _dataContext.From<TEntity>()).WithFilterScope(_filterScope);
+    {
+        var source = _filter ?? _dataContext.From<TEntity>();
+        if (_mappingScope != MappingScope.Default)
+            source = source.WithScope(_mappingScope);
+
+        return source.WithFilterScope(_filterScope);
+    }
 
     private void SetAssignment(UpdateAssignment assignment)
     {

@@ -42,11 +42,22 @@ public sealed partial class MergeBuilder<TEntity>
     private LambdaExpression? _keyUpdateAssignments;
     private LambdaExpression? _keyInsertAssignments;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
+    private MappingScope _mappingScope = MappingScope.Default;
 
-    internal MergeBuilder(IDataContext dataContext, IEntityMetadata metadata)
+    internal MergeBuilder(IDataContext dataContext, IEntityMetadata metadata, MappingScope mappingScope = default)
     {
         _dataContext = dataContext;
         _metadata = metadata;
+        _mappingScope = mappingScope;
+    }
+
+    /// <summary>Selects a runtime mapping variant for the merge target and source.</summary>
+    /// <param name="scope">The mapping variant used to resolve table, schema and column names.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public MergeBuilder<TEntity> WithScope(MappingScope scope)
+    {
+        _mappingScope = scope;
+        return this;
     }
 
     /// <summary>
@@ -744,7 +755,7 @@ public sealed partial class MergeBuilder<TEntity>
             // every captured or constant assignment value (the scalar visitor keys such a value through the
             // registry's plan comparer), so an expression branch needs it with or without a condition.
             var registry = hasCondition || HasActiveFilter() || HasExpressionBranch() ? _registry ??= new EntityBuilder<TEntity>(_dataContext).ToCommand() : null;
-            return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys ?? [], [], [.. _branches], returningColumns, _source, _matchCondition, registry, _dynamicColumns, _filterScope);
+            return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys ?? [], [], [.. _branches], returningColumns, _source, _matchCondition, registry, _dynamicColumns, _filterScope, mappingScope: _mappingScope);
         }
 
         if (_source is not null)
@@ -796,7 +807,8 @@ public sealed partial class MergeBuilder<TEntity>
             registry: keyRegistry,
             keyUpdateAssignments: keyUpdateAssignments,
             keyInsertAssignments: keyInsertAssignments,
-            sourceRow: keyUpdateAssignments is { UsesSource: true } || keyInsertAssignments is { UsesSource: true } ? sourceRow : null);
+            sourceRow: keyUpdateAssignments is { UsesSource: true } || keyInsertAssignments is { UsesSource: true } ? sourceRow : null,
+            mappingScope: _mappingScope);
     }
 
     /// <summary>

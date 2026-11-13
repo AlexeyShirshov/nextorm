@@ -19,6 +19,8 @@ public class DataContextBuilder
     private bool _logSensitiveData;
     private int? _commandTimeout;
     private Func<DataContextBuilder, IDataContext>? _factory;
+    private IEntityMetadataProvider _entityMetadataProvider = new DefaultEntityMetadataProvider();
+    private IEntityScopeResolver _entityScopeResolver = new DefaultEntityScopeResolver();
     // One ordered list holds every interceptor registration: either an already-created interceptor
     // instance or a Type to resolve from the captured IServiceProvider when a context is created.
     // Registration order is the invocation order in each event pipeline.
@@ -117,6 +119,28 @@ public class DataContextBuilder
     /// <see cref="InvalidOperationException"/> in that state.
     /// </summary>
     public Func<DataContextBuilder, IDataContext>? Factory { get => _factory; set => _factory = value; }
+
+    /// <summary>The provider used to resolve entity mapping metadata.</summary>
+    public IEntityMetadataProvider EntityMetadataProvider => _entityMetadataProvider;
+
+    /// <summary>Sets the provider used to resolve entity mapping metadata.</summary>
+    public DataContextBuilder UseEntityMetadataProvider(IEntityMetadataProvider provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        _entityMetadataProvider = provider;
+        return this;
+    }
+
+    /// <summary>The resolver used to select a mapping scope for entities.</summary>
+    public IEntityScopeResolver EntityScopeResolver => _entityScopeResolver;
+
+    /// <summary>Sets the resolver used to select a mapping scope for entities.</summary>
+    public DataContextBuilder UseScopeResolver(IEntityScopeResolver resolver)
+    {
+        ArgumentNullException.ThrowIfNull(resolver);
+        _entityScopeResolver = resolver;
+        return this;
+    }
 
     //public Dictionary<string, object> Property => _props;
     /// <summary>

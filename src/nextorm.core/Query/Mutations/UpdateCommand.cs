@@ -78,7 +78,8 @@ internal sealed class UpdateCommand : MutationCommand
     /// <param name="returningColumns">The mapped columns to return through <c>RETURNING</c>/<c>OUTPUT</c>, or <see langword="null"/> for a plain update.</param>
     /// <param name="outputInto">The <c>OUTPUT ... INTO</c> target, or <see langword="null"/>.</param>
     /// <param name="dynamicColumns">The entity store's dynamic columns appended to the <c>SET</c> list, or <see langword="null"/>.</param>
-    public UpdateCommand(Type entityType, string tableName, bool isTableNameAuto, IReadOnlyList<UpdateAssignment> assignments, QueryCommand source, IReadOnlyList<KeyValue>? keys, IReadOnlyList<IPropertyMetadata>? returningColumns = null, OutputIntoClause? outputInto = null, DynamicColumnSet? dynamicColumns = null)
+    /// <param name="tableSchema">The scope-specific schema (or database) qualifying the target table, or <see langword="null"/>.</param>
+    public UpdateCommand(Type entityType, string tableName, bool isTableNameAuto, IReadOnlyList<UpdateAssignment> assignments, QueryCommand source, IReadOnlyList<KeyValue>? keys, IReadOnlyList<IPropertyMetadata>? returningColumns = null, OutputIntoClause? outputInto = null, DynamicColumnSet? dynamicColumns = null, string? tableSchema = null)
         : base(SqlStatementType.Update, entityType)
     {
         TableName = tableName;
@@ -89,6 +90,7 @@ internal sealed class UpdateCommand : MutationCommand
         ReturningColumns = returningColumns;
         OutputInto = outputInto;
         DynamicColumns = dynamicColumns;
+        TableSchema = tableSchema;
     }
 
     /// <summary>The mapped table name, before the naming convention and identifier quoting are applied.</summary>
@@ -96,6 +98,9 @@ internal sealed class UpdateCommand : MutationCommand
 
     /// <summary>Whether <see cref="TableName"/> was auto-derived and the naming convention applies to it.</summary>
     public bool IsTableNameAuto { get; }
+
+    /// <summary>The scope-specific schema (or database) qualifying the target table, or <see langword="null"/>.</summary>
+    public string? TableSchema { get; }
 
     /// <summary>The <c>SET</c> assignments.</summary>
     public IReadOnlyList<UpdateAssignment> Assignments { get; }

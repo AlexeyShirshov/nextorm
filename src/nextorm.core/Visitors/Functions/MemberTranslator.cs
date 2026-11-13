@@ -477,7 +477,7 @@ internal static class MemberTranslator
                 if (!visitor.IsParamMode)
                 {
                     var colName = ResolveRangeColumnsMember(visitor, node.Member)
-                        ?? node.Member.GetPropertyColumnName(visitor.Options.NamingConvention, visitor.EntityType);
+                        ?? node.Member.GetPropertyColumnName(visitor.Options, visitor.EntityType);
                     if (!string.IsNullOrEmpty(colName))
                     {
                         if (TryTranslateDerivedProjectionMember(visitor, node, hasTableAliasForColumn: false))
@@ -601,7 +601,7 @@ internal static class MemberTranslator
                     tableAliasForColumn = AliasResolver.GetOuterAliasFromParam(visitor, (ParameterExpression)memberAccessExp.Expression!, false);
 
                 var colName = memberAccessExp.Member.GetPropertyColumnName(
-                    visitor.Options.NamingConvention,
+                    visitor.Options,
                     (memberAccessExp.Expression as ParameterExpression)?.Type);
                 if (!string.IsNullOrEmpty(colName))
                 {
@@ -677,7 +677,12 @@ internal static class MemberTranslator
                 twoTypeVisitor.Visit(node.Expression);
 
                 //if (node.Expression is ConstantExpression ce)
-                if (!twoTypeVisitor.Has1 && twoTypeVisitor.Has2)
+                // OuterRefMarker stores its slot index as an int constant. That is expression
+                // syntax, not a captured closure; compiling the whole member as a closure accessor
+                // dereferences the marker's null receiver during SQL rendering.
+                if (!twoTypeVisitor.Has1 && twoTypeVisitor.Has2
+                    && twoTypeVisitor.Target2!.Value is { } capturedOwner
+                    && !capturedOwner.GetType().IsValueType)
                 {
                     //var ce = twoTypeVisitor.Target2!;
                     // Note: expression caching is currently unconditional (the CacheExpressions flag is not wired).
@@ -1226,7 +1231,13 @@ internal static class MemberTranslator
             || marker.Arguments is not [ConstantExpression { Value: int idx }])
             return false;
 
-        var colName = node.Member.GetPropertyColumnName(visitor.Options.NamingConvention);
+        // The visitor entity is the inner query source, not necessarily the entity represented by
+        // this correlated outer member. Resolve scoped metadata against the outer member's declaring
+        // type; passing the inner type makes the metadata provider return no column and lets the
+        // marker's integer slot leak into parameter extraction.
+        var colName = visitor.Options.MappingScope == MappingScope.Default
+            ? node.Member.GetPropertyColumnName(visitor.Options.NamingConvention)
+            : node.Member.GetPropertyColumnName(visitor.Options, node.Member.DeclaringType);
         if (string.IsNullOrEmpty(colName))
             return false;
 

@@ -169,7 +169,8 @@ internal static class SqlSourceRenderer
             ctx.KeywordCase,
             sourceSql,
             sourceSql is null ? null : [],
-            parameterProvider: ctx.ParameterProvider);
+            parameterProvider: ctx.ParameterProvider,
+            metadataProvider: ctx.MetadataProvider);
 
         ctx.Params.AddRange(parameters);
         return sql;
@@ -827,8 +828,8 @@ internal static class SqlSourceRenderer
                 if (from.DatabaseOverride is not null && !ctx.Dialect.SupportsCrossDatabase)
                     throw new NotSupportedException("A cross-database table qualifier is not supported by this SQL dialect");
 
-                if (from.HasQualificationOverride)
-                    tableName = ctx.Dialect.MakeQualifiedTableName(from.ServerOverride, from.DatabaseOverride, from.SchemaOverride, tableName);
+                if (from.HasQualificationOverride || from.Schema is not null)
+                    tableName = ctx.Dialect.MakeQualifiedTableName(from.ServerOverride, from.DatabaseOverride, from.SchemaOverride ?? from.Schema, tableName);
 
                 sqlBuilder.Append(from.IsTableVariableSource || !ctx.QuoteIdentifiers ? tableName : QuoteQualifiedIdentifier(ctx.Dialect, tableName));
 

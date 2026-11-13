@@ -96,6 +96,7 @@ internal sealed class MergeCommand : MutationCommand
     /// <param name="keyUpdateAssignments">The explicit key-upsert update assignments, or <see langword="null"/> for the no-argument form.</param>
     /// <param name="keyInsertAssignments">The explicit key-upsert insert assignments, or <see langword="null"/> for the no-argument form.</param>
     /// <param name="sourceRow">The single materialized source entity, used to bind original-source values of a native key upsert, or <see langword="null"/>.</param>
+    /// <param name="mappingScope">The runtime mapping variant for this command.</param>
     public MergeCommand(
         Type entityType,
         string tableName,
@@ -113,7 +114,8 @@ internal sealed class MergeCommand : MutationCommand
         QueryFilterScope? filterScope = null,
         MergeAssignmentSet? keyUpdateAssignments = null,
         MergeAssignmentSet? keyInsertAssignments = null,
-        object? sourceRow = null)
+        object? sourceRow = null,
+        MappingScope mappingScope = default)
         : base(SqlStatementType.Merge, entityType)
     {
         FilterScope = filterScope ?? QueryFilterScope.None;
@@ -132,6 +134,7 @@ internal sealed class MergeCommand : MutationCommand
         KeyUpdateAssignments = keyUpdateAssignments;
         KeyInsertAssignments = keyInsertAssignments;
         SourceRow = sourceRow;
+        MappingScope = mappingScope;
     }
 
     /// <summary>
@@ -152,6 +155,8 @@ internal sealed class MergeCommand : MutationCommand
     /// through statement parameters, or <see langword="null"/> when the statement references no source row.
     /// </summary>
     public object? SourceRow { get; }
+
+    public MappingScope MappingScope { get; }
 
     /// <summary>
     /// The full-<c>MERGE</c> branches, or <see langword="null"/> for a key upsert. When set, the dialect

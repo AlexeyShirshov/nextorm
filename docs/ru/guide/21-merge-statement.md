@@ -13,6 +13,21 @@
 * **key upsert** — `OnKeys()` + `WhenMatchedUpdate()` + `WhenNotMatchedInsert()`. Каждый SQL-провайдер выражает её нативно, и только она применяется in-memory-провайдером (к зарегистрированной последовательности).
 * **полный `MERGE`** — `WhenMatched()`/`WhenNotMatched()`/`WhenNotMatchedBySource()`, каждая завершается `ThenUpdate`/`ThenInsert`/`ThenDelete`/`ThenDoNothing`. Нативно на SQL Server и PostgreSQL (предпосылка времени выполнения: сервер 15+); остальные провайдеры его отклоняют.
 
+## Область маппинга во время выполнения
+
+Используйте `WithScope(MappingScope)`, когда один и тот же маппинг сущности должен обращаться к таблице конкретного tenant или шарда. Область выбирает метаданные только для этой команды и не меняет маппинг контекста по умолчанию. Одинаковую область можно применять к источнику-сущности, батчу или запросу:
+
+```csharp
+var scope = new MappingScope("tenant_a");
+ctx.CreateMergeBuilder<Order>()
+    .Using(order)
+    .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
+    .WithScope(scope)
+    .Merge();
+```
+
+`CreateTruncateBuilder<TEntity>()` также разрешает настроенную для контекста область сущности, поэтому `TRUNCATE` использует соответствующую таблицу и схему.
+
 ## Upsert (key merge)
 
 [`CreateMergeBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateMergeBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) записывает набор строк-источника в таблицу и позволяет базе по объявленному ключу решить: обновить существующую строку или вставить новую. Источник — одна сущность или батч, ключ совпадения разрешается из маппинга сущности через `OnKeys()`, и обе ветки — `WhenMatchedUpdate()` (присвоить все не-key записываемые колонки из источника) и `WhenNotMatchedInsert()` — обязательны:

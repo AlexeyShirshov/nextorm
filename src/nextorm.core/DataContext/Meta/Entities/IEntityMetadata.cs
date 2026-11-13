@@ -18,6 +18,9 @@ public interface IEntityMetadata
     /// </summary>
     string? TableName { get; }
 
+    /// <summary>The mapped schema/owner, or null for an unqualified table.</summary>
+    string? Schema => null;
+
     /// <summary>
     /// Whether <see cref="TableName"/> was derived from the CLR type name rather than declared with
     /// an attribute or a fluent mapping. An active <see cref="INamingConvention"/> is applied only to

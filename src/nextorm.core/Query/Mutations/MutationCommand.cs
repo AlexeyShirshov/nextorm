@@ -49,6 +49,7 @@ internal abstract class MutationCommand
     /// <summary>The CLR entity type targeted by the mutation.</summary>
     public Type EntityType { get; }
 
+
     /// <summary>
     /// The mapped columns the statement returns through <c>RETURNING</c>/<c>OUTPUT</c>, or
     /// <see langword="null"/> when the statement only reports the affected-row count. Overridden by the
@@ -236,6 +237,7 @@ internal sealed class InsertCommand : MutationCommand
         OutputInto = outputInto;
         DynamicColumns = dynamicColumns;
         IsBulkReturning = isBulkReturning;
+        MappingScope = MappingScope.Default;
     }
 
     /// <summary>The mapped table name, before the naming convention and identifier quoting are applied.</summary>
@@ -304,4 +306,7 @@ internal sealed class InsertCommand : MutationCommand
     /// single-row <c>InsertBuilder.Returning()</c>, leaves it <see langword="false"/>.
     /// </summary>
     public bool IsBulkReturning { get; }
+
+    /// <summary>The runtime mapping scope selected for the insert target.</summary>
+    internal MappingScope MappingScope { get; init; }
 }

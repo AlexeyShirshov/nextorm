@@ -177,7 +177,11 @@ public static class DataContextExtensions
     {
         ArgumentNullException.ThrowIfNull(dataContext);
 
-        return new(dataContext, ResolveMetadata(dataContext, configEntity));
+        var metadata = ResolveMetadata(dataContext, configEntity);
+        var scope = dataContext is DataContext scopedContext
+            ? scopedContext.EntityScopeResolver.Resolve(typeof(TEntity))
+            : MappingScope.Default;
+        return new(dataContext, metadata, scope);
     }
 
     /// <summary>
@@ -195,7 +199,14 @@ public static class DataContextExtensions
     {
         ArgumentNullException.ThrowIfNull(dataContext);
 
-        return new(dataContext, ResolveMetadata(dataContext, configEntity));
+        var metadata = ResolveMetadata(dataContext, configEntity);
+        var scope = dataContext is DataContext scopedContext
+            ? scopedContext.EntityScopeResolver.Resolve(typeof(TEntity))
+            : MappingScope.Default;
+        var targetMetadata = scope != MappingScope.Default && dataContext is DataContext scopedDataContext
+            ? scopedDataContext.EntityMetadataProvider.GetMetadata(typeof(TEntity), scope)
+            : metadata;
+        return new(dataContext, metadata, scope, targetMetadata);
     }
 
     /// <summary>
@@ -214,7 +225,14 @@ public static class DataContextExtensions
         ArgumentNullException.ThrowIfNull(dataContext);
         ArgumentNullException.ThrowIfNull(entity);
 
-        return new UpdateBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(dataContext, null)).UpdateEntity(entity);
+        var metadata = ResolveMetadata<TEntity>(dataContext, null);
+        var scope = dataContext is DataContext scopedContext
+            ? scopedContext.EntityScopeResolver.Resolve(typeof(TEntity), entity!)
+            : MappingScope.Default;
+        var targetMetadata = scope != MappingScope.Default && dataContext is DataContext scopedDataContext
+            ? scopedDataContext.EntityMetadataProvider.GetMetadata(typeof(TEntity), scope)
+            : metadata;
+        return new UpdateBuilder<TEntity>(dataContext, metadata, scope, targetMetadata).UpdateEntity(entity);
     }
 
     /// <summary>
@@ -233,7 +251,14 @@ public static class DataContextExtensions
         ArgumentNullException.ThrowIfNull(dataContext);
         ArgumentNullException.ThrowIfNull(entity);
 
-        return new UpdateBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(dataContext, null)).UpdateEntityAsync(entity, cancellationToken);
+        var metadata = ResolveMetadata<TEntity>(dataContext, null);
+        var scope = dataContext is DataContext scopedContext
+            ? scopedContext.EntityScopeResolver.Resolve(typeof(TEntity), entity!)
+            : MappingScope.Default;
+        var targetMetadata = scope != MappingScope.Default && dataContext is DataContext scopedDataContext
+            ? scopedDataContext.EntityMetadataProvider.GetMetadata(typeof(TEntity), scope)
+            : metadata;
+        return new UpdateBuilder<TEntity>(dataContext, metadata, scope, targetMetadata).UpdateEntityAsync(entity, cancellationToken);
     }
 
     internal static IEntityMetadata ResolveMetadata<TEntity>(IDataContext? dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity)
@@ -381,8 +406,14 @@ public static class DataContextExtensions
     public static DeleteBuilder<TEntity> CreateDeleteBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
     {
         ArgumentNullException.ThrowIfNull(dataContext);
-
-        return new(dataContext, ResolveMetadata(dataContext, configEntity));
+        var metadata = ResolveMetadata(dataContext, configEntity);
+        var scope = dataContext is DataContext scopedContext
+            ? scopedContext.EntityScopeResolver.Resolve(typeof(TEntity))
+            : MappingScope.Default;
+        var targetMetadata = scope != MappingScope.Default && dataContext is DataContext scopedDataContext
+            ? scopedDataContext.EntityMetadataProvider.GetMetadata(typeof(TEntity), scope)
+            : metadata;
+        return new(dataContext, metadata, scope, targetMetadata);
     }
 
     /// <summary>
@@ -399,7 +430,14 @@ public static class DataContextExtensions
         ArgumentNullException.ThrowIfNull(dataContext);
         ArgumentNullException.ThrowIfNull(entity);
 
-        return new DeleteBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(dataContext, null)).DeleteEntity(entity);
+        var metadata = ResolveMetadata<TEntity>(dataContext, null);
+        var scope = dataContext is DataContext scopedContext
+            ? scopedContext.EntityScopeResolver.Resolve(typeof(TEntity), entity!)
+            : MappingScope.Default;
+        var targetMetadata = scope != MappingScope.Default && dataContext is DataContext scopedDataContext
+            ? scopedDataContext.EntityMetadataProvider.GetMetadata(typeof(TEntity), scope)
+            : metadata;
+        return new DeleteBuilder<TEntity>(dataContext, metadata, scope, targetMetadata).DeleteEntity(entity);
     }
 
     /// <summary>
@@ -417,7 +455,14 @@ public static class DataContextExtensions
         ArgumentNullException.ThrowIfNull(dataContext);
         ArgumentNullException.ThrowIfNull(entity);
 
-        return new DeleteBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(dataContext, null)).DeleteEntityAsync(entity, cancellationToken);
+        var metadata = ResolveMetadata<TEntity>(dataContext, null);
+        var scope = dataContext is DataContext scopedContext
+            ? scopedContext.EntityScopeResolver.Resolve(typeof(TEntity), entity!)
+            : MappingScope.Default;
+        var targetMetadata = scope != MappingScope.Default && dataContext is DataContext scopedDataContext
+            ? scopedDataContext.EntityMetadataProvider.GetMetadata(typeof(TEntity), scope)
+            : metadata;
+        return new DeleteBuilder<TEntity>(dataContext, metadata, scope, targetMetadata).DeleteEntityAsync(entity, cancellationToken);
     }
 
     /// <summary>
@@ -1004,7 +1049,11 @@ public static class DataContextExtensions
     {
         ArgumentNullException.ThrowIfNull(dataContext);
 
-        return new(dataContext, ResolveMetadata(dataContext, configEntity));
+        var metadata = ResolveMetadata(dataContext, configEntity);
+        var scope = dataContext is DataContext scopedContext ? scopedContext.EntityScopeResolver.Resolve(typeof(TEntity)) : MappingScope.Default;
+        if (scope != MappingScope.Default && dataContext is DataContext scopedDataContext)
+            metadata = scopedDataContext.EntityMetadataProvider.GetMetadata(typeof(TEntity), scope);
+        return new(dataContext, metadata, scope);
     }
 
     /// <summary>
