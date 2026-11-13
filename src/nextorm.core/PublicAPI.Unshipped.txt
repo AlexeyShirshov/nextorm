@@ -1,8 +1,17 @@
 #nullable enable
+NextORM.Core.PostgresFunctions.binary_quantize<T, TResult>(T value) -> TResult?
 NextORM.Core.PostgresFunctions.cosine_distance<T>(T left, T right) -> double?
+NextORM.Core.PostgresFunctions.hamming_distance<T>(T left, T right) -> double?
+NextORM.Core.PostgresFunctions.jaccard_distance<T>(T left, T right) -> double?
 NextORM.Core.PostgresFunctions.l1_distance<T>(T left, T right) -> double?
 NextORM.Core.PostgresFunctions.l2_distance<T>(T left, T right) -> double?
+NextORM.Core.PostgresFunctions.l2_norm<T>(T value) -> double?
 NextORM.Core.PostgresFunctions.l2_normalize<T>(T value) -> T
 NextORM.Core.PostgresFunctions.negative_inner_product<T>(T left, T right) -> double?
+NextORM.Core.PostgresFunctions.subvector<T>(T value, int start, int count) -> T
+NextORM.Core.PostgresFunctions.vector_add<T>(T left, T right) -> T
+NextORM.Core.PostgresFunctions.vector_concat<T>(T left, T right) -> T
 NextORM.Core.PostgresFunctions.vector_dims<T>(T value) -> int?
+NextORM.Core.PostgresFunctions.vector_multiply<T>(T left, T right) -> T
 NextORM.Core.PostgresFunctions.vector_norm<T>(T value) -> double?
+NextORM.Core.PostgresFunctions.vector_subtract<T>(T left, T right) -> T

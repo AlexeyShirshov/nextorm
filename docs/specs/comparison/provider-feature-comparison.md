@@ -85,7 +85,7 @@ claim tested here is width of the *dedicated provider API*.
 
 | Feature | nextorm | linq2db | nextorm evidence | linq2db evidence |
 |---|---|---|---|---|
-| pgvector value / operators and functions | yes | no | `PgVector`; LINQ marker translation for `<->`, `<=>`, `<#>`, `<+>`, `vector_dims`, `vector_norm`, `l2_normalize` | No dedicated pgvector type/operator/function API identified in `PostgreSQLExtensions.cs`. |
+| pgvector value / operators and functions | yes | no | `PgVector`, `PgHalfVector`, `PgSparseVector`, `PgBit`; `vector[]`/`halfvec[]`/`sparsevec[]`/`bit[]`; LINQ marker translation for `<->`, `<=>`, `<#>`, `<+>`, `<~>`, `<%>`, `+`, `-`, `*`, `||`, `vector_dims`, `vector_norm`, `l2_norm`, `l2_normalize`, `subvector`, `binary_quantize`, `hamming_distance`, `jaccard_distance` | No dedicated pgvector type/operator/function API identified in `PostgreSQLExtensions.cs`. |
 | Arrays + `any`/`all` quantifiers | yes | yes | `PostgresDialect.cs:297`; `SqlFunctions.Postgres.cs:19-103` | `PostgreSQLExtensions.cs` (`ARRAY_*`, `CARDINALITY`, `= ANY(...)`, `&&`, `@>`, `<@`) |
 | Range / multirange (operators, mapping) | yes | partial | `PostgresDialect.cs:301,182-187`; `SqlFunctions.Postgres.cs:738-1148` | type mapping only; no range operators in `PostgreSQLExtensions.cs` |
 | Full-text `tsvector`/`tsquery` | yes | no | `PostgresDialect.cs:428,431,465`; `SqlFunctions.Postgres.cs:519-563` | no `to_tsvector`/`tsquery` API found in `PostgreSQLExtensions.cs` |

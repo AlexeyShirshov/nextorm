@@ -136,8 +136,8 @@ public class PostgresDataContext : DataContext, IBulkInsertExecutor, IBulkInsert
     /// <returns>A new PostgreSQL parameter.</returns>
     public override DbParameter CreateParam(string name, object? value)
     {
-        if (value is PgVector vector)
-            return new NpgsqlParameter(name, vector.ToString()) { NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Unknown };
+        if (value is not null && PostgresVectorTypes.NameFor(value.GetType()) is not null)
+            return new NpgsqlParameter(name, PostgresVectorTypes.ToParameterText(value)) { NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Unknown };
 
         // A provider-agnostic Range<T> is bound as the matching Npgsql range type so that the range
         // operators and columns accept it without a cast.
@@ -268,8 +268,10 @@ public class PostgresDataContext : DataContext, IBulkInsertExecutor, IBulkInsert
     public override Expression MapColumnExpression(SelectExpression column, Expression param)
     {
         var realType = Nullable.GetUnderlyingType(column.PropertyType) ?? column.PropertyType;
-        if (realType == typeof(PgVector))
-            return MapVectorColumn(column, param);
+        if (PostgresVectorTypes.IsVectorArray(realType))
+            return MapVectorArrayColumn(column, param, realType.GetElementType()!);
+        if (PostgresVectorTypes.IsVectorType(realType))
+            return MapVectorColumn(column, param, realType);
 
         if (realType.IsGenericType && realType.GetGenericTypeDefinition() == typeof(Range<>))
             return MapRangeColumn(column, param, realType);
@@ -287,11 +289,27 @@ public class PostgresDataContext : DataContext, IBulkInsertExecutor, IBulkInsert
         return base.MapColumnExpression(column, param);
     }
 
-    private static Expression MapVectorColumn(SelectExpression column, Expression param)
+    private static Expression MapVectorColumn(SelectExpression column, Expression param, Type vectorType)
     {
         var index = Expression.Constant(column.Index);
         var getter = Expression.Call(param, typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetString))!, index);
-        var parsed = Expression.Call(typeof(PgVector).GetMethod(nameof(PgVector.Parse))!, getter);
+        var parsed = Expression.Call(vectorType.GetMethod(nameof(PgVector.Parse))!, getter);
+        return WrapVectorNull(column, param, index, parsed);
+    }
+
+    private static Expression MapVectorArrayColumn(SelectExpression column, Expression param, Type elementType)
+    {
+        var index = Expression.Constant(column.Index);
+        var getter = Expression.Call(Expression.Convert(param, typeof(DbDataReader)), GetFieldValueMI.MakeGenericMethod(typeof(string[])), index);
+        var parse = PostgresVectorArrays.ParseMethodFor(elementType)
+            ?? throw new NotSupportedException(
+                $"The PostgreSQL provider cannot materialize an array of '{elementType.Name}': declare the element type as PgVector, PgHalfVector, PgSparseVector or PgBit.");
+        var parsed = Expression.Call(parse, getter);
+        return WrapVectorNull(column, param, index, parsed);
+    }
+
+    private static Expression WrapVectorNull(SelectExpression column, Expression param, Expression index, Expression parsed)
+    {
         if (column.Nullable)
             return Expression.Condition(Expression.Call(param, IsDBNullMI, index), Expression.Constant(null, column.PropertyType), Expression.Convert(parsed, column.PropertyType));
         if (column.DefaultOnNull)

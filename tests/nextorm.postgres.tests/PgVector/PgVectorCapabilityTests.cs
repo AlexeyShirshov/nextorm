@@ -11,7 +11,7 @@ using NextORM.ClickHouse;
 
 namespace NextORM.Postgres.Tests;
 
-/// <summary>Verifies pgvector markers are rejected during query preparation by non-PostgreSQL dialects.</summary>
+/// <summary>Verifies every pgvector marker is rejected during query preparation by non-PostgreSQL dialects.</summary>
 public sealed class PgVectorCapabilityTests
 {
     private const string Refusal = "pgvector functions require PostgreSQL.";
@@ -29,6 +29,15 @@ public sealed class PgVectorCapabilityTests
 
         [Column("value")]
         PgVector Value { get; set; }
+
+        [Column("half_value")]
+        PgHalfVector HalfValue { get; set; }
+
+        [Column("sparse_value")]
+        PgSparseVector SparseValue { get; set; }
+
+        [Column("bits")]
+        PgBit Bits { get; set; }
     }
 
     [Fact]
@@ -58,37 +67,49 @@ public sealed class PgVectorCapabilityTests
 
     private static void AssertAllRejected(IDataContext context)
     {
-        var target = PgVector.Parse("[1,2,3]");
-        AssertRejected(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.l2_distance(x.Value, target)));
-        AssertRejected(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.cosine_distance(x.Value, target)));
-        AssertRejected(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.negative_inner_product(x.Value, target)));
-        AssertRejected(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.l1_distance(x.Value, target)));
-        AssertRejected(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.vector_dims(x.Value)));
-        AssertRejected(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.vector_norm(x.Value)));
-        AssertRejected(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.l2_normalize(x.Value)));
+        foreach (var prepare in MarkerQueries(context))
+            prepare.Should().ThrowExactly<NotSupportedException>().WithMessage(Refusal);
     }
 
     private static void AssertAllPrepared(IDataContext context)
     {
+        foreach (var prepare in MarkerQueries(context))
+            prepare.Should().NotThrow();
+    }
+
+    /// <summary>
+    /// The whole pgvector marker surface: four distances on <c>vector</c>, the Hamming/Jaccard pair on
+    /// <c>bit</c>, the half-precision/sparse norm and distance, the scalar functions and the element-wise
+    /// operators. Each entry prepares its query against the supplied context.
+    /// </summary>
+    private static IEnumerable<Action> MarkerQueries(IDataContext context)
+    {
         var target = PgVector.Parse("[1,2,3]");
-        AssertPrepared(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.l2_distance(x.Value, target)));
-        AssertPrepared(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.cosine_distance(x.Value, target)));
-        AssertPrepared(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.negative_inner_product(x.Value, target)));
-        AssertPrepared(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.l1_distance(x.Value, target)));
-        AssertPrepared(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.vector_dims(x.Value)));
-        AssertPrepared(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.vector_norm(x.Value)));
-        AssertPrepared(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.l2_normalize(x.Value)));
+        var halfTarget = new PgHalfVector(new[] { 1f, 2f, 3f });
+        var sparseTarget = new PgSparseVector(3, new[] { 0, 2 }, new[] { 1f, 2f });
+        var bitTarget = PgBit.Parse("10101");
+
+        yield return () => Prepare(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.l2_distance(x.Value, target)));
+        yield return () => Prepare(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.cosine_distance(x.Value, target)));
+        yield return () => Prepare(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.negative_inner_product(x.Value, target)));
+        yield return () => Prepare(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.l1_distance(x.Value, target)));
+        yield return () => Prepare(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.hamming_distance(x.Bits, bitTarget)));
+        yield return () => Prepare(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.jaccard_distance(x.Bits, bitTarget)));
+        yield return () => Prepare(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.vector_dims(x.Value)));
+        yield return () => Prepare(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.vector_norm(x.Value)));
+        yield return () => Prepare(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.l2_norm(x.HalfValue)));
+        yield return () => Prepare(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.l2_normalize(x.Value)));
+        yield return () => Prepare(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.l2_normalize(x.HalfValue)));
+        yield return () => Prepare(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.subvector(x.Value, 1, 2)));
+        yield return () => Prepare(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.vector_add(x.Value, target)));
+        yield return () => Prepare(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.vector_subtract(x.Value, target)));
+        yield return () => Prepare(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.vector_multiply(x.Value, target)));
+        yield return () => Prepare(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.vector_concat(x.Value, target)));
+        yield return () => Prepare(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.binary_quantize<PgVector, PgBit>(x.Value)));
+        yield return () => Prepare(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.l2_distance(x.HalfValue, halfTarget)));
+        yield return () => Prepare(context, context.From<IVectorMarker>().Select(x => SqlFunctions.Postgres.l2_distance(x.SparseValue, sparseTarget)));
     }
 
-    private static void AssertRejected<T>(IDataContext context, QueryCommand<T> query)
-    {
-        Action prepare = () => context.GetPreparedQueryCommand(query, false, false, CancellationToken.None);
-        prepare.Should().ThrowExactly<NotSupportedException>().WithMessage(Refusal);
-    }
-
-    private static void AssertPrepared<T>(IDataContext context, QueryCommand<T> query)
-    {
-        var prepared = context.GetPreparedQueryCommand(query, false, false, CancellationToken.None);
-        prepared.Should().NotBeNull();
-    }
+    private static void Prepare<T>(IDataContext context, QueryCommand<T> query)
+        => context.GetPreparedQueryCommand(query, false, false, CancellationToken.None);
 }

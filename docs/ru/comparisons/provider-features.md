@@ -56,7 +56,7 @@ maintenance в SQLite — всё подключено к конструктор�
 
 | Возможность | Nextorm | linq2db |
 |---|---|---|
-| Тип pgvector и операции | поддерживается (`PgVector` только для PostgreSQL и перевод LINQ-маркеров) | нет отдельного API |
+| Типы pgvector и операции | поддерживается (`PgVector`, `PgHalfVector`, `PgSparseVector` и `PgBit` только для PostgreSQL; перевод LINQ-маркеров расстояний, поэлементных операторов, функций и массивов векторов) | нет отдельного API |
 | Массивы + квантификаторы `any`/`all` | yes | yes |
 | Range / multirange (операторы, маппинг) | yes | partial (только маппинг типов) |
 | Full-text `tsvector`/`tsquery` | yes | no |

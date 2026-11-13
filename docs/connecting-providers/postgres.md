@@ -203,22 +203,6 @@ integer.
 
 ## Arrays
 
-## pgvector
-
-`NextORM.Postgres.PgVector` is a PostgreSQL-only `readonly struct` implementing `IEquatable<PgVector>`. It
-accepts finite coordinates, exposes dimensions and a zero-based indexer, and provides `ToArray()`,
-`ToString()` and `Parse(string)`; its textual representation is bracketed and comma-separated. The
-nullable form maps database `NULL` to `null`. Distance operations require equal vector dimensions;
-PostgreSQL reports a dimension-mismatch error when they differ. The pgvector extension and schema/column
-setup are managed by the application, not nextorm.
-
-The PostgreSQL marker methods in `SqlFunctions.Postgres` translate the distance operators `<->`, `<=>`,
-`<#>`, `<+>` and functions `vector_dims`, `vector_norm`, `l2_normalize` from LINQ expressions. They are
-PostgreSQL-only; configure the pgvector extension and vector columns in the database schema yourself.
-
-See [PostgreSQL-specific SQL](../guide/provider-specific-sql/postgresql.md#vector-pgvector).
-
-
 PostgreSQL is the only supported provider with native arrays, and the array surface lives on
 [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) ([`Sql`](xref:NextORM.Core.SqlFunctions.Sql) stays cross-provider). An array operand is passed as a single parameter, so
 `column = any(@array)` works with a runtime parameter or a captured array, and the SQL does not depend
@@ -241,6 +225,26 @@ The array functions (`cardinality`, `array_length`, `array_position`, ...) and t
 are documented in [Scalar functions](../scalar-functions/06-arrays.md#arrays-postgresql). Two names are
 refused at preparation even on PostgreSQL: `array_reverse` (no release provides it) and `array_sort`
 below an explicit 18+. Other providers reject the array surface with `NotSupportedException`.
+
+## pgvector
+
+The provider owns four pgvector value types: `NextORM.Postgres.PgVector` (`vector`), `PgHalfVector`
+(`halfvec`), `PgSparseVector` (`sparsevec`) and `PgBit` (`bit`). Each is a `readonly struct` with finite
+coordinates (`PgBit` holds bits), `Dimensions` (or `Length`), a zero-based indexer, `ToArray()`, the
+PostgreSQL text form in `ToString()` and `Parse(string)`; `PgVector` also implements element-wise
+`+`/`-`/`*`, scaling by `float` and `Normalize()`. Values travel as PostgreSQL text, so no `UseVector()`
+data-source plugin is needed. Arrays of these types map to `vector[]`, `halfvec[]`, `sparsevec[]` and
+`bit[]`, and nullable forms map database `NULL` to `null`.
+
+The marker methods in `SqlFunctions.Postgres` translate the distance operators `<->`, `<=>`, `<#>`,
+`<+>`, `<~>` and `<%>`, the element-wise `+`/`-`/`*`/`||` operators and the functions `vector_dims`,
+`vector_norm`, `l2_norm`, `l2_normalize`, `subvector`, `binary_quantize`, `hamming_distance` and
+`jaccard_distance` from LINQ expressions in `SELECT`, `WHERE` and `ORDER BY … Take(k)`. They are
+PostgreSQL-only and are refused during preparation on every other provider. Distance operations require
+equal dimensions and `bit` operations equal lengths; PostgreSQL raises the error otherwise. The pgvector
+extension, the columns and the indexes are managed by the application, not nextorm.
+
+See [PostgreSQL-specific SQL](../guide/provider-specific-sql/postgresql.md#pgvector-values).
 
 ## Range types
 
