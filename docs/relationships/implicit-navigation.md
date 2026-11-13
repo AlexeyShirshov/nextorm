@@ -173,6 +173,12 @@ All three reference forms work in this position:
 * a **scalar projection** by the correlated subquery (`.Select(c => p.Group!.Code)`) — a scalar
   reference value, **not** whole-object eager loading.
 
+The terminal that enters the body does not matter, and the body does not have to read the outer entity
+itself: a nested query whose **only** outer link is the navigation alias — for example
+`ctx.From<Child>().Where(c => c.GroupCode == p.Group!.Code).Any()` in a predicate, or the same shape
+behind `FirstOrDefault()` in a projection — registers the joined alias as an outer reference exactly as
+a direct `p.Id` read does.
+
 The same reference path used by two correlated predicates of one command reuses one joined alias (one
 `LEFT JOIN`, both correlated bodies reading it). Null semantics follow the outer `LEFT JOIN`: a dangling
 foreign key produces a `NULL` joined key, so the correlated comparison is unknown and the row does not

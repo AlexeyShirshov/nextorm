@@ -77,7 +77,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
     /// <summary>
     /// Rewrites a member access of a currently-pushed outer parameter (for example the XML column a
-    /// correlated <c>CROSS/OUTER APPLY</c> source is built from) into an <see cref="OuterRefMarker{T}"/>
+    /// correlated <c>CROSS/OUTER APPLY</c> source is built from) into an <see cref="OuterRefMarker"/>
     /// registered on the command this visitor prepares. Used by
     /// <see cref="XmlNodesExpression.TryCreate"/> for the <c>xml.nodes()</c> rowset operand, whose
     /// rendered form is <c>alias.column</c>.
@@ -289,12 +289,13 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 return ReplaceAggregateTerminal(node, builderReceiver);
 
             // A non-aggregate builder terminal (Any/First/Single) whose receiver references a current
-            // outer parameter must be built while the outer members are rewritten to markers; compiling
-            // the raw receiver would leave the outer parameter free. Route it through GetQueryCommand,
-            // which applies the same outer-reference rewrite as the aggregate terminals.
-            if (_forPrepare && _outerParams is { Count: > 0 } && ReferencesOuter(builderReceiver))
+            // outer parameter - directly or through a navigation-join alias the enclosing command
+            // injected - must be built while those members are rewritten to markers; compiling the raw
+            // receiver would leave the parameter free. Route it through GetQueryCommand, which applies
+            // the same outer-reference rewrite as the aggregate terminals.
+            if (_forPrepare && IsCorrelatedWithEnclosing(builderReceiver))
             {
-                var outerCmd = GetQueryCommand(Expression.Convert(builderReceiver, typeof(QueryCommand)));
+                var outerCmd = GetQueryCommand(AsCommandExpression(builderReceiver));
                 return ReplaceQueryCommand(node, outerCmd);
             }
 
@@ -304,7 +305,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
             {
                 //var d = Expression.Lambda<Func<QueryCommand>>(Expression.Call(node.Object, ToCommandMI)).Compile();
-                var d = Expression.Lambda<Func<QueryCommand>>(Expression.Convert(builderReceiver, typeof(QueryCommand))).Compile();
+                var d = Expression.Lambda<Func<QueryCommand>>(AsCommandExpression(builderReceiver)).Compile();
 
                 DataContextCache.ExpressionsCache[keyCmd] = d;
                 cmd = d();
@@ -328,7 +329,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             // with an OuterRefMarker and registered on the root command; the non-correlated closure path
             // below would either leave the outer parameter free and fail at Compile(), or rewrite the
             // marker's index constant as a closure value and corrupt the marker.
-            if (_forPrepare && ((_outerParams is { Count: > 0 } && ReferencesOuter(node.Object)) || ContainsOuterRefMarker(node.Object)))
+            if (_forPrepare && (IsCorrelatedWithEnclosing(node.Object) || ContainsOuterRefMarker(node.Object)))
             {
                 var outerCmd = GetQueryCommand(node.Object);
                 return ReplaceQueryCommand(node, outerCmd);
@@ -431,24 +432,18 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     {
         var selectCall = AggregateTerminalRewriter.Rewrite(node, builderReceiver);
         var cmd = GetQueryCommand(selectCall);
-        var firstCall = Expression.Call(selectCall, selectCall.Type.GetMethod("First", Type.EmptyTypes)!);
-        var scalar = ReplaceQueryCommand(firstCall, cmd);
 
-        // #303: an aggregate terminal used as a value must expose the *value*, not the untyped
-        // Func<IQueryRegistry, QueryCommand> placeholder the generic terminal returns - a delegate has
-        // no numeric operator, so `Sum(...) > 6` fails inside Expression.MakeBinary. Re-type the
-        // returned placeholder into the result-typed registry-index shape (the one
-        // ReplaceScalarQueryCommand produces) and reuse the index it was just registered under: the
-        // command stays prepared and registered exactly once, and `limit 1` / the FirstOrDefault
-        // default still come from the First() terminal above.
-        if (scalar is LambdaExpression { Parameters.Count: 1 } placeholder
-            && placeholder.Parameters[0].Type == typeof(IQueryRegistry)
-            && placeholder.Body is IndexExpression { Arguments: [ConstantExpression { Value: int idx }] })
-        {
-            return TypedScalarPlaceholder(idx, cmd.ResultType ?? typeof(object));
-        }
+        // The aggregate terminal reads one scalar, which is exactly the Limit-1 shape the First()
+        // terminal used to add. Building that terminal needed the closed QueryCommand<TResult> type and
+        // its First method through reflection - metadata a trimmed/native image drops - so the shape is
+        // applied to the command directly instead. #303: the placeholder is re-typed to the aggregate's
+        // result type so `Sum(...) > 6` still binds a numeric operator.
+        cmd.OuterRegistry ??= _queryProvider;
+        cmd.Paging.Limit = 1;
+        cmd.DefaultOnEmpty = false;
 
-        return scalar;
+        PrepareAndRegister(cmd, out var idx);
+        return TypedScalarPlaceholder(idx, cmd.ResultType ?? typeof(object));
     }
 
     /// <summary>
@@ -782,10 +777,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             var foreignKey = Expression.Property(navigation, leg.ForeignKeys[component].PropertyInfo);
 
             var index = _queryProvider!.AddOuterReference(outerKey);
-            var markerConstructor = ReplaceConstantsExpressionVisitor.GetOuterRefMarkerCI(outerKey.Type);
-            var marker = Expression.Property(
-                Expression.New(markerConstructor, Expression.Constant(index)),
-                nameof(OuterRefMarker<int>.Ref));
+            var marker = OuterReference.Create(index, outerKey.Type);
 
             var (left, right) = AlignNavigationKeys(foreignKey, marker);
             var parentEquality = Expression.Equal(left, right);
@@ -1332,10 +1324,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
 
         var index = _queryProvider!.AddOuterReference(outerKey);
-        var markerConstructor = ReplaceConstantsExpressionVisitor.GetOuterRefMarkerCI(outerKey.Type);
-        var marker = Expression.Property(
-            Expression.New(markerConstructor, Expression.Constant(index)),
-            nameof(OuterRefMarker<int>.Ref));
+        var marker = OuterReference.Create(index, outerKey.Type);
 
         var (left, right) = AlignNavigationKeys(innerKey, marker);
         return (hop.RelatedType, Expression.Lambda(Expression.Equal(left, right), navigation));
@@ -1465,7 +1454,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         return false;
     }
 
-    /// <summary>True when the expression already contains an <see cref="OuterRefMarker{T}"/> from an ancestor scope.</summary>
+    /// <summary>True when the expression already contains an <see cref="OuterRefMarker"/> from an ancestor scope.</summary>
     private static bool ContainsOuterRefMarker(Expression expression)
     {
         var detector = new OuterRefMarkerDetector();
@@ -1479,7 +1468,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
         protected override Expression VisitNew(NewExpression node)
         {
-            if (node.Type.IsGenericType && node.Type.GetGenericTypeDefinition() == typeof(OuterRefMarker<>))
+            if (node.Type == typeof(OuterRefMarker))
                 Found = true;
 
             return base.VisitNew(node);
@@ -1533,6 +1522,19 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             return base.VisitParameter(node);
         }
     }
+
+    /// <summary>
+    /// The statically known getter that reads a builder's command; see <see cref="IQueryCommandSource"/>.
+    /// </summary>
+    private static readonly PropertyInfo CommandPI = typeof(IQueryCommandSource).GetProperty(nameof(IQueryCommandSource.Command))!;
+
+    /// <summary>
+    /// Builds the expression that yields the untyped command of a builder, without a user-defined
+    /// conversion operator (which trimming removes and <see cref="Expression.Convert(Expression, Type)"/>
+    /// resolves reflectively).
+    /// </summary>
+    private static Expression AsCommandExpression(Expression builder)
+        => Expression.Property(Expression.Convert(builder, typeof(IQueryCommandSource)), CommandPI);
 
     private QueryCommand GetQueryCommand(Expression exp)
     {
@@ -1640,6 +1642,27 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     }
 
     /// <summary>
+    /// True when <paramref name="expression"/> is correlated with the command being prepared: it reads a
+    /// pushed outer parameter, or a navigation-join alias that <see cref="NavigationExpansion"/> injected
+    /// on that command. The alias case carries no outer parameter at all when the correlated body reads
+    /// the reference's scalar only (for example <c>inner.Where(i => i.Name == outer.Buyer!.Name).Any()</c>),
+    /// so testing the pushed parameters alone leaves such a body to be compiled unchecked and fails with
+    /// "variable 'navigationN' ... is not defined".
+    /// </summary>
+    private bool IsCorrelatedWithEnclosing(Expression expression)
+    {
+        if (_outerParams is { Count: > 0 } && ReferencesOuter(expression))
+            return true;
+
+        if (_queryProvider is not QueryCommand { NavigationPaths: { Count: > 0 } paths })
+            return false;
+
+        var collector = new JoinedParameterCollector(paths, _outerParams);
+        collector.Visit(expression);
+        return collector.Found.Count > 0;
+    }
+
+    /// <summary>
     /// Collects the free navigation-join aliases of the enclosing command that appear in an expression,
     /// skipping the parameters already treated as outer.
     /// </summary>
@@ -1677,7 +1700,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
     /// <summary>
     /// Builds the command the expression <paramref name="body"/> represents while the currently pushed
-    /// outer parameters are in scope: their member accesses become <see cref="OuterRefMarker{T}"/>
+    /// outer parameters are in scope: their member accesses become <see cref="OuterRefMarker"/>
     /// nodes registered on the command this visitor was created for. Used by a correlated
     /// <c>CROSS/OUTER APPLY</c> source, whose derived query is not part of a projection and therefore
     /// never reaches <see cref="ReplaceQueryCommand"/>.

@@ -223,6 +223,77 @@ public abstract partial class CommonTestSuite
     }
 
     /// <summary>
+    /// Reopened #304: a correlated body whose <em>only</em> link to the outer row is a declared
+    /// reference navigation scalar (<c>p.Group!.Code</c>), reached through a terminal that is not
+    /// <c>Sql.exists</c> - <c>Any()</c> in a predicate and a scalar subquery in a projection. Navigation
+    /// expansion rewrites the hop to a join alias on the enclosing command; that alias must register as
+    /// an outer reference exactly like a direct read of the outer entity parameter. Before the repair it
+    /// stayed free, and compiling the nested command failed with
+    /// <c>variable 'navigationN' ... is not defined</c>; the SQL-shape checks never compile that lambda.
+    /// </summary>
+    [Fact]
+    public void T304_ReferenceHop_NavigationOnlyCorrelation_ShouldExecuteThroughAnyAndScalarTerminals()
+    {
+        T304CreateFixture();
+        var ctx = _sut.DataProvider;
+
+        // Any() terminal, hop 1: every parent whose group code appears among some child's codes.
+        ctx.From<T304sParent>()
+            .Where(p => ctx.From<T304sChild>().Where(c => c.GroupCode == p.Group!.Code).Any())
+            .OrderBy(p => p.Id)
+            .Select(p => p.Id)
+            .ToList()
+            .Should().Equal(new[] { 8001, 8002, 8003 }, "8004's foreign key is dangling, so it has no code to match");
+
+        // Any() terminal, hop 2+: only the root-a parents see a child carrying their root label.
+        ctx.From<T304sParent>()
+            .Where(p => ctx.From<T304sChild>().Where(c => c.GroupCode == p.Group!.Root!.Label).Any())
+            .OrderBy(p => p.Id)
+            .Select(p => p.Id)
+            .ToList()
+            .Should().Equal(8001, 8002);
+
+        // Any() terminal, nullable foreign key: the NULL key never matches.
+        ctx.From<T304sNullableParent>()
+            .Where(p => ctx.From<T304sChild>().Where(c => c.GroupCode == p.Group!.Code).Any())
+            .OrderBy(p => p.Id)
+            .Select(p => p.Id)
+            .ToList()
+            .Should().Equal(8006);
+
+        // Scalar subquery: the same navigation-only body behind FirstOrDefault, including the dangling
+        // key, which has no matching child and therefore yields the terminal's default.
+        var scalars = ctx.From<T304sParent>()
+            .OrderBy(p => p.Id)
+            .Select(p => new
+            {
+                p.Id,
+                Child = ctx.From<T304sChild>()
+                    .Where(c => c.GroupCode == p.Group!.Code)
+                    .Select(c => c.Id)
+                    .FirstOrDefault()
+            })
+            .ToList();
+
+        scalars.Select(r => (r.Id, r.Child)).Should().Equal(
+            (8001, 8106),
+            (8002, 8106),
+            (8003, 8107),
+            (8004, 0));
+
+        // Ownership control: the same command also carries the inner command's own navigation chain.
+        // That chain must expand inside the nested command, while the outer alias stays the correlated
+        // operand - the guard collects only aliases of the enclosing command, never "every free
+        // parameter".
+        ctx.From<T304sParent>()
+            .Where(p => ctx.From<T304sChild>().Where(c => c.Parent!.Group!.Code == p.Group!.Code).Any())
+            .OrderBy(p => p.Id)
+            .Select(p => p.Id)
+            .ToList()
+            .Should().Equal(new[] { 8001, 8002, 8003 }, "8004's dangling key yields no inner principal group");
+    }
+
+    /// <summary>
     /// A5: two identically shaped commands carry the same captured parameter name and CLR type with
     /// distinct values; each returns its own rows and the first still binds its own value afterwards.
     /// </summary>

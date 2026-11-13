@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Diagnostics;
 using System.Text;
 using FluentAssertions;
@@ -23,7 +25,14 @@ public sealed class AotNativeRunTests
         "selectgroup-having",
         "extreme-min",
         "extreme-max",
-        "extreme-group"
+        "extreme-group",
+        "correlated-any",
+        "correlated-count",
+        "correlated-scalar-first",
+        "correlated-sum",
+        "correlated-nested-depth2",
+        "correlated-exists",
+        "correlated-outer-member"
     ];
 
     [Fact]
@@ -253,6 +262,62 @@ public sealed class AotNativeRunTests
                     .SelectWhereMin(row => row.Id, groupBy: row => row.Id % 2)
                     .ToList();
                 return string.Join(";", rows.OrderBy(row => row.Id).Select(row => row.Id));
+            }),
+            ["correlated-any"] = CaptureJit(() =>
+            {
+                var ids = context.From<SimpleEntity>()
+                    .Where(row => context.From<IComplexEntity>().Where(inner => inner.Int == row.Id).Any())
+                    .OrderBy(row => row.Id)
+                    .Select(row => row.Id)
+                    .ToList();
+                return string.Join(";", ids);
+            }),
+            ["correlated-count"] = CaptureJit(() =>
+            {
+                var rows = context.From<SimpleEntity>()
+                    .Select(row => new { row.Id, N = context.From<IComplexEntity>().Where(inner => inner.Int == row.Id).Count() })
+                    .ToList();
+                return string.Join(";", rows.OrderBy(row => row.Id).Select(row => $"{row.Id}:{row.N}"));
+            }),
+            ["correlated-scalar-first"] = CaptureJit(() =>
+            {
+                var rows = context.From<SimpleEntity>()
+                    .Select(row => new { row.Id, V = context.From<IComplexEntity>().Where(inner => inner.Int == row.Id).Select(inner => inner.Id).FirstOrDefault() })
+                    .ToList();
+                return string.Join(";", rows.OrderBy(row => row.Id).Select(row => $"{row.Id}:{row.V}"));
+            }),
+            ["correlated-sum"] = CaptureJit(() =>
+            {
+                var rows = context.From<SimpleEntity>()
+                    .Select(row => new { row.Id, S = context.From<IComplexEntity>().Where(inner => inner.Int == row.Id).Sum(inner => inner.Numeric) })
+                    .ToList();
+                return string.Join(";", rows.OrderBy(row => row.Id).Select(row => $"{row.Id}:{row.S?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "null"}"));
+            }),
+            ["correlated-nested-depth2"] = CaptureJit(() =>
+            {
+                var ids = context.From<SimpleEntity>()
+                    .Where(outer => context.From<IComplexEntity>().Where(inner => context.From<SimpleEntity>().Where(leaf => leaf.Id == outer.Id && leaf.Id == inner.Int).Any()).Any())
+                    .OrderBy(outer => outer.Id)
+                    .Select(outer => outer.Id)
+                    .ToList();
+                return string.Join(";", ids);
+            }),
+            ["correlated-exists"] = CaptureJit(() =>
+            {
+                var ids = context.From<SimpleEntity>()
+                    .Where(outer => SqlFunctions.Sql.exists(context.From<IComplexEntity>().Where(inner => inner.Int == outer.Id)))
+                    .OrderBy(outer => outer.Id)
+                    .Select(outer => outer.Id)
+                    .ToList();
+                return string.Join(";", ids);
+            }),
+            ["correlated-outer-member"] = CaptureJit(() =>
+            {
+                var rows = context.From<AotNavOrder>()
+                    .Join<AotNavPerson>((order, person) => order.BuyerId == person.Id)
+                    .Select(projection => new { projection.Item1.Id, N = context.From<AotNavOrder>().Where(inner => inner.BuyerId == projection.Item2.Id).Count() })
+                    .ToList();
+                return string.Join(";", rows.OrderBy(row => row.Id).Select(row => $"{row.Id}:{row.N}"));
             })
         };
         return results;
@@ -327,4 +392,27 @@ public sealed class AotNativeRunTests
         .Replace("\t", "\\t").Replace("\r", "\\r").Replace("\n", "\\n");
 
     private readonly record struct JitScenarioResult(string Status, string Values, string Exception, string Message);
+}
+
+[SqlTable("orders")]
+public sealed class AotNavOrder
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    [Column("buyer_id")]
+    public int BuyerId { get; set; }
+    [Column("approver_id")]
+    public int ApproverId { get; set; }
+    public AotNavPerson? Buyer { get; set; }
+}
+
+[SqlTable("person")]
+public sealed class AotNavPerson
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    [Column("name")]
+    public string? Name { get; set; }
 }

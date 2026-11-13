@@ -19,7 +19,7 @@ namespace NextORM.Core;
 /// <c>IDataContext.From&lt;TEntity&gt;()</c>.
 /// </summary>
 /// <typeparam name="TEntity">The mapped entity type the query projects.</typeparam>
-public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncEnumerable<TEntity>
+public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, IQueryCommandSource, IAggregateProjectionHost //IAsyncEnumerable<TEntity>
 {
     // private const string AnyCommandProperty = "NextORM.Core.AnyCommand";
     #region Fields
@@ -3708,6 +3708,59 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="builder">The builder to convert.</param>
     /// <returns>The command built by <see cref="ToCommand"/>.</returns>
     public static implicit operator QueryCommand(EntityBuilder<TEntity> builder) => builder.ToCommand();
+    /// <summary>
+    /// Exposes the builder's command through <see cref="IQueryCommandSource"/>, so the correlated
+    /// visitor can obtain it with a statically known property getter instead of resolving the implicit
+    /// conversion operator through reflection (which trimming removes).
+    /// </summary>
+    QueryCommand IQueryCommandSource.Command => ToCommand();
+    /// <summary>
+    /// Builds the projection command for an aggregate terminal whose result type is only known at run
+    /// time; see <see cref="IAggregateProjectionHost"/>. Mirrors the projection part of
+    /// <see cref="Select{TResult}"/> without closing a generic method at run time.
+    /// </summary>
+    /// <param name="projection">The aggregate projection lambda over the entity parameter.</param>
+    /// <param name="resultType">The aggregate's result type.</param>
+    /// <returns>The projection command, carrying <paramref name="resultType"/> as its result type.</returns>
+    QueryCommand IAggregateProjectionHost.SelectAggregateProjection(LambdaExpression projection, Type resultType)
+    {
+        EnsureNoJoinIntos(nameof(Select));
+        EnsureNoEagerLoadState(nameof(Select));
+
+        // A definition (not the stack-only QueryShape) because the untyped factory takes one; this is the
+        // cold correlated-subquery path, never the fluent hot path.
+        var cmd = RequireContext.CreateCommand(resultType, new QueryDefinition
+        {
+            Exp = projection,
+            SrcType = _sourceEntityType,
+            Condition = _condition,
+            FilterScope = _filterScope,
+            Joins = _joins?.ToArray(),
+            Paging = Paging,
+            Sorting = _sorting?.ToArray(),
+            Group = _group,
+            Having = _having,
+            Logger = Logger,
+            IsDistinct = IsDistinct,
+            Final = IsFinal,
+            SampleRatio = SampleRatio,
+            SampleOffset = SampleOffset,
+            Settings = _settings,
+            PreWhere = _preWhere,
+            ArrayJoins = _arrayJoins,
+            Windows = _windows,
+            ArrayJoinKind = _arrayJoinKind,
+            BindArrayJoinElement = _bindArrayJoinElement,
+        });
+
+        cmd.From = ResolveSource();
+
+        if (Ctes is not null)
+            cmd.Ctes = Ctes;
+
+        ApplyCommandOptions(cmd);
+        return cmd;
+    }
     // public QueryCommand<TEntity> ToCommand() => Select<TEntity>(typeof(TEntity));
     // public IAsyncEnumerator<TEntity> GetAsyncEnumerator(CancellationToken cancellationToken = default) => ToCommand().GetAsyncEnumerator(cancellationToken);
 

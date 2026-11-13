@@ -4,7 +4,7 @@ namespace NextORM.Core;
 
 /// <summary>
 /// A SQL Server <c>xml.nodes('xquery')</c> rowset used as a <c>CROSS/OUTER APPLY</c> source. The
-/// operand is an already-rewritten column reference (an <see cref="OuterRefMarker{T}"/> of the
+/// operand is an already-rewritten column reference (an <see cref="OuterRefMarker"/> of the
 /// left-hand row); the XQuery is a compile-time constant. Implementation detail of
 /// <see cref="SqlServerFunctions.xml_nodes(string?, string?)"/>.
 /// </summary>

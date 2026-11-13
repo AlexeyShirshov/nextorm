@@ -15,11 +15,16 @@ package adds a context, a dialect and a [`DataContextBuilder`](xref:NextORM.Core
 
 ## Namespace [`NextORM.Postgres`](xref:NextORM.Postgres)
 
-## PostgreSQL vector type
+## pgvector types
 
 | Type | Description |
 |---|---|
-| [`PgVector`](xref:NextORM.Postgres.PgVector) | PostgreSQL pgvector value as a `readonly struct` implementing `IEquatable<PgVector>`; finite coordinates, dimensions, zero-based indexer, `ToArray()`, bracketed comma-separated `ToString()` and `Parse(string)`. PostgreSQL marker methods translate pgvector operations from LINQ. See [PostgreSQL-specific SQL](../guide/provider-specific-sql/postgresql.md#vector-pgvector). |
+| [`PgVector`](xref:NextORM.Postgres.PgVector) | PostgreSQL `vector` value as a `readonly struct` implementing `IEquatable<PgVector>`; finite coordinates, dimensions, zero-based indexer, `ToArray()`, bracketed comma-separated `ToString()`, `Parse(string)`, element-wise `+`/`-`/`*`, scaling by `float` and `Normalize()`. |
+| [`PgHalfVector`](xref:NextORM.Postgres.PgHalfVector) | PostgreSQL `halfvec` value with half-precision coordinates and the same shape/text surface as `PgVector`. |
+| [`PgSparseVector`](xref:NextORM.Postgres.PgSparseVector) | PostgreSQL `sparsevec` value: dimensions, ascending zero-based indices and finite non-zero values, dense conversion through `ToArray()` and the `{index:value,...}/dimensions` text form. |
+| [`PgBit`](xref:NextORM.Postgres.PgBit) | PostgreSQL `bit` string: bits, `Length`, zero-based indexer, `ToArray()` and the binary text form. |
+
+The PostgreSQL marker methods translate pgvector operations from LINQ: the distances `<->`, `<=>`, `<#>`, `<+>`, `<~>` and `<%>`, the element-wise `+`/`-`/`*`/`||` operators and the functions `vector_dims`, `vector_norm`, `l2_norm`, `l2_normalize`, `subvector`, `binary_quantize`, `hamming_distance` and `jaccard_distance`. Arrays of the four types map to `vector[]`, `halfvec[]`, `sparsevec[]` and `bit[]`. See [PostgreSQL-specific SQL](../guide/provider-specific-sql/postgresql.md#pgvector-values).
 
 
 ## Namespace [`NextORM.Core`](xref:NextORM.Core)

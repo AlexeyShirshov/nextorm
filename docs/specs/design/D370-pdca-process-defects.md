@@ -79,3 +79,48 @@
 - Effect: one minor CHECK finding; no effect on the verdict after reconciliation.
 - Evidence: `.pdca/status/T370.md` §Step S7 `CHECK record (r1)` (previously `pending`).
 - Prevention: persist every CHECK report in the same write that advances the step's phase, before dispatching the next role.
+
+## T370-S10-IDENTITY-SNAPSHOT
+
+- Stable key: `T370-S10-IDENTITY-SNAPSHOT`.
+- Symptom: the S10 evidence round supplied `attempts/s10-identity.txt` — one identity snapshot plus log timestamps — as the binding between the frozen candidate and the runs; CHECK refused it as "a snapshot, not run-bound".
+- Root cause: the S8 evidence round had established a before/after identity pattern around a single run, and S10 reused the cheaper single-snapshot form although its runs were spread over hours.
+- Effect: one CHECK refusal on `T370-S10-EVIDENCE` and an escalation; no product impact.
+- Evidence: `.pdca/status/T370.md` §Step S10 `CHECK record (r3)`; fixed by `attempts/s10-bound-run.txt` (identity → build → publish → registry → harness → identity in one invocation).
+- Prevention: any measurement that supports a numeric criterion is produced by a single invocation that records the identity before and after the run, in the same command, from the first attempt.
+
+## T370-S10-FROZEN-PATCH-DRIFT
+
+- Stable key: `T370-S10-FROZEN-PATCH-DRIFT`.
+- Symptom: the frozen `candidate/patch-s10.diff` was generated before the design-record edits that satisfied `S10-C4` (corrected four-removal attribution and failure-log pointers), so the criterion was judged "unmet" against an artefact that no longer matched the tree.
+- Root cause: the patch was frozen once, then the docs were corrected for a different finding, and the patch was not regenerated.
+- Effect: one CHECK refusal on `S10-C4` plus a bounded re-verification round.
+- Evidence: `.pdca/status/T370.md` §Step S10 `CHECK record (r3)`; the regenerated patch sha256 `7352fe93…` contains both edits.
+- Prevention: regenerate and re-hash the frozen candidate as the last action of every DO round, after all edits including documentation, and let the CHECK dispatch quote only that hash.
+
+## T370-S10-FLOOR (recurrence of T370-S7-FLOOR)
+
+- Stable key: `T370-S10-FLOOR`.
+- Symptom: the S10 r2 planner set `S10-C2` at the achieved "≤201/207" instead of the campaign's −1 floor, exactly the class already recorded at S7.
+- Root cause: the measured result was copied into the criterion as a quota while restating it as a floor.
+- Effect: one criteria-defect finding; the candidate itself exceeded the floor.
+- Evidence: `.pdca/status/T370.md` §Step S10 `CHECK record (r1)`; corrected in `### r3` (≤204/≤210, 201/207 credited).
+- Prevention: a criterion whose wording contains a measured value must be rejected at PLAN; the only number a criterion may carry is the floor.
+
+## T370-S11-SUMMARY-NOT-ARTEFACT
+
+- Stable key: `T370-S11-SUMMARY-NOT-ARTEFACT`.
+- Symptom: the S11 CHECK refused `S11-C1` twice because the dispatch described the marker mechanism in prose (symbol names, call sites, "no `MakeGenericType`") while CHECK can read neither `src/**` nor a diff; the criterion was judged only after the source file, the Roslyn answers and the product diffs were copied into `.pdca/<campaign>/rv1/candidate/s11/`.
+- Root cause: the step's evidence round was written for a reader who can open the repository, but CHECK's scoped access excludes product sources; signatures in a brief are not an observation of the mechanism.
+- Effect: two `not accepted` verdicts on the same revision, both on `S11-C1` only, and a near-miss escalation on a gap that was an artefact packaging problem, not a disputed judgement.
+- Evidence: `.pdca/status/T370.md` §Step S11 `CHECK record … attempt 1/2/3`; the accepted bundle in `.pdca/370/rv1/candidate/s11/`.
+- Prevention: before the first CHECK dispatch of a step whose outcome is a construction mechanism, place the actual source file and the per-file diff in the CHECK-readable evidence directory, and point the matrix row at them. Prose stays a summary of the artefacts, never their substitute.
+
+## T370-S11-OVERBROAD-CLAIM
+
+- Stable key: `T370-S11-OVERBROAD-CLAIM`.
+- Symptom: the dispatch claimed a file "contains no `MakeGenericType`" while `CorrelatedQueryExpressionVisitor` still contains it at three unrelated sites; CHECK found the contradiction in the publish log and marked the whole claim untrustworthy.
+- Root cause: a property proven for one code path ("the marker is built without a generic instantiation") was written as a property of the files that host the path.
+- Effect: one extra evidence round and an explicit correction in the next dispatch.
+- Evidence: `.pdca/status/T370.md` §Step S11 `CHECK record … attempt 2`; the scoped scan in `.pdca/370/rv1/candidate/s11/marker-path-scan.txt`.
+- Prevention: state the scope of every absence claim as the path it was verified on, and list the excluded sites with their line numbers in the same sentence.

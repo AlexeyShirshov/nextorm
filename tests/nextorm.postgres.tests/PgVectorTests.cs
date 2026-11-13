@@ -40,7 +40,7 @@ public sealed class PgVectorTests
         var operators = new[] { "<->", "<=>", "<#>", "<+>" };
         foreach (var (prepared, sqlOperator) in selects.Zip(operators))
         {
-            Normalize(prepared.DbCommand.CommandText).Should().Be($"select (value {sqlOperator} @target)\n from pgvector_sql_marker");
+            Normalize(prepared.DbCommand.CommandText).Should().Be($"select (value {sqlOperator} cast(@target as vector))\n from pgvector_sql_marker");
             AssertTargetVectorIsBound(prepared.DbCommand);
         }
 
@@ -53,7 +53,7 @@ public sealed class PgVectorTests
         };
         foreach (var (prepared, sqlOperator) in predicates.Zip(operators))
         {
-            Normalize(prepared.DbCommand.CommandText).Should().Be($"select id\n from pgvector_sql_marker\n where ((value {sqlOperator} @target) < 0.25)");
+            Normalize(prepared.DbCommand.CommandText).Should().Be($"select id\n from pgvector_sql_marker\n where ((value {sqlOperator} cast(@target as vector)) < 0.25)");
             AssertTargetVectorIsBound(prepared.DbCommand);
         }
 
@@ -66,7 +66,7 @@ public sealed class PgVectorTests
         };
         foreach (var (prepared, sqlOperator) in nearest.Zip(operators))
         {
-            Normalize(prepared.DbCommand.CommandText).Should().Be($"select id\n from pgvector_sql_marker\n order by (value {sqlOperator} @target)\nlimit 5");
+            Normalize(prepared.DbCommand.CommandText).Should().Be($"select id\n from pgvector_sql_marker\n order by (value {sqlOperator} cast(@target as vector))\nlimit 5");
             AssertTargetVectorIsBound(prepared.DbCommand);
         }
     }

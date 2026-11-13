@@ -121,6 +121,76 @@ Run("extreme-group", () =>
         .ToList();
     return string.Join(";", rows.OrderBy(row => row.Id).Select(row => row.Id));
 });
+Run("correlated-any", () =>
+{
+    // Correlated subquery: the inner query references the outer row's Id. Regression gate for the
+    // outer-reference marker defect (#370 S11): the marker node is non-generic, so building it never
+    // resolves a constructor or property of a type closed at run time.
+    var ids = context.From<SimpleEntity>()
+        .Where(row => context.From<IComplexEntity>().Where(inner => inner.Int == row.Id).Any())
+        .OrderBy(row => row.Id)
+        .Select(row => row.Id)
+        .ToList();
+    return string.Join(";", ids);
+});
+Run("correlated-count", () =>
+{
+    // Correlated aggregate terminal: the inner Count is rewritten into a scalar subquery over the
+    // outer-reference marker.
+    var rows = context.From<SimpleEntity>()
+        .Select(row => new { row.Id, N = context.From<IComplexEntity>().Where(inner => inner.Int == row.Id).Count() })
+        .ToList();
+    return string.Join(";", rows.OrderBy(row => row.Id).Select(row => $"{row.Id}:{row.N}"));
+});
+Run("correlated-scalar-first", () =>
+{
+    // A correlated scalar subquery built from a projection terminal (FirstOrDefault) rather than an
+    // aggregate: the inner command keeps its own SELECT list and the outer row is read through the
+    // marker.
+    var rows = context.From<SimpleEntity>()
+        .Select(row => new { row.Id, V = context.From<IComplexEntity>().Where(inner => inner.Int == row.Id).Select(inner => inner.Id).FirstOrDefault() })
+        .ToList();
+    return string.Join(";", rows.OrderBy(row => row.Id).Select(row => $"{row.Id}:{row.V}"));
+});
+Run("correlated-sum", () =>
+{
+    // Correlated aggregate with a selector: Sum(long) goes through the aggregate projection host with a
+    // body, not the selector-free Count shape.
+    var rows = context.From<SimpleEntity>()
+        .Select(row => new { row.Id, S = context.From<IComplexEntity>().Where(inner => inner.Int == row.Id).Sum(inner => inner.Numeric) })
+        .ToList();
+    return string.Join(";", rows.OrderBy(row => row.Id).Select(row => $"{row.Id}:{row.S?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "null"}"));
+});
+Run("correlated-nested-depth2", () =>
+{
+    // Correlation depth 2: the innermost command reads both the middle row and the outermost row.
+    var ids = context.From<SimpleEntity>()
+        .Where(outer => context.From<IComplexEntity>().Where(inner => context.From<SimpleEntity>().Where(leaf => leaf.Id == outer.Id && leaf.Id == inner.Int).Any()).Any())
+        .OrderBy(outer => outer.Id)
+        .Select(outer => outer.Id)
+        .ToList();
+    return string.Join(";", ids);
+});
+Run("correlated-exists", () =>
+{
+    // The exists(...) function over a correlated command built inline as the function argument.
+    var ids = context.From<SimpleEntity>()
+        .Where(outer => SqlFunctions.Sql.exists(context.From<IComplexEntity>().Where(inner => inner.Int == outer.Id)))
+        .OrderBy(outer => outer.Id)
+        .Select(outer => outer.Id)
+        .ToList();
+    return string.Join(";", ids);
+});
+Run("correlated-outer-member", () =>
+{
+    // A member of a join-projection item read inside a correlated body: the outer reference is the
+    // projection (`p.Item2`), so the marker's `Ref` is followed by a member access.
+    var rows = context.From<AotNavOrder>()
+        .Join<AotNavPerson>((order, person) => order.BuyerId == person.Id)
+        .Select(projection => new { projection.Item1.Id, N = context.From<AotNavOrder>().Where(inner => inner.BuyerId == projection.Item2.Id).Count() })
+        .ToList();
+    return string.Join(";", rows.OrderBy(row => row.Id).Select(row => $"{row.Id}:{row.N}"));
+});
 RunComponentSlices(args[0]);
 return 0;
 
@@ -216,4 +286,29 @@ public interface IComplexEntity
     int? Int { get; set; }
     [Column("somestring")]
     string? String { get; set; }
+    [Column("m")]
+    decimal? Numeric { get; set; }
+}
+
+[SqlTable("orders")]
+public sealed class AotNavOrder
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    [Column("buyer_id")]
+    public int BuyerId { get; set; }
+    [Column("approver_id")]
+    public int ApproverId { get; set; }
+    public AotNavPerson? Buyer { get; set; }
+}
+
+[SqlTable("person")]
+public sealed class AotNavPerson
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    [Column("name")]
+    public string? Name { get; set; }
 }
