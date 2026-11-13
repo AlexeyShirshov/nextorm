@@ -25,7 +25,11 @@ public sealed class AotNativeRunTests
         "extreme-max",
         "extreme-group",
         "correlated-any",
-        "correlated-count"
+        "correlated-count",
+        "correlated-scalar-first",
+        "correlated-sum",
+        "correlated-nested-depth2",
+        "correlated-exists"
     ];
 
     [Fact]
@@ -271,6 +275,38 @@ public sealed class AotNativeRunTests
                     .Select(row => new { row.Id, N = context.From<IComplexEntity>().Where(inner => inner.Int == row.Id).Count() })
                     .ToList();
                 return string.Join(";", rows.OrderBy(row => row.Id).Select(row => $"{row.Id}:{row.N}"));
+            }),
+            ["correlated-scalar-first"] = CaptureJit(() =>
+            {
+                var rows = context.From<SimpleEntity>()
+                    .Select(row => new { row.Id, V = context.From<IComplexEntity>().Where(inner => inner.Int == row.Id).Select(inner => inner.Id).FirstOrDefault() })
+                    .ToList();
+                return string.Join(";", rows.OrderBy(row => row.Id).Select(row => $"{row.Id}:{row.V}"));
+            }),
+            ["correlated-sum"] = CaptureJit(() =>
+            {
+                var rows = context.From<SimpleEntity>()
+                    .Select(row => new { row.Id, S = context.From<IComplexEntity>().Where(inner => inner.Int == row.Id).Sum(inner => inner.Numeric) })
+                    .ToList();
+                return string.Join(";", rows.OrderBy(row => row.Id).Select(row => $"{row.Id}:{row.S?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "null"}"));
+            }),
+            ["correlated-nested-depth2"] = CaptureJit(() =>
+            {
+                var ids = context.From<SimpleEntity>()
+                    .Where(outer => context.From<IComplexEntity>().Where(inner => context.From<SimpleEntity>().Where(leaf => leaf.Id == outer.Id && leaf.Id == inner.Int).Any()).Any())
+                    .OrderBy(outer => outer.Id)
+                    .Select(outer => outer.Id)
+                    .ToList();
+                return string.Join(";", ids);
+            }),
+            ["correlated-exists"] = CaptureJit(() =>
+            {
+                var ids = context.From<SimpleEntity>()
+                    .Where(outer => SqlFunctions.Sql.exists(context.From<IComplexEntity>().Where(inner => inner.Int == outer.Id)))
+                    .OrderBy(outer => outer.Id)
+                    .Select(outer => outer.Id)
+                    .ToList();
+                return string.Join(";", ids);
             })
         };
         return results;
