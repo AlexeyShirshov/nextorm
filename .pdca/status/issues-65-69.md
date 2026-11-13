@@ -1,5 +1,7 @@
 # issues-65-69
 Status: campaign open/Step 2 not started; Step 1 (#65) accepted by CHECK and committed; N=5/r=2/n=2/3 ACT record remains open pending the raw retrospective. #69 not started.
+Append-only current-state update: Step 1 (#65) accepted and committed; Step 2 (#69) not started; campaign open. Issue #65 closed; retrospective recorded.
+Append-only clarification: this supersedes the pending-retrospective wording in the initial status projection; ACT is completed.
 Form: incremental   Overlay: pdca-dotnet
 Goal: complete issues #65 and #69 in milestone 1.0.10, with authorized commits on branch 1.0.10-a
 Global acceptance: See immutable planner report below; original task remains verbatim in Original task.
@@ -15,12 +17,14 @@ Baseline evidence: prior scout pointers remain historical at `/home/alex/sources
 Evidence root: current N5 `.pdca/issues-65-69/rv5/`; prior rv1 pointer `/home/alex/sources/nextorm/.pdca/issues-65-69/rv1/` is historical and was not accessed in N5.
 Steps: Step 1 (#65) → accepted and committed → Step 2 (#69) → not started; accepted increment: Step 1 only.
 Current step: Step 1 (#65) · Phase: N=5/r=2 CHECK accepted → ACT; Step 1 accepted/committed, ACT closure open pending retrospective · Closed cycles: N=1, N=2, N=3 and N=4 ACT completed blocked/incomplete · Current cycle: N=5 · Plan revision: r=2 · Attempt: N=5 r=2 n=2/3
+Append-only current-phase update: N=5/r=2/n=2/3 · phase ACT · record completed · Step 1 (#65) accepted and committed; Step 2 (#69) not started; campaign open.
 Next-step seed: #69 (not started; awaiting the authorized campaign boundary/PLAN decision)
 Accepted knowledge: none
 Assumptions and unknowns: As stated in PLAN report
 Rejected approaches: See PLAN report
 Deferred: #69 awaits accepted #65 step
 Blockers: N5 ACT closure requires the complete raw pdca-check retrospective report for Step 1, which was not supplied in this dispatch; no fallback analysis is authorized. Historical N5/r2 n=1 CHECK raw report remains missing. The current n=2 CHECK is accepted and recorded below. The pre-existing 11-file folder limitation is tracked separately in #393. #69 is not started.
+Append-only blocker update: the N5 ACT retrospective blocker is cleared; its complete raw source is persisted at `.pdca/issues-65-69/rv5/attempts/5/act-retrospective.md`, and ACT is completed. The historical N5/r2 n=1 CHECK original remains missing as a stated limit, not a current Step 1 closure blocker.
 Historical N5/r1 disposition after the planner ruling: AC-65-1/2/3 and AC-REPO-1 were classified `met` in the r1 DO evidence manifest; no independent CHECK ran. These statuses are not an r2 result. The prior attempt-1 whole-tree folder observation is preserved as a baseline `Notice:` and tracked separately as issue #393 (1.0.10).
 
 Append-only N5/r2 DO current-state update: evidence extraction is complete; the four-row candidate and both validator logs are persisted under `.pdca/issues-65-69/rv5/attempts/3/`. AC-65-1 is DO-classified `unverified` for the direct default-parameter/cache-hit assertion gap; CHECK/ACT have not run, and Step 1 remains unaccepted.
@@ -289,6 +293,8 @@ R65-69-PD3 and R65-69-PD4 are recorded above and linked to `docs/specs/design/D6
 - criteria: `AC-65-1`, `AC-65-2`, `AC-65-3`, `AC-REPO-1` only; exact r2 criterion correction remains referenced in PLAN record
 - evidence root: `.pdca/issues-65-69/rv5/`; accepted CHECK report: `.pdca/issues-65-69/rv5/attempts/5/check-report.md` (SHA-256 `8aa55b0ca0ab4b122d7ae5875d34e1388e24bae27e9d43485460317b5c37a033`); candidate tree: `a64d327cb7c3810a4138c650e7457bfe9d0227d0`
 - residual: Step 2 (#69) is not started; the next action requires an authorized campaign boundary/PLAN decision.
+- Current state (ACT completion): Step 1 (#65) accepted and committed; Step 2 (#69) not started; campaign open
+- ACT state: phase `ACT` · record `completed` · outcome `accepted`; counters `N=5/r=2/n=2/3`; issue #65 closed; retrospective recorded
 
 ##### Original task
 
@@ -401,10 +407,12 @@ Current N5/r2 CHECK after the requested comparator, at n=2/3: `accepted → ACT`
 
 CHECK→ACT outcome: Step 1 (#65) is accepted; the approved candidate and campaign record are committed under the explicit campaign auto-commit authorization. Residual: Step 2 (#69) is not started.
 ACT closure blocker: the complete raw `pdca-check` retrospective report for this Step 1 closure was not supplied. The record remains open; no fallback analysis or ACT-completed claim is made. The accepted CHECK outcome is unchanged.
+ACT completion update: outcome `accepted` for Step 1 (#65); commit `51ddc7de01ef00e38da0a9ef480858dc1e22a6a2`; issue #65 closed; retrospective recorded at `.pdca/issues-65-69/rv5/attempts/5/act-retrospective.md`. Residual: Step 2 (#69) not started. ACT is completed; counters remain `N=5/r=2/n=2/3`.
 
 ##### Lessons learned
 
 pending: ACT retrospective not conducted. Closure blocker: the complete raw retrospective report from `pdca-check` for N=5 Step 1 was not supplied. Request and persist that exact source verbatim or by exact reference; no fallback analysis. ACT remains open.
+ACT completion update (append-only): raw retrospective persisted verbatim at `.pdca/issues-65-69/rv5/attempts/5/act-retrospective.md`; `retrospective: recorded`. ACT completed. The preceding pending statement is historical and superseded by this update.
 
 ##### Revision history
 
@@ -478,6 +486,7 @@ Clarification (append-only): the preceding N5/r2 delta was the earlier evidence-
 
 
 ACT delta: `.pdca/issues-65-69/rv5/attempts/5/check-report.md` created with the exact CHECK text supplied in the driver dispatch (SHA-256 `8aa55b0ca0ab4b122d7ae5875d34e1388e24bae27e9d43485460317b5c37a033`); `.pdca/status/issues-65-69.md` updated. The authorized campaign commit contains exactly 44 manifest-footprint paths plus 13 matching campaign status files (57 total); ignored evidence under `.pdca/issues-65-69/**` was not staged.
+N5 ACT completion delta: `.pdca/issues-65-69/rv5/attempts/5/act-retrospective.md` → created with the supplied raw retrospective verbatim; `.pdca/status/issues-65-69.md` → modified to close Step 1 ACT and record the retrospective. No product/test edits; no staging or additional commit.
 ##### Git state
 
 Status path: `.pdca/status/issues-65-69.md` — modified this cycle · untracked (already untracked before N5; durable on disk, not committed). Baseline supplied: `adab3a8f`; re-read HEAD `adab3a8f4b51f6f952d2d3dbff975e0e65f3c8ad` on `feat/65-69-mapping-scope`. R2 re-anchor confirms the same HEAD. Status file and r2 plan artifact are untracked; evidence is to be created under `.pdca/issues-65-69/rv5/attempts/3/`. Same-cycle touched ledger: status file modified (untracked); `.pdca/issues-65-69/rv5/attempts/1/do-result.md` created (ignored by `/.pdca/*`). No staging/commit; pre-existing dirty work remains unclaimed and untouched.
@@ -512,6 +521,7 @@ N5/r2 n=2 Git ledger: baseline remains HEAD `adab3a8f4b51f6f952d2d3dbff975e0e65f
 
 ACT pre-commit readback: baseline remains `adab3a8f4b51f6f952d2d3dbff975e0e65f3c8ad` on `feat/65-69-mapping-scope`; status path was untracked before this authorized commit. Only the 44 manifest-footprint paths plus `.pdca/status/issues-65-69*.md` are authorized for staging. No foreign paths, evidence artifacts, push, or merge. The status update is included in the authorized campaign commit if it succeeds.
 ACT post-commit readback: `.pdca/status/issues-65-69.md` is now tracked in the authorized campaign commit on `feat/65-69-mapping-scope`; commit path set verified at 57/57 (44 candidate footprint + 13 campaign status files), worktree clean. No unrelated path staged; no push or merge. Baseline remains `adab3a8f4b51f6f952d2d3dbff975e0e65f3c8ad`.
+N5 ACT completion ledger: `.pdca/status/issues-65-69.md` was tracked in commit `51ddc7de01ef00e38da0a9ef480858dc1e22a6a2` and is modified by this post-commit ACT update; the retrospective artifact was created under ignored `.pdca/**`. Baseline for this ACT update was not separately supplied; pre-edit targeted Git status showed no changes to these two paths. No staging or further commit.
 ##### Progress log
 
 Shared chronology only: `## Progress log` below, entries keyed to `issues-65-69 / Step 1 / N5`.
@@ -544,9 +554,37 @@ Line-ending count evidence for the preceding entry: `.pdca/issues-65-69/rv5/atte
 
 Append-only N5 ACT update: Step 1 (#65) has an accepted CHECK and its candidate is authorized for commit; Step 2 (#69) remains not started. ACT record is open only because the required raw retrospective source is missing; the accepted CHECK outcome is preserved.
 Append-only commit update: the authorized commit `feat(mapping): scope-dependent table, schema, column and parameter mapping (#65)` completed; exact 57-path commit membership and a clean worktree were verified. Step 1 remains accepted; ACT closure remains open pending the raw retrospective; #69 not started.
+Append-only ACT completion correction: Step 1 (#65) ACT completed with outcome `accepted`; commit `51ddc7de01ef00e38da0a9ef480858dc1e22a6a2`; issue #65 closed; retrospective recorded. Step 2 (#69) not started; campaign remains open pending an authorized boundary/PLAN decision.
 ## Lessons learned
 
 Campaign-level retrospective not run because the campaign remains open. N2 and N3 step-cycle retrospectives are recorded above; N3 ACT is completed, while campaign completion remains pending.
+
+#### Step 1 (#65), N=5/r=2/n=2/3 retrospective report (verbatim)
+
+````markdown
+## Retrospective — Step 1 (#65), N=5/r=2/n=2/3
+
+1. **Contract fidelity / report preservation.** Source-bound handoffs helped catch invented `AC-65-4..6` before product work. However, criteria restatements and missing phase originals repeatedly required reconciliation. Next time, carry the exact criterion text and immutable source reference, and preserve complete role returns rather than summaries.
+   **Evidence:** `.pdca/status/issues-65-69.md:312–317,387–398`; `.pdca/status/issues-65-69-cycle-N4-plan-clarification-1.md:9–16`.
+
+2. **Baseline comparability.** The useful final evidence compared unchanged SQL/parameter expectations against a clean base. It also distinguished legacy behavior from feature-only fixtures. Crucially, the first cache probe needed replacement because an inline constant did not reproduce the candidate's captured-parameter query shape. Establish these exact comparisons before implementation, not during late reconciliation.
+   **Evidence:** `.pdca/issues-65-69/rv5/attempts/5/base-head-default-comparator.md:24–31,47–67`.
+
+3. **Evidence design / attempt economy.** The temporary cross-provider fixture consumed an attempt without durable coverage: five provider runs failed, while ClickHouse selected zero tests; the fixture was removed. Read the literal requirement before adding evidence tooling, and design any necessary fixture around provider-neutral physical metadata. Separately, validator success must not imply criterion satisfaction: the validator accepted a populated non-passing row.
+   **Evidence:** `.pdca/issues-65-69/rv5/attempts/2/do-result.md:25–29,36–42`; `.pdca/status/issues-65-69.md:354–367,435`.
+
+### Limits and uncertainty
+
+- Existing phase artifacts only; no new verification, research, execution or edits.
+- The historical N5/r2 n1 CHECK original is explicitly missing. The supplied final CHECK artifact contains only two summary lines, limiting reconstruction of its reasoning and verification limits: `.pdca/issues-65-69/rv5/attempts/5/check-report.md:1–2`.
+- Reading the process-defect spec was denied; its contents were not assessed.
+- A process-only explanation of all earlier delays is unsupported: history also records actual DML defects and failed mandatory suites, with some causality unresolved (`.pdca/status/issues-65-69.md:154,205,632`).
+- Commit identity and issue closure remain reported facts, not independently inspected here. The originating outcome is unchanged; #69 is outside this retrospective.
+
+**Retrospective analysis complete. ACT completion remains pending persistence of this raw report.**
+````
+
+retrospective: recorded
 
 ## Progress log
 
@@ -723,3 +761,5 @@ unknown | issues-65-69 / Step 1 / N3 / r1 / n3/3 | DO | Published NativeAOT runn
 2026-11-13T18:37:26Z | issues-65-69 / Step 1 / N5 / r2 / n2 | DO | DO (n=2/3) | base-HEAD comparator established: pre-existing default oracle 24/24 at adab3a8f; four candidate-authored default SQL/parameter literals matched base output; candidate-shaped cache retest 1/1 with cache identity true; manifest pointer refreshed; both validators exit 0; temp base worktrees removed | .pdca/issues-65-69/rv5/attempts/5/base-head-default-comparator.md
 2026-11-13T18:49:42Z | issues-65-69 / Step 1 / N5 / r2 / n2 | ACT | Fresh CHECK accepted Step 1 (#65); exact source persisted and hashed. Candidate commit is authorized. Step 2 (#69) not started. ACT closure remains open pending the complete raw retrospective report. | `.pdca/issues-65-69/rv5/attempts/5/check-report.md`; `.pdca/status/issues-65-69.md`
 2026-11-13T18:57:45Z | issues-65-69 / Step 1 / N5 / r2 / n2 | ACT | Authorized candidate + campaign-record commit completed; 57 committed paths exactly match 44 manifest-footprint paths plus 13 campaign status records. Worktree clean; Step 1 accepted, #69 not started; ACT record remains open pending raw retrospective. | `.pdca/status/issues-65-69.md`; commit subject `feat(mapping): scope-dependent table, schema, column and parameter mapping (#65)`
+2026-11-13T19:07:33Z | issues-65-69 / Step 1 / N5 / r2 / n2 | ACT | ACT completed: Step 1 (#65) accepted and committed as `51ddc7de01ef00e38da0a9ef480858dc1e22a6a2`; issue #65 closed; raw retrospective persisted (`retrospective: recorded`); Step 2 (#69) not started; campaign open. Counters N=5/r=2/n=2/3. | `.pdca/issues-65-69/rv5/attempts/5/act-retrospective.md`; `.pdca/status/issues-65-69.md`
+2026-11-13T19:08:57Z | issues-65-69 / Step 1 / N5 / r2 / n2 | ACT | Append-only current-state reconciliation: the pending-retrospective statements are historical; the raw retrospective is persisted, ACT completed, Step 1 accepted/committed, #65 closed, and #69 not started. Counters remain N=5/r=2/n=2/3. | `.pdca/status/issues-65-69.md`; `.pdca/issues-65-69/rv5/attempts/5/act-retrospective.md`
