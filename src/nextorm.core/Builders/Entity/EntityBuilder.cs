@@ -19,7 +19,7 @@ namespace NextORM.Core;
 /// <c>IDataContext.From&lt;TEntity&gt;()</c>.
 /// </summary>
 /// <typeparam name="TEntity">The mapped entity type the query projects.</typeparam>
-public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, IQueryCommandSource, IAggregateProjectionHost //IAsyncEnumerable<TEntity>
+public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, IQueryCommandSource, IAggregateProjectionHost //IAsyncEnumerable<TEntity>
 {
     // private const string AnyCommandProperty = "NextORM.Core.AnyCommand";
     #region Fields

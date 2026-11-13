@@ -646,6 +646,9 @@ public class PostgresDialect : SqlDialectBase
     /// <inheritdoc/>
     public override bool SupportsExtendedScalarFunctions => true;
 
+    /// <summary>PostgreSQL reuses pgvector distance operators for the unified vector-search surface.</summary>
+    public override bool SupportsVectorSearch => true;
+
     /// <summary>PostgreSQL has the standalone session random seed <c>setseed</c>.</summary>
     public override bool SupportsRandomSeed => true;
 

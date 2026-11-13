@@ -1,4 +1,5 @@
 using System.Reflection;
+using NextORM.Core;
 
 namespace NextORM.Postgres;
 
@@ -13,6 +14,10 @@ internal static class PostgresVectorArrays
     /// <summary>Converts <c>text[]</c> elements into a <see cref="PgVector"/> array.</summary>
     /// <param name="values">The element texts.</param>
     public static PgVector[] ToVector(string?[] values) => Map(values, PgVector.Parse, "vector");
+
+    /// <summary>Converts <c>text[]</c> elements into the shared <see cref="Vector"/> array.</summary>
+    /// <param name="values">The element texts.</param>
+    public static Vector[] ToCoreVector(string?[] values) => Map(values, Vector.Parse, "vector");
 
     /// <summary>Converts <c>text[]</c> elements into a <see cref="PgHalfVector"/> array.</summary>
     /// <param name="values">The element texts.</param>
@@ -31,6 +36,7 @@ internal static class PostgresVectorArrays
     public static MethodInfo? ParseMethodFor(Type elementType) => (Nullable.GetUnderlyingType(elementType) ?? elementType) switch
     {
         var type when type == typeof(PgVector) => typeof(PostgresVectorArrays).GetMethod(nameof(ToVector)),
+        var type when type == typeof(Vector) => typeof(PostgresVectorArrays).GetMethod(nameof(ToCoreVector)),
         var type when type == typeof(PgHalfVector) => typeof(PostgresVectorArrays).GetMethod(nameof(ToHalfVector)),
         var type when type == typeof(PgSparseVector) => typeof(PostgresVectorArrays).GetMethod(nameof(ToSparseVector)),
         var type when type == typeof(PgBit) => typeof(PostgresVectorArrays).GetMethod(nameof(ToBit)),

@@ -528,6 +528,12 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsExtendedScalarFunctions { get; }
     /// <summary>
+    /// True when the provider can translate the unified vector-distance expression and nearest-neighbor
+    /// query surface. The safe default is <c>false</c>; providers must opt in rather than emit a
+    /// different metric or approximate-search form.
+    /// </summary>
+    bool SupportsVectorSearch { get; }
+    /// <summary>
     /// True when the provider can set the seed of its session random generator as a separate side
     /// effect (<see cref="PostgresFunctions.setseed(double?)"/>). The safe default is <c>false</c>;
     /// only PostgreSQL has a standalone <c>setseed</c> (MySQL/MariaDB and SQL Server combine seeding

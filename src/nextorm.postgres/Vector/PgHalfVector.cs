@@ -1,10 +1,11 @@
 using System.Globalization;
 using System.Text;
+using NextORM.Core;
 
 namespace NextORM.Postgres;
 
 /// <summary>A PostgreSQL <c>halfvec</c> (pgvector half-precision) value backed by finite coordinates.</summary>
-public readonly struct PgHalfVector : IEquatable<PgHalfVector>
+public readonly struct PgHalfVector : IEquatable<PgHalfVector>, IVectorValue
 {
     private readonly Half[]? _values;
 

@@ -137,6 +137,29 @@ internal static class ExtendedScalarFunctionTranslator
     {
         var name = node.Method.Name;
 
+        if (node.Method.DeclaringType == typeof(SqlFunctions)
+            && name == nameof(SqlFunctions.VectorDistance))
+        {
+            if (!visitor.Dialect.SupportsVectorSearch)
+                throw new NotSupportedException(
+                    $"Vector distance and nearest-neighbor search are not supported by the {visitor.Dialect.GetType().Name} provider.");
+
+            var metricExpression = TypeFacts.UnwrapConvert(node.Arguments[2]);
+            if (metricExpression is not ConstantExpression { Value: VectorDistanceMetric metric })
+                throw new NotSupportedException(
+                    "SqlFunctions.VectorDistance requires a constant VectorDistanceMetric so the provider can select the matching operator.");
+
+            var sqlOperator = metric switch
+            {
+                VectorDistanceMetric.Cosine => "<=>",
+                VectorDistanceMetric.Euclidean => "<->",
+                VectorDistanceMetric.DotProduct => "<#>",
+                _ => throw new ArgumentOutOfRangeException(nameof(metric), metric, "The vector distance metric is not supported.")
+            };
+            EmitVectorOperator(visitor, sqlOperator, node.Arguments[0], node.Arguments[1]);
+            return true;
+        }
+
         if (name is nameof(PostgresFunctions.l2_distance) or nameof(PostgresFunctions.cosine_distance)
             or nameof(PostgresFunctions.negative_inner_product) or nameof(PostgresFunctions.l1_distance)
             or nameof(PostgresFunctions.hamming_distance) or nameof(PostgresFunctions.jaccard_distance)
