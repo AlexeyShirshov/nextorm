@@ -250,7 +250,16 @@ internal static class TypeFacts
         if (!IsPostgresVectorType(candidate))
             return false;
 
-        return dialect.MakeTypeName(candidate) is "vector" or "halfvec" or "sparsevec" or "bit";
+        try
+        {
+            return dialect.MakeTypeName(candidate) is "vector" or "halfvec" or "sparsevec" or "bit";
+        }
+        catch (NotSupportedException)
+        {
+            // Some providers (for example SQL Server) recognise the shared CLR vector but cannot
+            // infer its dimension for generated DDL. That is not a PostgreSQL text projection.
+            return false;
+        }
     }
 
     /// <summary>

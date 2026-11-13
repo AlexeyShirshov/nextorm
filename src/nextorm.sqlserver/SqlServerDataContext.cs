@@ -4,8 +4,10 @@ using System.Data.Common;
 using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
+using Microsoft.Data;
 using Microsoft.Data.SqlClient;
 using Microsoft.Data.SqlClient.Server;
+using Microsoft.Data.SqlTypes;
 using NextORM.Core;
 
 namespace NextORM.SqlServer;
@@ -255,6 +257,17 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
     {
         // A null value would leave SqlParameter unset, and SqlClient then sends no value at all
         // ("expects the parameter ... which was not supplied"), so nulls must be passed as DBNull.
+        if (value is IVectorValue vector)
+        {
+            var text = vector.ToString()
+                ?? throw new NotSupportedException($"The SQL Server vector parameter '{name}' has no text representation.");
+            var coordinates = Vector.Parse(text).ToArray();
+            return new SqlParameter(name, SqlDbTypeExtensions.Vector)
+            {
+                Value = new SqlVector<float>(coordinates.AsMemory())
+            };
+        }
+
         return new SqlParameter(name, value ?? DBNull.Value);
     }
 
@@ -568,6 +581,9 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
 
         var type = Nullable.GetUnderlyingType(column.PropertyType) ?? column.PropertyType;
 
+        if (type == typeof(Vector))
+            return MapVectorColumn(column, param);
+
         if (type == typeof(TimeSpan))
         {
             // SqlClient returns a native TimeSpan for time/timefromparts, while a mapped duration property
@@ -643,6 +659,35 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
         }
 
         return value;
+    }
+
+    private static Expression MapVectorColumn(SelectExpression column, Expression param)
+    {
+        var index = Expression.Constant(column.Index);
+        var rawValue = Expression.Call(param, GetValueMethod, index);
+        var readVector = Expression.Call(
+            typeof(SqlServerVectorMapper).GetMethod(
+                nameof(SqlServerVectorMapper.Read),
+                BindingFlags.NonPublic | BindingFlags.Static)!,
+            rawValue);
+
+        if (column.Nullable)
+        {
+            return Expression.Condition(
+                Expression.Call(param, IsDBNullMI, index),
+                Expression.Constant(null, column.PropertyType),
+                readVector);
+        }
+
+        if (column.DefaultOnNull)
+        {
+            return Expression.Condition(
+                Expression.Call(param, IsDBNullMI, index),
+                Expression.Default(column.PropertyType),
+                readVector);
+        }
+
+        return readVector;
     }
 
     /// <summary>

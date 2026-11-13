@@ -141,13 +141,47 @@ internal static class ExtendedScalarFunctionTranslator
             && name == nameof(SqlFunctions.VectorDistance))
         {
             if (!visitor.Dialect.SupportsVectorSearch)
+            {
+                var unsupportedReason = visitor.Dialect.SqlServerFunctions?.GetUnsupportedReason("vector_distance");
                 throw new NotSupportedException(
-                    $"Vector distance and nearest-neighbor search are not supported by the {visitor.Dialect.GetType().Name} provider.");
+                    unsupportedReason
+                    ?? $"Vector distance and nearest-neighbor search are not supported by the {visitor.Dialect.GetType().Name} provider.");
+            }
 
             var metricExpression = TypeFacts.UnwrapConvert(node.Arguments[2]);
             if (metricExpression is not ConstantExpression { Value: VectorDistanceMetric metric })
                 throw new NotSupportedException(
                     "SqlFunctions.VectorDistance requires a constant VectorDistanceMetric so the provider can select the matching operator.");
+
+            if (visitor.Dialect.SqlServerFunctions is { } sqlServerFunctions)
+            {
+                var sqlServerMetric = metric switch
+                {
+                    VectorDistanceMetric.Cosine => "cosine",
+                    VectorDistanceMetric.DotProduct => "dot",
+                    VectorDistanceMetric.Euclidean => "euclidean",
+                    _ => throw new NotSupportedException($"The vector distance metric '{metric}' is not supported by SQL Server.")
+                };
+
+                if (visitor.IsParamMode)
+                {
+                    visitor.Visit(node.Arguments[0]);
+                    visitor.Visit(node.Arguments[1]);
+                }
+                else
+                {
+                    visitor.NeedAliasForColumn = true;
+                    visitor.Builder!.Append(sqlServerFunctions.Render(
+                        "vector_distance",
+                        [
+                            $"'{sqlServerMetric}'",
+                            visitor.VisitToString(node.Arguments[0]),
+                            visitor.VisitToString(node.Arguments[1])
+                        ]));
+                }
+
+                return true;
+            }
 
             var sqlOperator = metric switch
             {

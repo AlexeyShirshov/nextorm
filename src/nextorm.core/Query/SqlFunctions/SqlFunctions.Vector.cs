@@ -13,7 +13,9 @@ public static partial class SqlFunctions
     /// <returns>The distance, or SQL NULL when either operand is NULL.</returns>
     /// <remarks>
     /// PostgreSQL translates the metrics to pgvector's <c>&lt;=&gt;</c> cosine,
-    /// <c>&lt;-&gt;</c> Euclidean, or <c>&lt;#&gt;</c> negative-inner-product operator.
+    /// <c>&lt;-&gt;</c> Euclidean, or <c>&lt;#&gt;</c> negative-inner-product operator. SQL Server 2025+
+    /// translates them to <c>VECTOR_DISTANCE('cosine'|'euclidean'|'dot', ...)</c>; SQL Server's
+    /// <c>dot</c> metric is the negative inner product, so smaller distances remain nearer.
     /// Providers without vector-distance support reject the call during query preparation.
     /// </remarks>
     public static double? VectorDistance<TVector>(TVector left, TVector right, VectorDistanceMetric metric)

@@ -124,11 +124,11 @@ public sealed class UnifiedVectorSearchTests
         using var mariaDb = new MariaDbDataContext(PlaceholderMySql, new DataContextBuilder());
         using var clickHouse = new ClickHouseDataContext(PlaceholderClickHouse, new DataContextBuilder());
 
-        AssertRejected(sqlite, "SqliteDialect");
-        AssertRejected(sqlServer, "SqlServerDialect");
-        AssertRejected(mySql, "MySqlDialect");
-        AssertRejected(mariaDb, "MariaDbDialect");
-        AssertRejected(clickHouse, "ClickHouseDialect");
+        AssertRejected(sqlite, "Vector distance and nearest-neighbor search are not supported by the SqliteDialect provider.");
+        AssertRejected(sqlServer, "The VECTOR_DISTANCE function requires SQL Server major version 17 or later; declared major version: unspecified.");
+        AssertRejected(mySql, "Vector distance and nearest-neighbor search are not supported by the MySqlDialect provider.");
+        AssertRejected(mariaDb, "Vector distance and nearest-neighbor search are not supported by the MariaDbDialect provider.");
+        AssertRejected(clickHouse, "Vector distance and nearest-neighbor search are not supported by the ClickHouseDialect provider.");
     }
 
     [Fact]
@@ -164,7 +164,7 @@ public sealed class UnifiedVectorSearchTests
             .Should().ThrowExactly<ArgumentOutOfRangeException>().WithParameterName("topK");
     }
 
-    private static void AssertRejected(IDataContext context, string dialectName)
+    private static void AssertRejected(IDataContext context, string refusal)
     {
         var query = context.From<VectorSearchProbe>().VectorSearch(
             row => row.Embedding,
@@ -175,6 +175,6 @@ public sealed class UnifiedVectorSearchTests
 
         FluentActions.Invoking(() => context.GetPreparedQueryCommand(query, false, false, CancellationToken.None))
             .Should().ThrowExactly<NotSupportedException>()
-            .WithMessage($"Vector distance and nearest-neighbor search are not supported by the {dialectName} provider.");
+            .WithMessage(refusal);
     }
 }

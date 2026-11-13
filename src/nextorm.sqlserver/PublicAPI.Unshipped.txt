@@ -1,1 +1,2 @@
 #nullable enable
+override NextORM.SqlServer.SqlServerDialect.SupportsVectorSearch.get -> bool
