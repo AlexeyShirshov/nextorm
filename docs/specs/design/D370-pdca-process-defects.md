@@ -106,3 +106,21 @@
 - Effect: one criteria-defect finding; the candidate itself exceeded the floor.
 - Evidence: `.pdca/status/T370.md` §Step S10 `CHECK record (r1)`; corrected in `### r3` (≤204/≤210, 201/207 credited).
 - Prevention: a criterion whose wording contains a measured value must be rejected at PLAN; the only number a criterion may carry is the floor.
+
+## T370-S11-SUMMARY-NOT-ARTEFACT
+
+- Stable key: `T370-S11-SUMMARY-NOT-ARTEFACT`.
+- Symptom: the S11 CHECK refused `S11-C1` twice because the dispatch described the marker mechanism in prose (symbol names, call sites, "no `MakeGenericType`") while CHECK can read neither `src/**` nor a diff; the criterion was judged only after the source file, the Roslyn answers and the product diffs were copied into `.pdca/<campaign>/rv1/candidate/s11/`.
+- Root cause: the step's evidence round was written for a reader who can open the repository, but CHECK's scoped access excludes product sources; signatures in a brief are not an observation of the mechanism.
+- Effect: two `not accepted` verdicts on the same revision, both on `S11-C1` only, and a near-miss escalation on a gap that was an artefact packaging problem, not a disputed judgement.
+- Evidence: `.pdca/status/T370.md` §Step S11 `CHECK record … attempt 1/2/3`; the accepted bundle in `.pdca/370/rv1/candidate/s11/`.
+- Prevention: before the first CHECK dispatch of a step whose outcome is a construction mechanism, place the actual source file and the per-file diff in the CHECK-readable evidence directory, and point the matrix row at them. Prose stays a summary of the artefacts, never their substitute.
+
+## T370-S11-OVERBROAD-CLAIM
+
+- Stable key: `T370-S11-OVERBROAD-CLAIM`.
+- Symptom: the dispatch claimed a file "contains no `MakeGenericType`" while `CorrelatedQueryExpressionVisitor` still contains it at three unrelated sites; CHECK found the contradiction in the publish log and marked the whole claim untrustworthy.
+- Root cause: a property proven for one code path ("the marker is built without a generic instantiation") was written as a property of the files that host the path.
+- Effect: one extra evidence round and an explicit correction in the next dispatch.
+- Evidence: `.pdca/status/T370.md` §Step S11 `CHECK record … attempt 2`; the scoped scan in `.pdca/370/rv1/candidate/s11/marker-path-scan.txt`.
+- Prevention: state the scope of every absence claim as the path it was verified on, and list the excluded sites with their line numbers in the same sentence.
