@@ -1,3 +1,4 @@
+using System.Data;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
@@ -19,17 +20,17 @@ public sealed class UnifiedVectorSearchTests
     private const string PlaceholderClickHouse = "Host=localhost;Port=8123;Database=default;Username=default;Password=";
 
     [SqlTable("unified_vector_search_probe")]
-    public interface IVectorSearchProbe
+    public sealed class VectorSearchProbe
     {
         [Key]
         [Column("id")]
-        int Id { get; set; }
+        public int Id { get; set; }
 
         [Column("embedding")]
-        Vector Embedding { get; set; }
+        public Vector Embedding { get; set; } = default!;
 
         [Column("pg_embedding")]
-        PgVector PgEmbedding { get; set; }
+        public PgVector PgEmbedding { get; set; } = default!;
     }
 
     private static DbPreparedQueryCommand<T> Prepared<T>(IDataContext context, QueryCommand<T> command)
@@ -37,17 +38,41 @@ public sealed class UnifiedVectorSearchTests
 
     private static string Normalize(string sql) => sql.Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd();
 
+    private static void AssertMaterializesResult(DbPreparedQueryCommand<VectorSearchResult<VectorSearchProbe>> prepared)
+    {
+        prepared.DbCommandParams.Count.Should().Be(1);
+        prepared.DbCommandParams[0].ParameterName.Should().Contain("queryVector");
+        prepared.DbCommandParams[0].Value.Should().NotBe(DBNull.Value);
+
+        var table = new DataTable();
+        table.Columns.Add("id", typeof(int));
+        table.Columns.Add("embedding", typeof(string));
+        table.Columns.Add("pg_embedding", typeof(string));
+        table.Columns.Add("distance", typeof(double));
+        table.Rows.Add(7, "[1,2,3]", "[4,5,6]", 0.25d);
+
+        using var reader = table.CreateDataReader();
+        reader.Read().Should().BeTrue();
+        prepared.MapDelegate.Should().NotBeNull();
+        var result = prepared.MapDelegate!(reader);
+
+        result.Entity.Id.Should().Be(7);
+        result.Entity.Embedding.ToArray().Should().Equal(1f, 2f, 3f);
+        result.Entity.PgEmbedding.ToArray().Should().Equal(4f, 5f, 6f);
+        result.Distance.Should().Be(0.25d);
+    }
+
     [Fact]
     public void VectorDistance_ShouldRenderEachPgvectorMetricForTheSharedVector()
     {
         using var context = PostgresTestContext.Create();
         var target = new Vector(new[] { 1f, 2f, 3f });
 
-        var cosine = Normalize(Prepared(context, context.From<IVectorSearchProbe>()
+        var cosine = Normalize(Prepared(context, context.From<VectorSearchProbe>()
             .Select(row => SqlFunctions.VectorDistance(row.Embedding, target, VectorDistanceMetric.Cosine))).DbCommand.CommandText);
-        var euclidean = Normalize(Prepared(context, context.From<IVectorSearchProbe>()
+        var euclidean = Normalize(Prepared(context, context.From<VectorSearchProbe>()
             .Select(row => SqlFunctions.VectorDistance(row.Embedding, target, VectorDistanceMetric.Euclidean))).DbCommand.CommandText);
-        var dotProduct = Normalize(Prepared(context, context.From<IVectorSearchProbe>()
+        var dotProduct = Normalize(Prepared(context, context.From<VectorSearchProbe>()
             .Select(row => SqlFunctions.VectorDistance(row.Embedding, target, VectorDistanceMetric.DotProduct))).DbCommand.CommandText);
 
         cosine.Should().Be("select (embedding <=> cast(@target as vector))\n from unified_vector_search_probe");
@@ -62,12 +87,14 @@ public sealed class UnifiedVectorSearchTests
     {
         using var context = PostgresTestContext.Create();
         var target = PgVector.Parse("[1,2,3]");
-        var source = context.From<IVectorSearchProbe>().OrderBy(row => row.Id).Page(50, 7);
+        var source = context.From<VectorSearchProbe>().OrderBy(row => row.Id).Page(50, 7);
 
-        var sql = Normalize(Prepared(context,
-            source.VectorSearch(row => row.PgEmbedding, target, VectorDistanceMetric.Cosine, 4, mode)).DbCommand.CommandText);
+        var prepared = Prepared(context,
+            source.VectorSearch(row => row.PgEmbedding, target, VectorDistanceMetric.Cosine, 4, mode));
+        AssertMaterializesResult(prepared);
+        var sql = Normalize(prepared.DbCommand.CommandText);
 
-        sql.Should().Be("select id, embedding, pg_embedding, (pg_embedding <=> cast(@target as vector))\n from unified_vector_search_probe\n order by (pg_embedding <=> cast(@target as vector))\n limit 4");
+        sql.Should().Be("select id, CAST(embedding AS text), CAST(pg_embedding AS text) as \"PgEmbedding\", (pg_embedding <=> cast(@queryVector as vector)) as \"distance\"\n from unified_vector_search_probe\n order by (pg_embedding <=> cast(@queryVector as vector))\nlimit 4");
     }
 
     [Fact]
@@ -80,8 +107,10 @@ public sealed class UnifiedVectorSearchTests
         shared.Dimensions.Should().Be(3);
         providerVector.ToArray().Should().Equal(new[] { 1f, 2f, 3f });
 
-        var sql = Normalize(Prepared(context, context.From<IVectorSearchProbe>()
-            .VectorSearch<Vector>(row => row.Embedding, providerVector, VectorDistanceMetric.Euclidean, 2)).DbCommand.CommandText);
+        var prepared = Prepared(context, context.From<VectorSearchProbe>()
+            .VectorSearch<Vector>(row => row.Embedding, providerVector, VectorDistanceMetric.Euclidean, 2));
+        AssertMaterializesResult(prepared);
+        var sql = Normalize(prepared.DbCommand.CommandText);
 
         sql.Should().Contain("(embedding <-> cast(@queryVector as vector))");
     }
@@ -107,7 +136,7 @@ public sealed class UnifiedVectorSearchTests
     {
         using var inMemory = new InMemoryDataContext();
 
-        FluentActions.Invoking(() => inMemory.From<IVectorSearchProbe>().VectorSearch(
+        FluentActions.Invoking(() => inMemory.From<VectorSearchProbe>().VectorSearch(
                 row => row.Embedding,
                 new Vector(new[] { 1f, 2f }),
                 VectorDistanceMetric.Cosine,
@@ -121,7 +150,7 @@ public sealed class UnifiedVectorSearchTests
     public void VectorSearch_ShouldRejectNullEmptyAndInvalidTopK()
     {
         using var context = PostgresTestContext.Create();
-        var source = context.From<IVectorSearchProbe>();
+        var source = context.From<VectorSearchProbe>();
         var empty = new Vector(Array.Empty<float>());
         var target = new Vector(new[] { 1f });
 
@@ -137,7 +166,7 @@ public sealed class UnifiedVectorSearchTests
 
     private static void AssertRejected(IDataContext context, string dialectName)
     {
-        var query = context.From<IVectorSearchProbe>().VectorSearch(
+        var query = context.From<VectorSearchProbe>().VectorSearch(
             row => row.Embedding,
             new Vector(new[] { 1f, 2f }),
             VectorDistanceMetric.Cosine,

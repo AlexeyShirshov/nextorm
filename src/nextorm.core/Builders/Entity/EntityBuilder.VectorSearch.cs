@@ -54,20 +54,19 @@ public partial class EntityBuilder<TEntity>
         if (mode is not (VectorSearchMode.Exact or VectorSearchMode.Approximate))
             throw new ArgumentException("The vector search mode must be Exact or Approximate.", nameof(mode));
 
+        Expression<Func<TVector>> queryVectorParameter = () => queryVector;
         var distance = Expression.Call(
             VectorDistanceMethod.MakeGenericMethod(typeof(TVector)),
             vectorSelector.Body,
-            Expression.Constant(queryVector, typeof(TVector)),
+            queryVectorParameter.Body,
             Expression.Constant(metric));
         var parameter = vectorSelector.Parameters[0];
         var orderSelector = Expression.Lambda<Func<TEntity, object?>>(
             Expression.Convert(distance, typeof(object)), parameter);
 
         var resultType = typeof(VectorSearchResult<TEntity>);
-        var resultExpression = Expression.MemberInit(
-            Expression.New(resultType),
-            Expression.Bind(resultType.GetProperty(nameof(VectorSearchResult<TEntity>.Entity))!, parameter),
-            Expression.Bind(resultType.GetProperty(nameof(VectorSearchResult<TEntity>.Distance))!, distance));
+        var resultConstructor = resultType.GetConstructor([typeof(TEntity), typeof(double?)])!;
+        var resultExpression = Expression.New(resultConstructor, parameter, distance);
         var resultSelector = Expression.Lambda<Func<TEntity, VectorSearchResult<TEntity>>>(resultExpression, parameter);
 
         // k-NN has its own primary order and page; an earlier user sort/offset must not change which

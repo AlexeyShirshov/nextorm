@@ -37,6 +37,7 @@ NextORM.Core.VectorSearchMode
 NextORM.Core.VectorSearchMode.Exact = 0 -> NextORM.Core.VectorSearchMode
 NextORM.Core.VectorSearchMode.Approximate = 1 -> NextORM.Core.VectorSearchMode
 NextORM.Core.VectorSearchResult<TEntity>
+NextORM.Core.VectorSearchResult<TEntity>.VectorSearchResult(TEntity entity, double? distance) -> void
 NextORM.Core.VectorSearchResult<TEntity>.VectorSearchResult() -> void
 NextORM.Core.VectorSearchResult<TEntity>.Entity.get -> TEntity
 NextORM.Core.VectorSearchResult<TEntity>.Entity.init -> void
