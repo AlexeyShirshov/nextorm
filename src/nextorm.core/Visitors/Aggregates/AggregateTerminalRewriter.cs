@@ -16,14 +16,13 @@ internal static class AggregateTerminalRewriter
     private static readonly MethodInfo CountBigMI = typeof(CommonFunctions).GetMethod(nameof(CommonFunctions.count_big), [typeof(object[])])!;
 
     /// <summary>
-    /// Builds <c>builderReceiver.Select(aggregate)</c> for the aggregate terminal
-    /// <paramref name="node"/>; the result is a <see cref="QueryCommand{TResult}"/> whose single
-    /// projection is the aggregate.
+    /// Builds the aggregate projection call for the terminal <paramref name="node"/>: the receiver is
+    /// projected through the non-generic <see cref="IAggregateProjectionHost.SelectAggregateProjection"/>
+    /// entry point, so the aggregate's runtime result type never closes a generic method at run time.
     /// </summary>
     public static MethodCallExpression Rewrite(MethodCallExpression node, Expression builderReceiver)
     {
         var entityType = builderReceiver.Type.GetGenericArguments()[0];
-        var selectMethod = SelectMethodFor(builderReceiver.Type, entityType);
 
         LambdaExpression selectLambda;
         Type resultType;
@@ -83,8 +82,19 @@ internal static class AggregateTerminalRewriter
             }
         }
 
-        return Expression.Call(builderReceiver, selectMethod.MakeGenericMethod(resultType), Expression.Quote(selectLambda));
+        return Expression.Call(
+            Expression.Convert(builderReceiver, typeof(IAggregateProjectionHost)),
+            SelectAggregateProjectionMI,
+            Expression.Constant(selectLambda, typeof(LambdaExpression)),
+            Expression.Constant(resultType, typeof(Type)));
     }
+
+    /// <summary>
+    /// The statically known non-generic projection entry point; see
+    /// <see cref="IAggregateProjectionHost"/>.
+    /// </summary>
+    private static readonly MethodInfo SelectAggregateProjectionMI =
+        typeof(IAggregateProjectionHost).GetMethod(nameof(IAggregateProjectionHost.SelectAggregateProjection))!;
 
     private static LambdaExpression UnwrapLambda(Expression expression) => expression switch
     {
@@ -106,19 +116,4 @@ internal static class AggregateTerminalRewriter
         _ => throw new NotSupportedException($"The aggregate terminal '{methodName}' is not supported inside a subquery.")
     };
 
-    private static MethodInfo SelectMethodFor(Type builderType, Type entityType)
-    {
-        var selectMethod = builderType
-            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
-            .SingleOrDefault(m => m.Name == nameof(EntityBuilder<object>.Select)
-                && m.IsGenericMethodDefinition
-                && m.GetParameters() is [{ ParameterType: { IsGenericType: true } parameterType }]
-                && parameterType.GetGenericTypeDefinition() == typeof(Expression<>)
-                && parameterType.GetGenericArguments()[0] is { IsGenericType: true } selectorType
-                && selectorType.GetGenericTypeDefinition() == typeof(Func<,>)
-                && selectorType.GetGenericArguments()[0] == entityType);
-
-        return selectMethod
-            ?? throw new NotSupportedException($"Cannot find the '{nameof(EntityBuilder<object>.Select)}' projection method on '{builderType.Name}'.");
-    }
 }

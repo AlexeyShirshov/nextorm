@@ -294,7 +294,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             // which applies the same outer-reference rewrite as the aggregate terminals.
             if (_forPrepare && _outerParams is { Count: > 0 } && ReferencesOuter(builderReceiver))
             {
-                var outerCmd = GetQueryCommand(Expression.Convert(builderReceiver, typeof(QueryCommand)));
+                var outerCmd = GetQueryCommand(AsCommandExpression(builderReceiver));
                 return ReplaceQueryCommand(node, outerCmd);
             }
 
@@ -304,7 +304,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
             {
                 //var d = Expression.Lambda<Func<QueryCommand>>(Expression.Call(node.Object, ToCommandMI)).Compile();
-                var d = Expression.Lambda<Func<QueryCommand>>(Expression.Convert(builderReceiver, typeof(QueryCommand))).Compile();
+                var d = Expression.Lambda<Func<QueryCommand>>(AsCommandExpression(builderReceiver)).Compile();
 
                 DataContextCache.ExpressionsCache[keyCmd] = d;
                 cmd = d();
@@ -431,24 +431,18 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     {
         var selectCall = AggregateTerminalRewriter.Rewrite(node, builderReceiver);
         var cmd = GetQueryCommand(selectCall);
-        var firstCall = Expression.Call(selectCall, selectCall.Type.GetMethod("First", Type.EmptyTypes)!);
-        var scalar = ReplaceQueryCommand(firstCall, cmd);
 
-        // #303: an aggregate terminal used as a value must expose the *value*, not the untyped
-        // Func<IQueryRegistry, QueryCommand> placeholder the generic terminal returns - a delegate has
-        // no numeric operator, so `Sum(...) > 6` fails inside Expression.MakeBinary. Re-type the
-        // returned placeholder into the result-typed registry-index shape (the one
-        // ReplaceScalarQueryCommand produces) and reuse the index it was just registered under: the
-        // command stays prepared and registered exactly once, and `limit 1` / the FirstOrDefault
-        // default still come from the First() terminal above.
-        if (scalar is LambdaExpression { Parameters.Count: 1 } placeholder
-            && placeholder.Parameters[0].Type == typeof(IQueryRegistry)
-            && placeholder.Body is IndexExpression { Arguments: [ConstantExpression { Value: int idx }] })
-        {
-            return TypedScalarPlaceholder(idx, cmd.ResultType ?? typeof(object));
-        }
+        // The aggregate terminal reads one scalar, which is exactly the Limit-1 shape the First()
+        // terminal used to add. Building that terminal needed the closed QueryCommand<TResult> type and
+        // its First method through reflection - metadata a trimmed/native image drops - so the shape is
+        // applied to the command directly instead. #303: the placeholder is re-typed to the aggregate's
+        // result type so `Sum(...) > 6` still binds a numeric operator.
+        cmd.OuterRegistry ??= _queryProvider;
+        cmd.Paging.Limit = 1;
+        cmd.DefaultOnEmpty = false;
 
-        return scalar;
+        PrepareAndRegister(cmd, out var idx);
+        return TypedScalarPlaceholder(idx, cmd.ResultType ?? typeof(object));
     }
 
     /// <summary>
@@ -1533,6 +1527,19 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             return base.VisitParameter(node);
         }
     }
+
+    /// <summary>
+    /// The statically known getter that reads a builder's command; see <see cref="IQueryCommandSource"/>.
+    /// </summary>
+    private static readonly PropertyInfo CommandPI = typeof(IQueryCommandSource).GetProperty(nameof(IQueryCommandSource.Command))!;
+
+    /// <summary>
+    /// Builds the expression that yields the untyped command of a builder, without a user-defined
+    /// conversion operator (which trimming removes and <see cref="Expression.Convert(Expression, Type)"/>
+    /// resolves reflectively).
+    /// </summary>
+    private static Expression AsCommandExpression(Expression builder)
+        => Expression.Property(Expression.Convert(builder, typeof(IQueryCommandSource)), CommandPI);
 
     private QueryCommand GetQueryCommand(Expression exp)
     {
