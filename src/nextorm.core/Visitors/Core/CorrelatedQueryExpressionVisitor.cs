@@ -289,10 +289,11 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 return ReplaceAggregateTerminal(node, builderReceiver);
 
             // A non-aggregate builder terminal (Any/First/Single) whose receiver references a current
-            // outer parameter must be built while the outer members are rewritten to markers; compiling
-            // the raw receiver would leave the outer parameter free. Route it through GetQueryCommand,
-            // which applies the same outer-reference rewrite as the aggregate terminals.
-            if (_forPrepare && _outerParams is { Count: > 0 } && ReferencesOuter(builderReceiver))
+            // outer parameter - directly or through a navigation-join alias the enclosing command
+            // injected - must be built while those members are rewritten to markers; compiling the raw
+            // receiver would leave the parameter free. Route it through GetQueryCommand, which applies
+            // the same outer-reference rewrite as the aggregate terminals.
+            if (_forPrepare && IsCorrelatedWithEnclosing(builderReceiver))
             {
                 var outerCmd = GetQueryCommand(AsCommandExpression(builderReceiver));
                 return ReplaceQueryCommand(node, outerCmd);
@@ -328,7 +329,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             // with an OuterRefMarker and registered on the root command; the non-correlated closure path
             // below would either leave the outer parameter free and fail at Compile(), or rewrite the
             // marker's index constant as a closure value and corrupt the marker.
-            if (_forPrepare && ((_outerParams is { Count: > 0 } && ReferencesOuter(node.Object)) || ContainsOuterRefMarker(node.Object)))
+            if (_forPrepare && (IsCorrelatedWithEnclosing(node.Object) || ContainsOuterRefMarker(node.Object)))
             {
                 var outerCmd = GetQueryCommand(node.Object);
                 return ReplaceQueryCommand(node, outerCmd);
@@ -1638,6 +1639,27 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         return collector.Found.Count == 0
             ? (IEnumerable<ParameterExpression>?)_outerParams ?? []
             : (_outerParams ?? []).Concat(collector.Found);
+    }
+
+    /// <summary>
+    /// True when <paramref name="expression"/> is correlated with the command being prepared: it reads a
+    /// pushed outer parameter, or a navigation-join alias that <see cref="NavigationExpansion"/> injected
+    /// on that command. The alias case carries no outer parameter at all when the correlated body reads
+    /// the reference's scalar only (for example <c>inner.Where(i => i.Name == outer.Buyer!.Name).Any()</c>),
+    /// so testing the pushed parameters alone leaves such a body to be compiled unchecked and fails with
+    /// "variable 'navigationN' ... is not defined".
+    /// </summary>
+    private bool IsCorrelatedWithEnclosing(Expression expression)
+    {
+        if (_outerParams is { Count: > 0 } && ReferencesOuter(expression))
+            return true;
+
+        if (_queryProvider is not QueryCommand { NavigationPaths: { Count: > 0 } paths })
+            return false;
+
+        var collector = new JoinedParameterCollector(paths, _outerParams);
+        collector.Visit(expression);
+        return collector.Found.Count > 0;
     }
 
     /// <summary>
