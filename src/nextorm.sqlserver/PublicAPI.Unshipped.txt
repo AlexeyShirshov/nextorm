@@ -1,2 +1,3 @@
 #nullable enable
 override NextORM.SqlServer.SqlServerDialect.SupportsVectorSearch.get -> bool
+override NextORM.SqlServer.SqlServerDialect.MakeApproximateTop(string! limitSql, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!

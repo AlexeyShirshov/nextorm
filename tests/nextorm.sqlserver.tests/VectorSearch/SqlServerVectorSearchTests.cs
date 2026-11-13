@@ -72,6 +72,73 @@ public sealed class SqlServerVectorSearchTests
     }
 
     [Fact]
+    public void ApproximateVectorSearch_ShouldRenderNamedVectorSearchArgumentsAndMaterializeResult()
+    {
+        using var context = Create17();
+        var target = new Vector([1f, 2f, 3f]);
+        var query = context.From<VectorSearchProbe>()
+            .Where(row => row.Id > 1)
+            .VectorSearch(row => row.Embedding, target, VectorDistanceMetric.Cosine, 5, VectorSearchMode.Approximate);
+        var prepared = Prepared(context, query);
+        var sql = Normalize(prepared.DbCommand.CommandText);
+
+        sql.Should().Be("select top (@topK) with approximate id, embedding, [distance]\n"
+            + " from VECTOR_SEARCH(TABLE = sqlserver_vector_probe as [t], COLUMN = [t].embedding, SIMILAR_TO = @queryVector, METRIC = 'cosine') as [t1]\n"
+            + " where (t1.id > 1)\n"
+            + " order by t1.[distance]");
+        prepared.DbCommandParams.Count.Should().Be(2);
+        prepared.DbCommandParams.Cast<SqlParameter>().Select(parameter => parameter.ParameterName).Should().Contain("topK");
+        prepared.DbCommandParams.Cast<SqlParameter>().Select(parameter => parameter.ParameterName).Should().Contain("queryVector");
+        prepared.DbCommandParams.Cast<SqlParameter>().Single(parameter => parameter.ParameterName.Contains("topK", StringComparison.Ordinal))
+            .Value.Should().Be(5);
+        var vectorParameter = prepared.DbCommandParams.Cast<SqlParameter>().Single(parameter => parameter.ParameterName.Contains("queryVector", StringComparison.Ordinal));
+        vectorParameter.SqlDbType.Should().Be(SqlDbTypeExtensions.Vector);
+        vectorParameter.Value.Should().BeOfType<SqlVector<float>>().Which.Memory.ToArray().Should().Equal(1f, 2f, 3f);
+
+        var table = new DataTable();
+        table.Columns.Add("id", typeof(int));
+        table.Columns.Add("embedding", typeof(string));
+        table.Columns.Add("distance", typeof(double));
+        table.Rows.Add(7, "[1,2,3]", 0.25d);
+        using var reader = table.CreateDataReader();
+        reader.Read().Should().BeTrue();
+        prepared.MapDelegate.Should().NotBeNull();
+        var result = prepared.MapDelegate!(reader);
+        result.Entity.Id.Should().Be(7);
+        result.Entity.Embedding.ToArray().Should().Equal(1f, 2f, 3f);
+        result.Distance.Should().Be(0.25d);
+    }
+
+    [Fact]
+    public void ApproximateVectorSearch_ShouldRefuseNonPositiveTopKAndConflictingOrderingOrPaging()
+    {
+        using var context = Create17();
+        var target = new Vector([1f, 2f, 3f]);
+
+        FluentActions.Invoking(() => context.From<VectorSearchProbe>()
+                .VectorSearch(row => row.Embedding, target, VectorDistanceMetric.Cosine, 0, VectorSearchMode.Approximate))
+            .Should().ThrowExactly<InvalidOperationException>()
+            .WithMessage("The approximate vector-search top-k value must be positive.");
+
+        FluentActions.Invoking(() => context.From<VectorSearchProbe>()
+                .VectorSearch(row => row.Embedding, target, VectorDistanceMetric.Cosine, -1, VectorSearchMode.Approximate))
+            .Should().ThrowExactly<InvalidOperationException>()
+            .WithMessage("The approximate vector-search top-k value must be positive.");
+
+        FluentActions.Invoking(() => Prepared(context, context.From<VectorSearchProbe>()
+                .OrderBy(row => row.Id)
+                .VectorSearch(row => row.Embedding, target, VectorDistanceMetric.Cosine, 5, VectorSearchMode.Approximate)))
+            .Should().ThrowExactly<InvalidOperationException>()
+            .WithMessage("SQL Server approximate VECTOR_SEARCH owns ORDER BY distance ascending; a user OrderBy cannot be combined with it.");
+
+        FluentActions.Invoking(() => Prepared(context, context.From<VectorSearchProbe>()
+                .Page(10, 2)
+                .VectorSearch(row => row.Embedding, target, VectorDistanceMetric.Cosine, 5, VectorSearchMode.Approximate)))
+            .Should().ThrowExactly<InvalidOperationException>()
+            .WithMessage("SQL Server approximate VECTOR_SEARCH owns TOP (@k); existing paging cannot be combined with it.");
+    }
+
+    [Fact]
     public void VectorDistance_ShouldGateUndeclaredAndOlderServerVersionsDuringPreparation()
     {
         using var unversioned = new SqlServerDataContext(ConnectionString, new DataContextBuilder());
@@ -91,6 +158,25 @@ public sealed class SqlServerVectorSearchTests
 
         var sqlServer16Query = sqlServer16.From<VectorSearchProbe>()
             .Select(row => SqlFunctions.VectorDistance(row.Embedding, target, VectorDistanceMetric.Cosine));
+        FluentActions.Invoking(() => Prepared(sqlServer16, sqlServer16Query))
+            .Should().ThrowExactly<NotSupportedException>()
+            .WithMessage("The VECTOR_DISTANCE function requires SQL Server major version 17 or later; declared major version: 16.");
+    }
+
+    [Fact]
+    public void ApproximateVectorSearch_ShouldGateUndeclaredAndOlderServerVersionsDuringPreparation()
+    {
+        using var unversioned = new SqlServerDataContext(ConnectionString, new DataContextBuilder());
+        using var sqlServer16 = new SqlServer16Context(ConnectionString);
+        var target = new Vector([1f, 2f, 3f]);
+        var unversionedQuery = unversioned.From<VectorSearchProbe>()
+            .VectorSearch(row => row.Embedding, target, VectorDistanceMetric.Cosine, 5, VectorSearchMode.Approximate);
+        var sqlServer16Query = sqlServer16.From<VectorSearchProbe>()
+            .VectorSearch(row => row.Embedding, target, VectorDistanceMetric.Cosine, 5, VectorSearchMode.Approximate);
+
+        FluentActions.Invoking(() => Prepared(unversioned, unversionedQuery))
+            .Should().ThrowExactly<NotSupportedException>()
+            .WithMessage("The VECTOR_DISTANCE function requires SQL Server major version 17 or later; declared major version: unspecified.");
         FluentActions.Invoking(() => Prepared(sqlServer16, sqlServer16Query))
             .Should().ThrowExactly<NotSupportedException>()
             .WithMessage("The VECTOR_DISTANCE function requires SQL Server major version 17 or later; declared major version: 16.");

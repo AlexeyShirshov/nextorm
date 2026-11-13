@@ -1716,6 +1716,18 @@ public interface ISqlDialect
     bool MakeTop(int limit, bool withTies, out string? topStmt, KeywordCase keywordCase = KeywordCase.Lower);
 
     /// <summary>
+    /// Renders SQL Server's approximate vector-search TOP modifier from an already-rendered, parameterized
+    /// limit expression. The default refuses so existing external dialect implementations remain source
+    /// compatible and cannot silently substitute ordinary paging.
+    /// </summary>
+    /// <param name="limitSql">The SQL expression that supplies the positive row limit.</param>
+    /// <param name="keywordCase">The letter case in which the emitted SQL keywords are written.</param>
+    /// <returns>The complete inline <c>TOP (@k) WITH APPROXIMATE</c> fragment.</returns>
+    /// <exception cref="NotSupportedException">The dialect cannot express approximate vector search.</exception>
+    string MakeApproximateTop(string limitSql, KeywordCase keywordCase = KeywordCase.Lower)
+        => throw new NotSupportedException("Approximate vector-search TOP is not supported by this SQL dialect.");
+
+    /// <summary>
     /// The provider's renderer for row locking; <c>null</c> means the provider cannot express it.
     /// Declared as a default interface method so that existing external implementations keep compiling.
     /// </summary>

@@ -147,7 +147,32 @@ internal readonly struct SqlBuilder
             if (cmd.Paging.HasWithTies && (cmd.IsDistinct || cmd.DistinctOn is not null))
                 throw new BuildSqlCommandException("WITH TIES cannot be combined with DISTINCT or DISTINCT ON.");
 
-            var pageApplied = !_ctx.ParamMode && !(cmd.IgnoreColumns || selectList is null) && cmd.Paging.IsTop && _ctx.Dialect.MakeTop(cmd.Paging.Limit, cmd.Paging.HasWithTies, out topStmt, _ctx.KeywordCase);
+            var approximateTopK = from?.TableFunction?.ApproximateTopK;
+            bool pageApplied;
+            if (approximateTopK is not null)
+            {
+                if (cmd.Paging.Limit <= 0 || cmd.Paging.Offset != 0 || cmd.Paging.HasWithTies)
+                    throw new InvalidOperationException("SQL Server approximate VECTOR_SEARCH requires a positive TOP limit without OFFSET or WITH TIES.");
+
+                var topValue = SqlSourceRenderer.MakeApproximateTopValue(in _ctx, entityType, approximateTopK);
+                if (_ctx.ParamMode)
+                {
+                    pageApplied = false;
+                }
+                else if (cmd.IgnoreColumns || selectList is null)
+                {
+                    throw new InvalidOperationException("SQL Server approximate VECTOR_SEARCH requires a projected result.");
+                }
+                else
+                {
+                    topStmt = _ctx.Dialect.MakeApproximateTop(topValue, _ctx.KeywordCase);
+                    pageApplied = true;
+                }
+            }
+            else
+            {
+                pageApplied = !_ctx.ParamMode && !(cmd.IgnoreColumns || selectList is null) && cmd.Paging.IsTop && _ctx.Dialect.MakeTop(cmd.Paging.Limit, cmd.Paging.HasWithTies, out topStmt, _ctx.KeywordCase);
+            }
 
             var joins = cmd.Joins;
             var hasJoins = joins?.Length > 0;

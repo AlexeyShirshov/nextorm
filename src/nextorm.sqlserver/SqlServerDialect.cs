@@ -973,6 +973,10 @@ public sealed class SqlServerDialect : SqlDialectBase
         return true;
     }
 
+    /// <summary>Renders SQL Server 2025's parameterized <c>TOP (@k) WITH APPROXIMATE</c> form.</summary>
+    public override string MakeApproximateTop(string limitSql, KeywordCase keywordCase = KeywordCase.Lower)
+        => Kw(keywordCase, "top (") + limitSql + Kw(keywordCase, ") with approximate");
+
     // T-SQL has no RECURSIVE keyword: a recursive CTE is declared with `with` alone, so the flag is
     // intentionally ignored.
     /// <summary>T-SQL has no <c>RECURSIVE</c> keyword, so the flag is ignored and <c>with</c> is always rendered.</summary>

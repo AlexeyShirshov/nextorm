@@ -1132,6 +1132,14 @@ internal static class SqlSourceRenderer
         var function = from.TableFunction!;
         var arguments = function.Arguments;
 
+        if (function.IsApproximateVectorSearch && !ctx.Dialect.SupportsVectorSearch)
+        {
+            var unsupportedReason = ctx.Dialect.SqlServerFunctions?.GetUnsupportedReason("vector_distance");
+            throw new NotSupportedException(
+                unsupportedReason
+                ?? $"Approximate VECTOR_SEARCH is not supported by the {ctx.Dialect.GetType().Name} provider.");
+        }
+
         // The built-in SqlFunctions.Sql table functions are provider-specific; user-defined runtime
         // table-function factories are emitted verbatim and are the caller's responsibility.
         var isBuiltIn = typeof(CommonFunctions).IsAssignableFrom(function.Call.Method.DeclaringType);
@@ -1178,9 +1186,33 @@ internal static class SqlSourceRenderer
                 if (i > 0 || leadsWithSchema)
                     sqlBuilder.Append(", ");
 
+                if (function.ArgumentNames is { } argumentNames)
+                    sqlBuilder.Append(argumentNames[i]).Append(" = ");
+
                 if (IsVerbatimArgument(function, i))
                 {
                     var verbatim = GetVerbatimArgument(arguments[i]);
+                    if (function.IsApproximateVectorSearch)
+                    {
+                        if (i == 0)
+                        {
+                            verbatim = ctx.QuoteIdentifiers
+                                ? QuoteQualifiedIdentifier(ctx.Dialect, verbatim)
+                                : verbatim;
+                            verbatim += ctx.Dialect.MakeTableAlias("t", ctx.KeywordCase);
+                        }
+                        else if (i == 1)
+                        {
+                            var alias = ctx.Dialect.Escape("t");
+                            var column = ctx.QuoteIdentifiers ? ctx.Dialect.QuoteIdentifier(verbatim) : verbatim;
+                            verbatim = alias + "." + column;
+                        }
+                        else if (i == 3)
+                        {
+                            verbatim = SqlLiteral.ToSqlStringLiteral(verbatim);
+                        }
+                    }
+
                     renderedArguments[i] = verbatim;
                     sqlBuilder.Append(verbatim);
                     continue;
@@ -1240,6 +1272,32 @@ internal static class SqlSourceRenderer
         {
             StringBuilderPool.Shared.Return(sqlBuilder);
         }
+    }
+
+    /// <summary>Walks or renders the captured TOP expression for SQL Server VECTOR_SEARCH.</summary>
+    internal static string MakeApproximateTopValue(in SqlBuildContext ctx, Type entityType, Expression topK)
+    {
+        using var visitor = new BaseExpressionVisitor(new VisitorOptions(
+            entityType,
+            ctx.Dialect,
+            ctx.ColumnsProvider,
+            0,
+            ctx.AliasProvider,
+            ctx.ParameterProvider,
+            ctx.QueryProvider,
+            true,
+            ctx.ParamMode,
+            ctx.Params,
+            ctx.Logger)
+        {
+            QuoteIdentifiers = ctx.QuoteIdentifiers,
+            NamingConvention = ctx.NamingConvention,
+            KeywordCase = ctx.KeywordCase,
+            ParameterNamePrefix = ctx.ParameterNamePrefix
+        });
+
+        visitor.Visit(topK);
+        return visitor.ToString();
     }
 
     /// <summary>
