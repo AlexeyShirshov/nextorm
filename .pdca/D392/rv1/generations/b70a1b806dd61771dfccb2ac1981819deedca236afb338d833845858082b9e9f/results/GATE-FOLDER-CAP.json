@@ -1,0 +1,17 @@
+{
+  "evidence": [
+    {
+      "exit": 0,
+      "kind": "folder-cap-audit",
+      "path": ".pdca/D392/rv1/logs/u10-repo-gates-final.log"
+    }
+  ],
+  "id": "GATE-FOLDER-CAP",
+  "predicate": "The final repository-gate audit counts all changed .cs files and affected direct source/test folders; every folder is at or below 10 direct .cs files.",
+  "requirements": [
+    "Source-folder cap of at most 10 C# files"
+  ],
+  "status": "met",
+  "tree": "5fb3f001e7c410eccaee11c6b848f751b094adcd",
+  "tree_binding": "5fb3f001e7c410eccaee11c6b848f751b094adcd"
+}

@@ -11,6 +11,10 @@ Scope: process defects observed in cycle `N=1`, contract revision `r=1`, attempt
 - **Evidence:** `AGENTS.md:83-88`; `.pdca/status/D392-1.md` §`DO result` (U5b entries; original lines 280, 284-285); `.pdca/D392/rv1/logs/u5b-repo-gates.log`; `.pdca/D392/rv1/logs/u5b-repo-gates-final.log`; `.pdca/D392/rv1/logs/u5b-repo-gates-after-crlf-fix-r1.log`; `.pdca/D392/rv1/logs/u5b-crlf-targeted-repair.log`.
 - **Prevention:** Normalize every tracked text file after its final edit and before every commit; after the final edit, rerun a tracked-path line-ending audit that includes the status, manifest, and every manifest receipt. Do not treat an earlier clean audit as evidence for later file writes.
 
+- **Third occurrence:** On 2026-11-14 the status file contained four lone-LF terminators on lines 318-321 (704 lines; CR-stripped SHA-256 `2153357176b1c2bd73222572d995d3c62dc9f409b23e7b9eafe59e8766480ff4`). The third terminator-only repair normalized those terminators without changing the CR-stripped status content; see `.pdca/D392/rv1/logs/u11-crlf-pre-repair-baseline.log` and `.pdca/D392/rv1/logs/u11-crlf-terminator-repair.log`.
+- **Suspected cause (inference, unproven):** The write path emits LF for appended lines. This is an inference; the exact path/cause has not been established.
+- **Mandatory write postcondition:** Every status/spec write must normalize the complete file to CRLF and then verify the result inside that write operation, before considering the write complete and before any commit. Verify 0 lone-LF terminators and verify the CR-stripped content hash is unchanged outside the newly appended lines; line-count changes are limited to appended lines. A later repository audit does not replace this per-write normalize-and-verify check.
+
 ## D392-P2 / VERSIONGATE-CACHE-IDENTITY
 
 - **Stable key:** `D392-P2 / VERSIONGATE-CACHE-IDENTITY`.

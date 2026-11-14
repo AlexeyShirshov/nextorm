@@ -1,0 +1,41 @@
+{
+  "evidence": [
+    {
+      "exit": 0,
+      "kind": "test-log",
+      "path": ".pdca/D392/rv1/logs/u8-test-core-tests.log"
+    },
+    {
+      "exit": 0,
+      "kind": "test-log",
+      "path": ".pdca/D392/rv1/logs/u8-test-postgres-tests.log"
+    },
+    {
+      "exit": 0,
+      "kind": "test-log",
+      "path": ".pdca/D392/rv1/logs/u8-test-sqlserver-tests.log"
+    },
+    {
+      "exit": 0,
+      "kind": "test-log",
+      "path": ".pdca/D392/rv1/logs/u5b-test-assertion-style.log"
+    },
+    {
+      "exit": 0,
+      "kind": "test-log",
+      "path": ".pdca/D392/rv1/logs/u5b-test-integration-suite-scoping.log"
+    },
+    {
+      "kind": "frozen-identity",
+      "path": ".pdca/D392/rv1/artifacts/u8-frozen-identity.md"
+    }
+  ],
+  "id": "GATE-TEST-CONVENTIONS",
+  "predicate": "U8 core (4045/4045), PostgreSQL (2021/2021), and SQL Server (2105 passed / 0 failed / 8 skipped) full suites are recorded; targeted AssertionStyleTests and IntegrationSuiteScopingTests each report 2/2 passed.",
+  "requirements": [
+    "AssertionStyleTests and IntegrationSuiteScopingTests green in the core unit suite"
+  ],
+  "status": "met",
+  "tree": "5fb3f001e7c410eccaee11c6b848f751b094adcd",
+  "tree_binding": "5fb3f001e7c410eccaee11c6b848f751b094adcd"
+}

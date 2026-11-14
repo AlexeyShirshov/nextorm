@@ -1,0 +1,73 @@
+{
+  "evidence": [
+    {
+      "exit": 0,
+      "kind": "canonical-integration-test-log",
+      "path": ".pdca/D392/rv1/logs/u9-integration-full.log"
+    },
+    {
+      "exit": 0,
+      "kind": "test-log",
+      "path": ".pdca/D392/rv1/logs/u8-test-core-tests.log"
+    },
+    {
+      "exit": 0,
+      "kind": "test-log",
+      "path": ".pdca/D392/rv1/logs/u8-test-postgres-tests.log"
+    },
+    {
+      "exit": 0,
+      "kind": "test-log",
+      "path": ".pdca/D392/rv1/logs/u8-test-sqlserver-tests.log"
+    },
+    {
+      "exit": 0,
+      "kind": "live-test-log",
+      "path": ".pdca/D392/rv1/logs/u3c-test-sqlserver-live.log"
+    },
+    {
+      "exit": 0,
+      "kind": "live-test-log",
+      "path": ".pdca/D392/rv1/logs/u6-test-integration-unified-vector-search.log"
+    },
+    {
+      "exit": 0,
+      "kind": "live-test-log",
+      "path": ".pdca/D392/rv1/logs/u6-test-integration-pgvector-filter.log"
+    },
+    {
+      "exit": 0,
+      "kind": "build-log",
+      "path": ".pdca/D392/rv1/logs/u5b-aot-publish.log"
+    },
+    {
+      "exit": 0,
+      "kind": "test-log",
+      "path": ".pdca/D392/rv1/logs/u5b-aot-test.log"
+    },
+    {
+      "kind": "native-run-log",
+      "path": ".pdca/D392/rv1/artifacts/u5b-aot-native-run/native-run.log"
+    },
+    {
+      "kind": "native-oracle",
+      "path": ".pdca/D392/rv1/artifacts/u5b-aot-native-run/oracle.md"
+    },
+    {
+      "kind": "coverage-inventory",
+      "path": ".pdca/D392/rv1/artifacts/u5b-u2c-negative-coverage.md"
+    },
+    {
+      "kind": "frozen-identity",
+      "path": ".pdca/D392/rv1/artifacts/u8-frozen-identity.md"
+    }
+  ],
+  "id": "AC-4",
+  "predicate": "The U9 canonical full integration run exits 0 with 8,737 total / 8,540 passed / 0 failed / 197 skipped; the pinned skip-budget check reports 197/197. U8 unit-suite logs, SQL Server/PostgreSQL live vector-search and PostgreSQL regression logs, AOT evidence, and the negative-coverage inventory are recorded.",
+  "requirements": [
+    "AC-4 SQL-generation tests and live SQL Server/PostgreSQL integration with PostgreSQL regression coverage and skip budget"
+  ],
+  "status": "met",
+  "tree": "5fb3f001e7c410eccaee11c6b848f751b094adcd",
+  "tree_binding": "5fb3f001e7c410eccaee11c6b848f751b094adcd"
+}

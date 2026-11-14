@@ -1,0 +1,25 @@
+{
+  "evidence": [
+    {
+      "exit": 0,
+      "kind": "build-log",
+      "path": ".pdca/D392/rv1/logs/u8-build-solution.log"
+    },
+    {
+      "kind": "public-api-ledger-diff",
+      "path": ".pdca/D392/rv1/artifacts/u10-publicapi-diff.patch"
+    },
+    {
+      "kind": "frozen-identity",
+      "path": ".pdca/D392/rv1/artifacts/u8-frozen-identity.md"
+    }
+  ],
+  "id": "GATE-PUBLICAPI",
+  "predicate": "The U8 whole-solution build exits 0 with 0 warnings/errors, and the final PublicAPI ledger diff is available for checking additions and removals.",
+  "requirements": [
+    "PublicAPI ledgers capture the new API and whole-solution API analyzers pass"
+  ],
+  "status": "met",
+  "tree": "5fb3f001e7c410eccaee11c6b848f751b094adcd",
+  "tree_binding": "5fb3f001e7c410eccaee11c6b848f751b094adcd"
+}

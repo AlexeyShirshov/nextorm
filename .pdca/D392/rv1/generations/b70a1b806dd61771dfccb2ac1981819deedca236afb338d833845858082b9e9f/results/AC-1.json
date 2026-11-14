@@ -1,0 +1,38 @@
+{
+  "evidence": [
+    {
+      "exit": 0,
+      "kind": "test-log",
+      "path": ".pdca/D392/rv1/logs/u8-test-postgres-tests.log"
+    },
+    {
+      "exit": 0,
+      "kind": "test-log",
+      "path": ".pdca/D392/rv1/logs/u6-test-postgres-unified-vector-search.log"
+    },
+    {
+      "kind": "frozen-source-diff",
+      "path": ".pdca/D392/rv1/artifacts/u10-product-diff.patch"
+    },
+    {
+      "kind": "public-api-ledger-diff",
+      "path": ".pdca/D392/rv1/artifacts/u10-publicapi-diff.patch"
+    },
+    {
+      "kind": "frozen-identity",
+      "path": ".pdca/D392/rv1/artifacts/u8-frozen-identity.md"
+    },
+    {
+      "kind": "documentation-pair-pointers",
+      "path": ".pdca/D392/rv1/artifacts/u10-ac5-page-row-pointers.md"
+    }
+  ],
+  "id": "AC-1",
+  "predicate": "The U8 full PostgreSQL suite (2021/2021) and U6 unified vector-search SQL-generation suite (11/11) pass; the final product/API snapshots and EN/RU documentation pointers are bound to the final candidate identity for independent review.",
+  "requirements": [
+    "AC-1 unified nearest-neighbor API, PostgreSQL reuse, and public compatibility"
+  ],
+  "status": "met",
+  "tree": "5fb3f001e7c410eccaee11c6b848f751b094adcd",
+  "tree_binding": "5fb3f001e7c410eccaee11c6b848f751b094adcd"
+}
