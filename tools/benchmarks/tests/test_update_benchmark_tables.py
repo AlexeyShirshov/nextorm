@@ -87,6 +87,33 @@ class E2ETableTests(unittest.TestCase):
             "| **10.00 μs** | 15.00 μs | 17.00 μs | 38.00 μs |",
             table,
         )
+        self.assertNotIn("Code |", table)
+
+    def test_code_links_point_at_the_measured_source(self):
+        write_report(
+            self.results,
+            "SqliteBenchmarkIteration",
+            [
+                "Nextorm_Prepared,10.00 μs,800 B,",
+                "Dapper_Async,15.00 μs,1 KB,",
+                "Linq2Db_Compiled,17.00 μs,2 KB,",
+                "EFCore_Compiled,38.00 μs,10 KB,",
+            ],
+        )
+        with mock.patch.object(tables, "E2E_ROWS", (tables.E2E_ROWS[0],)):
+            table = tables.build_e2e_table(self.results, "en", code_links=True)
+        self.assertIn("| Method | Nextorm | Dapper | linq2db | EF Core | Code |", table)
+        # The report link stays, and the new cell points at the class declaration in the source.
+        self.assertIn(
+            "[Data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/"
+            "BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md)",
+            table,
+        )
+        self.assertIn(
+            "| [code](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/nextorm.benchmark/"
+            "Sqlite/SqliteBenchmarkIteration.cs#L",
+            table,
+        )
 
     def test_allocations_follow_the_fastest_arm(self):
         write_report(
@@ -196,6 +223,40 @@ class FeatureRowTests(unittest.TestCase):
         stamp = tables.report_date(self.results, tables.CATEGORY_A_CLASS)
         self.assertTrue(table.startswith(f"As of **{stamp}**.\n\n"), table)
         self.assertIn("| Feature | Nextorm (prepared) |", table)
+
+    def test_feature_rows_link_the_feature_benchmark(self):
+        self._write_features()
+        categories = tuple(item for item in tables.CATEGORY_A if item[0] in ("A_Cte", "A_CaseWhen"))
+        with mock.patch.object(tables, "CATEGORY_A", categories):
+            rows = tables.build_feature_rows(self.results, "en", code_links=True)
+        for row in rows:
+            # The report link stays; the code cell anchors the category's first arm (nextorm).
+            self.assertIn("SqliteBenchmarkFeaturesFair-report-github.md)", row)
+            self.assertIn(
+                "| [code](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/"
+                "nextorm.benchmark/Sqlite/SqliteBenchmarkFeaturesFair.cs#L",
+                row,
+            )
+
+    def test_code_link_fails_closed_when_the_category_leaves_the_source(self):
+        write_report(
+            self.results,
+            tables.CATEGORY_A_CLASS,
+            [
+                "A_Nextorm_Prepared_Removed,10.0 μs,1.0 KB,A_Removed",
+                "A_Dapper_Removed,12.0 μs,1.0 KB,A_Removed",
+            ],
+        )
+        categories = (("A_Removed", "Removed", "Removed"),)
+        with mock.patch.object(tables, "CATEGORY_A", categories):
+            with self.assertRaises(tables.TableError):
+                tables.build_feature_rows(self.results, "en", code_links=True)
+
+    def test_only_the_readme_table_links_the_code(self):
+        by_name = {target.name: target for target in tables.TARGETS}
+        self.assertTrue(by_name["readme"].code_links)
+        self.assertFalse(by_name["docs"].code_links)
+        self.assertFalse(by_name["docs-ru"].code_links)
 
     def test_unknown_feature_category_fails_closed(self):
         write_report(

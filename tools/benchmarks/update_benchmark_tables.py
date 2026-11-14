@@ -13,7 +13,7 @@ rewrites the generated blocks in place, so a benchmark run cannot leave the pros
 Targets:
 
 * ``readme.md`` — conditions + end-to-end (time) table, extended with the basic-feature rows of
-  the Category A suite;
+  the Category A suite; every row also carries a ``Code`` link to the benchmark source it measures;
 * ``docs/comparisons/benchmarks.md`` — conditions + end-to-end + allocations + Category A + Category B;
 * ``docs/ru/comparisons/benchmarks.md`` — the Russian mirror of the same.
 
@@ -119,6 +119,10 @@ class Target:
     # of its own: the article prints those numbers (time *and* allocations) in its Category A/B
     # sections, so growing its end-to-end table too would duplicate them on the same page.
     feature_rows: bool = False
+    # Add a "Code" column that links every row to the benchmark source it measures (the readme is
+    # the landing page: a reader must see the measured code next to the numbers, not only the
+    # report). The article keeps its own layout and links reports from its prose instead.
+    code_links: bool = False
 
 
 TARGETS = (
@@ -128,6 +132,7 @@ TARGETS = (
         "en",
         ("conditions", "e2e"),
         feature_rows=True,
+        code_links=True,
     ),
     Target(
         "docs",
@@ -307,9 +312,43 @@ def _report_url(class_name: str) -> str:
     )
 
 
-def build_e2e_table(results_dir: Path, lang: str, *, include_features: bool = False) -> str:
+def _source_url(class_name: str, pattern: str, description: str) -> str:
+    """Blob URL of the benchmark source, anchored at the line matching *pattern*.
+
+    The readme's "Code" column must point at the code a row measures, so the anchor is resolved
+    from the source itself; a renamed class or category fails closed instead of emitting a link
+    that lands on the top of the file.
+    """
+    path = _benchmark_source(class_name)
+    text = path.read_text(encoding="utf-8")
+    match = re.search(pattern, text)
+    if not match:
+        raise TableError(f"{path.name}: cannot find {description}")
+    line = text.count("\n", 0, match.start()) + 1
+    return f"{GITHUB_BLOB_PREFIX}/{path.relative_to(REPO_ROOT).as_posix()}#L{line}"
+
+
+def _class_source_url(class_name: str) -> str:
+    return _source_url(
+        class_name, rf"\bclass\s+{re.escape(class_name)}\b", f"class {class_name}"
+    )
+
+
+def _category_source_url(class_name: str, category: str) -> str:
+    return _source_url(
+        class_name,
+        rf'BenchmarkCategory\("{re.escape(category)}"\)',
+        f'BenchmarkCategory("{category}")',
+    )
+
+
+def build_e2e_table(
+    results_dir: Path, lang: str, *, include_features: bool = False, code_links: bool = False
+) -> str:
     header = "| Method | Nextorm | Dapper | linq2db | EF Core |" if lang == "en" else "| Метод | Nextorm | Dapper | linq2db | EF Core |"
-    lines = [header, "|---|:---:|:---:|:---:|:---:|"]
+    if code_links:
+        header += " Code |"
+    lines = [header, "|---|" + ":---:|" * len(LIBRARIES) + ("---|" if code_links else "")]
     for row in E2E_ROWS:
         csv_path, _ = report_paths(results_dir, row.class_name)
         winners = fastest_per_library(row.class_name, read_measurements(csv_path))
@@ -318,13 +357,12 @@ def build_e2e_table(results_dir: Path, lang: str, *, include_features: bool = Fa
             _bold(winners[library].time_raw, winners[library].time_ns == best)
             for library in LIBRARIES
         ]
-        lines.append(
-            f"| [{row.en if lang == 'en' else row.ru}]({_report_url(row.class_name)}) | "
-            + " | ".join(cells)
-            + " |"
-        )
+        label = f"[{row.en if lang == 'en' else row.ru}]({_report_url(row.class_name)})"
+        if code_links:
+            cells.append(f"[code]({_class_source_url(row.class_name)})")
+        lines.append("| " + " | ".join([label, *cells]) + " |")
     if include_features:
-        lines.extend(build_feature_rows(results_dir, lang))
+        lines.extend(build_feature_rows(results_dir, lang, code_links=code_links))
     return "\n".join(lines)
 
 
@@ -354,12 +392,13 @@ def _fair_groups(results_dir: Path, class_name: str, categories: tuple, expected
     return divisor, groups
 
 
-def build_feature_rows(results_dir: Path, lang: str) -> list:
+def build_feature_rows(results_dir: Path, lang: str, *, code_links: bool = False) -> list:
     """Basic-feature rows read from the Category A suite, one row per feature.
 
     Each feature method runs ``Iterations`` queries, so the cell is the per-query mean of the
     fastest arm of that library — the same numbers the article's Category A table prints, minus the
-    allocations.
+    allocations. With ``code_links`` the row also links the feature's first benchmark method (the
+    nextorm arm) in the suite source.
     """
     divisor, groups = _fair_groups(
         results_dir, CATEGORY_A_CLASS, CATEGORY_A, CATEGORY_A_LOGICAL_OPS
@@ -383,9 +422,10 @@ def build_feature_rows(results_dir: Path, lang: str) -> list:
                     measurement.time_ns == best,
                 )
             )
-        lines.append(
-            f"| [{label_en if lang == 'en' else label_ru}]({url}) | " + " | ".join(cells) + " |"
-        )
+        label = f"[{label_en if lang == 'en' else label_ru}]({url})"
+        if code_links:
+            cells.append(f"[code]({_category_source_url(CATEGORY_A_CLASS, group[0].category)})")
+        lines.append("| " + " | ".join([label, *cells]) + " |")
     return lines
 
 
@@ -413,14 +453,25 @@ def _benchmark_source(class_name: str) -> Path:
     """Locate a benchmark class source anywhere under the project.
 
     Benchmark sources are grouped by topic (``Sqlite/``, ``Infrastructure/``, ...), so the
-    file is resolved recursively; a missing or duplicate class fails closed instead of
+    file is resolved recursively; when the file name and the class name disagree (e.g. a typo
+    such as ``SqliteBenchmarkSimulteWork.cs`` holding ``SqliteBenchmarkSimulateWork``) the class
+    declaration itself is the fallback. A missing or duplicate class fails closed instead of
     silently reading the wrong source.
     """
-    matches = sorted(
-        path
-        for path in BENCH_SRC_DIR.rglob(f"{class_name}.cs")
-        if not {"bin", "obj"} & set(path.relative_to(BENCH_SRC_DIR).parts)
-    )
+    def candidates():
+        return [
+            path
+            for path in BENCH_SRC_DIR.rglob("*.cs")
+            if not {"bin", "obj"} & set(path.relative_to(BENCH_SRC_DIR).parts)
+        ]
+
+    files = candidates()
+    matches = sorted(path for path in files if path.name == f"{class_name}.cs")
+    if not matches:
+        pattern = re.compile(rf"\bclass\s+{re.escape(class_name)}\b")
+        matches = sorted(
+            path for path in files if pattern.search(path.read_text(encoding="utf-8"))
+        )
     if not matches:
         raise TableError(f"{class_name}.cs: not found under {BENCH_SRC_DIR}")
     if len(matches) > 1:
@@ -579,7 +630,9 @@ def build_conditions(target: Target, results_dir: Path, date: str) -> str:
             "Benchmark conditions: provider SQLite (`Microsoft.Data.Sqlite`); async queries; each cell is "
             "the fastest method for that ORM in the linked report. Machine: "
             f"{machine}, .NET {conditions['runtime']}, BenchmarkDotNet {conditions['bdn']} "
-            f"(`{conditions['job']}` + `{conditions['toolchain']}`). As of **{date}**. The last twelve rows "
+            f"(`{conditions['job']}` + `{conditions['toolchain']}`). As of **{date}**. Each method name "
+            "links to its BenchmarkDotNet report, and the **Code** column links to the benchmark source in "
+            "this repository — the exact code behind the row. The last twelve rows "
             "are the basic-feature scenarios (Category A in the [comparison article]"
             "(https://alexeyshirshov.github.io/nextorm/comparisons/benchmarks.html)): Nextorm through "
             "`Prepare()` against the compiled form of EF Core and linq2db and raw Dapper, ten queries per "
@@ -655,7 +708,12 @@ def render_target(target: Target, results_dir: Path, date: str) -> str:
         if name == "conditions":
             blocks[name] = build_conditions(target, results_dir, date)
         elif name == "e2e":
-            blocks[name] = build_e2e_table(results_dir, target.lang, include_features=target.feature_rows)
+            blocks[name] = build_e2e_table(
+                results_dir,
+                target.lang,
+                include_features=target.feature_rows,
+                code_links=target.code_links,
+            )
         elif name == "allocations":
             blocks[name] = build_allocations_table(results_dir, target.lang)
         elif name == "category-a":
