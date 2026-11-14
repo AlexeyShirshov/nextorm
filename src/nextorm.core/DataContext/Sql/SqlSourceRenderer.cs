@@ -1199,13 +1199,12 @@ internal static class SqlSourceRenderer
                             verbatim = ctx.QuoteIdentifiers
                                 ? QuoteQualifiedIdentifier(ctx.Dialect, verbatim)
                                 : verbatim;
-                            verbatim += ctx.Dialect.MakeTableAlias("t", ctx.KeywordCase);
                         }
                         else if (i == 1)
                         {
-                            var alias = ctx.Dialect.Escape("t");
-                            var column = ctx.QuoteIdentifiers ? ctx.Dialect.QuoteIdentifier(verbatim) : verbatim;
-                            verbatim = alias + "." + column;
+                            verbatim = ctx.QuoteIdentifiers
+                                ? ctx.Dialect.QuoteIdentifier(verbatim)
+                                : verbatim;
                         }
                         else if (i == 3)
                         {

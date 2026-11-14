@@ -36,11 +36,12 @@ public sealed class SqlServerVectorSearchIntegrationTests(ITestOutputHelper outp
 
         try
         {
+            LogServerVersion(connectionString);
             EnablePreviewFeatures(connectionString);
             Execute(connectionString,
                 $"drop table if exists dbo.{Table}; create table dbo.{Table} (id int primary key, embedding vector(3) not null);");
 
-            using var context = new SqlServerDataContext(new Version(17, 0), connectionString);
+            using var context = new SqlServer17Context(connectionString);
             var rows = CreateRows();
             context.CreateInsertBuilder<VectorSearchProbe>().Values(rows).Insert();
             context.From<VectorSearchProbe>().Count().Should().Be(100);
@@ -89,11 +90,14 @@ public sealed class SqlServerVectorSearchIntegrationTests(ITestOutputHelper outp
             Execute(connectionString,
                 $"create vector index ix_{Table}_embedding_cosine on dbo.{Table} (embedding) with (metric = 'cosine', type = 'DiskANN');");
             output.WriteLine("SQL Server vector index created: 100 non-null VECTOR(3) rows, cosine DiskANN.");
+            output.WriteLine("The cosine DiskANN index is created before the approximate VECTOR_SEARCH query; this SQL Server grammar requires a matching ANN index.");
 
             const int topK = 3;
-            var approximate = context.From<VectorSearchProbe>()
-                .VectorSearch(row => row.Embedding, queryVector, VectorDistanceMetric.Cosine, topK, mode: VectorSearchMode.Approximate)
-                .ToList();
+            var approximateQuery = context.From<VectorSearchProbe>()
+                .VectorSearch(row => row.Embedding, queryVector, VectorDistanceMetric.Cosine, topK, mode: VectorSearchMode.Approximate);
+            var approximatePrepared = Prepared(context, approximateQuery);
+            output.WriteLine("SQL Server approximate VECTOR_SEARCH emitted SQL BEGIN\n" + approximatePrepared.DbCommand.CommandText + "\nSQL Server approximate VECTOR_SEARCH emitted SQL END");
+            var approximate = approximateQuery.ToList();
             approximate.Should().HaveCount(topK);
             approximate.Select(result => result.Entity.Id).Should().Equal(1, 2, 5);
             approximate[0].Distance!.Value.Should().BeApproximately(0d, 0.00001d);
@@ -101,7 +105,7 @@ public sealed class SqlServerVectorSearchIntegrationTests(ITestOutputHelper outp
             approximate[2].Distance!.Value.Should().BeApproximately(expectedFifthCosine, 0.00001d);
             approximate.Select(result => result.Distance!.Value).Should().BeInAscendingOrder();
 
-            using var sqlServer16 = new SqlServerDataContext(new Version(16, 0), connectionString);
+            using var sqlServer16 = new SqlServer16Context(connectionString);
             var unsupportedQuery = sqlServer16.From<VectorSearchProbe>()
                 .VectorSearch(row => row.Embedding, queryVector, VectorDistanceMetric.Cosine, topK, mode: VectorSearchMode.Approximate);
             FluentActions.Invoking(() => Prepared(sqlServer16, unsupportedQuery))
@@ -169,6 +173,18 @@ public sealed class SqlServerVectorSearchIntegrationTests(ITestOutputHelper outp
         }
     }
 
+    private void LogServerVersion(string connectionString)
+    {
+        using var connection = new SqlConnection(connectionString);
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT @@VERSION, SERVERPROPERTY('ProductVersion');";
+        using var reader = command.ExecuteReader();
+        reader.Read().Should().BeTrue();
+        output.WriteLine("SQL Server @@VERSION: " + reader.GetString(0));
+        output.WriteLine("SQL Server SERVERPROPERTY('ProductVersion'): " + Convert.ToString(reader.GetValue(1), CultureInfo.InvariantCulture));
+    }
+
     private static DbPreparedQueryCommand<T> Prepared<T>(SqlServerDataContext context, QueryCommand<T> command)
         => (DbPreparedQueryCommand<T>)context.GetPreparedQueryCommand(command, false, false, CancellationToken.None);
 
@@ -205,4 +221,14 @@ public sealed class SqlServerVectorSearchIntegrationTests(ITestOutputHelper outp
     private static void DropDatabase(string database)
         => Execute(MasterConnectionString(),
             $"alter database [{database}] set single_user with rollback immediate; drop database [{database}];");
+
+    private sealed class SqlServer17Context(string connectionString)
+        : SqlServerDataContext(new Version(17, 0), connectionString)
+    {
+    }
+
+    private sealed class SqlServer16Context(string connectionString)
+        : SqlServerDataContext(new Version(16, 0), connectionString)
+    {
+    }
 }

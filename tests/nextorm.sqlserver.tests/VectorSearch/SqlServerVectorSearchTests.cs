@@ -83,7 +83,7 @@ public sealed class SqlServerVectorSearchTests
         var sql = Normalize(prepared.DbCommand.CommandText);
 
         sql.Should().Be("select top (5) id, embedding, [distance]\n"
-            + " from VECTOR_SEARCH(TABLE = sqlserver_vector_probe as [t], COLUMN = [t].embedding, SIMILAR_TO = @queryVector, METRIC = 'cosine', TOP_N = 5) as [t1]\n"
+            + " from VECTOR_SEARCH(TABLE = dbo.sqlserver_vector_probe, COLUMN = embedding, SIMILAR_TO = @queryVector, METRIC = 'cosine', TOP_N = 5) as [t1]\n"
             + " where (t1.id > 1)\n"
             + " order by t1.[distance]");
         prepared.DbCommandParams.Count.Should().Be(1);
@@ -119,7 +119,7 @@ public sealed class SqlServerVectorSearchTests
             .VectorSearch(row => row.Embedding, target, VectorDistanceMetric.Cosine, 5, VectorSearchMode.Approximate));
 
         Normalize(prepared.DbCommand.CommandText).Should().Be("select top (5) with approximate id, embedding, [distance]\n"
-            + " from VECTOR_SEARCH(TABLE = sqlserver_vector_probe as [t], COLUMN = [t].embedding, SIMILAR_TO = @queryVector, METRIC = 'cosine') as [t1]\n"
+            + " from VECTOR_SEARCH(TABLE = dbo.sqlserver_vector_probe, COLUMN = embedding, SIMILAR_TO = @queryVector, METRIC = 'cosine') as [t1]\n"
             + " where (t1.id > 1)\n"
             + " order by t1.[distance]");
         prepared.DbCommandParams.Count.Should().Be(1);

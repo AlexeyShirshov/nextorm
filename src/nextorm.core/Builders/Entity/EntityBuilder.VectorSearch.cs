@@ -152,8 +152,11 @@ public partial class EntityBuilder<TEntity>
         else if (source is { IsAutoMapped: true } && NamingConvention is { } sourceNamingConvention)
             tableName = sourceNamingConvention.TableName(tableName, source.SourceIsInterface);
 
-        if (serverOverride is not null || databaseOverride is not null || schemaOverride is not null)
-            tableName = dialect.MakeQualifiedTableName(serverOverride, databaseOverride, schemaOverride, tableName);
+        var isSqlServer = dialect.SqlServerFunctions is not null;
+        var hasQualifiedTableName = tableName.Contains('.', StringComparison.Ordinal);
+        var effectiveSchema = schemaOverride ?? (isSqlServer && !hasQualifiedTableName ? "dbo" : null);
+        if (serverOverride is not null || databaseOverride is not null || effectiveSchema is not null)
+            tableName = dialect.MakeQualifiedTableName(serverOverride, databaseOverride, effectiveSchema, tableName);
 
         var propertyMetadata = metadata.Properties.FirstOrDefault(item => item.PropertyInfo == property)
             ?? throw new NotSupportedException($"The vector property '{property.Name}' is not mapped for SQL Server approximate VECTOR_SEARCH.");
