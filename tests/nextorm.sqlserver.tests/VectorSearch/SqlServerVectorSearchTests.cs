@@ -82,15 +82,13 @@ public sealed class SqlServerVectorSearchTests
         var prepared = Prepared(context, query);
         var sql = Normalize(prepared.DbCommand.CommandText);
 
-        sql.Should().Be("select top (@topK) with approximate id, embedding, [distance]\n"
-            + " from VECTOR_SEARCH(TABLE = sqlserver_vector_probe as [t], COLUMN = [t].embedding, SIMILAR_TO = @queryVector, METRIC = 'cosine') as [t1]\n"
+        sql.Should().Be("select top (5) id, embedding, [distance]\n"
+            + " from VECTOR_SEARCH(TABLE = sqlserver_vector_probe as [t], COLUMN = [t].embedding, SIMILAR_TO = @queryVector, METRIC = 'cosine', TOP_N = 5) as [t1]\n"
             + " where (t1.id > 1)\n"
             + " order by t1.[distance]");
-        prepared.DbCommandParams.Count.Should().Be(2);
-        prepared.DbCommandParams.Cast<SqlParameter>().Select(parameter => parameter.ParameterName).Should().Contain("topK");
+        prepared.DbCommandParams.Count.Should().Be(1);
+        prepared.DbCommandParams.Cast<SqlParameter>().Select(parameter => parameter.ParameterName).Should().NotContain("topK");
         prepared.DbCommandParams.Cast<SqlParameter>().Select(parameter => parameter.ParameterName).Should().Contain("queryVector");
-        prepared.DbCommandParams.Cast<SqlParameter>().Single(parameter => parameter.ParameterName.Contains("topK", StringComparison.Ordinal))
-            .Value.Should().Be(5);
         var vectorParameter = prepared.DbCommandParams.Cast<SqlParameter>().Single(parameter => parameter.ParameterName.Contains("queryVector", StringComparison.Ordinal));
         vectorParameter.SqlDbType.Should().Be(SqlDbTypeExtensions.Vector);
         vectorParameter.Value.Should().BeOfType<SqlVector<float>>().Which.Memory.ToArray().Should().Equal(1f, 2f, 3f);
@@ -107,6 +105,26 @@ public sealed class SqlServerVectorSearchTests
         result.Entity.Id.Should().Be(7);
         result.Entity.Embedding.ToArray().Should().Equal(1f, 2f, 3f);
         result.Distance.Should().Be(0.25d);
+    }
+
+    [Fact]
+    public void ApproximateVectorSearch_ShouldRenderWithApproximateGrammarWhenExplicitlyConfigured()
+    {
+        using var context = (SqlServerDataContext)new DataContextBuilder()
+            .UseSqlServer(ConnectionString, new Version(17, 0), SqlServerVectorSearchSyntax.WithApproximate)
+            .CreateDataContext();
+        var target = new Vector([1f, 2f, 3f]);
+        var prepared = Prepared(context, context.From<VectorSearchProbe>()
+            .Where(row => row.Id > 1)
+            .VectorSearch(row => row.Embedding, target, VectorDistanceMetric.Cosine, 5, VectorSearchMode.Approximate));
+
+        Normalize(prepared.DbCommand.CommandText).Should().Be("select top (5) with approximate id, embedding, [distance]\n"
+            + " from VECTOR_SEARCH(TABLE = sqlserver_vector_probe as [t], COLUMN = [t].embedding, SIMILAR_TO = @queryVector, METRIC = 'cosine') as [t1]\n"
+            + " where (t1.id > 1)\n"
+            + " order by t1.[distance]");
+        prepared.DbCommandParams.Count.Should().Be(1);
+        prepared.DbCommandParams.Cast<SqlParameter>().Select(parameter => parameter.ParameterName).Should().Equal("queryVector");
+        prepared.DbCommandParams[0].Value.Should().BeOfType<SqlVector<float>>().Which.Memory.ToArray().Should().Equal(1f, 2f, 3f);
     }
 
     [Fact]

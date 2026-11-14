@@ -27,6 +27,8 @@ public partial class EntityBuilder<TEntity>
     /// paging are replaced by distance ascending and <paramref name="topK"/>. PostgreSQL emits the same
     /// distance-operator query for <see cref="VectorSearchMode.Exact"/> and
     /// <see cref="VectorSearchMode.Approximate"/>; its planner may use HNSW or IVFFlat transparently.
+    /// SQL Server emits <paramref name="topK"/> as a literal and uses the context's explicitly selected
+    /// <c>VECTOR_SEARCH</c> grammar for approximate search.
     /// The mode does not rewrite the query into a different metric or result semantics. Other providers
     /// reject vector search during preparation unless their dialect advertises support.
     /// </remarks>
@@ -102,14 +104,13 @@ public partial class EntityBuilder<TEntity>
         if (sqlServerApproximate)
         {
             var (tableName, columnName) = ResolveApproximateVectorSource(vectorSelector.Body);
-            Expression<Func<int>> topKParameter = () => topK;
             search._from = new FromExpression(TableFunctionExpression.CreateApproximateVectorSearch(
                 tableName,
                 columnName,
                 (MethodCallExpression)vectorDistance,
                 queryVectorParameter.Body,
                 GetSqlServerMetric(metric),
-                topKParameter.Body,
+                Expression.Constant(topK),
                 typeof(TEntity)));
             search._table = null;
             search._tableNameOverride = null;

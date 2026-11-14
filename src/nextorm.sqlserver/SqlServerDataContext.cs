@@ -18,9 +18,10 @@ namespace NextORM.SqlServer;
 /// </summary>
 public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInsertNativeOptions, IBulkInsertPortableScope
 {
-    // One immutable (server version, engine edition) declaration per concrete context type, so two
-    // instances of the same type can never render different SQL and silently reuse each other's cached
-    // plans (the plan-cache key is the context type). Both components default to null ("unset").
+    // One immutable (server version, engine edition, vector-search grammar) declaration per concrete
+    // context type, so two instances of the same type can never render different SQL and silently reuse
+    // each other's cached plans (the plan-cache key is the context type). Version and edition default to
+    // null ("unset"); the vector-search grammar defaults to TopN.
     private static readonly ConcurrentDictionary<Type, CapabilityDeclaration> CapabilitiesByContextType = new();
 
     private readonly ISqlDialect _dialect;
@@ -49,7 +50,7 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
     /// <param name="connectionString">The connection string used to create the <c>SqlConnection</c>.</param>
     /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
     public SqlServerDataContext(string connectionString, DataContextBuilder optionsBuilder)
-        : this(connectionString, null, optionsBuilder, null, null)
+        : this(connectionString, null, optionsBuilder, null, null, SqlServerVectorSearchSyntax.TopN)
     {
     }
 
@@ -61,7 +62,7 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
     /// <param name="connection">An already-created <c>DbConnection</c> owned by the caller.</param>
     /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
     public SqlServerDataContext(DbConnection connection, DataContextBuilder optionsBuilder)
-        : this(null, connection, optionsBuilder, null, null)
+        : this(null, connection, optionsBuilder, null, null, SqlServerVectorSearchSyntax.TopN)
     {
     }
 
@@ -76,7 +77,26 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
     /// <exception cref="ArgumentNullException"><paramref name="serverVersion"/> is <see langword="null"/>; use the unversioned constructor instead.</exception>
     /// <exception cref="InvalidOperationException">A different server version was already registered for this context type.</exception>
     public SqlServerDataContext(Version serverVersion, string connectionString)
-        : this(connectionString, null, new DataContextBuilder(), ValidateServerVersion(serverVersion), null)
+        : this(connectionString, null, new DataContextBuilder(), ValidateServerVersion(serverVersion), null, SqlServerVectorSearchSyntax.TopN)
+    {
+    }
+
+    /// <summary>
+    /// Creates a SQL Server context bound to an explicitly declared server version and approximate
+    /// vector-search grammar. The server itself is never queried for its version or grammar; the grammar
+    /// is not inferred from the major version.
+    /// </summary>
+    /// <param name="serverVersion">The SQL Server version this context declares.</param>
+    /// <param name="connectionString">The connection string used to create the <c>SqlConnection</c>.</param>
+    /// <param name="vectorSearchSyntax">The explicit <c>VECTOR_SEARCH</c> grammar to emit.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="serverVersion"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="vectorSearchSyntax"/> is undefined.</exception>
+    /// <exception cref="InvalidOperationException">A different version, engine edition or vector-search grammar was already registered for this context type.</exception>
+    public SqlServerDataContext(
+        Version serverVersion,
+        string connectionString,
+        SqlServerVectorSearchSyntax vectorSearchSyntax)
+        : this(connectionString, null, new DataContextBuilder(), ValidateServerVersion(serverVersion), null, vectorSearchSyntax)
     {
     }
 
@@ -89,7 +109,25 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
     /// <exception cref="ArgumentNullException"><paramref name="serverVersion"/> is <see langword="null"/>; use the unversioned constructor instead.</exception>
     /// <exception cref="InvalidOperationException">A different server version was already registered for this context type.</exception>
     public SqlServerDataContext(Version serverVersion, DbConnection connection)
-        : this(null, connection, new DataContextBuilder(), ValidateServerVersion(serverVersion), null)
+        : this(null, connection, new DataContextBuilder(), ValidateServerVersion(serverVersion), null, SqlServerVectorSearchSyntax.TopN)
+    {
+    }
+
+    /// <summary>
+    /// Creates a SQL Server context over a caller-supplied connection with an explicit server version and
+    /// approximate vector-search grammar. The context does not dispose the connection.
+    /// </summary>
+    /// <param name="serverVersion">The SQL Server version this context declares.</param>
+    /// <param name="connection">An already-created <c>DbConnection</c> owned by the caller.</param>
+    /// <param name="vectorSearchSyntax">The explicit <c>VECTOR_SEARCH</c> grammar to emit.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="serverVersion"/> or <paramref name="connection"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="vectorSearchSyntax"/> is undefined.</exception>
+    /// <exception cref="InvalidOperationException">A different capability declaration was already registered for this context type.</exception>
+    public SqlServerDataContext(
+        Version serverVersion,
+        DbConnection connection,
+        SqlServerVectorSearchSyntax vectorSearchSyntax)
+        : this(null, connection, new DataContextBuilder(), ValidateServerVersion(serverVersion), null, vectorSearchSyntax)
     {
     }
 
@@ -105,7 +143,7 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="engineEdition"/> is not a defined <see cref="SqlServerEngineEdition"/> value.</exception>
     /// <exception cref="InvalidOperationException">A different capability declaration was already registered for this context type.</exception>
     public SqlServerDataContext(SqlServerEngineEdition engineEdition, string connectionString)
-        : this(connectionString, null, new DataContextBuilder(), null, ValidateEngineEdition(engineEdition))
+        : this(connectionString, null, new DataContextBuilder(), null, ValidateEngineEdition(engineEdition), SqlServerVectorSearchSyntax.TopN)
     {
     }
 
@@ -119,7 +157,7 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="engineEdition"/> is not a defined <see cref="SqlServerEngineEdition"/> value.</exception>
     /// <exception cref="InvalidOperationException">A different capability declaration was already registered for this context type.</exception>
     public SqlServerDataContext(SqlServerEngineEdition engineEdition, DbConnection connection)
-        : this(null, connection, new DataContextBuilder(), null, ValidateEngineEdition(engineEdition))
+        : this(null, connection, new DataContextBuilder(), null, ValidateEngineEdition(engineEdition), SqlServerVectorSearchSyntax.TopN)
     {
     }
 
@@ -135,7 +173,7 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="engineEdition"/> is not a defined <see cref="SqlServerEngineEdition"/> value.</exception>
     /// <exception cref="InvalidOperationException">A different capability declaration was already registered for this context type.</exception>
     public SqlServerDataContext(Version serverVersion, SqlServerEngineEdition engineEdition, string connectionString)
-        : this(connectionString, null, new DataContextBuilder(), ValidateServerVersion(serverVersion), ValidateEngineEdition(engineEdition))
+        : this(connectionString, null, new DataContextBuilder(), ValidateServerVersion(serverVersion), ValidateEngineEdition(engineEdition), SqlServerVectorSearchSyntax.TopN)
     {
     }
 
@@ -150,7 +188,25 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="engineEdition"/> is not a defined <see cref="SqlServerEngineEdition"/> value.</exception>
     /// <exception cref="InvalidOperationException">A different capability declaration was already registered for this context type.</exception>
     public SqlServerDataContext(Version serverVersion, SqlServerEngineEdition engineEdition, DbConnection connection)
-        : this(null, connection, new DataContextBuilder(), ValidateServerVersion(serverVersion), ValidateEngineEdition(engineEdition))
+        : this(null, connection, new DataContextBuilder(), ValidateServerVersion(serverVersion), ValidateEngineEdition(engineEdition), SqlServerVectorSearchSyntax.TopN)
+    {
+    }
+
+    internal SqlServerDataContext(
+        Version serverVersion,
+        string connectionString,
+        DataContextBuilder optionsBuilder,
+        SqlServerVectorSearchSyntax vectorSearchSyntax)
+        : this(connectionString, null, optionsBuilder, ValidateServerVersion(serverVersion), null, vectorSearchSyntax)
+    {
+    }
+
+    internal SqlServerDataContext(
+        Version serverVersion,
+        DbConnection connection,
+        DataContextBuilder optionsBuilder,
+        SqlServerVectorSearchSyntax vectorSearchSyntax)
+        : this(null, connection, optionsBuilder, ValidateServerVersion(serverVersion), null, vectorSearchSyntax)
     {
     }
 
@@ -159,13 +215,15 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
         DbConnection? connection,
         DataContextBuilder optionsBuilder,
         Version? serverVersion,
-        SqlServerEngineEdition? engineEdition)
+        SqlServerEngineEdition? engineEdition,
+        SqlServerVectorSearchSyntax vectorSearchSyntax)
         : base(connectionString, connection, optionsBuilder, serverVersion)
     {
-        RegisterCapabilityDeclaration(GetType(), ServerVersion, engineEdition);
-        _dialect = ServerVersion is null && engineEdition is null
+        ValidateVectorSearchSyntax(vectorSearchSyntax);
+        RegisterCapabilityDeclaration(GetType(), ServerVersion, engineEdition, vectorSearchSyntax);
+        _dialect = ServerVersion is null && engineEdition is null && vectorSearchSyntax == SqlServerVectorSearchSyntax.TopN
             ? SqlServerDialect.Instance
-            : new SqlServerDialect(ServerVersion, engineEdition);
+            : new SqlServerDialect(ServerVersion, engineEdition, vectorSearchSyntax);
     }
 
     private static Version ValidateServerVersion(Version serverVersion)
@@ -185,17 +243,28 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
         return engineEdition;
     }
 
+    private static void ValidateVectorSearchSyntax(SqlServerVectorSearchSyntax vectorSearchSyntax)
+    {
+        if (!Enum.IsDefined(vectorSearchSyntax))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(vectorSearchSyntax), vectorSearchSyntax, "Undefined SqlServerVectorSearchSyntax value.");
+        }
+    }
+
     // A context type owns one immutable capability declaration: the plan cache is keyed by the context
     // type, so two declarations would silently share cached SQL. A second, conflicting declaration is a
     // configuration error that names the remedy: derive a distinct context subclass. A conflict between two
-    // version-only declarations keeps the historical message verbatim; a declaration that involves an engine
-    // edition reports both declarations component-wise. Validation runs before the registry is touched.
+    // version-only declarations using the same grammar keeps the historical message verbatim; a declaration
+    // involving another grammar or an engine edition reports both declarations component-wise. Validation
+    // runs before the registry is touched.
     private static void RegisterCapabilityDeclaration(
         Type contextType,
         Version? serverVersion,
-        SqlServerEngineEdition? engineEdition)
+        SqlServerEngineEdition? engineEdition,
+        SqlServerVectorSearchSyntax vectorSearchSyntax)
     {
-        var candidate = new CapabilityDeclaration(serverVersion, engineEdition);
+        var candidate = new CapabilityDeclaration(serverVersion, engineEdition, vectorSearchSyntax);
         var registered = CapabilitiesByContextType.GetOrAdd(contextType, candidate);
 
         if (registered.Equals(candidate))
@@ -209,16 +278,26 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
         CapabilityDeclaration existing,
         CapabilityDeclaration requested)
     {
-        if (existing.Edition is null && requested.Edition is null)
+        if (existing.VectorSearchSyntax == requested.VectorSearchSyntax
+            && existing.Edition is null
+            && requested.Edition is null)
         {
             return $"The SQL Server context type '{contextType.Name}' is already bound to server version {DescribeServerVersion(existing.Version)}, " +
                 $"so it cannot also be used with {DescribeServerVersion(requested.Version)}. A context type has one immutable server version because the " +
                 "plan cache is keyed by the context type; derive a distinct DataContext subclass for each version.";
         }
 
+        if (existing.VectorSearchSyntax == requested.VectorSearchSyntax)
+        {
+            return $"SQL Server capability declaration conflict for context type '{contextType.FullName}': " +
+                $"existing declaration [version: {DescribeServerVersion(existing.Version)}, engine edition: {DescribeEngineEdition(existing.Edition)}]; " +
+                $"requested declaration [version: {DescribeServerVersion(requested.Version)}, engine edition: {DescribeEngineEdition(requested.Edition)}]. " +
+                "Use matching declarations or derive a distinct DataContext subclass.";
+        }
+
         return $"SQL Server capability declaration conflict for context type '{contextType.FullName}': " +
-            $"existing declaration [version: {DescribeServerVersion(existing.Version)}, engine edition: {DescribeEngineEdition(existing.Edition)}]; " +
-            $"requested declaration [version: {DescribeServerVersion(requested.Version)}, engine edition: {DescribeEngineEdition(requested.Edition)}]. " +
+            $"existing declaration [version: {DescribeServerVersion(existing.Version)}, engine edition: {DescribeEngineEdition(existing.Edition)}, vector-search syntax: {existing.VectorSearchSyntax}]; " +
+            $"requested declaration [version: {DescribeServerVersion(requested.Version)}, engine edition: {DescribeEngineEdition(requested.Edition)}, vector-search syntax: {requested.VectorSearchSyntax}]. " +
             "Use matching declarations or derive a distinct DataContext subclass.";
     }
 
@@ -228,8 +307,11 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
     private static string DescribeEngineEdition(SqlServerEngineEdition? engineEdition)
         => engineEdition is { } edition ? $"{edition} ({(int)edition})" : "unset (null)";
 
-    /// <summary>An immutable capability declaration: the caller's server version and engine edition, either unset.</summary>
-    private readonly record struct CapabilityDeclaration(Version? Version, SqlServerEngineEdition? Edition);
+    /// <summary>An immutable capability declaration: the caller's server version, engine edition and vector-search grammar.</summary>
+    private readonly record struct CapabilityDeclaration(
+        Version? Version,
+        SqlServerEngineEdition? Edition,
+        SqlServerVectorSearchSyntax VectorSearchSyntax);
 
     /// <summary>Creates a new <c>SqlConnection</c> for <paramref name="connectionString"/>.</summary>
     /// <param name="connectionString">The SQL Server connection string.</param>

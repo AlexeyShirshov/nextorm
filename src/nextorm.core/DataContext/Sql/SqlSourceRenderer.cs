@@ -1239,6 +1239,13 @@ internal static class SqlSourceRenderer
                 sqlBuilder.Append(renderedArgument);
             }
 
+            if (function.ApproximateTopK is { } topK
+                && ctx.Dialect.ApproximateVectorSearchTopNArgumentName is { } topNArgumentName)
+            {
+                sqlBuilder.Append(", ").Append(topNArgumentName).Append(" = ")
+                    .Append(MakeApproximateTopValue(in ctx, entityType ?? typeof(object), topK));
+            }
+
             if (!string.IsNullOrEmpty(function.CallClause))
                 sqlBuilder.Append(function.CallClause);
 

@@ -1728,6 +1728,12 @@ public interface ISqlDialect
         => throw new NotSupportedException("Approximate vector-search TOP is not supported by this SQL dialect.");
 
     /// <summary>
+    /// Optional named argument emitted inside an approximate vector-search table function with the
+    /// rendered top-k value. A dialect that uses a different grammar returns <see langword="null"/>.
+    /// </summary>
+    string? ApproximateVectorSearchTopNArgumentName => null;
+
+    /// <summary>
     /// The provider's renderer for row locking; <c>null</c> means the provider cannot express it.
     /// Declared as a default interface method so that existing external implementations keep compiling.
     /// </summary>

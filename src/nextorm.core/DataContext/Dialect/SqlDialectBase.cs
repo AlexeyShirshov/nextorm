@@ -1003,6 +1003,9 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual string MakeApproximateTop(string limitSql, KeywordCase keywordCase = KeywordCase.Lower)
         => throw new NotSupportedException("Approximate vector-search TOP is not supported by this SQL dialect.");
 
+    /// <inheritdoc/>
+    public virtual string? ApproximateVectorSearchTopNArgumentName => null;
+
     /// <summary>Defaults to <c>false</c>; PostgreSQL and SQL Server opt into <c>WITH TIES</c> paging.</summary>
     public virtual bool SupportsWithTies => false;
 

@@ -23,6 +23,7 @@ public sealed class SqlServerDialect : SqlDialectBase
     private readonly SqlServerSpecificFunctions _sqlServerFunctions;
     private readonly int? _serverMajorVersion;
     private readonly SqlServerEngineEdition? _engineEdition;
+    private readonly SqlServerVectorSearchSyntax _vectorSearchSyntax;
 
     /// <summary>The declared server major version, or <see langword="null"/> when unset.</summary>
     internal int? DeclaredMajorVersion => _serverMajorVersion;
@@ -33,9 +34,8 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// supported server.
     /// </summary>
     public SqlServerDialect()
+        : this(null, null, SqlServerVectorSearchSyntax.TopN)
     {
-        _pivot = new SqlServerPivotRenderer(this);
-        _sqlServerFunctions = new SqlServerSpecificFunctions(this);
     }
 
     /// <summary>
@@ -46,7 +46,7 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <param name="serverVersion">The SQL Server version the context declared.</param>
     /// <exception cref="ArgumentNullException"><paramref name="serverVersion"/> is <see langword="null"/>.</exception>
     internal SqlServerDialect(Version serverVersion)
-        : this(ValidateServerVersion(serverVersion), engineEdition: null)
+        : this(ValidateServerVersion(serverVersion), engineEdition: null, SqlServerVectorSearchSyntax.TopN)
     {
     }
 
@@ -59,12 +59,39 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <param name="engineEdition">The declared engine edition, or <see langword="null"/> when unset.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="engineEdition"/> is not a defined <see cref="SqlServerEngineEdition"/> value.</exception>
     internal SqlServerDialect(Version? serverVersion, SqlServerEngineEdition? engineEdition)
+        : this(serverVersion, engineEdition, SqlServerVectorSearchSyntax.TopN)
+    {
+    }
+
+    /// <summary>
+    /// Creates a dialect from the immutable server declaration and the explicitly selected
+    /// <c>VECTOR_SEARCH</c> grammar.
+    /// </summary>
+    /// <param name="serverVersion">The declared server version, or <see langword="null"/> when unset.</param>
+    /// <param name="engineEdition">The declared engine edition, or <see langword="null"/> when unset.</param>
+    /// <param name="vectorSearchSyntax">The SQL grammar to emit for approximate vector search.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="engineEdition"/> or <paramref name="vectorSearchSyntax"/> is undefined.</exception>
+    internal SqlServerDialect(
+        Version? serverVersion,
+        SqlServerEngineEdition? engineEdition,
+        SqlServerVectorSearchSyntax vectorSearchSyntax)
     {
         ValidateEngineEdition(engineEdition);
+        ValidateVectorSearchSyntax(vectorSearchSyntax);
         _serverMajorVersion = serverVersion?.Major;
         _engineEdition = engineEdition;
+        _vectorSearchSyntax = vectorSearchSyntax;
         _pivot = new SqlServerPivotRenderer(this);
         _sqlServerFunctions = new SqlServerSpecificFunctions(this);
+    }
+
+    private static void ValidateVectorSearchSyntax(SqlServerVectorSearchSyntax vectorSearchSyntax)
+    {
+        if (!Enum.IsDefined(vectorSearchSyntax))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(vectorSearchSyntax), vectorSearchSyntax, "Undefined SqlServerVectorSearchSyntax value.");
+        }
     }
 
     private static Version ValidateServerVersion(Version serverVersion)
@@ -973,9 +1000,18 @@ public sealed class SqlServerDialect : SqlDialectBase
         return true;
     }
 
-    /// <summary>Renders SQL Server 2025's parameterized <c>TOP (@k) WITH APPROXIMATE</c> form.</summary>
+    /// <summary>Returns <c>TOP_N</c> when the selected approximate vector-search grammar needs it.</summary>
+    public override string? ApproximateVectorSearchTopNArgumentName
+        => _vectorSearchSyntax == SqlServerVectorSearchSyntax.TopN ? "TOP_N" : null;
+
+    /// <summary>Renders the explicitly selected SQL Server approximate vector-search TOP form.</summary>
     public override string MakeApproximateTop(string limitSql, KeywordCase keywordCase = KeywordCase.Lower)
-        => Kw(keywordCase, "top (") + limitSql + Kw(keywordCase, ") with approximate");
+    {
+        var top = Kw(keywordCase, "top (") + limitSql + ")";
+        return _vectorSearchSyntax == SqlServerVectorSearchSyntax.WithApproximate
+            ? top + Kw(keywordCase, " with approximate")
+            : top;
+    }
 
     // T-SQL has no RECURSIVE keyword: a recursive CTE is declared with `with` alone, so the flag is
     // intentionally ignored.
