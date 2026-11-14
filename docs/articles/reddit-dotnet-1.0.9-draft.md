@@ -25,3 +25,5 @@ There is also **experimental NativeAOT support**. Under NativeAOT, the expressio
 Another feature is **query execution without materializing rows into DTOs**. You can obtain a `DbDataReader` for direct access or write query results straight to a `Stream` as JSON or CSV. This is useful for sending data to an HTTP response or a file without creating a DTO for every row or buffering the entire result set in memory.
 
 I'd welcome your feedback, suggestions, and criticism. I'm particularly interested in how the query API feels to use and what capabilities you'd need for your own projects.
+
+*Translated with AI assistance.*
