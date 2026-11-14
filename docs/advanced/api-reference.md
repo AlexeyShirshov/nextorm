@@ -99,6 +99,39 @@ The PostgreSQL marker methods translate pgvector operations from LINQ: the dista
 | [`TableAlias`](xref:NextORM.Core.TableAlias) / [`TableColumn`](xref:NextORM.Core.TableColumn) | Alias-mode column accessors ([`GetInt32`](xref:NextORM.Core.TableAlias.GetInt32(System.String)), [`GetString`](xref:NextORM.Core.TableAlias.GetString(System.String)), …) and typed column wrapper ([`AsInt`](xref:NextORM.Core.TableColumn.AsInt), [`AsString`](xref:NextORM.Core.TableColumn.AsString), …). |
 | [`Paging`](xref:NextORM.Core.Paging) | [`Limit`](xref:NextORM.Core.Paging.Limit) / [`Offset`](xref:NextORM.Core.Paging.Offset) / [`HasWithTies`](xref:NextORM.Core.Paging.HasWithTies) value used by every query builder. |
 
+### Vector search
+
+[`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) exposes
+`VectorSearch<TVector>(vectorSelector, queryVector, metric, topK, mode = Exact)`. It returns a
+[`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) of
+[`VectorSearchResult<TEntity>`](xref:NextORM.Core.VectorSearchResult`1), whose `Entity` is the matched
+row and whose nullable `Distance` is lower for nearer rows. The shared [`Vector`](xref:NextORM.Core.Vector)
+uses finite single-precision coordinates; PostgreSQL also retains its `PgVector`, `PgHalfVector` and
+`PgSparseVector` types. [`VectorDistanceMetric`](xref:NextORM.Core.VectorDistanceMetric) selects
+`Cosine`, `Euclidean` (L2) or `DotProduct` (negative inner product), and
+[`VectorSearchMode`](xref:NextORM.Core.VectorSearchMode) selects `Exact` or `Approximate`.
+
+```csharp
+var nearest = ctx.From<Document>()
+    .VectorSearch(x => x.Embedding, new Vector(new[] { 1f, 2f, 3f }),
+        VectorDistanceMetric.Cosine, topK: 10, mode: VectorSearchMode.Approximate)
+    .ToList();
+
+var entity = nearest[0].Entity;
+var distance = nearest[0].Distance;
+```
+
+`SqlFunctions.VectorDistance(vector, queryVector, metric)` is the scalar distance marker. PostgreSQL
+uses the corresponding pgvector operator; SQL Server 2025+ uses `VECTOR_DISTANCE` for exact distance
+and an explicitly selected `VECTOR_SEARCH` grammar for approximate search. PostgreSQL renders the same
+distance-operator query for both modes and leaves ANN index selection to its planner: `Exact` does not
+disable an ANN index, and `Approximate` does not guarantee one is used. Providers without
+vector support fail closed rather than changing the metric or exact/approximate request. See the
+[PostgreSQL](../guide/provider-specific-sql/postgresql.md#unified-nearest-neighbor-api) and
+[SQL Server](../guide/provider-specific-sql/sqlserver.md#vector-nearest-neighbor-search) SQL guides.
+SQLite, MySQL, MariaDB, ClickHouse and the in-memory provider reject this API with
+`NotSupportedException` before database access.
+
 ### Commands, plans and functions
 
 | Type | Description |

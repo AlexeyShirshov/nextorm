@@ -96,6 +96,41 @@
 | [`TableAlias`](xref:NextORM.Core.TableAlias) / [`TableColumn`](xref:NextORM.Core.TableColumn) | Аксессоры столбцов в режиме псевдонима ([`GetInt32`](xref:NextORM.Core.TableAlias.GetInt32(System.String)), [`GetString`](xref:NextORM.Core.TableAlias.GetString(System.String)), …) и типизированная обёртка столбца ([`AsInt`](xref:NextORM.Core.TableColumn.AsInt), [`AsString`](xref:NextORM.Core.TableColumn.AsString), …). |
 | [`Paging`](xref:NextORM.Core.Paging) | Значение [`Limit`](xref:NextORM.Core.Paging.Limit) / [`Offset`](xref:NextORM.Core.Paging.Offset) / [`HasWithTies`](xref:NextORM.Core.Paging.HasWithTies), используемое каждым построителем запросов. |
 
+### Поиск по векторам
+
+В [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) есть
+`VectorSearch<TVector>(vectorSelector, queryVector, metric, topK, mode = Exact)`. Метод возвращает
+[`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) с
+[`VectorSearchResult<TEntity>`](xref:NextORM.Core.VectorSearchResult`1): `Entity` — найденная строка,
+а nullable `Distance` меньше для более близких строк. Общий тип
+[`Vector`](xref:NextORM.Core.Vector) хранит конечные координаты одинарной точности; PostgreSQL
+сохраняет типы `PgVector`, `PgHalfVector` и `PgSparseVector`. Метрика
+[`VectorDistanceMetric`](xref:NextORM.Core.VectorDistanceMetric) выбирает `Cosine`, `Euclidean` (L2)
+или `DotProduct` (отрицательное скалярное произведение), а режим
+[`VectorSearchMode`](xref:NextORM.Core.VectorSearchMode) — `Exact` либо `Approximate`.
+
+```csharp
+var nearest = ctx.From<Document>()
+    .VectorSearch(x => x.Embedding, new Vector(new[] { 1f, 2f, 3f }),
+        VectorDistanceMetric.Cosine, topK: 10, mode: VectorSearchMode.Approximate)
+    .ToList();
+
+var entity = nearest[0].Entity;
+var distance = nearest[0].Distance;
+```
+
+`SqlFunctions.VectorDistance(vector, queryVector, metric)` — маркер скалярного расстояния.
+PostgreSQL использует соответствующий оператор pgvector; SQL Server 2025+ использует
+`VECTOR_DISTANCE` для точного расстояния и явно выбранную грамматику `VECTOR_SEARCH` для
+приближённого поиска. В PostgreSQL оба режима дают одинаковый запрос с оператором расстояния, а
+выбор ANN-индекса остаётся за планировщиком: `Exact` не отключает ANN-индекс, а `Approximate` не
+гарантирует его использование. Провайдеры без поддержки векторов отклоняют запрос,
+не меняя молча метрику или exact/approximate-семантику. См. руководства по SQL для
+[PostgreSQL](../guide/provider-specific-sql/postgresql.md#унифицированный-api-поиска-ближайших-соседей)
+и [SQL Server](../guide/provider-specific-sql/sqlserver.md#поиск-ближайших-соседей-по-векторам).
+SQLite, MySQL, MariaDB, ClickHouse и in-memory-провайдер отклоняют этот API с
+`NotSupportedException` до обращения к базе данных.
+
 ### Команды, планы и функции
 
 | Тип | Описание |

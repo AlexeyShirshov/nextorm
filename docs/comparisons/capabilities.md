@@ -11,7 +11,7 @@ provider list is not scored). The per-engine API breadth is on [Provider feature
 
 | Area | Nextorm | linq2db | EF Core |
 |---|---|---|---|
-| pgvector values (`PgVector`, `PgHalfVector`, `PgSparseVector`, `PgBit`) and operations | supported (PostgreSQL pgvector value types and LINQ marker translation) | partial (provider-specific support varies) | partial (Npgsql/provider-specific support; not a nextorm translation) |
+| Vector nearest-neighbor search and pgvector values/operations | supported (shared nearest-neighbor API on PostgreSQL and SQL Server 2025+; PostgreSQL pgvector types and marker translation remain available) | partial (provider-specific support varies) | partial (Npgsql/provider-specific support; not a nextorm translation) |
 | Projections (entity, DTO, anonymous, record, tuple, scalar; unmapped columns via `SqlFunctions.Column`) | yes | yes | yes |
 | Predicates (`WHERE`: comparison, `and`/`or`/`!`, arithmetic, bitwise/shift) | yes | yes | yes |
 | Null-safe comparison (`IS [NOT] DISTINCT FROM`; `SqlFunctions.Sql.is_distinct_from` / `is_not_distinct_from`) | yes (native on PostgreSQL, SQLite and MySQL/MariaDB; emulated on SQL Server and ClickHouse) | yes (`Sql.Is[Not]DistinctFrom`; provider coverage varies) | no |

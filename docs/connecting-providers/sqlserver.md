@@ -396,6 +396,55 @@ step. The library side keeps working either way: the same `[JsonColumn]` mapping
 to either column type, and `Auto` never retargets an existing mapping on its own. Declaring an engine
 edition is equally a library-side declaration: it never alters a column.
 
+## Vector search
+
+The shared nearest-neighbor API works with a `Vector` property mapped to SQL Server `VECTOR(n)`. The
+dimension is part of the database schema and must be declared there; nextorm does not infer it for
+automatic DDL. Vector-distance and vector-search capabilities require a caller-declared SQL Server
+major version of at least 17. The version is not probed, so the ordinary unversioned `UseSqlServer`
+overload does not enable them.
+
+Select the `VECTOR_SEARCH` grammar explicitly when configuring the builder; the choice is not inferred
+from the major version:
+
+```csharp
+using NextORM.Core;
+using NextORM.SqlServer;
+
+var builder = new DataContextBuilder().UseSqlServer(
+    connectionString, new Version(17, 0), SqlServerVectorSearchSyntax.TopN);
+using var ctx = builder.CreateDataContext();
+```
+
+`SqlServerVectorSearchSyntax.TopN` emits `TOP (k)` and `TOP_N = k` in the `VECTOR_SEARCH` call. Choose
+`SqlServerVectorSearchSyntax.WithApproximate` to emit `TOP (k) WITH APPROXIMATE` instead, without a
+`TOP_N` argument. Do not select a grammar based only on the version number: use the one supported by
+the target engine/build. Exact search uses `VECTOR_DISTANCE` and `TOP (k)`; approximate search uses
+`VECTOR_SEARCH`, and unsupported syntax does not trigger an automatic exact-search fallback.
+
+Approximate execution also requires the database preview feature and a matching DiskANN vector index.
+The indexed table must have a primary key and at least 100 non-NULL vectors for index creation. Enable
+the feature before vector operations and create the index in application-managed DDL, for example:
+
+```sql
+ALTER DATABASE SCOPED CONFIGURATION SET PREVIEW_FEATURES = ON;
+CREATE VECTOR INDEX ix_document_embedding
+    ON dbo.document (embedding)
+    WITH (METRIC = 'cosine', TYPE = 'DiskANN');
+```
+
+The index metric must match the query metric; the index is required before approximate search, with no
+silent exact fallback. SQL Server supports cosine, Euclidean/L2 and dot-product distance (negative
+inner product); lower `Distance` values mean nearer neighbors. Approximate search requires a positive
+`topK`, a direct physical entity-table source and no caller ordering, paging, joins, grouping,
+`DISTINCT` or derived source. PostgreSQL-only L1, Hamming and Jaccard metrics are not substituted.
+For generated SQL shapes and PostgreSQL
+differences, see [SQL Server-specific SQL](../guide/provider-specific-sql/sqlserver.md#vector-nearest-neighbor-search)
+and [PostgreSQL-specific SQL](../guide/provider-specific-sql/postgresql.md#unified-nearest-neighbor-api).
+The library emits only the explicitly selected grammar and does not probe syntax support: `TopN` is
+live-verified on SQL Server `17.0.5005.3`, while `WithApproximate` has SQL-generation coverage only and
+must be confirmed against the target engine build.
+
 ## Provider differences
 
 | Aspect | SQL Server |
@@ -439,6 +488,7 @@ edition is equally a library-side declaration: it never alters a column.
 | XML data-type methods | `xml.value('xpath', 'type')` / `xml.query('xpath')` / `xml.exist('xpath')` / `xml.nodes('xpath') as [alias]([value])` ([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)) |
 | `AVG` over an integer column | truncated to an integer |
 | `ORDER BY … DESC` null placement | nulls sort last by default |
+| Unified vector search | SQL Server 2025+ (`VECTOR_DISTANCE` exact; explicitly selected `VECTOR_SEARCH` grammar for approximate; see [Vector search](#vector-search)) |
 
 ## See also
 

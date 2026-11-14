@@ -250,6 +250,22 @@ SQL `NULL` в `null`.
 
 См. [SQL PostgreSQL](../guide/provider-specific-sql/postgresql.md#значения-pgvector).
 
+### Унифицированный API поиска ближайших соседей
+
+Core API `EntityBuilder<TEntity>.VectorSearch(...)` принимает общий тип `Vector` и существующие типы
+PostgreSQL `PgVector`, `PgHalfVector` и `PgSparseVector`, если тип query-вектора совпадает с типом
+отображённого свойства (`PgBit` остаётся для PostgreSQL-only маркеров расстояния между битами). Результат
+содержит каждую сущность и её `Distance`; меньшие значения ближе. Общие метрики — косинусная,
+евклидова/L2 и dot product (отрицательное скалярное произведение). PostgreSQL-specific маркеры
+`SqlFunctions.Postgres` и типы pgvector сохраняются, включая дополнительные операции L1, Hamming и
+Jaccard.
+
+Режимы `Exact` и `Approximate` используют один и тот же SQL с оператором расстояния pgvector.
+PostgreSQL сам решает, применять ли подходящий индекс HNSW или IVFFlat; режим не принуждает к
+конкретному плану: `Exact` не отключает ANN-индекс, а `Approximate` не гарантирует его использование.
+Установите pgvector, создайте подходящую колонку вектора и управляйте любым ANN-
+индексом в DDL приложения. См. [унифицированный API и SQL PostgreSQL](../guide/provider-specific-sql/postgresql.md#унифицированный-api-поиска-ближайших-соседей).
+
 ## Range-типы
 
 PostgreSQL — единственный поддерживаемый провайдер с нативными range-типами (`int4range`, `int8range`,
@@ -455,6 +471,7 @@ select t1.value, t2.somestring as "String"
 | Разбиение на страницы | `limit n` / `limit n offset m` / `offset m` |
 | Внедряемая сортировка при разбиении на страницы | нет |
 | Concat | `||` |
+| Унифицированный поиск ближайших соседей по векторам | общий API; операторы расстояния pgvector; режимы exact и approximate дают одинаковый SQL, выбор индекса остаётся за PostgreSQL |
 | Coalesce | `coalesce` |
 | Логический литерал | `true` / `false` |
 | Квотирование идентификаторов | двойные кавычки (`as "t1"`) |

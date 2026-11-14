@@ -407,6 +407,54 @@ nextorm не генерирует DDL колонок, поэтому перев�
 Объявление редакции движка — в равной степени объявление на стороне библиотеки: оно никогда не изменяет
 колонку.
 
+## Поиск по векторам
+
+Общий API поиска ближайших соседей работает со свойством `Vector`, отображённым на SQL Server
+`VECTOR(n)`. Размерность задаётся в схеме базы и должна быть объявлена явно; nextorm не выводит её для
+автоматического DDL. Возможности векторного расстояния и поиска требуют, чтобы вызывающий код объявил
+major-версию SQL Server не ниже 17. Версия не опрашивается, поэтому обычная перегрузка `UseSqlServer`
+без версии эти возможности не включает.
+
+Выберите грамматику `VECTOR_SEARCH` явно при настройке builder; она не выводится из major-версии:
+
+```csharp
+using NextORM.Core;
+using NextORM.SqlServer;
+
+var builder = new DataContextBuilder().UseSqlServer(
+    connectionString, new Version(17, 0), SqlServerVectorSearchSyntax.TopN);
+using var ctx = builder.CreateDataContext();
+```
+
+`SqlServerVectorSearchSyntax.TopN` выдаёт `TOP (k)` и `TOP_N = k` в вызове `VECTOR_SEARCH`.
+`SqlServerVectorSearchSyntax.WithApproximate` вместо этого выдаёт `TOP (k) WITH APPROXIMATE`, без
+аргумента `TOP_N`. Выбирайте грамматику по возможностям целевого движка/сборки, а не только по номеру
+версии. Точный поиск использует `VECTOR_DISTANCE` и `TOP (k)`; приближённый — `VECTOR_SEARCH`, и
+неподдерживаемый синтаксис не приводит к автоматическому откату на точный поиск.
+
+Для приближённого выполнения также требуются preview-функция базы и соответствующий векторный индекс
+DiskANN. Для создания индекса таблице нужен первичный ключ и не менее 100 векторов, не равных NULL.
+Включите функцию до векторных операций и создайте индекс через управляемый приложением DDL, например:
+
+```sql
+ALTER DATABASE SCOPED CONFIGURATION SET PREVIEW_FEATURES = ON;
+CREATE VECTOR INDEX ix_document_embedding
+    ON dbo.document (embedding)
+    WITH (METRIC = 'cosine', TYPE = 'DiskANN');
+```
+
+Метрика индекса должна совпадать с метрикой запроса; индекс нужен до приближённого поиска, без молчаливого
+отката на точный путь. SQL Server поддерживает косинусную, евклидову/L2 и dot-product дистанции
+(отрицательное скалярное произведение); меньшие значения `Distance` означают более близких соседей.
+Approximate требует положительный `topK`, прямой физический источник-таблицу сущности и отсутствие
+пользовательской сортировки, paging, соединений, группировки, `DISTINCT` и производного источника.
+Метрики PostgreSQL L1, Hamming и Jaccard не подменяются. Формы SQL и различия PostgreSQL описаны в
+руководствах по [SQL Server](../guide/provider-specific-sql/sqlserver.md#поиск-ближайших-соседей-по-векторам)
+и [PostgreSQL](../guide/provider-specific-sql/postgresql.md#унифицированный-api-поиска-ближайших-соседей).
+Библиотека выдаёт только явно выбранную грамматику и не опрашивает поддержку синтаксиса: `TopN`
+проверен вживую на SQL Server `17.0.5005.3`, а `WithApproximate` имеет только покрытие генерации SQL
+и требует проверки на целевой сборке движка.
+
 ## Различия провайдеров
 
 | Аспект | SQL Server |
@@ -450,6 +498,7 @@ nextorm не генерирует DDL колонок, поэтому перев�
 | Методы типа XML | `xml.value('xpath', 'type')` / `xml.query('xpath')` / `xml.exist('xpath')` / `xml.nodes('xpath') as [alias]([value])` ([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)) |
 | `AVG` по целочисленному столбцу | усекается до целого |
 | Размещение null при `ORDER BY … DESC` | null сортируются последними по умолчанию |
+| Поиск ближайших соседей по векторам | SQL Server 2025+ (`VECTOR_DISTANCE` для exact; явно выбранная грамматика `VECTOR_SEARCH` для approximate; см. [Поиск по векторам](#поиск-по-векторам)) |
 
 ## См. также
 

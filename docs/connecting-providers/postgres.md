@@ -246,6 +246,22 @@ extension, the columns and the indexes are managed by the application, not nexto
 
 See [PostgreSQL-specific SQL](../guide/provider-specific-sql/postgresql.md#pgvector-values).
 
+### Unified nearest-neighbor API
+
+The core `EntityBuilder<TEntity>.VectorSearch(...)` API accepts the shared `Vector` value and existing
+PostgreSQL `PgVector`, `PgHalfVector` and `PgSparseVector` values when the query-vector type matches the
+mapped property (`PgBit` remains for the PostgreSQL-only bit-distance markers). It returns
+each entity together with `Distance`; lower values are nearer. The shared metrics are cosine,
+Euclidean/L2 and dot product (negative inner product). The PostgreSQL-specific `SqlFunctions.Postgres`
+markers and pgvector types remain available, including their additional L1, Hamming and Jaccard
+operations.
+
+Both `Exact` and `Approximate` use the same pgvector distance-operator SQL. PostgreSQL decides whether
+to use a matching HNSW or IVFFlat index; `Exact` does not disable an ANN index and `Approximate` does
+not guarantee that one is used. Install pgvector,
+create a compatible vector column and provision any ANN index in application-managed DDL. See the
+[unified API and PostgreSQL SQL details](../guide/provider-specific-sql/postgresql.md#unified-nearest-neighbor-api).
+
 ## Range types
 
 PostgreSQL is the only supported provider with native range types (`int4range`, `int8range`,
@@ -447,6 +463,7 @@ See [Bulk insert](../guide/22-bulk-insert.md).
 | Paging | `limit n` / `limit n offset m` / `offset m` |
 | Injected sort when paging | none |
 | Concat | `||` |
+| Unified vector nearest-neighbor search | shared API; pgvector distance operators; exact and approximate modes render the same SQL, with index choice left to PostgreSQL |
 | Coalesce | `coalesce` |
 | Boolean literal | `true` / `false` |
 | Identifier quoting | double quotes (`as "t1"`) |

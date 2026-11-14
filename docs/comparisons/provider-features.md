@@ -5,6 +5,9 @@ support, how much of that engine's own feature set is exposed through a dedicate
 builder. Marks are judgement calls against the public documentation and source of both libraries, as of
 **2026-10-04**.
 
+The unified vector-search rows are a later Nextorm update; linq2db is marked **not assessed** for those
+rows, and those cells are excluded from the totals.
+
 This page answers a narrower question than [Capabilities](capabilities.md). Capabilities asks whether a
 construct can be expressed; this page asks whether there is a **dedicated provider API** for it. A `no` means
 no dedicated API was found — the construct may still be reachable through raw SQL (or, for linq2db, through
@@ -16,8 +19,9 @@ no dedicated API was found — the construct may still be reachable through raw 
 - **partial** — present with a named limitation, or reachable only through a generic mechanism.
 - **no** — no dedicated provider API found.
 - **n/a** — the feature does not exist on that engine.
+- **not assessed** — no comparison was made for this feature; excluded from totals.
 
-Each table ends with a **Total** row: the yes / partial / no counts per library (`n/a` is excluded).
+Each table ends with a **Total** row: the yes / partial / no counts per library (`n/a` and `not assessed` are excluded).
 
 ## Provider footprint
 
@@ -56,6 +60,7 @@ wider on SQL Server scalar-function breadth and hint variety (issue [#182](https
 | Feature | Nextorm | linq2db |
 |---|---|---|
 | pgvector value types and operations | supported (PostgreSQL-only `PgVector`, `PgHalfVector`, `PgSparseVector` and `PgBit`; LINQ marker translation for distances, element-wise operators, functions and vector arrays) | no dedicated API found |
+| Unified vector nearest-neighbor search | yes (shared API; pgvector distance operators; exact and approximate modes produce the same SQL shape) | not assessed |
 | Arrays + `any`/`all` quantifiers | yes | yes |
 | Range / multirange (operators, mapping) | yes | partial (type mapping only) |
 | Full-text `tsvector`/`tsquery` | yes | no |
@@ -76,7 +81,7 @@ wider on SQL Server scalar-function breadth and hint variety (issue [#182](https
 | Table functions / set-returning functions (`generate_series`, `unnest`, `regexp_matches`, `jsonb_*`, `ts_stat`, ...) | yes | partial (`unnest`/`generate_series` only) |
 | Row locking (`FOR UPDATE` / `FOR SHARE`, per-source `OF`, wait modes) | yes | yes |
 | Session/server identity (`pg_backend_pid`, `inet_*`) | yes | no |
-| **Total** | 20 / 0 / 0 | 8 / 5 / 7 |
+| **Total** | 21 / 0 / 0 | 8 / 5 / 7 |
 
 Net: **Nextorm leads** — full-text, regex, `jsonb_path_*`, range operators, data-modifying CTE,
 sequences/settings, table-valued parameters and the aggregate families have dedicated Nextorm APIs but no
@@ -86,6 +91,7 @@ linq2db ones.
 
 | Feature | Nextorm | linq2db |
 |---|---|---|
+| Vector nearest-neighbor search (`VECTOR_DISTANCE` / `VECTOR_SEARCH`, 2025+) | yes (shared API; approximate search requires a selected grammar, preview features and a matching DiskANN index) | not assessed |
 | `OUTPUT` / `OUTPUT ... INTO` | yes | yes |
 | `MERGE` (branches, `BY SOURCE`) | yes | yes |
 | Hints (table / query / join / tables-in-scope / index) | yes | yes (wider) |
@@ -105,7 +111,7 @@ linq2db ones.
 | Sequences (`NEXT VALUE FOR`) | yes | yes |
 | Row locking (`ForUpdate`/`ForShare`, `LockWaitMode` → `with (updlock)`/`with (holdlock)`) | yes | yes |
 | Session/server identity (`@@SERVERNAME`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) | yes | yes |
-| **Total** | 19 / 0 / 0 | 13 / 4 / 2 |
+| **Total** | 20 / 0 / 0 | 13 / 4 / 2 |
 
 Net: **parity on the audited T-SQL scalar catalogue, with linq2db still wider overall**. Issue
 [#182](https://github.com/AlexeyShirshov/nextorm/issues/182) reconciled 61 pinned linq2db `SqlFn.cs` entries

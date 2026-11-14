@@ -5,6 +5,9 @@
 конструктору запросов. Оценки — суждения по публичной документации и исходникам обеих библиотек на
 **2026-10-04**.
 
+Строки унифицированного поиска по векторам добавлены в Nextorm позже этого сравнения; для них linq2db
+отмечен как **not assessed**, и такие ячейки не входят в итоговые числа.
+
 Страница отвечает на более узкий вопрос, чем [«Возможности»](capabilities.md). «Возможности» — можно ли
 выразить конструкт вообще; здесь — есть ли для него **выделенный провайдерный API**. `no` означает, что
 выделенного API не найдено; конструкт при этом может быть выразим через сырой SQL (в linq2db — через
@@ -16,9 +19,10 @@
 - **partial** — есть с оговорённым ограничением либо достижим только общим механизмом.
 - **no** — выделенного провайдерного API не найдено.
 - **n/a** — такой возможности у движка нет.
+- **not assessed** — функция не сравнивалась; она исключена из итоговых чисел.
 
-Каждую таблицу закрывает строка **Итого**: количество yes / partial / no по каждой библиотеке (`n/a` не
-учитывается).
+Каждую таблицу закрывает строка **Итого**: количество yes / partial / no по каждой библиотеке (`n/a` и
+`not assessed` не учитываются).
 
 ## Провайдерное покрытие
 
@@ -57,6 +61,7 @@ maintenance в SQLite — всё подключено к конструктор�
 | Возможность | Nextorm | linq2db |
 |---|---|---|
 | Типы pgvector и операции | поддерживается (`PgVector`, `PgHalfVector`, `PgSparseVector` и `PgBit` только для PostgreSQL; перевод LINQ-маркеров расстояний, поэлементных операторов, функций и массивов векторов) | нет отдельного API |
+| Унифицированный поиск ближайших соседей по векторам | yes (общий API; операторы расстояния pgvector; режимы exact и approximate дают одинаковую форму SQL) | not assessed |
 | Массивы + квантификаторы `any`/`all` | yes | yes |
 | Range / multirange (операторы, маппинг) | yes | partial (только маппинг типов) |
 | Full-text `tsvector`/`tsquery` | yes | no |
@@ -77,7 +82,7 @@ maintenance в SQLite — всё подключено к конструктор�
 | Табличные функции / set-returning functions (`generate_series`, `unnest`, `regexp_matches`, `jsonb_*`, `ts_stat`, ...) | yes | partial (только `unnest`/`generate_series`) |
 | Блокировки строк (`FOR UPDATE` / `FOR SHARE`, `OF` на источник, режимы ожидания) | yes | yes |
 | Session/server identity (`pg_backend_pid`, `inet_*`) | yes | no |
-| **Итого** | 20 / 0 / 0 | 8 / 5 / 7 |
+| **Итого** | 21 / 0 / 0 | 8 / 5 / 7 |
 
 Итог: **Nextorm впереди** — full-text, regex, `jsonb_path_*`, операторы range, data-modifying CTE,
 последовательности/настройки, табличные параметры и семейства агрегатов имеют выделенный API в Nextorm и не
@@ -87,6 +92,7 @@ maintenance в SQLite — всё подключено к конструктор�
 
 | Возможность | Nextorm | linq2db |
 |---|---|---|
+| Поиск ближайших соседей по векторам (`VECTOR_DISTANCE` / `VECTOR_SEARCH`, 2025+) | yes (общий API; approximate требует выбранной грамматики, preview-функций и соответствующего индекса DiskANN) | not assessed |
 | `OUTPUT` / `OUTPUT ... INTO` | yes | yes |
 | `MERGE` (ветки, `BY SOURCE`) | yes | yes |
 | Хинты (table / query / join / tables-in-scope / index) | yes | yes (шире) |
@@ -106,7 +112,7 @@ maintenance в SQLite — всё подключено к конструктор�
 | Последовательности (`NEXT VALUE FOR`) | yes | yes |
 | Блокировки строк (`ForUpdate`/`ForShare`, `LockWaitMode` → `with (updlock)`/`with (holdlock)`) | yes | yes |
 | Session/server identity (`@@SERVERNAME`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) | yes | yes |
-| **Итого** | 19 / 0 / 0 | 13 / 4 / 2 |
+| **Итого** | 20 / 0 / 0 | 13 / 4 / 2 |
 
 Итог: **паритет по выверенному каталогу T-SQL-скаляров, но в целом linq2db шире**. Issue
 [#182](https://github.com/AlexeyShirshov/nextorm/issues/182) свёл 61 закреплённую запись `SqlFn.cs` из linq2db

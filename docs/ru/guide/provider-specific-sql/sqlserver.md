@@ -354,6 +354,36 @@ SQL Server поддерживает только метод `System`
 оценку `RANK` через `SqlFunctions.IKeyRankRow<TKey>`; см.
 [Табличные функции](../13-table-valued-functions.md#встроенные-табличные-функции).
 
+## Поиск ближайших соседей по векторам
+
+Общий API `EntityBuilder<TEntity>.VectorSearch(...)` поддерживает SQL Server 2025 (major-версия 17) и
+новее. Точный поиск сортирует по скалярному результату `VECTOR_DISTANCE` и ограничивает число строк
+значением `topK`:
+
+```sql
+select top (10) id, embedding,
+       VECTOR_DISTANCE('cosine', embedding, @queryVector) as [distance]
+  from dbo.document
+ order by [distance]
+```
+
+Приближённый поиск использует `VECTOR_SEARCH` как источник `FROM` и возвращаемый им столбец
+`distance`. Грамматика SQL Server выбирается явно в контексте и не выводится из версии сервера.
+`TopN` (грамматика по умолчанию) выдаёт `TOP (k)` вместе с `TOP_N = k`; `WithApproximate` выдаёт
+`TOP (k) WITH APPROXIMATE` без `TOP_N`. В обеих формах `distance` сортируется по возрастанию.
+Настройка грамматики и требования к базе приведены на странице [провайдера SQL Server — поиск по векторам](../../connecting-providers/sqlserver.md#поиск-по-векторам).
+
+Общие метрики: косинусная (`'cosine'`), евклидова/L2 (`'euclidean'`) и скалярное произведение
+(`'dot'`, **отрицательное** скалярное произведение); для всех трёх меньшая дистанция означает
+более близкий вектор. `Exact` использует `VECTOR_DISTANCE`, а `Approximate` — `VECTOR_SEARCH` и не
+переключается молча на точный путь. Скалярный маркер `SqlFunctions.VectorDistance(...)` переводится
+в `VECTOR_DISTANCE` на SQL Server. Approximate требует положительный `topK`, прямой физический
+источник-таблицу сущности и отсутствие пользовательской сортировки, paging, соединений, группировки,
+`DISTINCT` и производного источника: табличная функция сама задаёт top-k и сортировку distance по
+возрастанию. PostgreSQL-only метрики L1, Hamming и Jaccard на SQL Server не подменяются.
+Неподдерживаемые метрики, незаданная версия или версия ниже 17,
+а также провайдеры без поддержки векторного поиска явно отклоняются до отправки команды.
+
 ## Последовательности
 
 `SqlFunctions.SqlServer.next_value_for(sequence)` и его псевдоним `nextval(sequence)` рендерят

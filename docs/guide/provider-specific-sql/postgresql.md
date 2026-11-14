@@ -568,6 +568,32 @@ markers yet. DDL is out of scope for nextorm as a whole: install the extension a
 indexes (HNSW/IVFFlat, `vector_l2_ops` and friends) yourself. Distance operations with unequal dimensions
 fail on the PostgreSQL server, as do `bit` operations with unequal lengths.
 
+### Unified nearest-neighbor API
+
+`EntityBuilder<TEntity>.VectorSearch(...)` uses the same result shape on PostgreSQL and SQL Server:
+`VectorSearchResult<TEntity>` exposes the matching `Entity` and nullable `Distance`. Use the shared
+`Vector` value or an existing PostgreSQL `PgVector`, `PgHalfVector` or `PgSparseVector` value that matches
+the mapped property; the query-vector type must match that property. `PgBit` remains available for the
+PostgreSQL-only bit-distance markers, not this shared metric set. For example:
+
+```csharp
+var nearest = ctx.From<Document>()
+    .VectorSearch(x => x.Embedding, new Vector(new[] { 1f, 2f, 3f }),
+        VectorDistanceMetric.Cosine, topK: 10, mode: VectorSearchMode.Approximate)
+    .ToList();
+```
+
+The PostgreSQL SQL shape is the pgvector distance operator plus `LIMIT`, for example cosine uses
+`ORDER BY embedding <=> @queryVector LIMIT 10` (`<->` is Euclidean/L2 and `<#>` is negative inner
+product). `Exact` and `Approximate` render the same operator query: the PostgreSQL planner may use a
+matching HNSW or IVFFlat index, and the API mode does not force or promise a particular plan. Thus
+`Exact` does not disable an ANN index and `Approximate` does not guarantee that one is used. The
+unified API exposes cosine, Euclidean and dot-product distance, with lower values nearer; the
+PostgreSQL-only marker surface above continues to provide its additional L1, Hamming and Jaccard
+operations. Providers without vector-search support reject the unified call during preparation rather
+than substituting another metric or search path. See [SQL Server vector search](sqlserver.md#vector-nearest-neighbor-search)
+for its distinct exact and approximate SQL forms.
+
 ## See also
 
 * [PostgreSQL provider](../../connecting-providers/postgres.md)

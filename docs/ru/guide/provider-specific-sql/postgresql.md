@@ -576,6 +576,32 @@ DDL вне области охвата nextorm: расширение, столб
 приложение. Операции расстояния с разными размерностями и операции `bit` с разной длиной завершаются ошибкой
 PostgreSQL.
 
+### Унифицированный API поиска ближайших соседей
+
+Общий `EntityBuilder<TEntity>.VectorSearch(...)` возвращает ту же форму результата в PostgreSQL и SQL
+Server: `VectorSearchResult<TEntity>` содержит найденную `Entity` и nullable-значение `Distance`.
+Можно использовать общий тип `Vector` или существующий тип PostgreSQL `PgVector`, `PgHalfVector` либо
+`PgSparseVector`, соответствующий отображённому свойству; тип вектора запроса должен совпадать с типом
+этого свойства. `PgBit` остаётся доступен для PostgreSQL-only маркеров расстояния между битовыми
+строками, но не для общего набора метрик. Например:
+
+```csharp
+var nearest = ctx.From<Document>()
+    .VectorSearch(x => x.Embedding, new Vector(new[] { 1f, 2f, 3f }),
+        VectorDistanceMetric.Cosine, topK: 10, mode: VectorSearchMode.Approximate)
+    .ToList();
+```
+
+Форма SQL PostgreSQL — оператор расстояния pgvector плюс `LIMIT`; например, косинусное расстояние
+использует `ORDER BY embedding <=> @queryVector LIMIT 10` (`<->` — евклидова/L2-метрика, `<#>` —
+отрицательное скалярное произведение). `Exact` и `Approximate` генерируют одинаковый запрос с
+оператором расстояния: планировщик PostgreSQL может использовать подходящий индекс HNSW или IVFFlat,
+а режим API не принуждает и не гарантирует конкретный план. Поэтому `Exact` не отключает ANN-индекс,
+а `Approximate` не гарантирует его использование. Унифицированный API предоставляет
+косинусную, евклидову и dot-product дистанции; приведённые выше PostgreSQL-only маркеры по-прежнему
+дополнительно дают L1, Hamming и Jaccard. Провайдеры без поддержки векторного поиска отклоняют общий
+вызов при подготовке, а не подменяют метрику или путь поиска. См. [SQL Server: формы SQL для поиска по векторам](sqlserver.md#поиск-ближайших-соседей-по-векторам).
+
 ## См. также
 
 * [Провайдер PostgreSQL](../../connecting-providers/postgres.md)
