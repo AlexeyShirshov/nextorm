@@ -38,11 +38,8 @@ NextORM.Core.VectorSearchMode.Exact = 0 -> NextORM.Core.VectorSearchMode
 NextORM.Core.VectorSearchMode.Approximate = 1 -> NextORM.Core.VectorSearchMode
 NextORM.Core.VectorSearchResult<TEntity>
 NextORM.Core.VectorSearchResult<TEntity>.VectorSearchResult(TEntity entity, double? distance) -> void
-NextORM.Core.VectorSearchResult<TEntity>.VectorSearchResult() -> void
 NextORM.Core.VectorSearchResult<TEntity>.Entity.get -> TEntity
-NextORM.Core.VectorSearchResult<TEntity>.Entity.init -> void
 NextORM.Core.VectorSearchResult<TEntity>.Distance.get -> double?
-NextORM.Core.VectorSearchResult<TEntity>.Distance.init -> void
 static NextORM.Core.SqlFunctions.VectorDistance<TVector>(TVector left, TVector right, NextORM.Core.VectorDistanceMetric metric) -> double?
 NextORM.Core.ISqlDialect.SupportsVectorSearch.get -> bool
 NextORM.Core.ISqlDialect.MakeApproximateTop(string! limitSql, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!

@@ -29,11 +29,6 @@ public enum VectorSearchMode
 /// <typeparam name="TEntity">The entity returned for the neighbor.</typeparam>
 public sealed class VectorSearchResult<TEntity>
 {
-    /// <summary>Creates an empty result instance.</summary>
-    public VectorSearchResult()
-    {
-    }
-
     /// <summary>Creates a result from the matching entity and its distance.</summary>
     /// <param name="entity">The matching entity.</param>
     /// <param name="distance">The metric distance; lower values are nearer.</param>
@@ -44,8 +39,8 @@ public sealed class VectorSearchResult<TEntity>
     }
 
     /// <summary>The matching entity.</summary>
-    public TEntity Entity { get; init; } = default!;
+    public TEntity Entity { get; }
 
     /// <summary>The metric distance; lower values are nearer.</summary>
-    public double? Distance { get; init; }
+    public double? Distance { get; }
 }

@@ -85,7 +85,7 @@ claim tested here is width of the *dedicated provider API*.
 
 | Feature | nextorm | linq2db | nextorm evidence | linq2db evidence |
 |---|---|---|---|---|
-| pgvector value / operators and functions | yes | no | `PgVector`, `PgHalfVector`, `PgSparseVector`, `PgBit`; `vector[]`/`halfvec[]`/`sparsevec[]`/`bit[]`; LINQ marker translation for `<->`, `<=>`, `<#>`, `<+>`, `<~>`, `<%>`, `+`, `-`, `*`, `||`, `vector_dims`, `vector_norm`, `l2_norm`, `l2_normalize`, `subvector`, `binary_quantize`, `hamming_distance`, `jaccard_distance` | No dedicated pgvector type/operator/function API identified in `PostgreSQLExtensions.cs`. |
+| pgvector value / operators and functions; unified `VectorSearch` API | yes | no | `PgVector`, `PgHalfVector`, `PgSparseVector`, `PgBit`; `vector[]`/`halfvec[]`/`sparsevec[]`/`bit[]`; LINQ marker translation for `<->`, `<=>`, `<#>`, `<+>`, `<~>`, `<%>`, `+`, `-`, `*`, `||`, `vector_dims`, `vector_norm`, `l2_norm`, `l2_normalize`, `subvector`, `binary_quantize`, `hamming_distance`, `jaccard_distance`; `EntityBuilder.VectorSearch` reuses the pgvector distance-operator path | No dedicated pgvector type/operator/function API identified in `PostgreSQLExtensions.cs`. |
 | Arrays + `any`/`all` quantifiers | yes | yes | `PostgresDialect.cs:297`; `SqlFunctions.Postgres.cs:19-103` | `PostgreSQLExtensions.cs` (`ARRAY_*`, `CARDINALITY`, `= ANY(...)`, `&&`, `@>`, `<@`) |
 | Range / multirange (operators, mapping) | yes | partial | `PostgresDialect.cs:301,182-187`; `SqlFunctions.Postgres.cs:738-1148` | type mapping only; no range operators in `PostgreSQLExtensions.cs` |
 | Full-text `tsvector`/`tsquery` | yes | no | `PostgresDialect.cs:428,431,465`; `SqlFunctions.Postgres.cs:519-563` | no `to_tsvector`/`tsquery` API found in `PostgreSQLExtensions.cs` |
@@ -136,7 +136,8 @@ sequences/settings, TVP and the aggregate families have dedicated nextorm APIs b
 | Sequences (`NEXT VALUE FOR`) | yes | yes | `SqlFunctions.SqlServer.cs:339,346` (`next_value_for`/`nextval`, [#218](https://github.com/AlexeyShirshov/nextorm/issues/218)) | `SqlFn.cs` `NextValueFor` (`[Sql.Extension(ProviderName.SqlServer, "NEXT VALUE FOR {sequence_name}", ...)]`) |
 | Row locking (`ForUpdate`/`ForShare`, `LockWaitMode` → `with (updlock)`/`with (holdlock)`, `nowait`/`readpast`) | yes | yes | `FromOptions.ForUpdate/ForShare` (`DataContext/FromOptions.cs:182-214`); `docs/connecting-providers/sqlserver.md:317` ([#216](https://github.com/AlexeyShirshov/nextorm/issues/216)) | `SqlServerHints.generated.cs` (`WithUpdLock`/`WithHoldLock`/`WithNoLock`/`WithRowLock`/`WithPagLock`/`WithTabLock`/…, table + in-scope) |
 | Session/server identity (`@@SERVERNAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) | yes (6, gated by `ISqlServerFunctions.SupportsSessionIdentity`) | yes (`SqlFn.cs` declares the same T-SQL state functions) | `SqlFunctions.SqlServer.cs:23,30,39,46,53,60`; `SqlServerDialect.cs:773,1037`; `DialectCapabilities.cs:739` | `SqlFn.cs` `[Sql.Function]` declarations |
-| **Total** | yes 19<br>partial 0<br>no 0<br>n/a 0 | yes 13<br>partial 4<br>no 2<br>n/a 0 | — | — |
+| Vector search (`VECTOR_DISTANCE` exact; `VECTOR_SEARCH` approximate) | yes (SQL Server 2025+; selectable grammar) | no | `EntityBuilder.VectorSearch`; `SqlFunctions.VectorDistance`; `SqlServerVectorSearchSyntax`; approximate search requires `PREVIEW_FEATURES = ON` and a matching vector index | No dedicated vector-search API identified in pinned `SqlServerExtensions.cs` / `SqlFn.cs` (source scan at the comparison's pinned linq2db commit). |
+| **Total** | yes 20<br>partial 0<br>no 0<br>n/a 0 | yes 13<br>partial 4<br>no 3<br>n/a 0 | — | — |
 
 Net: **parity on the audited T-SQL scalar catalogue, with linq2db still wider overall** — issue
 [#182](https://github.com/AlexeyShirshov/nextorm/issues/182) reconciled 61 pinned linq2db v6.5.0
@@ -149,7 +150,8 @@ identity subset (`@@SERVERNAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME
 `ROWCOUNT_BIG`, `SCOPE_IDENTITY`) as-is, with native semantics and their caveats. Within the reconciled
 set the FROMPARTS family is 6 total / 5 newly added and the date family is 13 total / 10 newly added.
 nextorm leads on first-class builders for `PIVOT`/`UNPIVOT`, `FOR JSON`/`FOR XML`, XML methods,
-`OPENJSON`/`STRING_SPLIT`, and 2025 regex.
+`OPENJSON`/`STRING_SPLIT`, 2025 regex and 2025+ vector search (`VECTOR_DISTANCE` exact and
+`VECTOR_SEARCH` approximate with an explicitly selected grammar and documented preview/index prerequisites).
 
 ---
 
