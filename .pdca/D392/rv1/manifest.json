@@ -57,7 +57,7 @@
     "tests/nextorm.postgres.tests/PgVector/UnifiedVectorSearchTests.cs",
     "tests/nextorm.sqlserver.tests/VectorSearch/SqlServerVectorSearchTests.cs"
   ],
-  "git_head": "98892ed459f7ee6bc4c5c67229bcf9b24c94d17a",
+  "git_head": "e2de4f4bb3e639a9d7b373ec3dff1c978007ea11",
   "issue": "392",
   "path": ".pdca/D392/rv1/",
   "required_rows": [
