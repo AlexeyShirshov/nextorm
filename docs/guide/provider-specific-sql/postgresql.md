@@ -568,6 +568,37 @@ markers yet. DDL is out of scope for nextorm as a whole: install the extension a
 indexes (HNSW/IVFFlat, `vector_l2_ops` and friends) yourself. Distance operations with unequal dimensions
 fail on the PostgreSQL server, as do `bit` operations with unequal lengths.
 
+### Unified nearest-neighbor API
+
+`EntityBuilder<TEntity>.VectorSearch(...)` uses the same result shape on PostgreSQL and SQL Server:
+`VectorSearchResult<TEntity>` exposes the matching `Entity` and nullable `Distance`. Use the shared
+`Vector` value or an existing PostgreSQL `PgVector`, `PgHalfVector` or `PgSparseVector` value that matches
+the mapped property; the query-vector type must match that property. `PgBit` remains available for the
+PostgreSQL-only bit-distance markers, not this shared metric set. For example:
+
+```csharp
+var nearest = ctx.From<Document>()
+    .VectorSearch(x => x.Embedding, new Vector(new[] { 1f, 2f, 3f }),
+        VectorDistanceMetric.Cosine, topK: 10, mode: VectorSearchMode.Approximate)
+    .ToList();
+```
+
+PostgreSQL uses separate SQL forms for the two modes. `Exact` calls pgvector's distance function and
+orders by the result, guaranteeing exact nearest neighbors for the filtered source rows; for example
+`ORDER BY cosine_distance(embedding, @queryVector) LIMIT 10`
+(`l2_distance` is Euclidean/L2 and `negative_inner_product` is dot product). These function calls do
+not match the HNSW/IVFFlat distance-operator index ordering, so an ANN index cannot serve the exact
+nearest-neighbor search; computing all candidate distances can be slower. `Approximate` uses the
+pgvector distance operator, for example `ORDER BY embedding <=> @queryVector LIMIT 10` (`<->` is
+Euclidean/L2 and `<#>` is negative inner product), which is eligible for a matching HNSW or IVFFlat
+index. The PostgreSQL planner still decides whether an eligible index is used. Both forms return the
+same metric distance with lower values nearer. The PostgreSQL-only marker surface above continues to
+provide its additional L1, Hamming and Jaccard operations. Providers without vector-search support
+reject the unified call during preparation rather than substituting another metric or search path.
+SQL Server remains unchanged: exact search uses `VECTOR_DISTANCE`, while approximate search uses the
+context's explicitly selected `VECTOR_SEARCH` grammar. See [SQL Server vector search](sqlserver.md#vector-nearest-neighbor-search)
+for its SQL forms.
+
 ## See also
 
 * [PostgreSQL provider](../../connecting-providers/postgres.md)

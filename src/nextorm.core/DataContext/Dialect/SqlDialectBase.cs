@@ -174,6 +174,8 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsArrayAgg => SupportsStringArrayAggregates;
     /// <inheritdoc/>
     public virtual bool SupportsExtendedScalarFunctions => false;
+    /// <summary>Defaults to <c>false</c>; a provider must explicitly opt into vector-distance translation.</summary>
+    public virtual bool SupportsVectorSearch => false;
     /// <summary>Only PostgreSQL has a standalone session random seed (<c>setseed</c>).</summary>
     public virtual bool SupportsRandomSeed => false;
     /// <summary>Only PostgreSQL has the <c>digest</c>/<c>sha256</c> hash surface.</summary>
@@ -996,6 +998,13 @@ public abstract class SqlDialectBase : ISqlDialect
         topStmt = null;
         return false;
     }
+
+    /// <inheritdoc/>
+    public virtual string MakeApproximateTop(string limitSql, KeywordCase keywordCase = KeywordCase.Lower)
+        => throw new NotSupportedException("Approximate vector-search TOP is not supported by this SQL dialect.");
+
+    /// <inheritdoc/>
+    public virtual string? ApproximateVectorSearchTopNArgumentName => null;
 
     /// <summary>Defaults to <c>false</c>; PostgreSQL and SQL Server opt into <c>WITH TIES</c> paging.</summary>
     public virtual bool SupportsWithTies => false;

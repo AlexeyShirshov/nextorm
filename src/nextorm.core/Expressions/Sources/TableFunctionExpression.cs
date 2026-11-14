@@ -9,6 +9,8 @@ namespace NextORM.Core;
 /// </summary>
 public sealed class TableFunctionExpression
 {
+    private readonly IReadOnlyList<Expression>? _arguments;
+
     /// <summary>Creates a table-function source without a trailing <c>WITH</c> clause.</summary>
     public TableFunctionExpression(string name, string? schema, MethodCallExpression call)
         : this(name, schema, null, null, null, call)
@@ -25,6 +27,21 @@ public sealed class TableFunctionExpression
     internal TableFunctionExpression(string name, string? schema, string? withClause, string? callClause, IReadOnlyList<int>? verbatimArguments, MethodCallExpression call)
         : this(name, schema, withClause, callClause, verbatimArguments, call, null, TableFunctionSchema.None)
     {
+    }
+
+    private TableFunctionExpression(
+        string name,
+        MethodCallExpression call,
+        IReadOnlyList<Expression> arguments,
+        IReadOnlyList<string> argumentNames,
+        IReadOnlyList<int> verbatimArguments,
+        Type resultType,
+        Expression approximateTopK)
+        : this(name, null, null, null, verbatimArguments, call, resultType, TableFunctionSchema.None)
+    {
+        _arguments = arguments;
+        ArgumentNames = argumentNames;
+        ApproximateTopK = approximateTopK;
     }
 
     private TableFunctionExpression(string name, string? schema, string? withClause, string? callClause, IReadOnlyList<int>? verbatimArguments, MethodCallExpression call, Type? resultType, TableFunctionSchema resultSchema)
@@ -80,7 +97,44 @@ public sealed class TableFunctionExpression
     public TableFunctionSchema ResultSchema { get; }
 
     /// <summary>The TVF argument expressions, in declaration order.</summary>
-    public IReadOnlyList<Expression> Arguments => Call.Arguments;
+    public IReadOnlyList<Expression> Arguments => _arguments ?? Call.Arguments;
+
+    /// <summary>Named argument labels for an internal table-function lowering, or <see langword="null"/> for positional calls.</summary>
+    internal IReadOnlyList<string>? ArgumentNames { get; }
+
+    /// <summary>The captured TOP value for SQL Server's approximate vector-search form.</summary>
+    internal Expression? ApproximateTopK { get; }
+
+    /// <summary>True when this source is the SQL Server approximate VECTOR_SEARCH table construct.</summary>
+    internal bool IsApproximateVectorSearch => ApproximateTopK is not null;
+
+    /// <summary>Creates the internal SQL Server VECTOR_SEARCH source with its four named arguments.</summary>
+    internal static TableFunctionExpression CreateApproximateVectorSearch(
+        string tableName,
+        string columnName,
+        MethodCallExpression call,
+        Expression queryVector,
+        string metric,
+        Expression topK,
+        Type resultType)
+    {
+        Expression[] arguments =
+        [
+            Expression.Constant(tableName),
+            Expression.Constant(columnName),
+            queryVector,
+            Expression.Constant(metric)
+        ];
+
+        return new TableFunctionExpression(
+            "VECTOR_SEARCH",
+            call,
+            arguments,
+            ["TABLE", "COLUMN", "SIMILAR_TO", "METRIC"],
+            [0, 1, 3],
+            resultType,
+            topK);
+    }
 
     /// <summary>
     /// Builds a source node from runtime metadata of a <see cref="TvfEntityBuilder{T}"/> descriptor: the

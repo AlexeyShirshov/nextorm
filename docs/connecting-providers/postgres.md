@@ -246,6 +246,28 @@ extension, the columns and the indexes are managed by the application, not nexto
 
 See [PostgreSQL-specific SQL](../guide/provider-specific-sql/postgresql.md#pgvector-values).
 
+### Unified nearest-neighbor API
+
+The core `EntityBuilder<TEntity>.VectorSearch(...)` API accepts the shared `Vector` value and existing
+PostgreSQL `PgVector`, `PgHalfVector` and `PgSparseVector` values when the query-vector type matches the
+mapped property (`PgBit` remains for the PostgreSQL-only bit-distance markers). It returns
+each entity together with `Distance`; lower values are nearer. The shared metrics are cosine,
+Euclidean/L2 and dot product (negative inner product). The PostgreSQL-specific `SqlFunctions.Postgres`
+markers and pgvector types remain available, including their additional L1, Hamming and Jaccard
+operations.
+
+`Exact` uses pgvector's distance-function form (`cosine_distance`, `l2_distance` or
+`negative_inner_product`) for both the projected `Distance` and ordering, guaranteeing exact
+nearest neighbors for the filtered source rows. These functions cannot use HNSW/IVFFlat
+distance-operator indexes, so exact nearest-neighbor search evaluates the distance without ANN index
+ordering and may be slower. `Approximate` uses pgvector's distance operators
+(`<=>`, `<->` or `<#>`), which are eligible for a matching HNSW or IVFFlat index; PostgreSQL's planner
+still decides whether to use an eligible index. SQL Server behavior is unchanged: exact search uses
+`VECTOR_DISTANCE`, and approximate search uses the explicitly selected `VECTOR_SEARCH` grammar.
+Install pgvector, create a compatible vector column and provision any ANN index in application-managed
+DDL. See the
+[unified API and PostgreSQL SQL details](../guide/provider-specific-sql/postgresql.md#unified-nearest-neighbor-api).
+
 ## Range types
 
 PostgreSQL is the only supported provider with native range types (`int4range`, `int8range`,
@@ -447,6 +469,7 @@ See [Bulk insert](../guide/22-bulk-insert.md).
 | Paging | `limit n` / `limit n offset m` / `offset m` |
 | Injected sort when paging | none |
 | Concat | `||` |
+| Unified vector nearest-neighbor search | shared API; exact uses pgvector distance functions (not ANN-indexable), approximate uses distance operators eligible for HNSW/IVFFlat |
 | Coalesce | `coalesce` |
 | Boolean literal | `true` / `false` |
 | Identifier quoting | double quotes (`as "t1"`) |

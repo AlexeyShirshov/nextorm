@@ -225,14 +225,14 @@ internal static class TypeFacts
         || type.IsArray;
 
     /// <summary>
-    /// True for a provider-owned pgvector CLR type (<c>PgVector</c>, <c>PgHalfVector</c>,
-    /// <c>PgSparseVector</c>, <c>PgBit</c>), with nullability stripped. Recognized by stable public
-    /// type identity so core stays independent of the PostgreSQL provider assembly.
+    /// True for the shared core vector or a provider-owned pgvector CLR type (<c>PgVector</c>,
+    /// <c>PgHalfVector</c>, <c>PgSparseVector</c>, <c>PgBit</c>), with nullability stripped. Recognized
+    /// by stable public type identity so core stays independent of the PostgreSQL provider assembly.
     /// </summary>
     internal static bool IsPostgresVectorType(Type type)
         => (Nullable.GetUnderlyingType(type) ?? type).FullName is
             "NextORM.Postgres.PgVector" or "NextORM.Postgres.PgHalfVector"
-            or "NextORM.Postgres.PgSparseVector" or "NextORM.Postgres.PgBit";
+            or "NextORM.Postgres.PgSparseVector" or "NextORM.Postgres.PgBit" or "NextORM.Core.Vector";
 
     /// <summary>
     /// True when a projection of <paramref name="type"/> has to be projected through PostgreSQL text
@@ -250,7 +250,16 @@ internal static class TypeFacts
         if (!IsPostgresVectorType(candidate))
             return false;
 
-        return dialect.MakeTypeName(candidate) is "vector" or "halfvec" or "sparsevec" or "bit";
+        try
+        {
+            return dialect.MakeTypeName(candidate) is "vector" or "halfvec" or "sparsevec" or "bit";
+        }
+        catch (NotSupportedException)
+        {
+            // Some providers (for example SQL Server) recognise the shared CLR vector but cannot
+            // infer its dimension for generated DDL. That is not a PostgreSQL text projection.
+            return false;
+        }
     }
 
     /// <summary>

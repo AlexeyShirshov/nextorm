@@ -1,4 +1,5 @@
 using System.Text;
+using NextORM.Core;
 
 namespace NextORM.Postgres;
 
@@ -58,6 +59,7 @@ internal static class PostgresVectorTypes
     private static string? NameOf(Type type) => (Nullable.GetUnderlyingType(type) ?? type) switch
     {
         var candidate when candidate == typeof(PgVector) => "vector",
+        var candidate when candidate == typeof(Vector) => "vector",
         var candidate when candidate == typeof(PgHalfVector) => "halfvec",
         var candidate when candidate == typeof(PgSparseVector) => "sparsevec",
         var candidate when candidate == typeof(PgBit) => "bit",

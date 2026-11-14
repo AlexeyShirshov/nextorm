@@ -170,3 +170,31 @@ NextORM.Core.ShardQuery<TEntity>.Sum<TValue>(System.Linq.Expressions.Expression<
 NextORM.Core.ShardQuery<TEntity>.ThenBy<TKey>(System.Linq.Expressions.Expression<System.Func<TEntity, TKey>!>! keySelector) -> NextORM.Core.ShardQuery<TEntity>!
 NextORM.Core.ShardQuery<TEntity>.ThenByDescending<TKey>(System.Linq.Expressions.Expression<System.Func<TEntity, TKey>!>! keySelector) -> NextORM.Core.ShardQuery<TEntity>!
 NextORM.Core.ShardQuery<TEntity, TResult>.AsAsyncEnumerable(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<TResult>!
+NextORM.Core.IVectorValue
+NextORM.Core.IVectorValue.Dimensions.get -> int
+NextORM.Core.Vector
+NextORM.Core.Vector.Vector(System.Collections.Generic.IEnumerable<float>! coordinates) -> void
+NextORM.Core.Vector.Dimensions.get -> int
+NextORM.Core.Vector.this[int index].get -> float
+NextORM.Core.Vector.ToArray() -> float[]!
+override NextORM.Core.Vector.ToString() -> string!
+static NextORM.Core.Vector.Parse(string! text) -> NextORM.Core.Vector!
+NextORM.Core.VectorDistanceMetric
+NextORM.Core.VectorDistanceMetric.Cosine = 0 -> NextORM.Core.VectorDistanceMetric
+NextORM.Core.VectorDistanceMetric.Euclidean = 1 -> NextORM.Core.VectorDistanceMetric
+NextORM.Core.VectorDistanceMetric.DotProduct = 2 -> NextORM.Core.VectorDistanceMetric
+NextORM.Core.VectorSearchMode
+NextORM.Core.VectorSearchMode.Exact = 0 -> NextORM.Core.VectorSearchMode
+NextORM.Core.VectorSearchMode.Approximate = 1 -> NextORM.Core.VectorSearchMode
+NextORM.Core.VectorSearchResult<TEntity>
+NextORM.Core.VectorSearchResult<TEntity>.VectorSearchResult(TEntity entity, double? distance) -> void
+NextORM.Core.VectorSearchResult<TEntity>.Entity.get -> TEntity
+NextORM.Core.VectorSearchResult<TEntity>.Distance.get -> double?
+static NextORM.Core.SqlFunctions.VectorDistance<TVector>(TVector left, TVector right, NextORM.Core.VectorDistanceMetric metric) -> double?
+NextORM.Core.ISqlDialect.SupportsVectorSearch.get -> bool
+NextORM.Core.ISqlDialect.MakeApproximateTop(string! limitSql, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+NextORM.Core.ISqlDialect.ApproximateVectorSearchTopNArgumentName.get -> string?
+virtual NextORM.Core.SqlDialectBase.SupportsVectorSearch.get -> bool
+virtual NextORM.Core.SqlDialectBase.MakeApproximateTop(string! limitSql, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+virtual NextORM.Core.SqlDialectBase.ApproximateVectorSearchTopNArgumentName.get -> string?
+NextORM.Core.EntityBuilder<TEntity>.VectorSearch<TVector>(System.Linq.Expressions.Expression<System.Func<TEntity, TVector>!>! vectorSelector, TVector queryVector, NextORM.Core.VectorDistanceMetric metric, int topK, NextORM.Core.VectorSearchMode mode = NextORM.Core.VectorSearchMode.Exact) -> NextORM.Core.QueryCommand<NextORM.Core.VectorSearchResult<TEntity>!>!

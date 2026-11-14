@@ -350,6 +350,35 @@ The cross-provider boolean predicates `contains`/`freetext` render `CONTAINS`/`F
 `SqlFunctions.IKeyRankRow<TKey>`; see
 [Table-valued functions](../13-table-valued-functions.md#built-in-table-functions).
 
+## Vector nearest-neighbor search
+
+The shared `EntityBuilder<TEntity>.VectorSearch(...)` API supports SQL Server 2025 (major version 17) and
+later. Exact search orders by the scalar `VECTOR_DISTANCE` result and limits the rows to `topK`:
+
+```sql
+select top (10) id, embedding,
+       VECTOR_DISTANCE('cosine', embedding, @queryVector) as [distance]
+  from dbo.document
+ order by [distance]
+```
+
+Approximate search uses `VECTOR_SEARCH` as the `FROM` source and returns its `distance` column. The
+SQL Server grammar is an explicit context choice, not inferred from the server version. `TopN` (the
+default grammar) emits `TOP (k)` with `TOP_N = k`; `WithApproximate` emits `TOP (k) WITH APPROXIMATE`
+and omits `TOP_N`. Both shapes order the returned `distance` ascending. The provider setup page shows
+how to select the grammar and the database prerequisites: [SQL Server provider — vector search](../../connecting-providers/sqlserver.md#vector-search).
+
+The shared metrics are cosine (`'cosine'`), Euclidean/L2 (`'euclidean'`) and dot product
+(`'dot'`, the **negative** inner product); lower distances are nearer for all three. `Exact` uses
+`VECTOR_DISTANCE`; `Approximate` uses `VECTOR_SEARCH` and does not silently fall back to the exact
+path. The scalar `SqlFunctions.VectorDistance(...)` translates to `VECTOR_DISTANCE` on SQL Server.
+Approximate search requires a positive `topK`, a direct physical entity-table source and no caller
+ordering, paging, joins, grouping, `DISTINCT` or derived source; the table function owns the top-k and
+ascending-distance order. PostgreSQL-only L1, Hamming and Jaccard metrics are not substituted on SQL
+Server.
+Unsupported metrics, an undeclared or pre-17 server version, and providers without vector-search
+support fail explicitly before a command is sent.
+
 ## Sequences
 
 `SqlFunctions.SqlServer.next_value_for(sequence)` and its alias `nextval(sequence)` render the T-SQL
