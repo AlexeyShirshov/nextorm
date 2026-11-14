@@ -1,5 +1,7 @@
 #nullable enable
 NextORM.Core.EntityBuilder<TEntity>.WithScope(NextORM.Core.MappingScope scope) -> NextORM.Core.EntityBuilder<TEntity>!
+NextORM.Core.EntityBuilder<TEntity>.WithShardKey(params object?[]! shardKeyValues) -> NextORM.Core.EntityBuilder<TEntity>!
+NextORM.Core.InsertBuilder<TEntity>.WithShardKey(params object?[]! shardKeyValues) -> NextORM.Core.InsertBuilder<TEntity>!
 NextORM.Core.EntityMetadataBuilder<T>.Schema(string! schema) -> NextORM.Core.EntityMetadataBuilder<T>!
 NextORM.Core.DataContextBuilder.EntityMetadataProvider.get -> NextORM.Core.IEntityMetadataProvider!
 NextORM.Core.DataContextBuilder.EntityScopeResolver.get -> NextORM.Core.IEntityScopeResolver!
@@ -61,3 +63,75 @@ NextORM.Core.PostgresFunctions.vector_subtract<T>(T left, T right) -> T
 *REMOVED*NextORM.Core.OuterRefMarker<T>.OuterRefMarker(int i) -> void
 *REMOVED*NextORM.Core.OuterRefMarker<T>.Ref.get -> T?
 *REMOVED*static NextORM.Core.ReplaceConstantsExpressionVisitor.GetOuterRefMarkerCI(System.Type! type) -> System.Reflection.ConstructorInfo!
+NextORM.Core.AttributeShardKeyProvider
+NextORM.Core.AttributeShardKeyProvider.AttributeShardKeyProvider() -> void
+NextORM.Core.AttributeShardKeyProvider.GetShardKey(System.Type! entityType) -> System.Collections.Generic.IReadOnlyList<System.Reflection.PropertyInfo!>!
+NextORM.Core.AttributeShardKeyProvider.IsSharded(System.Type! entityType) -> bool
+NextORM.Core.ConsistentHashRing
+NextORM.Core.ConsistentHashRing.AddShard(string! shardId) -> void
+NextORM.Core.ConsistentHashRing.ConsistentHashRing(System.Collections.Generic.IEnumerable<string!>! shardIds, int virtualNodesPerShard = 128, int bucketCount = 4096) -> void
+NextORM.Core.ConsistentHashRing.GetBucket(System.ReadOnlySpan<byte> key) -> int
+NextORM.Core.ConsistentHashRing.GetShard(int bucket) -> string!
+NextORM.Core.ConsistentHashRing.RemoveShard(string! shardId) -> void
+NextORM.Core.ConsistentHashRing.BucketCount.get -> int
+NextORM.Core.ConsistentHashRing.ShardIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+NextORM.Core.ConsistentHashRing.Version.get -> int
+NextORM.Core.IConsistentHashRing
+NextORM.Core.IConsistentHashRing.BucketCount.get -> int
+NextORM.Core.IConsistentHashRing.GetBucket(System.ReadOnlySpan<byte> key) -> int
+NextORM.Core.IConsistentHashRing.GetShard(int bucket) -> string!
+NextORM.Core.IConsistentHashRing.ShardIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+NextORM.Core.IConsistentHashRing.Version.get -> int
+NextORM.Core.IShardKeyProvider
+NextORM.Core.IShardKeyProvider.GetShardKey(System.Type! entityType) -> System.Collections.Generic.IReadOnlyList<System.Reflection.PropertyInfo!>!
+NextORM.Core.IShardKeyProvider.IsSharded(System.Type! entityType) -> bool
+NextORM.Core.IShardRouter
+NextORM.Core.IShardRouter.GetShardKey(System.Type! entityType) -> System.Collections.Generic.IReadOnlyList<System.Reflection.PropertyInfo!>!
+NextORM.Core.IShardRouter.IsSharded(System.Type! entityType) -> bool
+NextORM.Core.IShardRouter.ResolveShard(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingScope
+NextORM.Core.IShardTopology
+NextORM.Core.IShardTopology.GetPlacement(System.Type! entityType, string! shardId) -> NextORM.Core.ShardPlacement
+NextORM.Core.IShardTopology.Ring.get -> NextORM.Core.IConsistentHashRing!
+NextORM.Core.IShardTopology.ShardIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+NextORM.Core.IShardTopology.Version.get -> int
+NextORM.Core.ShardDataContextBuilderExtensions
+static NextORM.Core.ShardDataContextBuilderExtensions.UseSharding(this NextORM.Core.DataContextBuilder! builder, NextORM.Core.ShardTopology! topology, NextORM.Core.IShardKeyProvider? keyProvider = null) -> NextORM.Core.DataContextBuilder!
+NextORM.Core.ShardEntityMetadataProvider
+NextORM.Core.ShardEntityMetadataProvider.GetColumnName(System.Reflection.PropertyInfo! property, in NextORM.Core.MappingScope scope, NextORM.Core.INamingConvention? convention) -> string!
+NextORM.Core.ShardEntityMetadataProvider.GetMetadata(System.Type! entityType, in NextORM.Core.MappingScope scope) -> NextORM.Core.IEntityMetadata!
+NextORM.Core.ShardEntityMetadataProvider.ShardEntityMetadataProvider(NextORM.Core.IEntityMetadataProvider! inner, NextORM.Core.IShardTopology! topology) -> void
+NextORM.Core.ShardKeyAttribute
+NextORM.Core.ShardKeyAttribute.PropertyNames.get -> System.Collections.Generic.IReadOnlyList<string!>!
+NextORM.Core.ShardKeyAttribute.ShardKeyAttribute(params string![]! propertyNames) -> void
+NextORM.Core.ShardKeyPredicateExtractor
+static NextORM.Core.ShardKeyPredicateExtractor.TryGetValues<T>(System.Linq.Expressions.Expression<System.Func<T, bool>!>! predicate, System.Collections.Generic.IReadOnlyList<System.Reflection.PropertyInfo!>! shardKey, out object?[]! values) -> bool
+NextORM.Core.ShardPlacement
+NextORM.Core.ShardPlacement.Deconstruct(out string? Schema, out string? TableName) -> void
+NextORM.Core.ShardPlacement.Equals(NextORM.Core.ShardPlacement other) -> bool
+NextORM.Core.ShardPlacement.Schema.get -> string?
+NextORM.Core.ShardPlacement.Schema.init -> void
+NextORM.Core.ShardPlacement.ShardPlacement() -> void
+NextORM.Core.ShardPlacement.ShardPlacement(string? Schema, string? TableName) -> void
+NextORM.Core.ShardPlacement.TableName.get -> string?
+NextORM.Core.ShardPlacement.TableName.init -> void
+override NextORM.Core.ShardPlacement.GetHashCode() -> int
+~override NextORM.Core.ShardPlacement.ToString() -> string
+~override NextORM.Core.ShardPlacement.Equals(object obj) -> bool
+static NextORM.Core.ShardPlacement.operator ==(NextORM.Core.ShardPlacement left, NextORM.Core.ShardPlacement right) -> bool
+static NextORM.Core.ShardPlacement.operator !=(NextORM.Core.ShardPlacement left, NextORM.Core.ShardPlacement right) -> bool
+NextORM.Core.ShardRouter
+NextORM.Core.ShardRouter.GetShardKey(System.Type! entityType) -> System.Collections.Generic.IReadOnlyList<System.Reflection.PropertyInfo!>!
+NextORM.Core.ShardRouter.IsSharded(System.Type! entityType) -> bool
+NextORM.Core.ShardRouter.Resolve(System.Type! entityType) -> NextORM.Core.MappingScope
+NextORM.Core.ShardRouter.Resolve(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingScope
+NextORM.Core.ShardRouter.Resolve(System.Type! entityType, object! entity) -> NextORM.Core.MappingScope
+NextORM.Core.ShardRouter.ResolveShard(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingScope
+NextORM.Core.ShardRouter.ShardRouter(NextORM.Core.IShardTopology! topology, NextORM.Core.IShardKeyProvider? keyProvider = null) -> void
+NextORM.Core.ShardTopology
+NextORM.Core.ShardTopology.AddShard(string! shardId, string? schema = null, string? tableName = null) -> void
+NextORM.Core.ShardTopology.GetPlacement(System.Type! entityType, string! shardId) -> NextORM.Core.ShardPlacement
+NextORM.Core.ShardTopology.RemoveShard(string! shardId) -> void
+NextORM.Core.ShardTopology.ShardTopology(int virtualNodesPerShard = 128, int bucketCount = 4096) -> void
+NextORM.Core.ShardTopology.Ring.get -> NextORM.Core.IConsistentHashRing!
+NextORM.Core.ShardTopology.ShardIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+NextORM.Core.ShardTopology.Version.get -> int

@@ -20,7 +20,7 @@ public sealed partial class InsertBuilder<TEntity>
 {
     private readonly IDataContext _dataContext;
     private readonly IEntityMetadata _metadata;
-    private readonly MappingScope _mappingScope;
+    private MappingScope _mappingScope;
     private readonly List<ColumnAccumulator> _columns = [];
     private DynamicColumnSet? _dynamicColumns;
     private int _rowCount;
@@ -50,6 +50,26 @@ public sealed partial class InsertBuilder<TEntity>
         _mappingScope = dataContext is DataContext scopedContext
             ? scopedContext.EntityScopeResolver.Resolve(typeof(TEntity))
             : MappingScope.Default;
+    }
+
+    /// <summary>
+    /// Routes the insert to the shard selected by the supplied shard-key values.
+    /// </summary>
+    /// <param name="shardKeyValues">The shard-key values in the order the entity declares them.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The context has no shard router or the entity type is not sharded.
+    /// </exception>
+    public InsertBuilder<TEntity> WithShardKey(params object?[] shardKeyValues)
+    {
+        if (_dataContext is not DataContext dataContext || dataContext.EntityScopeResolver is not IShardRouter router)
+            throw new InvalidOperationException("WithShardKey requires a context configured with a shard router.");
+
+        if (!router.IsSharded(typeof(TEntity)))
+            throw new InvalidOperationException($"Entity '{typeof(TEntity)}' does not declare a shard key.");
+
+        _mappingScope = router.ResolveShard(typeof(TEntity), shardKeyValues);
+        return this;
     }
 
     /// <summary>The context the insert executes on; used by <see cref="InsertReturningBuilder{TEntity, TResult}"/>.</summary>
@@ -635,8 +655,67 @@ public sealed partial class InsertBuilder<TEntity>
         return accumulator;
     }
 
+    /// <summary>
+    /// Resolves the shard scope from the entity values: every row of one insert must target the same shard.
+    /// </summary>
+    private void ResolveShardScope(IReadOnlyList<TEntity> entities)
+    {
+        if (_mappingScope != MappingScope.Default)
+            return;
+
+        if (_dataContext is not DataContext dataContext || dataContext.EntityScopeResolver is not IShardRouter router)
+            return;
+
+        if (!router.IsSharded(typeof(TEntity)))
+            return;
+
+        MappingScope? resolved = null;
+        for (var index = 0; index < entities.Count; index++)
+        {
+            var entity = entities[index];
+            if (entity is null)
+                throw new ArgumentException($"Entity at index {index} is null.", nameof(entities));
+
+            var scope = router.Resolve(typeof(TEntity), entity);
+            if (resolved is null)
+            {
+                resolved = scope;
+                continue;
+            }
+
+            if (resolved.Value != scope)
+            {
+                throw new InvalidOperationException(
+                    $"Insert rows target different shards ('{resolved.Value.Key}' and '{scope.Key}'). " +
+                    "A single insert must target one shard; group the rows by shard and insert each group separately.");
+            }
+        }
+
+        _mappingScope = resolved ?? MappingScope.Default;
+    }
+
+    /// <summary>
+    /// Rejects a sharded insert whose scope was never resolved, for example a column-only insert.
+    /// </summary>
+    private void EnsureShardScopeResolved()
+    {
+        if (_mappingScope != MappingScope.Default)
+            return;
+
+        if (_dataContext is not DataContext dataContext || dataContext.EntityScopeResolver is not IShardRouter router)
+            return;
+
+        if (!router.IsSharded(typeof(TEntity)))
+            return;
+
+        throw new InvalidOperationException(
+            $"Entity '{typeof(TEntity)}' is sharded. Insert entity values or call WithShardKey(...) before executing the insert.");
+    }
+
     private InsertCommand BuildCommand(IPropertyMetadata? identityColumn, IReadOnlyList<IPropertyMetadata>? returningColumns = null, OutputIntoClause? outputInto = null)
     {
+        EnsureShardScopeResolved();
+
         if (_source is not null)
             return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, [], 1, identityColumn, returningColumns, _source, _selectColumns, outputInto: outputInto) { MappingScope = _mappingScope };
 

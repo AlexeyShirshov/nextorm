@@ -273,8 +273,17 @@ public sealed class DeleteBuilder<TEntity>
     }
 
     private DeleteCommand CreateCommand(QueryCommand? condition, IReadOnlyList<KeyValue>? keys, IReadOnlyList<IPropertyMetadata>? returningColumns = null, OutputIntoClause? outputInto = null)
-        => new(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, condition, keys, returningColumns, outputInto,
-            _mappingScope == MappingScope.Default ? null : _targetMetadata.Schema, _mappingScope);
+    {
+        // The condition command resolves the shard scope from the predicate when the builder carries no
+        // explicit scope; the DELETE target has to follow it, because the renderer reads the command's
+        // scope rather than the condition's.
+        var scope = condition is not null && condition.MappingScope != MappingScope.Default
+            ? condition.MappingScope
+            : _mappingScope;
+
+        return new(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, condition, keys, returningColumns, outputInto,
+            scope == MappingScope.Default ? null : _targetMetadata.Schema, scope);
+    }
 
     // Applies the builder's selective filter scope to the source command that carries the DELETE's
     // condition, so both the predicate form and the key form honor IgnoreFilters. The scope is folded

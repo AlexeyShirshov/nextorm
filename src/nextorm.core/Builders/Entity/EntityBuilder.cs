@@ -500,6 +500,24 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, IQueryCo
         return copy;
     }
     /// <summary>
+    /// Returns a builder routed to the shard selected by the supplied shard-key values.
+    /// </summary>
+    /// <param name="shardKeyValues">The shard-key values in the order the entity declares them.</param>
+    /// <returns>A builder that carries the resolved shard scope into its query command.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The context has no shard router or the entity type is not sharded.
+    /// </exception>
+    public EntityBuilder<TEntity> WithShardKey(params object?[] shardKeyValues)
+    {
+        if (_dataProvider is not DataContext dataContext || dataContext.EntityScopeResolver is not IShardRouter router)
+            throw new InvalidOperationException("WithShardKey requires a context configured with a shard router.");
+
+        if (!router.IsSharded(typeof(TEntity)))
+            throw new InvalidOperationException($"Entity '{typeof(TEntity)}' does not declare a shard key.");
+
+        return WithScope(router.ResolveShard(typeof(TEntity), shardKeyValues));
+    }
+    /// <summary>
     /// Returns a builder whose selective filter scope is the union of this builder's scope and
     /// <paramref name="scope"/>, without mutating this builder. Used by the DML builders to fold their
     /// own <c>IgnoreFilters</c> state into a retained source builder: mutating that builder in place
@@ -720,6 +738,30 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, IQueryCo
     /// Copies the builder's provider-independent modifiers onto an already-created command. Shared by
     /// <see cref="Select{TResult}"/>, <see cref="ToCommand"/> and the <c>JoinInto</c> pair command.
     /// </summary>
+    /// <summary>
+    /// Resolves the mapping scope the command runs under: an explicit scope always wins, otherwise a
+    /// sharded entity is routed by the shard-key equality found in the predicate, and an unroutable
+    /// sharded query fails before any SQL is rendered.
+    /// </summary>
+    private MappingScope ResolveCommandScope()
+    {
+        if (_mappingScope != MappingScope.Default)
+            return _mappingScope;
+
+        if (_dataProvider is not DataContext dataContext || dataContext.EntityScopeResolver is not IShardRouter router)
+            return MappingScope.Default;
+
+        var entityType = _sourceEntityType ?? typeof(TEntity);
+        if (!router.IsSharded(entityType))
+            return MappingScope.Default;
+
+        if (entityType == typeof(TEntity) && _condition is not null &&
+            ShardKeyPredicateExtractor.TryGetValues(_condition, router.GetShardKey(entityType), out var values))
+            return router.ResolveShard(entityType, values);
+
+        throw new InvalidOperationException(
+            $"Entity '{entityType}' is sharded. Add an equality on the shard key to the predicate or call WithShardKey(...) before building the query.");
+    }
     private void ApplyCommandOptions(QueryCommand cmd)
     {
         cmd.GroupingType = GroupingType;
@@ -754,7 +796,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, IQueryCo
         // Structural identity of the collection-valued projection slot graph this entity query materializes
         // (#249 / T353). Empty for every ordinary command, so unrelated plan keys are untouched.
         cmd.CollectionSlotShape = _collectionSlotShape;
-        cmd.MappingScope = _mappingScope;
+        cmd.MappingScope = ResolveCommandScope();
 
         // Eager-load strategy and graph identity: only commands that actually carry eager loads record
         // them, so a command with no eager loads is never touched. The requested override (or null to

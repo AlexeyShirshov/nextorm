@@ -68,7 +68,29 @@ public sealed class TruncateBuilder<TEntity>
     internal MutationCommand BuildBatchCommand() => BuildCommand();
 
     private TruncateCommand BuildCommand()
-        => new(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _mappingScope);
+    {
+        EnsureShardScopeResolved();
+        return new(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _mappingScope);
+    }
+
+    /// <summary>
+    /// Rejects a sharded truncate that carries no resolved shard scope: truncating the default table of a
+    /// sharded entity is never a silent fallback.
+    /// </summary>
+    private void EnsureShardScopeResolved()
+    {
+        if (_mappingScope != MappingScope.Default)
+            return;
+
+        if (_dataContext is not DataContext dataContext || dataContext.EntityScopeResolver is not IShardRouter router)
+            return;
+
+        if (!router.IsSharded(typeof(TEntity)))
+            return;
+
+        throw new InvalidOperationException(
+            $"Entity '{typeof(TEntity)}' is sharded. Configure a shard scope before truncating the entity.");
+    }
 
     private NotSupportedException Unsupported()
         => new(
