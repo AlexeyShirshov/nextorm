@@ -11,16 +11,21 @@ public enum VectorDistanceMetric
     DotProduct = 2,
 }
 
-/// <summary>Whether a nearest-neighbor search requests an exact or approximate search plan.</summary>
+/// <summary>Whether a nearest-neighbor search requests exact or approximate results.</summary>
 public enum VectorSearchMode
 {
     /// <summary>Request exact nearest-neighbor semantics.</summary>
-    Exact = 0,
-    /// <summary>Request an approximate nearest-neighbor search where the provider supports it.</summary>
     /// <remarks>
-    /// PostgreSQL renders the same pgvector distance-operator query as <see cref="Exact"/>. PostgreSQL
-    /// chooses an HNSW or IVFFlat index transparently when the query and index permit it; the mode does
-    /// not silently change the metric, ordering or result semantics.
+    /// PostgreSQL uses the pgvector distance-function form, which is not eligible for HNSW or IVFFlat
+    /// distance-operator indexes and may be slower. SQL Server uses <c>VECTOR_DISTANCE</c>.
+    /// </remarks>
+    Exact = 0,
+    /// <summary>Request approximate nearest-neighbor search where the provider supports it.</summary>
+    /// <remarks>
+    /// PostgreSQL uses pgvector distance operators, making the query eligible for a matching HNSW or
+    /// IVFFlat index; the planner still decides whether to use one. SQL Server uses the explicitly
+    /// selected <c>VECTOR_SEARCH</c> grammar. The mode does not silently change the metric, ordering or
+    /// result shape.
     /// </remarks>
     Approximate = 1,
 }

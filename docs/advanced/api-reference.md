@@ -123,10 +123,14 @@ var distance = nearest[0].Distance;
 
 `SqlFunctions.VectorDistance(vector, queryVector, metric)` is the scalar distance marker. PostgreSQL
 uses the corresponding pgvector operator; SQL Server 2025+ uses `VECTOR_DISTANCE` for exact distance
-and an explicitly selected `VECTOR_SEARCH` grammar for approximate search. PostgreSQL renders the same
-distance-operator query for both modes and leaves ANN index selection to its planner: `Exact` does not
-disable an ANN index, and `Approximate` does not guarantee one is used. Providers without
-vector support fail closed rather than changing the metric or exact/approximate request. See the
+and an explicitly selected `VECTOR_SEARCH` grammar for approximate search. For unified PostgreSQL
+`VectorSearch`, `Exact` uses the pgvector distance-function form for both `Distance` and ordering,
+guaranteeing exact nearest neighbors for the filtered source rows; these functions are not eligible
+for HNSW/IVFFlat distance-operator indexes and may be slower.
+`Approximate` uses the corresponding distance operator, which is eligible for a matching ANN index,
+although PostgreSQL's planner decides whether to use it. SQL Server exact/approximate behavior remains
+unchanged. Providers without vector support fail closed rather than changing the metric or
+exact/approximate request. See the
 [PostgreSQL](../guide/provider-specific-sql/postgresql.md#unified-nearest-neighbor-api) and
 [SQL Server](../guide/provider-specific-sql/sqlserver.md#vector-nearest-neighbor-search) SQL guides.
 SQLite, MySQL, MariaDB, ClickHouse and the in-memory provider reject this API with

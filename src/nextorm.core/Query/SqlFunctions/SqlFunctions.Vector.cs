@@ -20,4 +20,18 @@ public static partial class SqlFunctions
     /// </remarks>
     public static double? VectorDistance<TVector>(TVector left, TVector right, VectorDistanceMetric metric)
         where TVector : IVectorValue => default!;
+
+    /// <summary>Translation marker used by the unified nearest-neighbor query to preserve its selected mode.</summary>
+    /// <typeparam name="TVector">The provider-independent or provider-specific vector value type.</typeparam>
+    /// <param name="left">The vector column being measured.</param>
+    /// <param name="right">The query vector.</param>
+    /// <param name="metric">The distance metric.</param>
+    /// <param name="mode">The requested nearest-neighbor search mode.</param>
+    /// <returns>The distance expression selected by the provider and search mode.</returns>
+    internal static double? VectorSearchDistance<TVector>(
+        TVector left,
+        TVector right,
+        VectorDistanceMetric metric,
+        VectorSearchMode mode)
+        where TVector : IVectorValue => default!;
 }

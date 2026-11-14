@@ -81,20 +81,29 @@ public sealed class UnifiedVectorSearchTests
     }
 
     [Theory]
-    [InlineData(VectorSearchMode.Exact)]
-    [InlineData(VectorSearchMode.Approximate)]
-    public void VectorSearch_ShouldRenderOrderedTopKAndEntityDistance(VectorSearchMode mode)
+    [InlineData(VectorSearchMode.Exact, VectorDistanceMetric.Cosine, "cosine_distance(pg_embedding, cast(@queryVector as vector))")]
+    [InlineData(VectorSearchMode.Exact, VectorDistanceMetric.Euclidean, "l2_distance(pg_embedding, cast(@queryVector as vector))")]
+    [InlineData(VectorSearchMode.Exact, VectorDistanceMetric.DotProduct, "negative_inner_product(pg_embedding, cast(@queryVector as vector))")]
+    [InlineData(VectorSearchMode.Approximate, VectorDistanceMetric.Cosine, "(pg_embedding <=> cast(@queryVector as vector))")]
+    [InlineData(VectorSearchMode.Approximate, VectorDistanceMetric.Euclidean, "(pg_embedding <-> cast(@queryVector as vector))")]
+    [InlineData(VectorSearchMode.Approximate, VectorDistanceMetric.DotProduct, "(pg_embedding <#> cast(@queryVector as vector))")]
+    public void VectorSearch_ShouldRenderModeSpecificMetricAndEntityDistance(
+        VectorSearchMode mode,
+        VectorDistanceMetric metric,
+        string distanceExpression)
     {
         using var context = PostgresTestContext.Create();
         var target = PgVector.Parse("[1,2,3]");
         var source = context.From<VectorSearchProbe>().OrderBy(row => row.Id).Page(50, 7);
 
         var prepared = Prepared(context,
-            source.VectorSearch(row => row.PgEmbedding, target, VectorDistanceMetric.Cosine, 4, mode));
+            source.VectorSearch(row => row.PgEmbedding, target, metric, 4, mode));
         AssertMaterializesResult(prepared);
         var sql = Normalize(prepared.DbCommand.CommandText);
 
-        sql.Should().Be("select id, CAST(embedding AS text), CAST(pg_embedding AS text) as \"PgEmbedding\", (pg_embedding <=> cast(@queryVector as vector)) as \"distance\"\n from unified_vector_search_probe\n order by (pg_embedding <=> cast(@queryVector as vector))\nlimit 4");
+        sql.Should().Be(
+            $"select id, CAST(embedding AS text), CAST(pg_embedding AS text) as \"PgEmbedding\", {distanceExpression} as \"distance\"\n"
+            + $" from unified_vector_search_probe\n order by {distanceExpression}\nlimit 4");
     }
 
     [Fact]
@@ -112,7 +121,7 @@ public sealed class UnifiedVectorSearchTests
         AssertMaterializesResult(prepared);
         var sql = Normalize(prepared.DbCommand.CommandText);
 
-        sql.Should().Contain("(embedding <-> cast(@queryVector as vector))");
+        sql.Should().Contain("l2_distance(embedding, cast(@queryVector as vector))");
     }
 
     [Fact]

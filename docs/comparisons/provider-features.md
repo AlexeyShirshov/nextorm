@@ -60,7 +60,7 @@ wider on SQL Server scalar-function breadth and hint variety (issue [#182](https
 | Feature | Nextorm | linq2db |
 |---|---|---|
 | pgvector value types and operations | supported (PostgreSQL-only `PgVector`, `PgHalfVector`, `PgSparseVector` and `PgBit`; LINQ marker translation for distances, element-wise operators, functions and vector arrays) | no dedicated API found |
-| Unified vector nearest-neighbor search | yes (shared API; pgvector distance operators; exact and approximate modes produce the same SQL shape) | not assessed |
+| Unified vector nearest-neighbor search | yes (shared API; PostgreSQL exact guarantees exact results via pgvector distance functions, potentially slower and not ANN-indexable; approximate uses index-eligible distance operators) | not assessed |
 | Arrays + `any`/`all` quantifiers | yes | yes |
 | Range / multirange (operators, mapping) | yes | partial (type mapping only) |
 | Full-text `tsvector`/`tsquery` | yes | no |

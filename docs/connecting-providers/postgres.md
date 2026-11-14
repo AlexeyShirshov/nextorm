@@ -256,10 +256,16 @@ Euclidean/L2 and dot product (negative inner product). The PostgreSQL-specific `
 markers and pgvector types remain available, including their additional L1, Hamming and Jaccard
 operations.
 
-Both `Exact` and `Approximate` use the same pgvector distance-operator SQL. PostgreSQL decides whether
-to use a matching HNSW or IVFFlat index; `Exact` does not disable an ANN index and `Approximate` does
-not guarantee that one is used. Install pgvector,
-create a compatible vector column and provision any ANN index in application-managed DDL. See the
+`Exact` uses pgvector's distance-function form (`cosine_distance`, `l2_distance` or
+`negative_inner_product`) for both the projected `Distance` and ordering, guaranteeing exact
+nearest neighbors for the filtered source rows. These functions cannot use HNSW/IVFFlat
+distance-operator indexes, so exact nearest-neighbor search evaluates the distance without ANN index
+ordering and may be slower. `Approximate` uses pgvector's distance operators
+(`<=>`, `<->` or `<#>`), which are eligible for a matching HNSW or IVFFlat index; PostgreSQL's planner
+still decides whether to use an eligible index. SQL Server behavior is unchanged: exact search uses
+`VECTOR_DISTANCE`, and approximate search uses the explicitly selected `VECTOR_SEARCH` grammar.
+Install pgvector, create a compatible vector column and provision any ANN index in application-managed
+DDL. See the
 [unified API and PostgreSQL SQL details](../guide/provider-specific-sql/postgresql.md#unified-nearest-neighbor-api).
 
 ## Range types
@@ -463,7 +469,7 @@ See [Bulk insert](../guide/22-bulk-insert.md).
 | Paging | `limit n` / `limit n offset m` / `offset m` |
 | Injected sort when paging | none |
 | Concat | `||` |
-| Unified vector nearest-neighbor search | shared API; pgvector distance operators; exact and approximate modes render the same SQL, with index choice left to PostgreSQL |
+| Unified vector nearest-neighbor search | shared API; exact uses pgvector distance functions (not ANN-indexable), approximate uses distance operators eligible for HNSW/IVFFlat |
 | Coalesce | `coalesce` |
 | Boolean literal | `true` / `false` |
 | Identifier quoting | double quotes (`as "t1"`) |

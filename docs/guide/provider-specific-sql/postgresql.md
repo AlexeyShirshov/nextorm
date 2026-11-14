@@ -583,16 +583,21 @@ var nearest = ctx.From<Document>()
     .ToList();
 ```
 
-The PostgreSQL SQL shape is the pgvector distance operator plus `LIMIT`, for example cosine uses
-`ORDER BY embedding <=> @queryVector LIMIT 10` (`<->` is Euclidean/L2 and `<#>` is negative inner
-product). `Exact` and `Approximate` render the same operator query: the PostgreSQL planner may use a
-matching HNSW or IVFFlat index, and the API mode does not force or promise a particular plan. Thus
-`Exact` does not disable an ANN index and `Approximate` does not guarantee that one is used. The
-unified API exposes cosine, Euclidean and dot-product distance, with lower values nearer; the
-PostgreSQL-only marker surface above continues to provide its additional L1, Hamming and Jaccard
-operations. Providers without vector-search support reject the unified call during preparation rather
-than substituting another metric or search path. See [SQL Server vector search](sqlserver.md#vector-nearest-neighbor-search)
-for its distinct exact and approximate SQL forms.
+PostgreSQL uses separate SQL forms for the two modes. `Exact` calls pgvector's distance function and
+orders by the result, guaranteeing exact nearest neighbors for the filtered source rows; for example
+`ORDER BY cosine_distance(embedding, @queryVector) LIMIT 10`
+(`l2_distance` is Euclidean/L2 and `negative_inner_product` is dot product). These function calls do
+not match the HNSW/IVFFlat distance-operator index ordering, so an ANN index cannot serve the exact
+nearest-neighbor search; computing all candidate distances can be slower. `Approximate` uses the
+pgvector distance operator, for example `ORDER BY embedding <=> @queryVector LIMIT 10` (`<->` is
+Euclidean/L2 and `<#>` is negative inner product), which is eligible for a matching HNSW or IVFFlat
+index. The PostgreSQL planner still decides whether an eligible index is used. Both forms return the
+same metric distance with lower values nearer. The PostgreSQL-only marker surface above continues to
+provide its additional L1, Hamming and Jaccard operations. Providers without vector-search support
+reject the unified call during preparation rather than substituting another metric or search path.
+SQL Server remains unchanged: exact search uses `VECTOR_DISTANCE`, while approximate search uses the
+context's explicitly selected `VECTOR_SEARCH` grammar. See [SQL Server vector search](sqlserver.md#vector-nearest-neighbor-search)
+for its SQL forms.
 
 ## See also
 

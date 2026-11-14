@@ -8,6 +8,8 @@ public partial class EntityBuilder<TEntity>
 {
     private static readonly MethodInfo VectorDistanceMethod =
         typeof(SqlFunctions).GetMethod(nameof(SqlFunctions.VectorDistance))!;
+    private static readonly MethodInfo VectorSearchDistanceMethod =
+        typeof(SqlFunctions).GetMethod(nameof(SqlFunctions.VectorSearchDistance), BindingFlags.Static | BindingFlags.NonPublic)!;
     private static readonly MethodInfo ColumnMethod =
         typeof(SqlFunctions).GetMethod(nameof(SqlFunctions.Column))!;
 
@@ -24,10 +26,11 @@ public partial class EntityBuilder<TEntity>
     /// <returns>A query of entities paired with their computed distance.</returns>
     /// <remarks>
     /// The source query's filtering and source modifiers are preserved, while its prior ordering and
-    /// paging are replaced by distance ascending and <paramref name="topK"/>. PostgreSQL emits the same
-    /// distance-operator query for <see cref="VectorSearchMode.Exact"/> and
-    /// <see cref="VectorSearchMode.Approximate"/>; its planner may use HNSW or IVFFlat transparently.
-    /// SQL Server emits <paramref name="topK"/> as a literal and uses the context's explicitly selected
+    /// paging are replaced by distance ascending and <paramref name="topK"/>. PostgreSQL uses pgvector's
+    /// distance functions for <see cref="VectorSearchMode.Exact"/>, which cannot use HNSW/IVFFlat
+    /// distance-operator indexes, and distance operators for <see cref="VectorSearchMode.Approximate"/>,
+    /// which are eligible for those indexes. SQL Server emits <paramref name="topK"/> as a literal and
+    /// uses <c>VECTOR_DISTANCE</c> for exact search or the context's explicitly selected
     /// <c>VECTOR_SEARCH</c> grammar for approximate search.
     /// The mode does not rewrite the query into a different metric or result semantics. Other providers
     /// reject vector search during preparation unless their dialect advertises support.
@@ -80,13 +83,19 @@ public partial class EntityBuilder<TEntity>
             vectorSelector.Body,
             queryVectorParameter.Body,
             Expression.Constant(metric));
+        var vectorSearchDistance = Expression.Call(
+            VectorSearchDistanceMethod.MakeGenericMethod(typeof(TVector)),
+            vectorSelector.Body,
+            queryVectorParameter.Body,
+            Expression.Constant(metric),
+            Expression.Constant(mode));
         var parameter = vectorSelector.Parameters[0];
         var distance = sqlServerApproximate
             ? Expression.Call(
                 ColumnMethod.MakeGenericMethod(typeof(double?)),
                 Expression.Convert(parameter, typeof(object)),
                 Expression.Constant("distance"))
-            : vectorDistance;
+            : vectorSearchDistance;
         var orderSelector = Expression.Lambda<Func<TEntity, object?>>(
             Expression.Convert(distance, typeof(object)), parameter);
 
