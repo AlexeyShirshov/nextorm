@@ -843,7 +843,11 @@ internal sealed class QueryPlanner : IQueryPlanner
             && !streamingRowsRequested
             && !queryCommand.HasDataModifyingCte
             && !queryCommand.HasTemporaryTableSource()
-            && !IsSharedAnyCommand(queryCommand))
+            && !IsSharedAnyCommand(queryCommand)
+            // The value-free raw fingerprint describes the command graph, not the mapping scope: a
+            // recipe prepared for one shard would be adopted by a command targeting another shard and
+            // would render the wrong table. Scope-keyed plans keep the ordinary (normalized key) route.
+            && queryCommand.MappingScope == MappingScope.Default)
         {
             // A global/builder query filter is injected only during preparation and is absent from the
             // value-free raw shape, so a fresh command whose raw graph resolves ANY applicable filter for
@@ -1175,7 +1179,11 @@ internal sealed class QueryPlanner : IQueryPlanner
 
     private FromExpression GetFrom(Type t, MappingScope scope)
     {
-        if (_fromCache.TryGetValue((t, scope), out var cached))
+        // The FROM cache is process-wide and keyed by (type, scope) only. A scoped table depends on the
+        // metadata provider that produced it, and two contexts may configure different topologies under
+        // the same shard id, so a non-default scope is resolved per plan instead of being shared.
+        var cacheable = scope == MappingScope.Default;
+        if (cacheable && _fromCache.TryGetValue((t, scope), out var cached))
             return cached;
 
         // Keep the established registration boundary: resolving an arbitrary CLR type here must not
@@ -1190,7 +1198,8 @@ internal sealed class QueryPlanner : IQueryPlanner
         if (!string.IsNullOrEmpty(entity.TableName))
         {
             var from = new FromExpression(entity.TableName, entity.Schema, entity.IsTableNameAuto, t.IsInterface);
-            _fromCache.TryAdd((t, scope), from);
+            if (cacheable)
+                _fromCache.TryAdd((t, scope), from);
             return from;
         }
 

@@ -685,8 +685,28 @@ public sealed partial class MergeBuilder<TEntity>
         return await RequireExecutor().Execute(BuildCommand(), cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Rejects a sharded merge that carries no resolved shard scope: merging into the default table of a
+    /// sharded entity is never a silent fallback.
+    /// </summary>
+    private void EnsureShardScopeResolved()
+    {
+        if (_mappingScope != MappingScope.Default)
+            return;
+
+        if (_dataContext is not DataContext dataContext || dataContext.EntityScopeResolver is not IShardRouter router)
+            return;
+
+        if (!router.IsSharded(typeof(TEntity)))
+            return;
+
+        throw new InvalidOperationException(
+            $"Entity '{typeof(TEntity)}' is sharded. Call WithScope(...) with a shard scope before executing the merge.");
+    }
+
     private MergeCommand BuildCommand(IReadOnlyList<IPropertyMetadata>? returningColumns = null)
     {
+        EnsureShardScopeResolved();
         EnsureAssignmentFormSupported();
         EnsureFilteredFormSupported();
         EnsureAssignmentFilterSupported();

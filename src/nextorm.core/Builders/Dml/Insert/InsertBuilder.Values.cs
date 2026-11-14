@@ -124,6 +124,8 @@ public sealed partial class InsertBuilder<TEntity>
         if (list.Count == 0)
             throw new ArgumentException("At least one entity is required.", nameof(entities));
 
+        ResolveShardScope(list);
+
         foreach (var property in _metadata.Properties)
         {
             if (property.IsIdentity || property.IsComputed)

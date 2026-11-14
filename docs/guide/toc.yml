@@ -64,6 +64,8 @@
   href: 31-provider-specific-features.md
 - name: Inheritance and derived entities
   href: 32-inheritance-and-derived-entities.md
+- name: Sharding and horizontal partitioning
+  href: 33-sharding-and-horizontal-partitioning.md
 - name: Provider-specific SQL
   items:
     - name: Overview
