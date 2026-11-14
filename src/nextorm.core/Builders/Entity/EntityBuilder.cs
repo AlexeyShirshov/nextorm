@@ -518,6 +518,69 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, IQueryCo
         return WithScope(router.ResolveShard(typeof(TEntity), shardKeyValues));
     }
     /// <summary>
+    /// Starts a client-side fan-out that runs this query against every configured shard and concatenates
+    /// the rows.
+    /// </summary>
+    /// <returns>A fan-out query over all shards.</returns>
+    /// <exception cref="InvalidOperationException">The context has no shard router or no shard is configured.</exception>
+    public ShardQuery<TEntity> AcrossShards()
+    {
+        var router = RequireShardRouter();
+        if (router.ShardIds.Count == 0)
+            throw new InvalidOperationException("The shard topology has no configured shards.");
+
+        return new ShardQuery<TEntity>(this, router.ShardIds);
+    }
+
+    /// <summary>
+    /// Starts a client-side fan-out over the explicitly listed shards.
+    /// </summary>
+    /// <param name="shardIds">The shards to query; duplicates are ignored.</param>
+    /// <returns>A fan-out query over the listed shards.</returns>
+    /// <exception cref="ArgumentException">A shard id is empty, duplicated by an unknown id, or not configured.</exception>
+    public ShardQuery<TEntity> AcrossShards(params string[] shardIds)
+    {
+        var router = RequireShardRouter();
+        ArgumentNullException.ThrowIfNull(shardIds);
+        if (shardIds.Length == 0)
+            throw new ArgumentException("At least one shard id is required.", nameof(shardIds));
+
+        var configured = router.ShardIds;
+        var selected = new List<string>(shardIds.Length);
+        foreach (var shardId in shardIds)
+        {
+            if (string.IsNullOrWhiteSpace(shardId))
+                throw new ArgumentException("Shard ids must not be empty.", nameof(shardIds));
+
+            var known = false;
+            for (var index = 0; index < configured.Count; index++)
+            {
+                if (string.Equals(configured[index], shardId, StringComparison.Ordinal))
+                {
+                    known = true;
+                    break;
+                }
+            }
+
+            if (!known)
+                throw new ArgumentException($"Shard '{shardId}' is not configured.", nameof(shardIds));
+
+            if (!selected.Contains(shardId, StringComparer.Ordinal))
+                selected.Add(shardId);
+        }
+
+        return new ShardQuery<TEntity>(this, selected);
+    }
+
+    /// <summary>
+    /// Returns the configured shard router or throws when the context is not sharding-enabled.
+    /// </summary>
+    private IShardRouter RequireShardRouter()
+        => _dataProvider is DataContext dataContext && dataContext.EntityScopeResolver is IShardRouter router
+            ? router
+            : throw new InvalidOperationException("AcrossShards requires a context configured with a shard router.");
+
+    /// <summary>
     /// Returns a builder whose selective filter scope is the union of this builder's scope and
     /// <paramref name="scope"/>, without mutating this builder. Used by the DML builders to fold their
     /// own <c>IgnoreFilters</c> state into a retained source builder: mutating that builder in place
@@ -535,6 +598,8 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, IQueryCo
         return copy;
     }
     internal Expression<Func<TEntity, bool>>? Condition { get => _condition; set => _condition = value; }
+    /// <summary>The mapping scope carried by this builder; read-only seam for native-route eligibility.</summary>
+    internal MappingScope MappingScope => _mappingScope;
     /// <summary>
     /// The <c>HAVING</c> predicate applied by <see cref="Having"/>, or <c>null</c> when there is none.
     /// Read-only neutral seam used by provider extensions that must inspect the composed state (for

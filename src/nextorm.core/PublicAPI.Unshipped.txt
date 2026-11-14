@@ -135,3 +135,38 @@ NextORM.Core.ShardTopology.ShardTopology(int virtualNodesPerShard = 128, int buc
 NextORM.Core.ShardTopology.Ring.get -> NextORM.Core.IConsistentHashRing!
 NextORM.Core.ShardTopology.ShardIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
 NextORM.Core.ShardTopology.Version.get -> int
+NextORM.Core.EntityBuilder<TEntity>.AcrossShards() -> NextORM.Core.ShardQuery<TEntity>!
+NextORM.Core.EntityBuilder<TEntity>.AcrossShards(params string![]! shardIds) -> NextORM.Core.ShardQuery<TEntity>!
+NextORM.Core.IShardRouter.ShardIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+NextORM.Core.ShardQuery<TEntity, TResult>
+NextORM.Core.ShardQuery<TEntity, TResult>.ToArray() -> TResult[]!
+NextORM.Core.ShardQuery<TEntity, TResult>.ToArrayAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TResult[]!>!
+NextORM.Core.ShardQuery<TEntity, TResult>.ToList() -> System.Collections.Generic.List<TResult>!
+NextORM.Core.ShardQuery<TEntity, TResult>.ToListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<TResult>!>!
+NextORM.Core.ShardQuery<TEntity, TResult>.Where(System.Linq.Expressions.Expression<System.Func<TEntity, bool>!>! predicate) -> NextORM.Core.ShardQuery<TEntity, TResult>!
+NextORM.Core.ShardQuery<TEntity>
+NextORM.Core.ShardQuery<TEntity>.Any() -> bool
+NextORM.Core.ShardQuery<TEntity>.Count() -> int
+NextORM.Core.ShardQuery<TEntity>.Distinct() -> NextORM.Core.ShardQuery<TEntity>!
+NextORM.Core.ShardQuery<TEntity>.First() -> TEntity
+NextORM.Core.ShardQuery<TEntity>.OrderBy<TKey>(System.Linq.Expressions.Expression<System.Func<TEntity, TKey>!>! keySelector) -> NextORM.Core.ShardQuery<TEntity>!
+NextORM.Core.ShardQuery<TEntity>.OrderByDescending<TKey>(System.Linq.Expressions.Expression<System.Func<TEntity, TKey>!>! keySelector) -> NextORM.Core.ShardQuery<TEntity>!
+NextORM.Core.ShardQuery<TEntity>.Select<TResult>(System.Linq.Expressions.Expression<System.Func<TEntity, TResult>!>! selector) -> NextORM.Core.ShardQuery<TEntity, TResult>!
+NextORM.Core.ShardQuery<TEntity>.Single() -> TEntity
+NextORM.Core.ShardQuery<TEntity>.Skip(int count) -> NextORM.Core.ShardQuery<TEntity>!
+NextORM.Core.ShardQuery<TEntity>.Take(int count) -> NextORM.Core.ShardQuery<TEntity>!
+NextORM.Core.ShardQuery<TEntity>.ToArray() -> TEntity[]!
+NextORM.Core.ShardQuery<TEntity>.ToArrayAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TEntity[]!>!
+NextORM.Core.ShardQuery<TEntity>.ToList() -> System.Collections.Generic.List<TEntity>!
+NextORM.Core.ShardQuery<TEntity>.ToListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<TEntity>!>!
+NextORM.Core.ShardQuery<TEntity>.Where(System.Linq.Expressions.Expression<System.Func<TEntity, bool>!>! predicate) -> NextORM.Core.ShardQuery<TEntity>!
+NextORM.Core.ShardRouter.ShardIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+NextORM.Core.ShardQuery<TEntity>.All(System.Linq.Expressions.Expression<System.Func<TEntity, bool>!>! predicate) -> bool
+NextORM.Core.ShardQuery<TEntity>.AsAsyncEnumerable(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<TEntity>!
+NextORM.Core.ShardQuery<TEntity>.Average<TValue>(System.Linq.Expressions.Expression<System.Func<TEntity, TValue>!>! selector) -> TValue
+NextORM.Core.ShardQuery<TEntity>.Max<TValue>(System.Linq.Expressions.Expression<System.Func<TEntity, TValue>!>! selector) -> TValue
+NextORM.Core.ShardQuery<TEntity>.Min<TValue>(System.Linq.Expressions.Expression<System.Func<TEntity, TValue>!>! selector) -> TValue
+NextORM.Core.ShardQuery<TEntity>.Sum<TValue>(System.Linq.Expressions.Expression<System.Func<TEntity, TValue>!>! selector) -> TValue
+NextORM.Core.ShardQuery<TEntity>.ThenBy<TKey>(System.Linq.Expressions.Expression<System.Func<TEntity, TKey>!>! keySelector) -> NextORM.Core.ShardQuery<TEntity>!
+NextORM.Core.ShardQuery<TEntity>.ThenByDescending<TKey>(System.Linq.Expressions.Expression<System.Func<TEntity, TKey>!>! keySelector) -> NextORM.Core.ShardQuery<TEntity>!
+NextORM.Core.ShardQuery<TEntity, TResult>.AsAsyncEnumerable(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<TResult>!

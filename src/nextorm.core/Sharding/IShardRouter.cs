@@ -15,6 +15,9 @@ public interface IShardRouter : IEntityScopeResolver
     /// <returns>The shard-key properties, or an empty list for an unsharded type.</returns>
     IReadOnlyList<PropertyInfo> GetShardKey(Type entityType);
 
+    /// <summary>Gets every configured shard identifier, in deterministic ordinal order.</summary>
+    IReadOnlyList<string> ShardIds { get; }
+
     /// <summary>Resolves an ordered list of shard-key values to a mapping scope.</summary>
     /// <param name="entityType">The entity type being routed.</param>
     /// <param name="keyValues">The shard-key values in declared property order.</param>
@@ -53,6 +56,9 @@ public sealed class ShardRouter : IShardRouter
         ArgumentNullException.ThrowIfNull(entityType);
         return _keyProvider.GetShardKey(entityType);
     }
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> ShardIds => _topology.ShardIds;
 
     /// <inheritdoc />
     public MappingScope Resolve(Type entityType)

@@ -102,6 +102,8 @@
       href: guide/31-provider-specific-features.md
     - name: Наследование и производные сущности
       href: guide/32-inheritance-and-derived-entities.md
+    - name: Шардирование и горизонтальное партиционирование
+      href: guide/33-sharding-and-horizontal-partitioning.md
     - name: Специфичный для провайдеров SQL
       items:
         - name: Обзор
