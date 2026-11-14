@@ -1,0 +1,27 @@
+{
+  "evidence": [
+    {
+      "exit": 0,
+      "kind": "test-log",
+      "path": ".pdca/D392/rv1/logs/u4b-test-core-tests.log"
+    },
+    {
+      "exit": 0,
+      "kind": "test-log",
+      "path": ".pdca/D392/rv1/logs/u4b-test-postgres-tests.log"
+    },
+    {
+      "exit": 0,
+      "kind": "test-log",
+      "path": ".pdca/D392/rv1/logs/u4b-test-sqlserver-tests.log"
+    }
+  ],
+  "id": "GATE-TEST-CONVENTIONS",
+  "predicate": "The full core unit suite reports 4045 passed, 0 failed, 0 skipped; full PostgreSQL and SQL Server provider unit-suite logs are also green.",
+  "requirements": [
+    "AssertionStyleTests and IntegrationSuiteScopingTests green in the core unit suite"
+  ],
+  "status": "met",
+  "tree": "ad77c27b82d8e3edddd1dfa60fe00731c3810483",
+  "tree_binding": "ad77c27b82d8e3edddd1dfa60fe00731c3810483"
+}

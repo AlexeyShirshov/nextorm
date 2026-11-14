@@ -1,0 +1,12 @@
+{
+  "evidence": [],
+  "id": "GATE-CRLF",
+  "predicate": "Every changed text file in the D392 footprint is verified CRLF with no mixed or LF-only endings.",
+  "reason": "No repository-wide CRLF check was run in U5; canonical evidence collection stopped after the integration skip-budget gate failed.",
+  "requirements": [
+    "Changed text files use CRLF"
+  ],
+  "status": "open",
+  "tree": "ad77c27b82d8e3edddd1dfa60fe00731c3810483",
+  "tree_binding": "ad77c27b82d8e3edddd1dfa60fe00731c3810483"
+}

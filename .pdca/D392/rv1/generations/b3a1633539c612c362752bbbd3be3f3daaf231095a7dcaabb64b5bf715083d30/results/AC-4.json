@@ -1,0 +1,12 @@
+{
+  "evidence": [],
+  "id": "AC-4",
+  "predicate": "The canonical full integration run and its pinned skip-budget check both exit 0 with no required provider omitted.",
+  "reason": "The full test process exited 0 with 8737 total / 8539 passed / 0 failed / 198 skipped, but the wrapper's skip-budget gate exited 1 (budget 197, actual 198). The extra skip is AotNativeRunTests.PublishedNativeRunner_UsesParentSqliteDatabase_AndReportsEveryScenario because the published NativeAOT runner is missing. No in-scope D392 defect was identified; per instruction, subsequent canonical runs were stopped. Logs: .pdca/D392/rv1/logs/u5-integration-full.log and .pdca/D392/rv1/logs/u5-integration-full-tests.log.",
+  "requirements": [
+    "AC-4 SQL-generation tests and live SQL Server/PostgreSQL integration with PostgreSQL regression coverage and skip budget"
+  ],
+  "status": "open",
+  "tree": "ad77c27b82d8e3edddd1dfa60fe00731c3810483",
+  "tree_binding": "ad77c27b82d8e3edddd1dfa60fe00731c3810483"
+}

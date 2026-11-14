@@ -1,0 +1,12 @@
+{
+  "evidence": [],
+  "id": "AC-5",
+  "predicate": "Canonical DocFX reports 0 errors, no InvalidFileLink entries, and at most 18 warnings; EN/RU page pairs and internal scope rows are pointed to in the staged evidence.",
+  "reason": "Page/row pointers are persisted at .pdca/D392/rv1/artifacts/u5-ac5-page-row-pointers.md. Prior DocFX log u4a-docfx.log reported exit 0 / 18 warnings / 0 errors but did not report InvalidFileLink count; the requested U5 DocFX run was not started after the canonical integration skip-budget gate failed.",
+  "requirements": [
+    "AC-5 EN/RU public documentation and internal SQL-function scope reconciliation"
+  ],
+  "status": "open",
+  "tree": "ad77c27b82d8e3edddd1dfa60fe00731c3810483",
+  "tree_binding": "ad77c27b82d8e3edddd1dfa60fe00731c3810483"
+}

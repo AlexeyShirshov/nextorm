@@ -1,0 +1,264 @@
+{
+  "base_ref": "b1e2db6a42c27d4dc81aac500a2b65cfbdb616cd",
+  "collection_baseline_ref": null,
+  "contract_rv": 1,
+  "exclusions": [
+    ".pdca/**"
+  ],
+  "footprint": [
+    "docs/advanced/api-reference.md",
+    "docs/comparisons/capabilities.md",
+    "docs/comparisons/provider-features.md",
+    "docs/connecting-providers/postgres.md",
+    "docs/connecting-providers/sqlserver.md",
+    "docs/guide/provider-specific-sql/postgresql.md",
+    "docs/guide/provider-specific-sql/sqlserver.md",
+    "docs/ru/advanced/api-reference.md",
+    "docs/ru/comparisons/capabilities.md",
+    "docs/ru/comparisons/provider-features.md",
+    "docs/ru/connecting-providers/postgres.md",
+    "docs/ru/connecting-providers/sqlserver.md",
+    "docs/ru/guide/provider-specific-sql/postgresql.md",
+    "docs/ru/guide/provider-specific-sql/sqlserver.md",
+    "docs/specs/comparison/provider-feature-comparison.md",
+    "docs/specs/roadmap/sql-function-coverage-gap.md",
+    "src/nextorm.core/Builders/Entity/EntityBuilder.VectorSearch.cs",
+    "src/nextorm.core/Builders/Entity/EntityBuilder.cs",
+    "src/nextorm.core/DataContext/Dialect/ISqlDialect.cs",
+    "src/nextorm.core/DataContext/Dialect/SqlDialectBase.cs",
+    "src/nextorm.core/DataContext/Sql/SqlBuilder.cs",
+    "src/nextorm.core/DataContext/Sql/SqlSourceRenderer.cs",
+    "src/nextorm.core/Expressions/Sources/TableFunctionExpression.cs",
+    "src/nextorm.core/PublicAPI.Unshipped.txt",
+    "src/nextorm.core/Query/SqlFunctions/SqlFunctions.Vector.cs",
+    "src/nextorm.core/Query/VectorSearch/IVectorValue.cs",
+    "src/nextorm.core/Query/VectorSearch/Vector.cs",
+    "src/nextorm.core/Query/VectorSearch/VectorSearchTypes.cs",
+    "src/nextorm.core/Visitors/Functions/ExtendedScalarFunctionTranslator.cs",
+    "src/nextorm.core/Visitors/Sql/NormSqlTranslator.cs",
+    "src/nextorm.core/Visitors/TypeFacts.cs",
+    "src/nextorm.postgres/PostgresDialect.cs",
+    "src/nextorm.postgres/PublicAPI.Unshipped.txt",
+    "src/nextorm.postgres/Vector/PgHalfVector.cs",
+    "src/nextorm.postgres/Vector/PgSparseVector.cs",
+    "src/nextorm.postgres/Vector/PgVector.cs",
+    "src/nextorm.postgres/Vector/PostgresVectorArrays.cs",
+    "src/nextorm.postgres/Vector/PostgresVectorTypes.cs",
+    "src/nextorm.sqlserver/DI/SqlServerDataContextOptionsBuilderExtensions.cs",
+    "src/nextorm.sqlserver/PublicAPI.Unshipped.txt",
+    "src/nextorm.sqlserver/SqlServerDataContext.cs",
+    "src/nextorm.sqlserver/SqlServerDialect.cs",
+    "src/nextorm.sqlserver/Vector/SqlServerVectorMapper.cs",
+    "src/nextorm.sqlserver/Vector/SqlServerVectorSearchSyntax.cs",
+    "tests/nextorm.integration.tests/Postgres/Vector/UnifiedVectorSearchIntegrationTests.cs",
+    "tests/nextorm.integration.tests/SqlServer/Vector/SqlServerVectorSearchIntegrationTests.cs",
+    "tests/nextorm.postgres.tests/PgVector/UnifiedVectorSearchTests.cs",
+    "tests/nextorm.sqlserver.tests/VectorSearch/SqlServerVectorSearchTests.cs"
+  ],
+  "git_head": "ecf10606052f45f9f0fdd7a6a57faf3e8027631c",
+  "issue": "392",
+  "path": ".pdca/D392/rv1/",
+  "required_rows": [
+    "AC-1",
+    "AC-2",
+    "AC-3",
+    "AC-4",
+    "AC-5",
+    "GATE-0-WARNING-BUILD",
+    "GATE-CRLF",
+    "GATE-FOLDER-CAP",
+    "GATE-PUBLICAPI",
+    "GATE-TEST-CONVENTIONS"
+  ],
+  "rows": [
+    {
+      "evidence": [
+        {
+          "exit": 0,
+          "kind": "test-log",
+          "path": ".pdca/D392/rv1/logs/u4b-test-postgres-tests.log"
+        },
+        {
+          "kind": "frozen-source-diff",
+          "path": ".pdca/D392/rv1/artifacts/u5-product-diff.patch"
+        },
+        {
+          "kind": "public-api-ledger-diff",
+          "path": ".pdca/D392/rv1/artifacts/u5-publicapi-diff.patch"
+        }
+      ],
+      "id": "AC-1",
+      "predicate": "The full PostgreSQL project run reports 2017 passed, 0 failed, 0 skipped; the frozen product diff and all changed PublicAPI.* ledger entries are staged for independent review, and the PublicAPI diff contains no removed ledger lines.",
+      "requirements": [
+        "AC-1 unified nearest-neighbor API, PostgreSQL reuse, and public compatibility"
+      ],
+      "result": "generations/b3a1633539c612c362752bbbd3be3f3daaf231095a7dcaabb64b5bf715083d30/results/AC-1.json",
+      "status": "met"
+    },
+    {
+      "evidence": [
+        {
+          "exit": 0,
+          "kind": "test-log",
+          "path": ".pdca/D392/rv1/logs/u4b-test-sqlserver-tests.log"
+        },
+        {
+          "exit": 0,
+          "kind": "live-test-log",
+          "path": ".pdca/D392/rv1/logs/u3c-test-sqlserver-live.log"
+        },
+        {
+          "kind": "canonical-integration-test-log",
+          "path": ".pdca/D392/rv1/logs/u5-integration-full-tests.log"
+        },
+        {
+          "kind": "frozen-source-diff",
+          "path": ".pdca/D392/rv1/artifacts/u5-product-diff.patch"
+        }
+      ],
+      "id": "AC-2",
+      "predicate": "The SQL Server SQL-generation suite reports 2105 passed and 0 failed, the SQL Server live vector-search class reports 1/1 passed, and the frozen source diff contains the SQL, parameter and materialization assertions for independent review.",
+      "requirements": [
+        "AC-2 SQL Server VECTOR_SEARCH translation, parameter binding, mapping and materialization"
+      ],
+      "result": "generations/b3a1633539c612c362752bbbd3be3f3daaf231095a7dcaabb64b5bf715083d30/results/AC-2.json",
+      "status": "met"
+    },
+    {
+      "evidence": [
+        {
+          "exit": 0,
+          "kind": "test-log",
+          "path": ".pdca/D392/rv1/logs/u4b-test-postgres-tests.log"
+        },
+        {
+          "exit": 0,
+          "kind": "test-log",
+          "path": ".pdca/D392/rv1/logs/u4b-test-sqlserver-tests.log"
+        },
+        {
+          "kind": "frozen-source-diff",
+          "path": ".pdca/D392/rv1/artifacts/u5-product-diff.patch"
+        }
+      ],
+      "id": "AC-3",
+      "predicate": "The full PostgreSQL and SQL Server project suites report 2017/2017 and 2105 passed respectively with 0 failed, and the frozen test/source diff is available for checking the metric, top-k, exact/approximate and version/capability refusal assertions.",
+      "requirements": [
+        "AC-3 metric/top-k/exact-vs-approximate semantics and explicit version/capability refusals"
+      ],
+      "result": "generations/b3a1633539c612c362752bbbd3be3f3daaf231095a7dcaabb64b5bf715083d30/results/AC-3.json",
+      "status": "met"
+    },
+    {
+      "id": "AC-4",
+      "predicate": "The canonical full integration run and its pinned skip-budget check both exit 0 with no required provider omitted.",
+      "reason": "The full test process exited 0 with 8737 total / 8539 passed / 0 failed / 198 skipped, but the wrapper's skip-budget gate exited 1 (budget 197, actual 198). The extra skip is AotNativeRunTests.PublishedNativeRunner_UsesParentSqliteDatabase_AndReportsEveryScenario because the published NativeAOT runner is missing. No in-scope D392 defect was identified; per instruction, subsequent canonical runs were stopped. Logs: .pdca/D392/rv1/logs/u5-integration-full.log and .pdca/D392/rv1/logs/u5-integration-full-tests.log.",
+      "requirements": [
+        "AC-4 SQL-generation tests and live SQL Server/PostgreSQL integration with PostgreSQL regression coverage and skip budget"
+      ],
+      "result": "generations/b3a1633539c612c362752bbbd3be3f3daaf231095a7dcaabb64b5bf715083d30/results/AC-4.json",
+      "status": "open"
+    },
+    {
+      "id": "AC-5",
+      "predicate": "Canonical DocFX reports 0 errors, no InvalidFileLink entries, and at most 18 warnings; EN/RU page pairs and internal scope rows are pointed to in the staged evidence.",
+      "reason": "Page/row pointers are persisted at .pdca/D392/rv1/artifacts/u5-ac5-page-row-pointers.md. Prior DocFX log u4a-docfx.log reported exit 0 / 18 warnings / 0 errors but did not report InvalidFileLink count; the requested U5 DocFX run was not started after the canonical integration skip-budget gate failed.",
+      "requirements": [
+        "AC-5 EN/RU public documentation and internal SQL-function scope reconciliation"
+      ],
+      "result": "generations/b3a1633539c612c362752bbbd3be3f3daaf231095a7dcaabb64b5bf715083d30/results/AC-5.json",
+      "status": "open"
+    },
+    {
+      "evidence": [
+        {
+          "exit": 0,
+          "kind": "build-log",
+          "path": ".pdca/D392/rv1/logs/u5-build-solution.log"
+        }
+      ],
+      "id": "GATE-0-WARNING-BUILD",
+      "predicate": "dotnet build nextorm.slnx -c Debug exits 0 and reports 0 Warning(s), 0 Error(s).",
+      "requirements": [
+        "Whole-solution Debug build: 0 warnings and 0 errors"
+      ],
+      "result": "generations/b3a1633539c612c362752bbbd3be3f3daaf231095a7dcaabb64b5bf715083d30/results/GATE-0-WARNING-BUILD.json",
+      "status": "met"
+    },
+    {
+      "id": "GATE-CRLF",
+      "predicate": "Every changed text file in the D392 footprint is verified CRLF with no mixed or LF-only endings.",
+      "reason": "No repository-wide CRLF check was run in U5; canonical evidence collection stopped after the integration skip-budget gate failed.",
+      "requirements": [
+        "Changed text files use CRLF"
+      ],
+      "result": "generations/b3a1633539c612c362752bbbd3be3f3daaf231095a7dcaabb64b5bf715083d30/results/GATE-CRLF.json",
+      "status": "open"
+    },
+    {
+      "id": "GATE-FOLDER-CAP",
+      "predicate": "Every affected source/test directory is verified at or below the repository maximum of 10 .cs files.",
+      "reason": "No folder-cap check was run in U5; canonical evidence collection stopped after the integration skip-budget gate failed.",
+      "requirements": [
+        "Source-folder cap of at most 10 C# files"
+      ],
+      "result": "generations/b3a1633539c612c362752bbbd3be3f3daaf231095a7dcaabb64b5bf715083d30/results/GATE-FOLDER-CAP.json",
+      "status": "open"
+    },
+    {
+      "evidence": [
+        {
+          "exit": 0,
+          "kind": "build-log",
+          "path": ".pdca/D392/rv1/logs/u5-build-solution.log"
+        },
+        {
+          "kind": "public-api-ledger-diff",
+          "path": ".pdca/D392/rv1/artifacts/u5-publicapi-diff.patch"
+        }
+      ],
+      "id": "GATE-PUBLICAPI",
+      "predicate": "The whole-solution build exits 0 with 0 warnings/errors, and the frozen diff includes the complete changed PublicAPI.* ledgers with no removed diff lines.",
+      "requirements": [
+        "PublicAPI ledgers capture the new API and whole-solution API analyzers pass"
+      ],
+      "result": "generations/b3a1633539c612c362752bbbd3be3f3daaf231095a7dcaabb64b5bf715083d30/results/GATE-PUBLICAPI.json",
+      "status": "met"
+    },
+    {
+      "evidence": [
+        {
+          "exit": 0,
+          "kind": "test-log",
+          "path": ".pdca/D392/rv1/logs/u4b-test-core-tests.log"
+        },
+        {
+          "exit": 0,
+          "kind": "test-log",
+          "path": ".pdca/D392/rv1/logs/u4b-test-postgres-tests.log"
+        },
+        {
+          "exit": 0,
+          "kind": "test-log",
+          "path": ".pdca/D392/rv1/logs/u4b-test-sqlserver-tests.log"
+        }
+      ],
+      "id": "GATE-TEST-CONVENTIONS",
+      "predicate": "The full core unit suite reports 4045 passed, 0 failed, 0 skipped; full PostgreSQL and SQL Server provider unit-suite logs are also green.",
+      "requirements": [
+        "AssertionStyleTests and IntegrationSuiteScopingTests green in the core unit suite"
+      ],
+      "result": "generations/b3a1633539c612c362752bbbd3be3f3daaf231095a7dcaabb64b5bf715083d30/results/GATE-TEST-CONVENTIONS.json",
+      "status": "met"
+    }
+  ],
+  "status_file": ".pdca/status/D392-1.md",
+  "supersedes": {
+    "artifacts": "none",
+    "rv": 1
+  },
+  "task": "D392",
+  "tree": "ad77c27b82d8e3edddd1dfa60fe00731c3810483",
+  "tree_binding": "ad77c27b82d8e3edddd1dfa60fe00731c3810483",
+  "tree_method": "Synthetic tree: seed an isolated index with `git read-tree <base_ref>^{tree}`, run `git add -A -- <recorded footprint paths>` using the evaluated contents, then `git write-tree`. `.pdca/**` is excluded from the overlay, not removed from the base tree. Reconcile by repeating this recipe; after ACT, use committed footprint contents. The resulting tree is not asserted to equal `HEAD^{tree}`."
+}

@@ -1,0 +1,26 @@
+{
+  "evidence": [
+    {
+      "exit": 0,
+      "kind": "test-log",
+      "path": ".pdca/D392/rv1/logs/u4b-test-postgres-tests.log"
+    },
+    {
+      "exit": 0,
+      "kind": "test-log",
+      "path": ".pdca/D392/rv1/logs/u4b-test-sqlserver-tests.log"
+    },
+    {
+      "kind": "frozen-source-diff",
+      "path": ".pdca/D392/rv1/artifacts/u5-product-diff.patch"
+    }
+  ],
+  "id": "AC-3",
+  "predicate": "The full PostgreSQL and SQL Server project suites report 2017/2017 and 2105 passed respectively with 0 failed, and the frozen test/source diff is available for checking the metric, top-k, exact/approximate and version/capability refusal assertions.",
+  "requirements": [
+    "AC-3 metric/top-k/exact-vs-approximate semantics and explicit version/capability refusals"
+  ],
+  "status": "met",
+  "tree": "ad77c27b82d8e3edddd1dfa60fe00731c3810483",
+  "tree_binding": "ad77c27b82d8e3edddd1dfa60fe00731c3810483"
+}

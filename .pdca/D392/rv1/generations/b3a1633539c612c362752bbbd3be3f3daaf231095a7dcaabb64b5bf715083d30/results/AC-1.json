@@ -1,0 +1,25 @@
+{
+  "evidence": [
+    {
+      "exit": 0,
+      "kind": "test-log",
+      "path": ".pdca/D392/rv1/logs/u4b-test-postgres-tests.log"
+    },
+    {
+      "kind": "frozen-source-diff",
+      "path": ".pdca/D392/rv1/artifacts/u5-product-diff.patch"
+    },
+    {
+      "kind": "public-api-ledger-diff",
+      "path": ".pdca/D392/rv1/artifacts/u5-publicapi-diff.patch"
+    }
+  ],
+  "id": "AC-1",
+  "predicate": "The full PostgreSQL project run reports 2017 passed, 0 failed, 0 skipped; the frozen product diff and all changed PublicAPI.* ledger entries are staged for independent review, and the PublicAPI diff contains no removed ledger lines.",
+  "requirements": [
+    "AC-1 unified nearest-neighbor API, PostgreSQL reuse, and public compatibility"
+  ],
+  "status": "met",
+  "tree": "ad77c27b82d8e3edddd1dfa60fe00731c3810483",
+  "tree_binding": "ad77c27b82d8e3edddd1dfa60fe00731c3810483"
+}
