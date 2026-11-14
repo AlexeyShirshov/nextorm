@@ -12,10 +12,14 @@
     {
       "kind": "frozen-source-diff",
       "path": ".pdca/D392/rv1/artifacts/u5-product-diff.patch"
+    },
+    {
+      "kind": "docfx-link-diagnostic",
+      "path": ".pdca/D392/rv1/logs/u5c-docfx-invalidfilelink-count.log"
     }
   ],
   "id": "AC-5",
-  "predicate": "dotnet docfx docs/docfx.json exits 0 and reports 18 warnings / 0 errors (at the baseline of 18); grep finds no InvalidFileLink lines (0 InvalidFileLink not reported). EN/RU page-pair and internal SQL-function scope reconciliation pointers are in the staged evidence.",
+  "predicate": "dotnet docfx docs/docfx.json exits 0 and reports 18 warnings / 0 errors (baseline 18/0); the persisted DocFX log has 0 matching lines and 0 literal occurrences of `InvalidFileLink`. EN/RU page-pair and internal SQL-function scope reconciliation pointers are in the staged evidence.",
   "requirements": [
     "AC-5 EN/RU public documentation and internal SQL-function scope reconciliation"
   ],
