@@ -1,12 +1,17 @@
 {
-  "evidence": [],
+  "evidence": [
+    {
+      "kind": "folder-cap-audit",
+      "path": ".pdca/D392/rv1/logs/u5b-repo-gates-final.log",
+      "exit": 0
+    }
+  ],
   "id": "GATE-FOLDER-CAP",
-  "predicate": "Every affected source/test directory is verified at or below the repository maximum of 10 .cs files.",
-  "reason": "No folder-cap check was run in U5; canonical evidence collection stopped after the integration skip-budget gate failed.",
+  "predicate": "The final folder-cap audit counts 29 changed .cs files in 18 affected direct source/test folders; every folder is at or below 10 direct .cs files (maximum observed 10).",
   "requirements": [
     "Source-folder cap of at most 10 C# files"
   ],
-  "status": "open",
+  "status": "met",
   "tree": "ad77c27b82d8e3edddd1dfa60fe00731c3810483",
   "tree_binding": "ad77c27b82d8e3edddd1dfa60fe00731c3810483"
 }

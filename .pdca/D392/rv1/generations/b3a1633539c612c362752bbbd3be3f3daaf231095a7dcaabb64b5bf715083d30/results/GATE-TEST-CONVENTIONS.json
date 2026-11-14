@@ -14,10 +14,20 @@
       "exit": 0,
       "kind": "test-log",
       "path": ".pdca/D392/rv1/logs/u4b-test-sqlserver-tests.log"
+    },
+    {
+      "kind": "test-log",
+      "path": ".pdca/D392/rv1/logs/u5b-test-assertion-style.log",
+      "exit": 0
+    },
+    {
+      "kind": "test-log",
+      "path": ".pdca/D392/rv1/logs/u5b-test-integration-suite-scoping.log",
+      "exit": 0
     }
   ],
   "id": "GATE-TEST-CONVENTIONS",
-  "predicate": "The full core unit suite reports 4045 passed, 0 failed, 0 skipped; full PostgreSQL and SQL Server provider unit-suite logs are also green.",
+  "predicate": "The full core unit suite reports 4045 passed, 0 failed, 0 skipped; the full PostgreSQL and SQL Server provider unit suites are green. Targeted AssertionStyleTests and IntegrationSuiteScopingTests each report 2 total / 2 passed / 0 failed / 0 skipped.",
   "requirements": [
     "AssertionStyleTests and IntegrationSuiteScopingTests green in the core unit suite"
   ],

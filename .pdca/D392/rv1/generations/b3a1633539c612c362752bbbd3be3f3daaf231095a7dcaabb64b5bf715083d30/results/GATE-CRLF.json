@@ -1,12 +1,17 @@
 {
-  "evidence": [],
+  "evidence": [
+    {
+      "kind": "line-ending-audit",
+      "path": ".pdca/D392/rv1/logs/u5b-repo-gates-after-crlf-fix-r1.log",
+      "exit": 0
+    }
+  ],
   "id": "GATE-CRLF",
-  "predicate": "Every changed text file in the D392 footprint is verified CRLF with no mixed or LF-only endings.",
-  "reason": "No repository-wide CRLF check was run in U5; canonical evidence collection stopped after the integration skip-budget gate failed.",
+  "predicate": "The persisted repository-gate audit exits 0 and checks 60/60 tracked text paths, including the cycle status, manifest, and all 10/10 manifest receipts; every text path has 0 lone-LF and 0 lone-CR line endings.",
   "requirements": [
     "Changed text files use CRLF"
   ],
-  "status": "open",
+  "status": "met",
   "tree": "ad77c27b82d8e3edddd1dfa60fe00731c3810483",
   "tree_binding": "ad77c27b82d8e3edddd1dfa60fe00731c3810483"
 }
