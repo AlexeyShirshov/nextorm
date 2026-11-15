@@ -257,7 +257,8 @@ sequences, row locking, generic CTAS/temporary tables, index/query hints, named 
 - MySQL and MariaDB are separate Nextorm providers but a single linq2db provider, so the MySQL/MariaDB table
   folds both libraries' shapes into one list.
 - NativeAOT is not a per-provider row: linq2db does not officially support it, while Nextorm's zero-config
-  contract (`PublishAot=true` only) is verified on SQLite today — see the
+  contract (`PublishAot=true` only) is verified on SQLite, PostgreSQL, SQL Server, MySQL, MariaDB and
+  ClickHouse today — see the
   [NativeAOT guide](../infrastructure/05-nativeaot.md).
 
 ## See also

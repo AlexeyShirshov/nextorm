@@ -132,16 +132,17 @@
   объявленным связям, с глобальными фильтрами на дочерних уровнях.
 - Пакет интеграции с EF Core (`nextorm.entityframeworkcore`), использующий соединение, маппинг модели и
   транзакцию EF.
-- **Zero-config миграция на NativeAOT.** Внутри проверенной поверхности (SQLite, .NET 11 / `linux-x64`)
-  единственное изменение у потребителя — `PublishAot=true`: без compiled model, без шага
-  precompilation, без opt-in анализатора/интерцепторов, без регистрации сущностей и запросов, без
-  linker-дескрипторов и roots. EF Core требует compiled model и interceptor-based precompilation и
+- **Zero-config миграция на NativeAOT.** Внутри проверенной поверхности (все шесть провайдеров,
+  .NET 11 / `linux-x64`) единственное изменение у потребителя — `PublishAot=true`: без compiled model,
+  без шага precompilation, без opt-in анализатора/интерцепторов, без регистрации сущностей и запросов,
+  без linker-дескрипторов и roots. EF Core требует compiled model и interceptor-based precompilation и
   отвергает динамически компонуемые запросы; Dapper требует `Dapper.AOT`, `[module: DapperAot]`,
   opt-in `InterceptorsNamespaces` и статически известный SQL; linq2db официально NativeAOT не
   поддерживает. На реальном приложении отчётов по SQLite на 13 ГБ nextorm опубликовался нативно без
   правок исходников (8.2 MB, 0.12 s, 30 MB RSS), а EF Core — 17.3 MB / 0.23 s / 42 MB после двух
-  обходов ошибок кодогенерации. Покрытие частичное (только SQLite;
-  [#370](https://github.com/AlexeyShirshov/nextorm/issues/370)); преимущество — в контракте миграции.
+  обходов ошибок кодогенерации. Покрытие измеренное, а не полное: EF Core bridge, массовая вставка,
+  маппинг сырого SQL и DML-билдеры остаются на JIT-рантайме
+  ([#370](https://github.com/AlexeyShirshov/nextorm/issues/370)); преимущество — в контракте миграции.
   См. [руководство по NativeAOT](../infrastructure/05-nativeaot.md).
 - Кросс-провайдерные row values, переносимый range поверх пары колонок (`[RangeColumns]`), index hints,
   настраиваемый регистр ключевых слов, полнотекстовый поиск вместе с SQLite-поверхностью FTS3/4/5 и

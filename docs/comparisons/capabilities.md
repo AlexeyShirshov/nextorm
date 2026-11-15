@@ -129,16 +129,18 @@ Against the shared surface Nextorm matches or exceeds linq2db; on top of that it
   navigation, with global query filters applied to children at every level.
 - An EF Core integration package (`nextorm.entityframeworkcore`) sharing the EF connection, model mapping and
   transaction.
-- **Zero-config NativeAOT migration.** Inside the verified surface (SQLite, .NET 11 / `linux-x64`) the
-  only consumer change is `PublishAot=true`: no compiled model, no precompilation step, no
-  analyzer/interceptor opt-in, no entity or query registration, no linker descriptors or roots. EF Core
-  requires a compiled model plus interceptor-based query precompilation and rejects dynamically
-  composed queries; Dapper requires `Dapper.AOT` with `[module: DapperAot]`, an `InterceptorsNamespaces`
-  opt-in and statically known SQL; linq2db does not support NativeAOT officially. On a 13 GB SQLite
-  reporting app nextorm published natively with no source changes (8.2 MB, 0.12 s, 30 MB RSS), while
-  EF Core needed 17.3 MB / 0.23 s / 42 MB after two code-generation workarounds. Coverage is partial
-  (SQLite only; [#370](https://github.com/AlexeyShirshov/nextorm/issues/370)); the advantage is the
-  migration contract. See the [NativeAOT guide](../infrastructure/05-nativeaot.md).
+- **Zero-config NativeAOT migration.** Inside the verified surface (all six providers on .NET 11 /
+  `linux-x64`) the only consumer change is `PublishAot=true`: no compiled model, no precompilation
+  step, no analyzer/interceptor opt-in, no entity or query registration, no linker descriptors or
+  roots. EF Core requires a compiled model plus interceptor-based query precompilation and rejects
+  dynamically composed queries; Dapper requires `Dapper.AOT` with `[module: DapperAot]`, an
+  `InterceptorsNamespaces` opt-in and statically known SQL; linq2db does not support NativeAOT
+  officially. On a 13 GB SQLite reporting app nextorm published natively with no source changes
+  (8.2 MB, 0.12 s, 30 MB RSS), while EF Core needed 17.3 MB / 0.23 s / 42 MB after two code-generation
+  workarounds. Coverage is measured rather than complete: the EF Core bridge, bulk insert, raw SQL row
+  mapping and the DML builders stay on the JIT runtime
+  ([#370](https://github.com/AlexeyShirshov/nextorm/issues/370)); the advantage is the migration
+  contract. See the [NativeAOT guide](../infrastructure/05-nativeaot.md).
 - Cross-provider row values, portable range-over-scalar-pairs (`[RangeColumns]`), index hints, configurable
   keyword casing, full-text search including the SQLite FTS3/4/5 query surface and the FTS5
   maintenance/control builder, and CLR `Regex` translation.
