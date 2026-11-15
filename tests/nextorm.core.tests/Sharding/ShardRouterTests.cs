@@ -15,7 +15,9 @@ public sealed class ShardRouterTests
         var explicitScope = router.ResolveShard(typeof(ShardedRow), [row.Tenant, row.Id]);
 
         instanceScope.Should().Be(explicitScope);
-        instanceScope.Key.Should().BeOneOf("east", "west");
+        var bucket = int.Parse(instanceScope.Key!, System.Globalization.CultureInfo.InvariantCulture);
+        bucket.Should().BeInRange(0, topology.Ring.BucketCount - 1);
+        router.GetShard(bucket).Should().BeOneOf("east", "west");
     }
 
     [Fact]
@@ -72,9 +74,9 @@ public sealed class ShardRouterTests
 
     private static ShardTopology CreateTopology()
     {
-        var topology = new ShardTopology();
-        topology.AddShard("east", "sales");
-        topology.AddShard("west", "sales");
+        var topology = new ShardTopology(4096);
+        topology.AddShard("east", "Server=east");
+        topology.AddShard("west", "Server=west");
         return topology;
     }
 

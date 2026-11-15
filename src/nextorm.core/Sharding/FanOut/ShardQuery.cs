@@ -1,271 +1,345 @@
+using System.Globalization;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 
 namespace NextORM.Core;
 
 /// <summary>
-/// A cross-shard query that runs one command per selected shard and merges the rows on the client.
+/// A bucket fan-out query: it runs the query once per bucket and returns one result vector per bucket.
 /// </summary>
 /// <remarks>
-/// Fan-out is deliberately limited to per-shard filtering, projection and materialization. Global
-/// ordering, paging, distinct and aggregation cannot be answered correctly by concatenating shard
-/// results, so the corresponding members throw <see cref="NotSupportedException"/> instead of returning
-/// a silently wrong answer.
+/// A shard (server) is a dynamic deployment detail and never appears here. Buckets are the stable unit:
+/// the result is an array whose cardinality is the configured bucket count, and each element holds the
+/// rows (or the scalar) produced for that bucket. Buckets sharing a shard run sequentially on that
+/// shard's connection; different shards run in parallel, up to the configured limit. The library never
+/// merges, orders or aggregates across buckets — that is the caller's decision.
 /// </remarks>
-/// <typeparam name="TEntity">The mapped entity selected from every shard.</typeparam>
+/// <typeparam name="TEntity">The mapped entity selected from every bucket.</typeparam>
 public sealed class ShardQuery<TEntity>
 {
     private readonly EntityBuilder<TEntity> _source;
-    private readonly IReadOnlyList<string> _shardIds;
+    private readonly IReadOnlyList<int> _buckets;
+    private readonly IReadOnlyDictionary<int, string> _bucketOwners;
+    private readonly int? _parallelism;
 
-    internal ShardQuery(EntityBuilder<TEntity> source, IReadOnlyList<string> shardIds)
+    internal ShardQuery(
+        EntityBuilder<TEntity> source,
+        IReadOnlyList<int> buckets,
+        IReadOnlyDictionary<int, string> bucketOwners,
+        int? parallelism)
     {
         _source = source;
-        _shardIds = shardIds;
+        _buckets = buckets;
+        _bucketOwners = bucketOwners;
+        _parallelism = parallelism;
     }
 
-    /// <summary>Restricts every per-shard command with the same predicate.</summary>
+    /// <summary>The buckets this fan-out runs against, in ascending order.</summary>
+    public IReadOnlyList<int> Buckets => _buckets;
+
+    /// <summary>Restricts every per-bucket command with the same predicate.</summary>
     /// <param name="predicate">The condition each row must satisfy.</param>
-    /// <returns>A fan-out query with the predicate applied per shard.</returns>
+    /// <returns>A fan-out query with the predicate applied per bucket.</returns>
     public ShardQuery<TEntity> Where(Expression<Func<TEntity, bool>> predicate)
-        => new(_source.Where(predicate), _shardIds);
+        => new(_source.Where(predicate), _buckets, _bucketOwners, _parallelism);
 
-    /// <summary>Projects every per-shard command with the same selector.</summary>
+    /// <summary>Projects every per-bucket command with the same selector.</summary>
     /// <typeparam name="TResult">The projected row type.</typeparam>
-    /// <param name="selector">The projection applied on every shard.</param>
-    /// <returns>A fan-out query producing <typeparamref name="TResult"/> rows.</returns>
+    /// <param name="selector">The projection applied on every bucket.</param>
+    /// <returns>A fan-out query producing one projected vector per bucket.</returns>
     public ShardQuery<TEntity, TResult> Select<TResult>(Expression<Func<TEntity, TResult>> selector)
-        => new(_source, selector, _shardIds);
+        => new(_source, selector, _buckets, _bucketOwners, _parallelism);
 
-    /// <summary>Runs one command per shard and concatenates the rows.</summary>
-    /// <returns>Every row from every selected shard, in shard order.</returns>
-    public List<TEntity> ToList()
+    /// <summary>Orders each bucket's vector.</summary>
+    /// <param name="keySelector">The ordering applied per bucket.</param>
+    /// <returns>A fan-out query that orders every bucket independently.</returns>
+    public ShardQuery<TEntity> OrderBy(Expression<Func<TEntity, object?>> keySelector)
+        => new(_source.OrderBy(keySelector), _buckets, _bucketOwners, _parallelism);
+
+    /// <summary>Removes duplicates inside each bucket's vector.</summary>
+    /// <returns>A fan-out query with distinct applied per bucket.</returns>
+    public ShardQuery<TEntity> Distinct()
+        => new(_source.Distinct(), _buckets, _bucketOwners, _parallelism);
+
+    /// <summary>Runs the query once per bucket and returns one vector per bucket.</summary>
+    /// <returns>An array indexed by bucket number; every element holds that bucket's rows.</returns>
+    public List<TEntity>[] ToList() => RunEach(static query => query.ToList());
+
+    /// <summary>Runs the query once per bucket and returns one vector per bucket.</summary>
+    /// <param name="cancellationToken">Cancels the fan-out.</param>
+    /// <returns>An array indexed by bucket number; every element holds that bucket's rows.</returns>
+    public async Task<List<TEntity>[]> ToListAsync(CancellationToken cancellationToken = default)
     {
-        var rows = new List<TEntity>();
-        foreach (var shardId in _shardIds)
-            rows.AddRange(_source.WithScope(new MappingScope(shardId)).ToCommand().ToList());
+        var results = new List<TEntity>[_buckets.Count];
+        await RunEachAsync(
+            static (query, token) => query.ToListAsync(token),
+            (position, rows) => results[position] = rows,
+            cancellationToken).ConfigureAwait(false);
 
-        return rows;
+        return results;
     }
 
-    /// <summary>Runs one command per shard and returns the concatenated rows.</summary>
-    /// <returns>Every row from every selected shard, in shard order.</returns>
-    public TEntity[] ToArray() => [.. ToList()];
+    /// <summary>Runs the query once per bucket and returns one vector per bucket.</summary>
+    /// <returns>An array indexed by bucket number; every element holds that bucket's rows (or is empty).</returns>
+    public TEntity[][] ToArray() => [.. ToList().Select(static rows => rows.ToArray())];
 
-    /// <summary>Asynchronously runs one command per shard and concatenates the rows.</summary>
+    /// <summary>Runs the query once per bucket and returns one vector per bucket.</summary>
     /// <param name="cancellationToken">Cancels the fan-out.</param>
-    /// <returns>Every row from every selected shard, in shard order.</returns>
-    public async Task<List<TEntity>> ToListAsync(CancellationToken cancellationToken = default)
+    /// <returns>An array indexed by bucket number; every element holds that bucket's rows (or is empty).</returns>
+    public async Task<TEntity[][]> ToArrayAsync(CancellationToken cancellationToken = default)
+        => [.. (await ToListAsync(cancellationToken).ConfigureAwait(false)).Select(static rows => rows.ToArray())];
+
+    /// <summary>Streams the result one bucket at a time, sequentially.</summary>
+    /// <param name="cancellationToken">Cancels the fan-out.</param>
+    /// <returns>One asynchronous sequence of per-bucket vectors, in bucket order.</returns>
+    public async IAsyncEnumerable<TEntity[]> AsAsyncEnumerable([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var rows = new List<TEntity>();
-        foreach (var shardId in _shardIds)
+        for (var position = 0; position < _buckets.Count; position++)
         {
-            var shardRows = await _source.WithScope(new MappingScope(shardId)).ToCommand()
-                .ToListAsync(cancellationToken).ConfigureAwait(false);
-            rows.AddRange(shardRows);
-        }
-
-        return rows;
-    }
-
-    /// <summary>Asynchronously runs one command per shard and returns the concatenated rows.</summary>
-    /// <param name="cancellationToken">Cancels the fan-out.</param>
-    /// <returns>Every row from every selected shard, in shard order.</returns>
-    public async Task<TEntity[]> ToArrayAsync(CancellationToken cancellationToken = default)
-        => [.. await ToListAsync(cancellationToken).ConfigureAwait(false)];
-
-    /// <summary>Global cross-shard ordering is not supported.</summary>
-    /// <typeparam name="TKey">The ordering key type.</typeparam>
-    /// <param name="keySelector">Ignored.</param>
-    /// <returns>Never returns.</returns>
-    /// <exception cref="NotSupportedException">Always thrown: the ordering would not be global.</exception>
-    public ShardQuery<TEntity> OrderBy<TKey>(Expression<Func<TEntity, TKey>> keySelector)
-        => throw GlobalOperationNotSupported("ordering");
-
-    /// <summary>Global cross-shard ordering is not supported.</summary>
-    /// <typeparam name="TKey">The ordering key type.</typeparam>
-    /// <param name="keySelector">Ignored.</param>
-    /// <returns>Never returns.</returns>
-    /// <exception cref="NotSupportedException">Always thrown: the ordering would not be global.</exception>
-    public ShardQuery<TEntity> OrderByDescending<TKey>(Expression<Func<TEntity, TKey>> keySelector)
-        => throw GlobalOperationNotSupported("ordering");
-
-    /// <summary>Global cross-shard paging is not supported.</summary>
-    /// <param name="count">Ignored.</param>
-    /// <returns>Never returns.</returns>
-    /// <exception cref="NotSupportedException">Always thrown: the page would not be global.</exception>
-    public ShardQuery<TEntity> Take(int count) => throw GlobalOperationNotSupported("paging");
-
-    /// <summary>Global cross-shard paging is not supported.</summary>
-    /// <param name="count">Ignored.</param>
-    /// <returns>Never returns.</returns>
-    /// <exception cref="NotSupportedException">Always thrown: the page would not be global.</exception>
-    public ShardQuery<TEntity> Skip(int count) => throw GlobalOperationNotSupported("paging");
-
-    /// <summary>Global cross-shard distinct is not supported.</summary>
-    /// <returns>Never returns.</returns>
-    /// <exception cref="NotSupportedException">Always thrown: per-shard distinct does not deduplicate across shards.</exception>
-    public ShardQuery<TEntity> Distinct() => throw GlobalOperationNotSupported("distinct");
-
-    /// <summary>Global cross-shard counting is not supported.</summary>
-    /// <returns>Never returns.</returns>
-    /// <exception cref="NotSupportedException">Always thrown: per-shard counts are not a global count.</exception>
-    public int Count() => throw GlobalOperationNotSupported("counting");
-
-    /// <summary>Global cross-shard aggregation is not supported.</summary>
-    /// <returns>Never returns.</returns>
-    /// <exception cref="NotSupportedException">Always thrown: per-shard aggregates are not global aggregates.</exception>
-    public bool Any() => throw GlobalOperationNotSupported("aggregation");
-
-    /// <summary>Global cross-shard aggregation is not supported.</summary>
-    /// <returns>Never returns.</returns>
-    /// <exception cref="NotSupportedException">Always thrown: per-shard aggregates are not global aggregates.</exception>
-    public TEntity First() => throw GlobalOperationNotSupported("aggregation");
-
-    /// <summary>Global cross-shard aggregation is not supported.</summary>
-    /// <returns>Never returns.</returns>
-    /// <exception cref="NotSupportedException">Always thrown: per-shard aggregates are not global aggregates.</exception>
-    public TEntity Single() => throw GlobalOperationNotSupported("aggregation");
-
-    /// <summary>Global cross-shard secondary ordering is not supported.</summary>
-    /// <typeparam name="TKey">The ordering key type.</typeparam>
-    /// <param name="keySelector">Ignored.</param>
-    /// <returns>Never returns.</returns>
-    /// <exception cref="NotSupportedException">Always thrown: the ordering would not be global.</exception>
-    public ShardQuery<TEntity> ThenBy<TKey>(Expression<Func<TEntity, TKey>> keySelector)
-        => throw GlobalOperationNotSupported("ordering");
-
-    /// <summary>Global cross-shard secondary ordering is not supported.</summary>
-    /// <typeparam name="TKey">The ordering key type.</typeparam>
-    /// <param name="keySelector">Ignored.</param>
-    /// <returns>Never returns.</returns>
-    /// <exception cref="NotSupportedException">Always thrown: the ordering would not be global.</exception>
-    public ShardQuery<TEntity> ThenByDescending<TKey>(Expression<Func<TEntity, TKey>> keySelector)
-        => throw GlobalOperationNotSupported("ordering");
-
-    /// <summary>Global cross-shard predicate evaluation is not supported.</summary>
-    /// <param name="predicate">Ignored.</param>
-    /// <returns>Never returns.</returns>
-    /// <exception cref="NotSupportedException">Always thrown: per-shard results are not a global answer.</exception>
-    public bool All(Expression<Func<TEntity, bool>> predicate) => throw GlobalOperationNotSupported("aggregation");
-
-    /// <summary>Global cross-shard aggregation is not supported.</summary>
-    /// <typeparam name="TValue">The aggregate value type.</typeparam>
-    /// <param name="selector">Ignored.</param>
-    /// <returns>Never returns.</returns>
-    /// <exception cref="NotSupportedException">Always thrown: per-shard aggregates are not global aggregates.</exception>
-    public TValue Sum<TValue>(Expression<Func<TEntity, TValue>> selector) => throw GlobalOperationNotSupported("aggregation");
-
-    /// <summary>Global cross-shard aggregation is not supported.</summary>
-    /// <typeparam name="TValue">The aggregate value type.</typeparam>
-    /// <param name="selector">Ignored.</param>
-    /// <returns>Never returns.</returns>
-    /// <exception cref="NotSupportedException">Always thrown: per-shard aggregates are not global aggregates.</exception>
-    public TValue Min<TValue>(Expression<Func<TEntity, TValue>> selector) => throw GlobalOperationNotSupported("aggregation");
-
-    /// <summary>Global cross-shard aggregation is not supported.</summary>
-    /// <typeparam name="TValue">The aggregate value type.</typeparam>
-    /// <param name="selector">Ignored.</param>
-    /// <returns>Never returns.</returns>
-    /// <exception cref="NotSupportedException">Always thrown: per-shard aggregates are not global aggregates.</exception>
-    public TValue Max<TValue>(Expression<Func<TEntity, TValue>> selector) => throw GlobalOperationNotSupported("aggregation");
-
-    /// <summary>Global cross-shard aggregation is not supported.</summary>
-    /// <typeparam name="TValue">The aggregate value type.</typeparam>
-    /// <param name="selector">Ignored.</param>
-    /// <returns>Never returns.</returns>
-    /// <exception cref="NotSupportedException">Always thrown: per-shard aggregates are not global aggregates.</exception>
-    public TValue Average<TValue>(Expression<Func<TEntity, TValue>> selector) => throw GlobalOperationNotSupported("aggregation");
-
-    /// <summary>Streams every selected shard's rows in shard order.</summary>
-    /// <param name="cancellationToken">Cancels the fan-out.</param>
-    /// <returns>One merged asynchronous sequence, shard by shard.</returns>
-    public async IAsyncEnumerable<TEntity> AsAsyncEnumerable([EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        foreach (var shardId in _shardIds)
-        {
-            var stream = _source.WithScope(new MappingScope(shardId)).ToCommand().ToAsyncEnumerable(cancellationToken);
-            await foreach (var row in stream.ConfigureAwait(false))
-                yield return row;
+            var rows = await Scoped(_buckets[position]).ToListAsync(cancellationToken).ConfigureAwait(false);
+            yield return [.. rows];
         }
     }
 
-    private static NotSupportedException GlobalOperationNotSupported(string operation)
-        => new($"A cross-shard {operation} operation cannot be expressed by concatenating per-shard results. " +
-               "Run it against a single shard (WithShardKey/WithScope) or merge the materialized rows on the client.");
+    /// <summary>Returns one row count per bucket.</summary>
+    /// <returns>An array indexed by bucket number; the caller decides how to combine the values.</returns>
+    public int[] Count() => RunEach(static query => query.Count());
+
+    /// <summary>Returns one boolean per bucket: whether that bucket has any matching row.</summary>
+    /// <returns>An array indexed by bucket number; the caller decides how to combine the values.</returns>
+    public bool[] Any() => RunEach(static query => query.Any());
+
+    /// <summary>Returns the first row of every bucket.</summary>
+    /// <returns>An array indexed by bucket number.</returns>
+    public TEntity[] First() => RunEach(static query => query.First());
+
+    /// <summary>Returns the single row of every bucket, if the bucket has exactly one.</summary>
+    /// <returns>An array indexed by bucket number.</returns>
+    public TEntity[] Single() => RunEach(static query => query.Single());
+
+    private EntityBuilder<TEntity> Scoped(int bucket)
+        => _source.WithScope(new MappingScope(bucket.ToString(CultureInfo.InvariantCulture)));
+
+    private TResult[] RunEach<TResult>(Func<EntityBuilder<TEntity>, TResult> run)
+    {
+        var results = new TResult[_buckets.Count];
+        var groups = BucketsByShard();
+        var options = new ParallelOptions { MaxDegreeOfParallelism = DegreeOfParallelism(groups.Count) };
+        Parallel.ForEach(groups, options, group =>
+        {
+            foreach (var (bucket, position) in group)
+                results[position] = run(Scoped(bucket));
+        });
+
+        return results;
+    }
+
+    private async Task RunEachAsync<TResult>(
+        Func<EntityBuilder<TEntity>, CancellationToken, Task<TResult>> run,
+        Action<int, TResult> store,
+        CancellationToken cancellationToken)
+    {
+        var groups = BucketsByShard();
+        using var gate = new SemaphoreSlim(DegreeOfParallelism(groups.Count));
+        var tasks = new List<Task>(groups.Count);
+        foreach (var group in groups)
+        {
+            tasks.Add(Task.Run(async () =>
+            {
+                await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    foreach (var (bucket, position) in group)
+                    {
+                        var value = await run(Scoped(bucket), cancellationToken).ConfigureAwait(false);
+                        store(position, value);
+                    }
+                }
+                finally
+                {
+                    gate.Release();
+                }
+            }, cancellationToken));
+        }
+
+        await Task.WhenAll(tasks).ConfigureAwait(false);
+    }
+
+    private int DegreeOfParallelism(int shardCount)
+        => Math.Clamp(_parallelism ?? shardCount, 1, Math.Max(1, shardCount));
+
+    private List<List<(int Bucket, int Position)>> BucketsByShard()
+    {
+        var groups = new List<List<(int Bucket, int Position)>>();
+        var shardIndex = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var position = 0; position < _buckets.Count; position++)
+        {
+            var bucket = _buckets[position];
+            var shardId = _bucketOwners[bucket];
+            if (!shardIndex.TryGetValue(shardId, out var groupIndex))
+            {
+                groupIndex = groups.Count;
+                shardIndex.Add(shardId, groupIndex);
+                groups.Add([]);
+            }
+
+            groups[groupIndex].Add((bucket, position));
+        }
+
+        return groups;
+    }
 }
 
 /// <summary>
-/// A projected cross-shard query that runs one command per selected shard and merges the rows on the client.
+/// A projected bucket fan-out query: it runs the projection once per bucket and returns one vector per bucket.
 /// </summary>
-/// <typeparam name="TEntity">The mapped entity selected from every shard.</typeparam>
+/// <typeparam name="TEntity">The mapped entity selected from every bucket.</typeparam>
 /// <typeparam name="TResult">The projected row type.</typeparam>
 public sealed class ShardQuery<TEntity, TResult>
 {
     private readonly EntityBuilder<TEntity> _source;
     private readonly Expression<Func<TEntity, TResult>> _selector;
-    private readonly IReadOnlyList<string> _shardIds;
+    private readonly IReadOnlyList<int> _buckets;
+    private readonly IReadOnlyDictionary<int, string> _bucketOwners;
+    private readonly int? _parallelism;
 
-    internal ShardQuery(EntityBuilder<TEntity> source, Expression<Func<TEntity, TResult>> selector, IReadOnlyList<string> shardIds)
+    internal ShardQuery(
+        EntityBuilder<TEntity> source,
+        Expression<Func<TEntity, TResult>> selector,
+        IReadOnlyList<int> buckets,
+        IReadOnlyDictionary<int, string> bucketOwners,
+        int? parallelism)
     {
         _source = source;
         _selector = selector;
-        _shardIds = shardIds;
+        _buckets = buckets;
+        _bucketOwners = bucketOwners;
+        _parallelism = parallelism;
     }
 
-    /// <summary>Restricts every per-shard command with the same predicate.</summary>
+    /// <summary>Restricts every per-bucket command with the same predicate.</summary>
     /// <param name="predicate">The condition each row must satisfy.</param>
-    /// <returns>A projected fan-out query with the predicate applied per shard.</returns>
+    /// <returns>A projected fan-out query with the predicate applied per bucket.</returns>
     public ShardQuery<TEntity, TResult> Where(Expression<Func<TEntity, bool>> predicate)
-        => new(_source.Where(predicate), _selector, _shardIds);
+        => new(_source.Where(predicate), _selector, _buckets, _bucketOwners, _parallelism);
 
-    /// <summary>Runs one command per shard and concatenates the projected rows.</summary>
-    /// <returns>Every projected row from every selected shard, in shard order.</returns>
-    public List<TResult> ToList()
+    /// <summary>Runs the projection once per bucket and returns one vector per bucket.</summary>
+    /// <returns>An array indexed by bucket number; every element holds that bucket's projected rows.</returns>
+    public List<TResult>[] ToList() => RunEach(query => query.Select(_selector).ToList());
+
+    /// <summary>Runs the projection once per bucket and returns one vector per bucket.</summary>
+    /// <param name="cancellationToken">Cancels the fan-out.</param>
+    /// <returns>An array indexed by bucket number; every element holds that bucket's projected rows.</returns>
+    public async Task<List<TResult>[]> ToListAsync(CancellationToken cancellationToken = default)
     {
-        var rows = new List<TResult>();
-        foreach (var shardId in _shardIds)
-            rows.AddRange(_source.WithScope(new MappingScope(shardId)).Select(_selector).ToList());
+        var results = new List<TResult>[_buckets.Count];
+        await RunEachAsync(
+            (query, token) => query.Select(_selector).ToListAsync(token),
+            (position, rows) => results[position] = rows,
+            cancellationToken).ConfigureAwait(false);
 
-        return rows;
+        return results;
     }
 
-    /// <summary>Runs one command per shard and returns the concatenated projected rows.</summary>
-    /// <returns>Every projected row from every selected shard, in shard order.</returns>
-    public TResult[] ToArray() => [.. ToList()];
+    /// <summary>Runs the projection once per bucket and returns one vector per bucket.</summary>
+    /// <returns>An array indexed by bucket number; every element holds that bucket's projected rows.</returns>
+    public TResult[][] ToArray() => [.. ToList().Select(static rows => rows.ToArray())];
 
-    /// <summary>Asynchronously runs one command per shard and concatenates the projected rows.</summary>
+    /// <summary>Runs the projection once per bucket and returns one vector per bucket.</summary>
     /// <param name="cancellationToken">Cancels the fan-out.</param>
-    /// <returns>Every projected row from every selected shard, in shard order.</returns>
-    public async Task<List<TResult>> ToListAsync(CancellationToken cancellationToken = default)
-    {
-        var rows = new List<TResult>();
-        foreach (var shardId in _shardIds)
-        {
-            var shardRows = await _source.WithScope(new MappingScope(shardId)).Select(_selector)
-                .ToListAsync(cancellationToken).ConfigureAwait(false);
-            rows.AddRange(shardRows);
-        }
+    /// <returns>An array indexed by bucket number; every element holds that bucket's projected rows.</returns>
+    public async Task<TResult[][]> ToArrayAsync(CancellationToken cancellationToken = default)
+        => [.. (await ToListAsync(cancellationToken).ConfigureAwait(false)).Select(static rows => rows.ToArray())];
 
-        return rows;
+    /// <summary>Streams the projected result one bucket at a time, sequentially.</summary>
+    /// <param name="cancellationToken">Cancels the fan-out.</param>
+    /// <returns>One asynchronous sequence of per-bucket vectors, in bucket order.</returns>
+    public async IAsyncEnumerable<TResult[]> AsAsyncEnumerable([EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        for (var position = 0; position < _buckets.Count; position++)
+        {
+            var rows = await Scoped(_buckets[position]).Select(_selector).ToListAsync(cancellationToken).ConfigureAwait(false);
+            yield return [.. rows];
+        }
     }
 
-    /// <summary>Asynchronously runs one command per shard and returns the concatenated projected rows.</summary>
-    /// <param name="cancellationToken">Cancels the fan-out.</param>
-    /// <returns>Every projected row from every selected shard, in shard order.</returns>
-    public async Task<TResult[]> ToArrayAsync(CancellationToken cancellationToken = default)
-        => [.. await ToListAsync(cancellationToken).ConfigureAwait(false)];
+    /// <summary>Returns one row count per bucket.</summary>
+    /// <returns>An array indexed by bucket number; the caller decides how to combine the values.</returns>
+    public int[] Count() => RunEach(static query => query.Count());
 
-    /// <summary>Streams every selected shard's projected rows in shard order.</summary>
-    /// <param name="cancellationToken">Cancels the fan-out.</param>
-    /// <returns>One merged asynchronous sequence, shard by shard.</returns>
-    public async IAsyncEnumerable<TResult> AsAsyncEnumerable([EnumeratorCancellation] CancellationToken cancellationToken = default)
+    /// <summary>Returns one boolean per bucket: whether that bucket has any matching row.</summary>
+    /// <returns>An array indexed by bucket number; the caller decides how to combine the values.</returns>
+    public bool[] Any() => RunEach(static query => query.Any());
+
+    private EntityBuilder<TEntity> Scoped(int bucket)
+        => _source.WithScope(new MappingScope(bucket.ToString(CultureInfo.InvariantCulture)));
+
+    private TValue[] RunEach<TValue>(Func<EntityBuilder<TEntity>, TValue> run)
     {
-        foreach (var shardId in _shardIds)
+        var results = new TValue[_buckets.Count];
+        var groups = BucketsByShard();
+        var options = new ParallelOptions { MaxDegreeOfParallelism = DegreeOfParallelism(groups.Count) };
+        Parallel.ForEach(groups, options, group =>
         {
-            var stream = _source.WithScope(new MappingScope(shardId)).Select(_selector).ToAsyncEnumerable(cancellationToken);
-            await foreach (var row in stream.ConfigureAwait(false))
-                yield return row;
+            foreach (var (bucket, position) in group)
+                results[position] = run(Scoped(bucket));
+        });
+
+        return results;
+    }
+
+    private async Task RunEachAsync<TValue>(
+        Func<EntityBuilder<TEntity>, CancellationToken, Task<TValue>> run,
+        Action<int, TValue> store,
+        CancellationToken cancellationToken)
+    {
+        var groups = BucketsByShard();
+        using var gate = new SemaphoreSlim(DegreeOfParallelism(groups.Count));
+        var tasks = new List<Task>(groups.Count);
+        foreach (var group in groups)
+        {
+            tasks.Add(Task.Run(async () =>
+            {
+                await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    foreach (var (bucket, position) in group)
+                    {
+                        var value = await run(Scoped(bucket), cancellationToken).ConfigureAwait(false);
+                        store(position, value);
+                    }
+                }
+                finally
+                {
+                    gate.Release();
+                }
+            }, cancellationToken));
         }
+
+        await Task.WhenAll(tasks).ConfigureAwait(false);
+    }
+
+    private int DegreeOfParallelism(int shardCount)
+        => Math.Clamp(_parallelism ?? shardCount, 1, Math.Max(1, shardCount));
+
+    private List<List<(int Bucket, int Position)>> BucketsByShard()
+    {
+        var groups = new List<List<(int Bucket, int Position)>>();
+        var shardIndex = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var position = 0; position < _buckets.Count; position++)
+        {
+            var bucket = _buckets[position];
+            var shardId = _bucketOwners[bucket];
+            if (!shardIndex.TryGetValue(shardId, out var groupIndex))
+            {
+                groupIndex = groups.Count;
+                shardIndex.Add(shardId, groupIndex);
+                groups.Add([]);
+            }
+
+            groups[groupIndex].Add((bucket, position));
+        }
+
+        return groups;
     }
 }

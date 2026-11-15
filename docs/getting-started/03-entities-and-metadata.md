@@ -365,7 +365,7 @@ provider-side quoting instead.
 ## Runtime mapping scope (one entity, several tables)
 
 One entity class can address a different physical table, schema or column set per runtime *scope* - the
-mechanism behind multi-tenancy and sharding. Choose the scope with `IEntityScopeResolver`, map it with
+mechanism behind multi-tenancy. Choose the scope with `IEntityScopeResolver`, map it with
 `IEntityMetadataProvider`, and override the choice for a single command with `WithScope(...)`:
 
 ```csharp

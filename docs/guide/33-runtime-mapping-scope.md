@@ -1,12 +1,9 @@
 # Runtime mapping scope
 
 One entity class can address more than one physical place: a database per tenant, a `{tenant}_orders`
-table next to `orders` on one server, a tenant-specific schema, or — on top of this — a shard. A
-*mapping scope* is the runtime decision behind that: a key that the mapping layer turns into a table
-name, a schema, column names and a parameter prefix.
-
-The mechanism is provider- and sharding-agnostic. [Sharding and horizontal partitioning](34-sharding-and-horizontal-partitioning.md)
-is one consumer of it.
+table next to `orders` on one server, a tenant-specific schema. A *mapping scope* is the runtime decision
+behind that: a key that the mapping layer turns into a table name, a schema, column names and a
+parameter prefix.
 
 ## Two contracts
 
@@ -141,26 +138,15 @@ Points worth keeping:
   scopes in one batch cannot collide: `... where total > $acme_minimum`.
 - **DML** renders the scoped target and columns: insert, update, delete and truncate all resolve their
   scope before the statement is built.
-- **The connection is not part of a mapping scope.** A scope maps names on the context's own connection.
-  Routing a scope to another server — a shard — is a separate layer.
-
-## Scope and sharding
-
-Sharding is built on this mechanism and adds nothing to its contract: its router implements
-`IEntityScopeResolver` and chooses the scope, its metadata provider implements `IEntityMetadataProvider`
-and derives the physical names from it, and the shard topology plus the routing of a scope to its server
-sit on top of those two.
-
-Nothing in this page requires sharding to be configured. See
-[Sharding and horizontal partitioning](34-sharding-and-horizontal-partitioning.md) for the shard-specific
-part.
+- **The connection is not part of a mapping scope.** A scope maps names on the context's own connection;
+  reaching another server is a separate layer.
 
 ## Limitations
 
 - The default provider builds the same mapping for every scope: names only change when a provider derives
   them from the key.
 - `WithScope` exists on the query and merge builders. Insert, update, delete and truncate take the
-  resolver's answer (sharding adds `WithShardKey(...)` for an explicit key).
+  resolver's answer.
 - One scope means one cached plan per query shape: many tenants times many shapes grows the plan cache,
   and each entry holds its own prepared statement.
 - A scope renames objects; it does not add predicates. A table shared by several tenants still needs the

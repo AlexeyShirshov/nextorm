@@ -41,7 +41,6 @@ internal sealed class DeleteCommand : MutationCommand
     internal string? Schema { get; }
 
     /// <summary>The resolved mapping variant for this target.</summary>
-    internal MappingScope MappingScope { get; }
 
     /// <summary>The predicate command whose prepared condition forms the <c>WHERE</c>, or <see langword="null"/>.</summary>
     public QueryCommand? Condition { get; }

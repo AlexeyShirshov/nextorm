@@ -1,248 +1,106 @@
 # TODO: Шардирование (consistent hashing) поверх mapping scope
 > Tracking issue: [#69](https://github.com/AlexeyShirshov/nextorm/issues/69).
 
-> Рабочий план (design RFC). Продвинутый слой: опирается на базовый
-> [`todo_mapping_scope.md`](todo_mapping_scope.md) и не дублирует его механику кэшей/подмены имён.
-> Источник: обсуждение шардирования по значениям свойств сущности.
+> **МОДЕЛЬ v2.** Прежний текст этого файла трактовал шард как «схема/таблица на одном соединении» и
+> вводил виртуальные узлы. Это отменено: шард — физический сервер (`connection-per-shard` в области),
+> бакет — фиксированная единица размещения, не зависящая от числа шардов, виртуальных узлов нет.
 
 ## 1. Пункт и цель
 
-- **Проблема:** нужно раскладывать данные по шардам на основе **одного или нескольких свойств
-  сущности**: вычислить бакет (consistent hashing), сопоставить бакет шарду, шард — схеме/имени
-  таблицы. Один коннект, разные schema/table (connection-per-shard — вне области).
-- **Цель:** декларация shard key, кольцо consistent hashing, маршрутизация точки записи/чтения на шард,
-  и явный сценарий сбора с нескольких шардов. Базовая механика (scope, подмена названий, префикс
-  параметров) берётся из [`todo_mapping_scope.md`](todo_mapping_scope.md).
-- **Критерий приёмки:** вставка N сущностей с разными значениями shard key раскладывает их по M
-  таблицам/схемам согласно кольцу; point-read/update/delete с зафиксированным shard key попадает в тот
-  же шард; добавление/удаление шарда перераспределяет минимум ключей (проверка на кольце); при
-  отсутствии конфигурации шардинга поведение не меняется.
+- **Проблема:** горизонтальное масштабирование — данные раскладываются по нескольким физическим
+  серверам по одному или нескольким свойствам сущности, при этом добавление сервера не должно
+  менять физические имена данных и не должно требовать перекомпиляции/деплоя приложения.
+- **Модель:**
+  - **Шард** — физический сервер со своим соединением.
+  - **Бакет** — фиксированная единица размещения: задаётся схемой либо именем таблицы (режим
+    выбирается один раз, когда создаётся физическая схема данных). Число бакетов фиксировано и от
+    числа шардов не зависит.
+  - **bucket → shard** — consistent hashing. Виртуальных узлов нет.
+  - Изменение числа шардов меняет только маршрут `bucket → shard`: бакет с тем же id уезжает на
+    другой сервер, имя его схемы/таблицы остаётся прежним.
+- **Критерий приёмки:** вставка N сущностей с разными значениями shard key раскладывает их по
+  бакетам и серверам согласно кольцу; point-read/update/delete с зафиксированным shard key попадает
+  на тот же сервер; добавление/удаление шарда перемещает минимум бакетов и не меняет
+  `bucket → schema/table`; при отсутствии конфигурации шардинга поведение не меняется.
 
-## 2. Почему это нужно
+## 2. Почему так
 
-1. Горизонтальное масштабирование: шард на схему/таблицу, единый коннект.
-2. Consistent hashing минимизирует перераспределение при изменении числа шардов.
-3. Опирается на базовый слой; не форкает ядро и не дублирует кэши.
+1. Горизонтальное масштабирование — это добавление серверов, а не переименование таблиц.
+2. Consistent hashing минимизирует перемещение бакетов при изменении числа шардов, поэтому топология
+   меняется без DDL и без деплоя приложения.
+3. Бакет как стабильная единица размещения отделяет физическую схему данных от текущего парка
+   серверов: парк меняется, схема данных — нет.
 
-## 3. Зависимость и что берём из базового слоя
+## 3. Инварианты
 
-Базовый слой даёт (см. `todo_mapping_scope.md` §4):
+- `(entity, bucket) → schema/table` не зависит от состава шардов и версии топологии.
+- При `AddShard`/`RemoveShard` меняется только `bucket → shard`.
+- Ключ → бакет детерминирован между процессами и после перезапуска.
+- Значение ключа не сравнивается с id шарда; id шарда не попадает в имя схемы/таблицы.
+- Планы, метаданные и префикс параметров ключуются по бакету (mapping scope = bucket).
 
-- `MappingScope` — ключ метаданных; `IEntityScopeResolver` — переход «сущность + значения → scope»;
-- `IEntityMetadataProvider` — подмена table/schema/column per scope, кэш `(Type, scope)`;
-- `IEntityMetadata.Schema`, `FromExpression` со схемой;
-- `PrefixedParameterProvider` + scope-aware `NormParam` — изоляция имён параметров.
-
-Шардинг добавляет только: shard key, кольцо, топологию, маршрутизацию и сбор.
-
-## 4. Дизайн и публичный API
-
-### 4.1. Декларация shard key
-
-```csharp
-[AttributeUsage(AttributeTargets.Class | AttributeTargets.Interface, AllowMultiple = true)]
-public sealed class ShardKeyAttribute(params string[] propertyNames) : Attribute;
-```
-
-- Fluent на метаданных: `EntityMetadataBuilder<T>.ShardKey(params Expression<Func<T, object>>[])`.
-- В `IEntityMetadata` (через базовый provider): `IReadOnlyList<IPropertyMetadata> ShardKey => []`
-  (дефолт пустой — шардинг выключен).
-- Компилируемый экстрактор `Func<T, object?[]>` строится один раз на `(Type, scope)`.
-
-### 4.2. Consistent hash ring
+## 4. Публичный API (как реализовано)
 
 ```csharp
-/// <summary>Consistent hash ring mapping a key to a bucket and a bucket to a shard.</summary>
-public interface IConsistentHashRing
-{
-    /// <summary>Number of buckets on the ring.</summary>
-    int BucketCount { get; }
+var topology = new ShardTopology(bucketCount: 4096);              // BucketPlacementMode.TableSuffix
+topology.AddShard("server-eu-1", "Host=eu-1;Database=app");
+topology.AddShard("server-eu-2", "Host=eu-2;Database=app");
 
-    /// <summary>Stable ring version; changes on add/remove of a shard.</summary>
-    int Version { get; }
-
-    /// <summary>Bucket for a hash of the shard-key values.</summary>
-    int GetBucket(ReadOnlySpan<byte> key);
-
-    /// <summary>Shard owning <paramref name="bucket"/>.</summary>
-    string GetShard(int bucket);
-}
+var builder = new DataContextBuilder().UseSharding(topology);
+using var context = new PostgresDataContext(topology.GetConnectionString("server-eu-1"), builder);
 ```
 
-- Реализация: виртуальные узлы (например 256 vnode/shard), хэш `XxHash64`, бинарный поиск по
-  отсортированному массиву vnode → shard. Детерминированная между процессами (общий DB).
-- `Add`/`Remove` шарда → новый `Version`, минимум перемещённых бакетов (свойство consistent hashing).
-- Кэш `ShardAddress`, вычисленного для набора значений, — опционально; инвалидируется по `Version`.
+- `IShardTopology`: `Version`, `Ring`, `ShardIds`, `PlacementMode`, `GetConnectionString(shardId)`;
+  `ShardTopology(bucketCount, placementMode = TableSuffix)` + `AddShard(shardId, connectionString)` /
+  `RemoveShard(shardId)`. Число бакетов обязательно, значения по умолчанию нет.
+- `IConsistentHashRing` (без vnode): `GetBucket(keyBytes)` — стабильный номер бакета;
+  `GetShard(bucket)` — владелец по rendezvous/HRW по `(bucket, shardId)`; добавление `(K+1)`-го
+  шарда забирает только его бакеты и не перетасовывает остальные. `ConsistentHashRing` принимает
+  пользовательские делегаты `BucketHash`/`ShardHash`; `UseSharding` принимает любую реализацию
+  `IShardTopology`, поэтому своё кольцо подключается собственной топологией.
+- `BucketPlacementMode`: `TableSuffix` (`table = {mappedTable}_{bucket}`) либо `SchemaPerBucket`
+  (`schema = {mappedSchema}_{bucket}`); имена зависят только от бакета.
+- `ShardRouter : IEntityScopeResolver` → `MappingScope(bucket.ToString())`.
+- Исполнение: соединение на шард (`DataContext.ManagerFor(scope)`); команда выполняется на соединении
+  сервера-владельца бакета, DML несёт `MappingScope` в `MutationCommand`.
+- Fan-out: `AcrossBuckets(int? parallelism = null)` → `ShardQuery<TEntity>` / `ShardQuery<TEntity,
+  TResult>`. Результат — массив кардинальности «число бакетов», каждый элемент — вектор строк этого
+  бакета (`List<T>[]`, `T[][]`); библиотека ничего не сливает. Скаляры — `int[] Count()`,
+  `bool[] Any()`, `T[] First()`, `T[] Single()`. `Where`/`OrderBy`/`Distinct`/`Select` применяются на
+  бакет. `AsAsyncEnumerable()` отдаёт векторы по одному в порядке бакетов.
+- Параллелизм: бакеты группируются по шарду-владельцу; внутри шарда — последовательно, между
+  шардами — параллельно (`Parallel.ForEach` / `SemaphoreSlim`), лимит по умолчанию = число шардов,
+  значение ограничивается `[1, shardCount]`.
 
-### 4.3. Топология (шард → schema/table)
+## 5. Критерии приёмки (измеримые)
 
-```csharp
-public readonly record struct ShardAddress(string ShardId, int Version);
+- K=2, 4096 бакетов: доля бакетов каждого шарда в диапазоне 45–55 %.
+- `AddShard`: перемещается не более `1/(K+1)` + 5 % бакетов.
+- Снимок `bucket → schema/table` идентичен до и после `AddShard`/`RemoveShard` (тест).
+- INSERT/UPDATE/DELETE и point-read выполняются на соединении сервера-владельца (проверка на живых
+  БД: два файла SQLite и два database одного контейнера PostgreSQL).
+- `AcrossBuckets` возвращает вектор на бакет; скалярные терминалы — значение на бакет; ничего не
+  сливается.
+- Шарды выполняются параллельно, бакеты одного шарда — последовательно (счётчик одновременных
+  исполнений в тесте).
+- В публичном API и в гайде нет «виртуальных узлов».
 
-public readonly record struct ShardPlacement(string? Schema, string? TableName);
+## 6. Что переделано относительно v1
 
-public interface IShardTopology
-{
-    /// <summary>Current topology version (guards placement changes).</summary>
-    int Version { get; }
+- `ConsistentHashRing` (виртуальные узлы) → кольцо бакетов с rendezvous-хешем и пользовательскими
+  `BucketHash`/`ShardHash`.
+- `ShardTopology.AddShard(shardId, schema, tableName)` → `AddShard(shardId, connectionString)`.
+- `ShardEntityMetadataProvider` — размещение по бакету, а не по id шарда.
+- `DataContext`/`DataContextBuilder` — соединение на шард, маршрутизация команды на владельца бакета;
+  DML-команда несёт scope (иначе UPDATE попадал на соединение по умолчанию).
+- Скалярные терминалы на бакетном builder не используют общие артефакты/команду `Any` без scope.
+- `AcrossShards()`/`Concatenate` → `AcrossBuckets()` с векторами по бакетам.
+- Тесты, live-сьюты, гайд (`docs/guide/34-*`, `docs/ru/guide/34-*`).
 
-    /// <summary>Shard owning a bucket for the entity.</summary>
-    ShardAddress GetShard(Type entityType, int bucket);
+## 7. Ограничения
 
-    /// <summary>Physical schema/table for a shard.</summary>
-    ShardPlacement GetPlacement(Type entityType, ShardAddress shard);
-}
-```
-
-- По умолчанию `TableName` — исходное имя из базовых метаданных (если `null`) или
-  `{base}_{shardId}`; `Schema` — per-shard схема. Конфигурируется пользователем.
-
-### 4.4. Роутер — реализует базовый `IEntityScopeResolver`
-
-```csharp
-public interface IShardRouter : IEntityScopeResolver
-{
-    /// <summary>Scope for explicit shard-key values (bypasses predicate extraction).</summary>
-    MappingScope ResolveShardScope(Type entityType, IReadOnlyList<object?> shardKeyValues);
-
-    /// <summary>Whether <paramref name="entityType"/> is sharded.</summary>
-    bool IsSharded(Type entityType);
-}
-```
-
-- `Resolve(type, values)` = хэш значений → бакет → `ShardAddress` → `MappingScope(Key: shard.Id)`.
-- Регистрируется как `UseScopeResolver(shardRouter)`; базовая `IEntityMetadataProvider` получает
-  `ShardPlacement` через `IShardTopology` (шардинг подставляет свой провайдер/декоратор имён).
-- **Ключ scope = id шарда** (стабилен), а `Version` топологии участвует только в вычислении placement
-  и инвалидации при перекладке схем.
-
-### 4.5. Источники значений shard key
-
-| Операция | Источник значений | Когда известно |
-|---|---|---|
-| INSERT | инстанс сущности (`InsertBuilder.Values(entity)`) | build-time |
-| UPDATE/DELETE по сущности | инстанс (`Update(entity)`/`Delete(entity)`) | build-time |
-| SELECT/UPDATE/DELETE по предикату | равенство по shard-key свойству в `Where` | build-time для констант и замыканий; execution-time для `params` |
-| Явно | `.Shard(values)` / `.ShardKey(...)` fluent | build-time |
-
-- **Extraction из предиката:** `ShardKeyPredicateExtractor.TryGetValues(LambdaExpression predicate,
-  IReadOnlyList<IPropertyMetadata> shardKey, out object?[] values)` — ищет `prop == value` /
-  `value == prop` для всех shard-key свойств, значения берёт через вычисление дерева (замыкания и
-  константы доступны на build-time — query-лямбды nextorm это `Expression<Func<...>>`).
-- **`params object[]` (runtime-параметры, `NormParam`)**: значения появляются только при исполнении.
-  Варианты: (a) v1 — требовать явный `.Shard(...)` или shard key в замыкании; (b) фаза 2 — двухфазная
-  подготовка per-shard команд (см. §6).
-- Если shard key не пинован и сбор не запрошен явно — **fail-fast** (`InvalidOperationException`), а не
-  молчаливый полносканирующий запрос.
-
-### 4.6. Сбор с нескольких шардов
-
-```csharp
-public EntityBuilder<T> AcrossShards();                 // UNION ALL по затронутым шардам
-public EntityBuilder<T> AcrossShards(ShardSelection sel);
-```
-
-- v1: только шарды, попавшие из предиката (`shardKey IN (...)` или диапазон) — `UNION ALL`
-  per-shard-запросов; базовый `PrefixedParameterProvider` изолирует коллизии имён параметров.
-- Ограничения (документировать): глобальные `ORDER BY`/`LIMIT`/`OFFSET`/`DISTINCT` и агрегаты требуют
-  слияния на клиенте — либо ограниченная поддержка, либо `ShardFanOut` (N команд + merge в исполнителе).
-- Полный scatter-gather по всем шардам — фаза 3 и только по явному запросу.
-
-## 5. Точки встраивания
-
-| Что | Точка | Файл:строка |
-|---|---|---|
-| Резолв scope для чтения | `From<T>`/`ResolveMetadata` через базовый `IEntityScopeResolver` | `DataContextExtensions.cs:114`, `:665` |
-| Вставка | значения инстанса → scope | `Builders/InsertBuilder.Values.cs:94` |
-| Update/Delete по сущности | инстанс → scope | `DataContextExtensions.cs:87` (`Update`), `:153` (`Delete`) |
-| Предикат | extractor обходит `Where`-лямбду | `Builders/EntityBuilder.cs:295` (`Where`), предикат в `Query/QueryCommand.QueryPreparer.cs` |
-| FROM | scope → `ShardPlacement` → table/schema | `DataContext/QueryPlanner.cs:479-481` |
-| DML | scope → table/schema | `InsertBuilder.cs:421`, `UpdateBuilder.cs:211`, `DeleteBuilder.cs:151`, `MergeBuilder.cs:375`, `TruncateBuilder.cs:62` |
-| Имена параметров при сборе | базовый префикс | `Query/PrefixedParameterProvider.cs`, `DataContext/NormParam.cs:12` |
-| Регистрация | `UseScopeResolver`/`UseEntityMetadataProvider`/`UseShardTopology` | `DI/DataContextBuilder.cs:146` |
-
-## 6. Этапы внедрения
-
-- **Фаза 0:** базовый [`todo_mapping_scope.md`](todo_mapping_scope.md) Фазы 0–2 (schema + scope +
-  префикс параметров).
-- **Фаза 1 (MVP, build-time routing):** `ShardKey` в метаданных, `ConsistentHashRing`, `IShardTopology`,
-  `IShardRouter`; маршрутизация INSERT/UPDATE/DELETE по инстансу и point-read по константе/замыканию;
-  fail-fast при непокрытом shard key.
-- **Фаза 2 (execution-time):** двухфазная подготовка per-shard команд / parameterized shard key из
-  `params`; scoping prepared-команд (`Cache/DbPreparedQueryCommand.cs`).
-- **Фаза 3 (сбор):** `AcrossShards()` (`UNION ALL`), `ShardFanOut` (N команд + merge), глобальные
-  `OrderBy`/`Limit`/агрегаты на клиенте.
-- **Вне области:** connection-per-shard, распределённые транзакции (2PC), rebalancing с переносом
-  данных (только вычисление кольца), online-смена числа шардов без version-bump.
-
-## 7. Ограничения и цена
-
-- **Кэши:** ключ — id шарда (стабилен при ребалансе), `Version` топологии — только для placement.
-  Prepared-команды per-shard. План-кэш `[ThreadStatic]` (`Cache/QueryPlanStore.cs:18`) — scope
-  захватывается на build-time.
-- **Инъекция:** имена шардовых схем/таблиц — из `IShardTopology` (доверенный), не из пользовательских
-  значений shard key. Значения shard key идут только в параметры предиката, не в идентификаторы.
-- **Хэш значений:** стабильная сериализация ключа (тип + разделитель) обязана быть детерминированной
-  между процессами; null, строки, `Guid`, числа — каноническое представление.
-- **Ребаланс:** consistent hashing перемещает ~K/N; но сменивший шард ключ окажется в «старой» таблице,
-  пока данные не перенесены — это ответственность потребителя (документировать).
-- **Агрегаты/пагинация при сборе:** не композируются глобально — задокументировать или отклонить.
-- **Производительность:** fast-path при `!IsSharded` — тот же план, что до фичи.
-
-## 8. План тестов
-
-- **Core (`tests/nextorm.core.tests`):**
-  - `ConsistentHashRing`: детерминизм, распределение, минимум перемещений при add/remove, version;
-  - `ShardKeyPredicateExtractor`: константа, замыкание, `AND` нескольких свойств, отсутствие ключа →
-    fail;
-  - маршрутизация INSERT/UPDATE/DELETE по инстансу; SELECT по предикату;
-  - разные shard key → разные SQL (table/schema).
-- **SQL-gen (`tests/nextorm.<provider>.tests`):** `FROM "shard_2"."orders"`; `UNION ALL`-сбор.
-- **Интеграция (`tests/nextorm.integration.tests/CommonTestSuite.*.cs`):** PostgreSQL + SQL Server —
-  создать 3 схемы/таблицы, вставить пачку, проверить раскладку кольца, point-read/update/delete,
-  сбор `AcrossShards`. Нужен `DOCKER_HOST` (skill `running-integration-tests`).
-- **Покрытие:** не ниже базового; заявить before/after.
-
-## 9. Открытые вопросы
-
-1. **Тип кольца:** бакеты `[0, N)` vs позиции на 64-битном кольце; число vnode/shard.
-2. **Автоматический extraction предиката** vs только явный `.Shard(...)` в v1 (сложность/риск).
-3. **Execution-time shard key из `params`:** двухфазная подготовка vs отказ в v1.
-4. **Форма `UNION ALL`-сбора:** server-side (`UNION ALL`) vs client-side `ShardFanOut` (merge в
-   исполнителе) — что поддержать первым.
-5. **Где хранить топологию** (in-memory конфиг vs провайдер с runtime-refresh) и как триггерить
-   version-bump.
-6. **Совместимость с динамической схемой результата** (`TableFunctionSchema`/`ResultSchema`, см.
-   [Dynamic result schema](../../guide/13-table-valued-functions.md#dynamic-result-schema)) — не конфликтуют ли понятия «динамическая схема».
-7. **Канонизация ключа хэша** для смешанных типов (десятичные `decimal`, `DateTimeOffset`, enum).
-
-## 10. Файлы к изменению
-
-- Новое: `src/nextorm.core/Query/Sharding/ShardKeyAttribute.cs`, `Sharding/ShardKey.cs`,
-  `Sharding/ConsistentHashRing.cs`, `Sharding/ShardTopology.cs`, `Sharding/ShardRouter.cs`,
-  `Sharding/ShardKeyPredicateExtractor.cs`, `Sharding/ShardPlacement.cs`.
-- Правки: базовые `DataContext/Meta/*` (ShardKey в метаданных), `DataContext/QueryPlanner.cs`,
-  `Builders/EntityBuilder.cs` (+`AcrossShards`), `Builders/InsertBuilder*.cs`,
-  `Builders/UpdateBuilder.cs`, `Builders/DeleteBuilder.cs`, `DataContextExtensions.cs`,
-  `DI/DataContextBuilder.cs`, `Query/QueryCommand.QueryPreparer.cs`, `Cache/DbPreparedQueryCommand.cs`.
-- Тесты: `tests/nextorm.core.tests/ShardingTests.cs` (+ ring/extractor), SQL-gen провайдеров,
-  `tests/nextorm.integration.tests/CommonTestSuite.Sharding.cs`.
-- Документация: новый гайд по шардированию (+RU), `docs/connecting-providers/overview.md` (+RU),
-  `docs/advanced/limitations.md` (+RU), `docs/specs/design/API-NAMING-REVIEW.md`,
-  `docs/specs/design/code-smells-review.md`.
-
-## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
-
-> Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
-> Вердикт: **нужен пересмотр — 1 блокер** (форма `AcrossShards` нереализуема как единый `EntityBuilder` без scope-aware fan-out).
-
-- **[OCP]/[SRP] 🔴** `AcrossShards()` возвращает `EntityBuilder<T>` (`:141-143`), но scope фиксируется в команду на build-time, `QueryCommand` несёт один `FROM`/один scope; `FromExpression` хранит один `Table`/`SourceType` (`Expressions/FromExpression.cs:16-21,67`), FROM рендерится одной веткой (`DataContext/QueryPlanner.cs:518`). Fix: зафиксировать fan-out-абстракцию (N `QueryCommand` + merge в исполнителе, `ShardFanOut`) либо scope-aware UNION-рендер — до фазы 3.
-- **[SRP/DRY] 🟡** `IShardRouter.ResolveShardScope(Type, IReadOnlyList<object?>)` (`:106`) дублирует унаследованный `IEntityScopeResolver.Resolve(Type, IReadOnlyList<object?>)` (mapping_scope §4.2). Fix: убрать, переопределить базовый `Resolve`, оставить `IsSharded` (инвариант 1).
-- **[DRY] 🟡** Дублирование «bucket → shard»: `IConsistentHashRing.GetShard(int bucket)` (`:68`) и `IShardTopology.GetShard(Type, int bucket)` (`:90`). Fix: одно владение (ring даёт bucket→shard, topology — shard→placement).
-- **[SRP/DIP] 🟡** `IEntityMetadata.ShardKey => []` (`:48-49`) вносит знание о шардинге в базовые метаданные, тогда как `todo_mapping_scope.md` §1 требует «базовый слой без знания о шардировании». Fix: отдельный provider (`IShardKeyProvider`), не расширять `IEntityMetadata` (инварианты 1/7).
-- **[PERF] 🟡** Компилируемый экстрактор `Func<T, object?[]>` (`:50`) аллоцирует `object?[]` + боксы ключей на каждый вызов; на INSERT пачки из N сущностей — N массивов. Fix: инкрементальный хэш (`XxHash64`/`HashCode`) без промежуточного массива либо буфер в пуле (INSERT — заявленный hot-path критерия).
-- **[TYPE/PERF] 🟡** `ShardKeyPredicateExtractor.TryGetValues(…, out object?[] values)` (`:128-130`) аллоцирует массив без переиспользования буфера; `ShardAddress` несёт `Version` (`:80`) при авторитете `IShardTopology.Version` (`:86-93`). Fix: `TryGetValues(…, Span<object?> dest)`; убрать `Version` из `ShardAddress`.
-- **[TYPE] ℹ️** `IConsistentHashRing.GetShard(int bucket)` возвращает `string` shard-id на lookup-пути (`:68`). Deferred: вернуть `int` индекс, строковый id резолвить в `ShardPlacement`.
-- **[DRY] 🟡** Устаревшие якоря: `DataContextExtensions.cs:114/665` → `:729`; `:87` (`Update`) → `:151`; `:153` (`Delete`) → `:217`; `QueryPlanner.cs:479-481` → `:518`; `DI/DataContextBuilder.cs:146` → `:166` (методов `UseScopeResolver`/`UseEntityMetadataProvider`/`UseShardTopology` нет); `Cache/QueryPlanStore.cs:18` → `DataContext/Cache/QueryPlanStore.cs`. Fix.
-- **[DRY/TYPE] ℹ️** `ShardSelection` (`:142`) не определён ни здесь, ни в базовом плане. Fix: определить форму или убрать перегрузку из v1.
-- **[DIP] ℹ️** `Query/PrefixedParameterProvider.cs` (`:34,161`) ещё не существует — зависимость `todo_mapping_scope.md` Фазы 2. Deferred с триггером: зафиксировать, что маршрутизация Фазы 1 от префикса не зависит.
+- Глобальные `ORDER BY`/`LIMIT`/`OFFSET`/`DISTINCT`/агрегаты на fan-out не композируются — выполняются
+  на одном сервере либо сливаются на клиенте.
+- Распределённые транзакции (2PC) вне области; транзакция живёт в пределах одного шарда.
+- Перенос самих данных при изменении состава шардов — ответственность приложения (имена при этом
+  стабильны).

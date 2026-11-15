@@ -23,12 +23,12 @@ public sealed class ShardingDialectTests
     public void PredicateRoute_ShouldRenderTheShardTableOnEveryDialect(string provider)
     {
         var topology = CreateTopology();
-        var (tenant, shard) = FindTenant(topology, "east");
+        var (tenant, bucket) = FindTenant(topology, "east");
         using var context = CreateContext(provider, new DataContextBuilder().UseSharding(topology));
 
         var sql = PrepareSelect(context, tenant);
 
-        sql.Should().Contain($"sales.ShardedRow_{shard}");
+        sql.Should().Contain($"ShardedRow_{bucket}");
     }
 
     [Theory]
@@ -40,12 +40,12 @@ public sealed class ShardingDialectTests
     public void ExplicitShardKey_ShouldRenderTheShardTableOnEveryDialect(string provider)
     {
         var topology = CreateTopology();
-        var (tenant, shard) = FindTenant(topology, "west");
+        var (tenant, bucket) = FindTenant(topology, "west");
         using var context = CreateContext(provider, new DataContextBuilder().UseSharding(topology));
 
         var sql = PrepareSelect(context, context.From<ShardedRow>().WithShardKey(tenant).Select(row => row.Id));
 
-        sql.Should().Contain($"sales.ShardedRow_{shard}");
+        sql.Should().Contain($"ShardedRow_{bucket}");
     }
 
     [Theory]
@@ -71,33 +71,34 @@ public sealed class ShardingDialectTests
     public void InsertInstance_ShouldRenderTheShardTableOnEveryDialect(string provider)
     {
         var topology = CreateTopology();
-        var (tenant, shard) = FindTenant(topology, "east");
+        var (tenant, bucket) = FindTenant(topology, "east");
         using var context = CreateContext(provider, new DataContextBuilder().UseSharding(topology));
 
         var sql = context.CreateInsertBuilder<ShardedRow>()
             .Values(new ShardedRow { Id = 1, Tenant = tenant, Name = "row" })
             .ToSql();
 
-        sql.Should().Contain($"sales.ShardedRow_{shard}");
+        sql.Should().Contain($"ShardedRow_{bucket}");
     }
 
     private static ShardTopology CreateTopology()
     {
-        var topology = new ShardTopology();
-        topology.AddShard("east", "sales");
-        topology.AddShard("west", "sales");
+        var topology = new ShardTopology(4096);
+        topology.AddShard("east", "Server=east");
+        topology.AddShard("west", "Server=west");
         return topology;
     }
 
-    private static (string Tenant, string Shard) FindTenant(ShardTopology topology, string desiredShard)
+    private static (string Tenant, int Bucket) FindTenant(ShardTopology topology, string desiredShard)
     {
         var router = new ShardRouter(topology);
-        for (var index = 0; index < 1000; index++)
+        for (var index = 0; index < 10_000; index++)
         {
             var tenant = $"tenant-{index}";
             var scope = router.ResolveShard(typeof(ShardedRow), [tenant]);
-            if (scope.Key == desiredShard)
-                return (tenant, desiredShard);
+            var bucket = int.Parse(scope.Key!, System.Globalization.CultureInfo.InvariantCulture);
+            if (router.GetShard(bucket) == desiredShard)
+                return (tenant, bucket);
         }
 
         throw new InvalidOperationException($"No tenant mapped to shard '{desiredShard}'.");

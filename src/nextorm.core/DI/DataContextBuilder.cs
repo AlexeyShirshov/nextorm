@@ -70,6 +70,9 @@ public class DataContextBuilder
     /// </summary>
     public INamingConvention? NamingConvention { get; private set; }
 
+    /// <summary>The shard topology configured through <c>UseSharding</c>, or <see langword="null"/>.</summary>
+    internal IShardTopology? ShardTopology { get; set; }
+
     /// <summary>
     /// The letter case in which SQL keywords are emitted by default. Defaults to
     /// <see cref="NextORM.Core.KeywordCase.Lower"/> (unchanged historical output); can be overridden per

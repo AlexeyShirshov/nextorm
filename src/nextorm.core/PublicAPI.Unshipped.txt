@@ -69,7 +69,6 @@ NextORM.Core.AttributeShardKeyProvider.GetShardKey(System.Type! entityType) -> S
 NextORM.Core.AttributeShardKeyProvider.IsSharded(System.Type! entityType) -> bool
 NextORM.Core.ConsistentHashRing
 NextORM.Core.ConsistentHashRing.AddShard(string! shardId) -> void
-NextORM.Core.ConsistentHashRing.ConsistentHashRing(System.Collections.Generic.IEnumerable<string!>! shardIds, int virtualNodesPerShard = 128, int bucketCount = 4096) -> void
 NextORM.Core.ConsistentHashRing.GetBucket(System.ReadOnlySpan<byte> key) -> int
 NextORM.Core.ConsistentHashRing.GetShard(int bucket) -> string!
 NextORM.Core.ConsistentHashRing.RemoveShard(string! shardId) -> void
@@ -90,12 +89,11 @@ NextORM.Core.IShardRouter.GetShardKey(System.Type! entityType) -> System.Collect
 NextORM.Core.IShardRouter.IsSharded(System.Type! entityType) -> bool
 NextORM.Core.IShardRouter.ResolveShard(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingScope
 NextORM.Core.IShardTopology
-NextORM.Core.IShardTopology.GetPlacement(System.Type! entityType, string! shardId) -> NextORM.Core.ShardPlacement
 NextORM.Core.IShardTopology.Ring.get -> NextORM.Core.IConsistentHashRing!
 NextORM.Core.IShardTopology.ShardIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
 NextORM.Core.IShardTopology.Version.get -> int
 NextORM.Core.ShardDataContextBuilderExtensions
-static NextORM.Core.ShardDataContextBuilderExtensions.UseSharding(this NextORM.Core.DataContextBuilder! builder, NextORM.Core.ShardTopology! topology, NextORM.Core.IShardKeyProvider? keyProvider = null) -> NextORM.Core.DataContextBuilder!
+static NextORM.Core.ShardDataContextBuilderExtensions.UseSharding(this NextORM.Core.DataContextBuilder! builder, NextORM.Core.IShardTopology! topology, NextORM.Core.IShardKeyProvider? keyProvider = null) -> NextORM.Core.DataContextBuilder!
 NextORM.Core.ShardEntityMetadataProvider
 NextORM.Core.ShardEntityMetadataProvider.GetColumnName(System.Reflection.PropertyInfo! property, in NextORM.Core.MappingScope scope, NextORM.Core.INamingConvention? convention) -> string!
 NextORM.Core.ShardEntityMetadataProvider.GetMetadata(System.Type! entityType, in NextORM.Core.MappingScope scope) -> NextORM.Core.IEntityMetadata!
@@ -128,48 +126,56 @@ NextORM.Core.ShardRouter.Resolve(System.Type! entityType, object! entity) -> Nex
 NextORM.Core.ShardRouter.ResolveShard(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingScope
 NextORM.Core.ShardRouter.ShardRouter(NextORM.Core.IShardTopology! topology, NextORM.Core.IShardKeyProvider? keyProvider = null) -> void
 NextORM.Core.ShardTopology
-NextORM.Core.ShardTopology.AddShard(string! shardId, string? schema = null, string? tableName = null) -> void
-NextORM.Core.ShardTopology.GetPlacement(System.Type! entityType, string! shardId) -> NextORM.Core.ShardPlacement
 NextORM.Core.ShardTopology.RemoveShard(string! shardId) -> void
-NextORM.Core.ShardTopology.ShardTopology(int virtualNodesPerShard = 128, int bucketCount = 4096) -> void
 NextORM.Core.ShardTopology.Ring.get -> NextORM.Core.IConsistentHashRing!
 NextORM.Core.ShardTopology.ShardIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
 NextORM.Core.ShardTopology.Version.get -> int
-NextORM.Core.EntityBuilder<TEntity>.AcrossShards() -> NextORM.Core.ShardQuery<TEntity>!
-NextORM.Core.EntityBuilder<TEntity>.AcrossShards(params string![]! shardIds) -> NextORM.Core.ShardQuery<TEntity>!
 NextORM.Core.IShardRouter.ShardIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
 NextORM.Core.ShardQuery<TEntity, TResult>
-NextORM.Core.ShardQuery<TEntity, TResult>.ToArray() -> TResult[]!
-NextORM.Core.ShardQuery<TEntity, TResult>.ToArrayAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TResult[]!>!
-NextORM.Core.ShardQuery<TEntity, TResult>.ToList() -> System.Collections.Generic.List<TResult>!
-NextORM.Core.ShardQuery<TEntity, TResult>.ToListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<TResult>!>!
 NextORM.Core.ShardQuery<TEntity, TResult>.Where(System.Linq.Expressions.Expression<System.Func<TEntity, bool>!>! predicate) -> NextORM.Core.ShardQuery<TEntity, TResult>!
 NextORM.Core.ShardQuery<TEntity>
-NextORM.Core.ShardQuery<TEntity>.Any() -> bool
-NextORM.Core.ShardQuery<TEntity>.Count() -> int
 NextORM.Core.ShardQuery<TEntity>.Distinct() -> NextORM.Core.ShardQuery<TEntity>!
-NextORM.Core.ShardQuery<TEntity>.First() -> TEntity
-NextORM.Core.ShardQuery<TEntity>.OrderBy<TKey>(System.Linq.Expressions.Expression<System.Func<TEntity, TKey>!>! keySelector) -> NextORM.Core.ShardQuery<TEntity>!
-NextORM.Core.ShardQuery<TEntity>.OrderByDescending<TKey>(System.Linq.Expressions.Expression<System.Func<TEntity, TKey>!>! keySelector) -> NextORM.Core.ShardQuery<TEntity>!
 NextORM.Core.ShardQuery<TEntity>.Select<TResult>(System.Linq.Expressions.Expression<System.Func<TEntity, TResult>!>! selector) -> NextORM.Core.ShardQuery<TEntity, TResult>!
-NextORM.Core.ShardQuery<TEntity>.Single() -> TEntity
-NextORM.Core.ShardQuery<TEntity>.Skip(int count) -> NextORM.Core.ShardQuery<TEntity>!
-NextORM.Core.ShardQuery<TEntity>.Take(int count) -> NextORM.Core.ShardQuery<TEntity>!
-NextORM.Core.ShardQuery<TEntity>.ToArray() -> TEntity[]!
-NextORM.Core.ShardQuery<TEntity>.ToArrayAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TEntity[]!>!
-NextORM.Core.ShardQuery<TEntity>.ToList() -> System.Collections.Generic.List<TEntity>!
-NextORM.Core.ShardQuery<TEntity>.ToListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<TEntity>!>!
 NextORM.Core.ShardQuery<TEntity>.Where(System.Linq.Expressions.Expression<System.Func<TEntity, bool>!>! predicate) -> NextORM.Core.ShardQuery<TEntity>!
 NextORM.Core.ShardRouter.ShardIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
-NextORM.Core.ShardQuery<TEntity>.All(System.Linq.Expressions.Expression<System.Func<TEntity, bool>!>! predicate) -> bool
-NextORM.Core.ShardQuery<TEntity>.AsAsyncEnumerable(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<TEntity>!
-NextORM.Core.ShardQuery<TEntity>.Average<TValue>(System.Linq.Expressions.Expression<System.Func<TEntity, TValue>!>! selector) -> TValue
-NextORM.Core.ShardQuery<TEntity>.Max<TValue>(System.Linq.Expressions.Expression<System.Func<TEntity, TValue>!>! selector) -> TValue
-NextORM.Core.ShardQuery<TEntity>.Min<TValue>(System.Linq.Expressions.Expression<System.Func<TEntity, TValue>!>! selector) -> TValue
-NextORM.Core.ShardQuery<TEntity>.Sum<TValue>(System.Linq.Expressions.Expression<System.Func<TEntity, TValue>!>! selector) -> TValue
-NextORM.Core.ShardQuery<TEntity>.ThenBy<TKey>(System.Linq.Expressions.Expression<System.Func<TEntity, TKey>!>! keySelector) -> NextORM.Core.ShardQuery<TEntity>!
-NextORM.Core.ShardQuery<TEntity>.ThenByDescending<TKey>(System.Linq.Expressions.Expression<System.Func<TEntity, TKey>!>! keySelector) -> NextORM.Core.ShardQuery<TEntity>!
-NextORM.Core.ShardQuery<TEntity, TResult>.AsAsyncEnumerable(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<TResult>!
+NextORM.Core.BucketHash
+NextORM.Core.ConsistentHashRing.ConsistentHashRing(System.Collections.Generic.IEnumerable<string!>! shardIds, int bucketCount, NextORM.Core.BucketHash? bucketHash = null, NextORM.Core.ShardHash? shardHash = null) -> void
+NextORM.Core.ShardHash
+virtual NextORM.Core.BucketHash.Invoke(System.ReadOnlySpan<byte> key, int bucketCount) -> int
+virtual NextORM.Core.ShardHash.Invoke(int bucket, string! shardId) -> ulong
+NextORM.Core.BucketPlacementMode
+NextORM.Core.BucketPlacementMode.SchemaPerBucket = 1 -> NextORM.Core.BucketPlacementMode
+NextORM.Core.BucketPlacementMode.TableSuffix = 0 -> NextORM.Core.BucketPlacementMode
+NextORM.Core.IShardTopology.GetConnectionString(string! shardId) -> string!
+NextORM.Core.IShardTopology.PlacementMode.get -> NextORM.Core.BucketPlacementMode
+NextORM.Core.ShardTopology.AddShard(string! shardId, string! connectionString) -> void
+NextORM.Core.ShardTopology.GetConnectionString(string! shardId) -> string!
+NextORM.Core.ShardTopology.PlacementMode.get -> NextORM.Core.BucketPlacementMode
+NextORM.Core.ShardTopology.ShardTopology(int bucketCount, NextORM.Core.BucketPlacementMode placementMode = NextORM.Core.BucketPlacementMode.TableSuffix) -> void
+NextORM.Core.IShardRouter.BucketCount.get -> int
+NextORM.Core.IShardRouter.GetShard(int bucket) -> string!
+NextORM.Core.ShardRouter.BucketCount.get -> int
+NextORM.Core.ShardRouter.GetShard(int bucket) -> string!
+NextORM.Core.PreparedQueryCommand<TResult, TRecord>.MappingScope.get -> NextORM.Core.MappingScope
+NextORM.Core.EntityBuilder<TEntity>.AcrossBuckets(int? parallelism = null) -> NextORM.Core.ShardQuery<TEntity>!
+NextORM.Core.ShardQuery<TEntity, TResult>.Any() -> bool[]!
+NextORM.Core.ShardQuery<TEntity, TResult>.AsAsyncEnumerable(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<TResult[]!>!
+NextORM.Core.ShardQuery<TEntity, TResult>.Count() -> int[]!
+NextORM.Core.ShardQuery<TEntity, TResult>.ToArray() -> TResult[]![]!
+NextORM.Core.ShardQuery<TEntity, TResult>.ToArrayAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TResult[]![]!>!
+NextORM.Core.ShardQuery<TEntity, TResult>.ToList() -> System.Collections.Generic.List<TResult>![]!
+NextORM.Core.ShardQuery<TEntity, TResult>.ToListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<TResult>![]!>!
+NextORM.Core.ShardQuery<TEntity>.Any() -> bool[]!
+NextORM.Core.ShardQuery<TEntity>.AsAsyncEnumerable(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<TEntity[]!>!
+NextORM.Core.ShardQuery<TEntity>.Buckets.get -> System.Collections.Generic.IReadOnlyList<int>!
+NextORM.Core.ShardQuery<TEntity>.Count() -> int[]!
+NextORM.Core.ShardQuery<TEntity>.First() -> TEntity[]!
+NextORM.Core.ShardQuery<TEntity>.OrderBy(System.Linq.Expressions.Expression<System.Func<TEntity, object?>!>! keySelector) -> NextORM.Core.ShardQuery<TEntity>!
+NextORM.Core.ShardQuery<TEntity>.Single() -> TEntity[]!
+NextORM.Core.ShardQuery<TEntity>.ToArray() -> TEntity[]![]!
+NextORM.Core.ShardQuery<TEntity>.ToArrayAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TEntity[]![]!>!
+NextORM.Core.ShardQuery<TEntity>.ToList() -> System.Collections.Generic.List<TEntity>![]!
+NextORM.Core.ShardQuery<TEntity>.ToListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<TEntity>![]!>!
 NextORM.Core.IVectorValue
 NextORM.Core.IVectorValue.Dimensions.get -> int
 NextORM.Core.Vector

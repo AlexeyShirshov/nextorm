@@ -10,7 +10,7 @@ public sealed class ShardEntityMetadataProviderTests
     public void DefaultScope_ShouldDelegateMetadataUnchanged()
     {
         var inner = new DefaultEntityMetadataProvider();
-        var provider = new ShardEntityMetadataProvider(inner, CreateTopology("east"));
+        var provider = new ShardEntityMetadataProvider(inner, CreateTopology());
         var scope = global::NextORM.Core.MappingScope.Default;
         var expected = inner.GetMetadata(typeof(Orders), scope);
 
@@ -18,64 +18,102 @@ public sealed class ShardEntityMetadataProviderTests
     }
 
     [Fact]
-    public void ScopedPlacement_ShouldApplyConfiguredSchemaAndTable()
+    public void TableSuffixPlacement_ShouldDeriveTheTableFromTheBucket()
     {
-        var topology = new ShardTopology();
-        topology.AddShard("east", "sales", "orders_east");
-        var provider = new ShardEntityMetadataProvider(new DefaultEntityMetadataProvider(), topology);
-        var metadata = provider.GetMetadata(typeof(Orders), new global::NextORM.Core.MappingScope("east"));
+        var provider = new ShardEntityMetadataProvider(new DefaultEntityMetadataProvider(), CreateTopology());
 
-        metadata.Schema.Should().Be("sales");
-        metadata.TableName.Should().Be("orders_east");
+        var metadata = provider.GetMetadata(typeof(Orders), BucketScope(7));
+
+        metadata.TableName.Should().Be("Orders_7");
+        metadata.Schema.Should().BeNull();
     }
 
     [Fact]
-    public void NullPlacementParts_ShouldFallBackToInnerMetadataAndShardSuffix()
+    public void SchemaPerBucketPlacement_ShouldDeriveTheSchemaFromTheBucket()
     {
-        var inner = new DefaultEntityMetadataProvider();
-        var topology = CreateTopology("east");
-        var provider = new ShardEntityMetadataProvider(inner, topology);
-        var defaultScope = global::NextORM.Core.MappingScope.Default;
-        var baseMetadata = inner.GetMetadata(typeof(Orders), defaultScope);
+        var topology = new ShardTopology(4096, BucketPlacementMode.SchemaPerBucket);
+        topology.AddShard("east", "Server=east");
+        var provider = new ShardEntityMetadataProvider(new DefaultEntityMetadataProvider(), topology);
 
-        var metadata = provider.GetMetadata(typeof(Orders), new global::NextORM.Core.MappingScope("east"));
+        var metadata = provider.GetMetadata(typeof(Orders), BucketScope(7));
 
-        metadata.Schema.Should().Be(baseMetadata.Schema);
-        metadata.TableName.Should().Be($"{baseMetadata.TableName}_east");
+        metadata.Schema.Should().Be("bucket_7");
+        metadata.TableName.Should().Be("Orders");
+    }
+
+    [Fact]
+    public void Placement_ShouldNotDependOnTheShardSet()
+    {
+        // The physical name is a function of the bucket only: adding or removing shards must not rename data.
+        var provider = new ShardEntityMetadataProvider(new DefaultEntityMetadataProvider(), CreateTopology());
+        var before = provider.GetMetadata(typeof(Orders), BucketScope(7));
+
+        var topology = CreateTopology();
+        topology.AddShard("north", "Server=north");
+        var after = new ShardEntityMetadataProvider(new DefaultEntityMetadataProvider(), topology)
+            .GetMetadata(typeof(Orders), BucketScope(7));
+
+        after.TableName.Should().Be(before.TableName);
+        after.Schema.Should().Be(before.Schema);
+    }
+
+    [Fact]
+    public void ScopeKey_ShouldRejectValuesThatAreNotBuckets()
+    {
+        var provider = new ShardEntityMetadataProvider(new DefaultEntityMetadataProvider(), CreateTopology());
+
+        FluentActions.Invoking(() => provider.GetMetadata(typeof(Orders), new global::NextORM.Core.MappingScope("east")))
+            .Should().Throw<InvalidOperationException>().WithMessage("*not a bucket number*");
+        FluentActions.Invoking(() => provider.GetMetadata(typeof(Orders), BucketScope(4096)))
+            .Should().Throw<InvalidOperationException>().WithMessage("*outside*");
     }
 
     [Fact]
     public void ColumnName_ShouldDelegateToWrappedProvider()
     {
         var inner = new ColumnMarkerProvider();
-        var provider = new ShardEntityMetadataProvider(inner, CreateTopology("east"));
+        var provider = new ShardEntityMetadataProvider(inner, CreateTopology());
         var property = typeof(Orders).GetProperty(nameof(Orders.Id))!;
-        var scope = new global::NextORM.Core.MappingScope("east");
+        var scope = BucketScope(3);
 
         provider.GetColumnName(property, scope, null).Should().Be("custom_Id");
         inner.LastScope.Should().Be(scope);
     }
 
     [Fact]
-    public void Topology_ShouldValidateSqlSafeShardIdentifiersAndVersionChanges()
+    public void Topology_ShouldStoreServerConnectionsAndRejectInvalidChanges()
     {
-        var topology = new ShardTopology();
+        var topology = CreateTopology();
 
-        topology.Version.Should().Be(0);
-        FluentActions.Invoking(() => topology.AddShard("bad-name"))
+        var versionBefore = topology.Version;
+        topology.GetConnectionString("east").Should().Be("Server=east");
+
+        // A shard id never reaches a SQL identifier, so non-identifier characters are allowed.
+        topology.AddShard("eu-west-1", "Server=eu;Database=app");
+        topology.Version.Should().Be(versionBefore + 1);
+        topology.ShardIds.Should().Equal("east", "eu-west-1", "west");
+        topology.GetConnectionString("eu-west-1").Should().Be("Server=eu;Database=app");
+
+        FluentActions.Invoking(() => topology.AddShard("east", "Server=other"))
             .Should().Throw<ArgumentException>();
-        topology.AddShard("valid_1");
-        topology.Version.Should().Be(1);
-        topology.ShardIds.Should().Equal("valid_1");
-        topology.GetPlacement(typeof(Orders), "valid_1").Should().Be(new ShardPlacement(null, null));
-        FluentActions.Invoking(() => topology.RemoveShard("valid_1"))
+        FluentActions.Invoking(() => topology.AddShard("blank", ""))
+            .Should().Throw<ArgumentException>();
+        FluentActions.Invoking(() => topology.AddShard("", "Server=blank"))
+            .Should().Throw<ArgumentException>();
+        FluentActions.Invoking(() => topology.GetConnectionString("missing"))
+            .Should().Throw<ArgumentException>();
+        FluentActions.Invoking(() => topology.RemoveShard("missing"))
             .Should().Throw<ArgumentException>();
     }
 
-    private static ShardTopology CreateTopology(string shardId)
+    private static global::NextORM.Core.MappingScope BucketScope(int bucket)
+        => new(bucket.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+    private static ShardTopology CreateTopology()
     {
-        var topology = new ShardTopology();
-        topology.AddShard(shardId);
+        var topology = new ShardTopology(4096);
+        topology.AddShard("east", "Server=east");
+        topology.AddShard("west", "Server=west");
         return topology;
     }
 

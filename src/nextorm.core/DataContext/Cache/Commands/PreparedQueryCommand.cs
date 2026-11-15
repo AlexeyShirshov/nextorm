@@ -10,6 +10,12 @@ public class PreparedQueryCommand<TResult, TRecord> : IPreparedQueryCommand<TRes
     public readonly Func<TRecord, TResult>? MapDelegate;
 
     /// <summary>
+    /// The mapping scope the command was planned for. A bucket scope selects the shard (server) whose
+    /// connection executes the command; the default scope keeps the context connection.
+    /// </summary>
+    public MappingScope MappingScope { get; internal set; } = MappingScope.Default;
+
+    /// <summary>
     /// Creates a prepared command with a fixed record-to-result mapper.
     /// </summary>
     /// <param name="mapDelegate">Maps a record to a result, or <see langword="null"/> when no projection is needed.</param>

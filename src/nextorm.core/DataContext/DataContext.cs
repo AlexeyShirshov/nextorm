@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
 using System.Collections;
+using System.Collections.Concurrent;
+using System.Globalization;
 using System.Data;
 using System.Data.Common;
 using System.Linq.Expressions;
@@ -22,6 +24,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     private readonly NextORM.Core.EagerLoadMode _eagerLoadMode;
     private readonly QueryCache _queryCache;
     private readonly DbConnectionManager _connectionManager;
+    private readonly ConnectionHooks _connectionHooks;
+    private readonly LoggingOptions _connectionLogging;
+    private readonly IShardTopology? _shardTopology;
+    private readonly ConcurrentDictionary<string, DbConnectionManager> _shardConnectionManagers = new(StringComparer.Ordinal);
     private readonly QueryExecutor _executor;
     private readonly QueryPlanner _planner;
     private readonly InterceptorHooks _interceptors;
@@ -89,12 +95,15 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // the context and they are passed in as delegates (bound here, never invoked during
         // construction). `connectionString`/`providedConnection` differ in ownership: the context
         // disposes only the connection it creates from the string.
+        _connectionHooks = new ConnectionHooks(CreateDbConnection, OnConnectionCreated);
+        _connectionLogging = new LoggingOptions(_environment.Logger, LogSensitiveData: _environment.LogSensitiveData);
+        _shardTopology = optionsBuilder.ShardTopology;
         _connectionManager = new DbConnectionManager(
             this,
-            new ConnectionHooks(CreateDbConnection, OnConnectionCreated),
+            _connectionHooks,
             connectionString,
             providedConnection,
-            new LoggingOptions(_environment.Logger, LogSensitiveData: _environment.LogSensitiveData),
+            _connectionLogging,
             () => Dialect.SupportsTransactions,
             () => Dialect.SupportsSavepoints,
             _interceptors);
@@ -112,6 +121,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         _executor = new QueryExecutor(
             this,
             _connectionManager,
+            ManagerFor,
             _createParam,
             _createParamSimple,
             _createProcedureParam,
@@ -284,6 +294,37 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <summary>Returns the connection in use, creating it on first access (which may throw if the connection string is missing).</summary>
     /// <returns>The underlying database connection.</returns>
     public DbConnection GetConnection() => _connectionManager.GetConnection();
+
+    /// <summary>
+    /// Resolves the connection manager that executes a command planned for <paramref name="scope"/>: a
+    /// bucket scope selects the shard (server) that owns the bucket, and every shard keeps its own lazy
+    /// connection; the default scope keeps the context connection.
+    /// </summary>
+    internal IConnectionManager ManagerFor(MappingScope scope)
+    {
+        if (scope == MappingScope.Default || string.IsNullOrEmpty(scope.Key) || _shardTopology is null)
+            return _connectionManager;
+
+        if (!int.TryParse(scope.Key, NumberStyles.None, CultureInfo.InvariantCulture, out var bucket) ||
+            (uint)bucket >= (uint)_shardTopology.Ring.BucketCount)
+        {
+            return _connectionManager;
+        }
+
+        var shardId = _shardTopology.Ring.GetShard(bucket);
+        return _shardConnectionManagers.GetOrAdd(shardId, CreateShardConnectionManager);
+    }
+
+    private DbConnectionManager CreateShardConnectionManager(string shardId)
+        => new(
+            this,
+            _connectionHooks,
+            _shardTopology!.GetConnectionString(shardId),
+            providedConnection: null,
+            _connectionLogging,
+            () => Dialect.SupportsTransactions,
+            () => Dialect.SupportsSavepoints,
+            _interceptors);
 
     // Transaction axis (ITransactionManager). Implemented explicitly so the concrete context does not
     // grow twelve public members; callers reach them through the ITransactionManager role, as documented.
@@ -965,26 +1006,26 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         var (sql, parameters) = BuildInsertSql((InsertCommand)command);
         // The identity function runs in the same batch as the insert: SCOPE_IDENTITY() is scoped to the
         // batch, so issuing it as a separate command would return NULL on SQL Server.
-        return _executor.ExecuteScalar(sql + "; " + Dialect.MakeIdentityFunction(KeywordCase), parameters);
+        return _executor.ExecuteScalar(sql + "; " + Dialect.MakeIdentityFunction(KeywordCase), parameters, command.MappingScope);
     }
 
     async Task<object?> IMutationExecutor.ExecuteIdentityFunction(MutationCommand command, CancellationToken cancellationToken)
     {
         EnsureIdentityFunctionSupported();
         var (sql, parameters) = BuildInsertSql((InsertCommand)command);
-        return await _executor.ExecuteScalarAsync(sql + "; " + Dialect.MakeIdentityFunction(KeywordCase), parameters, cancellationToken).ConfigureAwait(false);
+        return await _executor.ExecuteScalarAsync(sql + "; " + Dialect.MakeIdentityFunction(KeywordCase), parameters, cancellationToken, command.MappingScope).ConfigureAwait(false);
     }
 
     int IMutationExecutor.Execute(MutationCommand command)
     {
         var (sql, parameters) = BuildMutationSql(command);
-        return _executor.ExecuteNonQuery(sql, parameters);
+        return _executor.ExecuteNonQuery(sql, parameters, command.MappingScope);
     }
 
     async Task<int> IMutationExecutor.Execute(MutationCommand command, CancellationToken cancellationToken)
     {
         var (sql, parameters) = BuildMutationSql(command);
-        return await _executor.ExecuteNonQueryAsync(sql, parameters, cancellationToken).ConfigureAwait(false);
+        return await _executor.ExecuteNonQueryAsync(sql, parameters, cancellationToken, command.MappingScope).ConfigureAwait(false);
     }
 
     object? IMutationExecutor.ExecuteIdentity(MutationCommand command)
@@ -992,15 +1033,15 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         if (Dialect.SupportsReturning || Dialect.SupportsOutput)
         {
             var (sql, parameters) = BuildInsertSql((InsertCommand)command);
-            return _executor.ExecuteScalar(sql, parameters);
+            return _executor.ExecuteScalar(sql, parameters, command.MappingScope);
         }
 
         if (Dialect.SupportsLastInsertId)
         {
             EnsureIdentityColumn(command);
             var (sql, parameters) = BuildInsertSql((InsertCommand)command);
-            _executor.ExecuteNonQuery(sql, parameters);
-            return _executor.ExecuteScalar(Dialect.MakeLastInsertId(KeywordCase), []);
+            _executor.ExecuteNonQuery(sql, parameters, command.MappingScope);
+            return _executor.ExecuteScalar(Dialect.MakeLastInsertId(KeywordCase), [], command.MappingScope);
         }
 
         throw new NotSupportedException(
@@ -1012,15 +1053,15 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         if (Dialect.SupportsReturning || Dialect.SupportsOutput)
         {
             var (sql, parameters) = BuildInsertSql((InsertCommand)command);
-            return await _executor.ExecuteScalarAsync(sql, parameters, cancellationToken).ConfigureAwait(false);
+            return await _executor.ExecuteScalarAsync(sql, parameters, cancellationToken, command.MappingScope).ConfigureAwait(false);
         }
 
         if (Dialect.SupportsLastInsertId)
         {
             EnsureIdentityColumn(command);
             var (sql, parameters) = BuildInsertSql((InsertCommand)command);
-            await _executor.ExecuteNonQueryAsync(sql, parameters, cancellationToken).ConfigureAwait(false);
-            return await _executor.ExecuteScalarAsync(Dialect.MakeLastInsertId(KeywordCase), [], cancellationToken).ConfigureAwait(false);
+            await _executor.ExecuteNonQueryAsync(sql, parameters, cancellationToken, command.MappingScope).ConfigureAwait(false);
+            return await _executor.ExecuteScalarAsync(Dialect.MakeLastInsertId(KeywordCase), [], cancellationToken, command.MappingScope).ConfigureAwait(false);
         }
 
         throw new NotSupportedException(
@@ -1033,7 +1074,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         EnsureReturningMaterializable<TResult>(oneColumn);
         var (sql, parameters) = BuildReturningSql(command);
         var mapper = RowMapperFactory.GetOrBuild<TResult>(sql, GetType(), selectList, oneColumn, MapColumnExpression);
-        return _executor.ExecuteReader(sql, parameters, mapper);
+        return _executor.ExecuteReader(sql, parameters, mapper, command.MappingScope);
     }
 
     async Task<IReadOnlyList<TResult>> IMutationExecutor.ExecuteReturning<TResult>(MutationCommand command, SelectExpression[] selectList, bool oneColumn, CancellationToken cancellationToken)
@@ -1042,7 +1083,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         EnsureReturningMaterializable<TResult>(oneColumn);
         var (sql, parameters) = BuildReturningSql(command);
         var mapper = RowMapperFactory.GetOrBuild<TResult>(sql, GetType(), selectList, oneColumn, MapColumnExpression);
-        return await _executor.ExecuteReaderAsync(sql, parameters, mapper, cancellationToken).ConfigureAwait(false);
+        return await _executor.ExecuteReaderAsync(sql, parameters, mapper, cancellationToken, command.MappingScope).ConfigureAwait(false);
     }
 
     // Raw command execution (IRawCommandExecutor). Public so a concrete context exposes the entry
@@ -1892,6 +1933,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // a disposed context must not keep anything alive through the fast path.
         _queryCache.ClearScalarArtifacts();
         _connectionManager.DisposeConnection();
+        foreach (var shardManager in _shardConnectionManagers.Values)
+            shardManager.DisposeConnection();
+        _shardConnectionManagers.Clear();
         Disposed?.Invoke(this, EventArgs.Empty);
     }
 
