@@ -355,3 +355,13 @@ NextORM.Core.EntityPropertyDescriptor.DurationUnit.get -> NextORM.Core.DurationU
 NextORM.Core.EntityPropertyDescriptor.DurationUnit.init -> void
 NextORM.Core.EntityPropertyDescriptor.RangeColumns.get -> NextORM.Core.RangeColumnsMetadata?
 NextORM.Core.EntityPropertyDescriptor.RangeColumns.init -> void
+NextORM.Core.EntityFilterDescriptor
+NextORM.Core.EntityFilterDescriptor.EntityFilterDescriptor() -> void
+NextORM.Core.EntityFilterDescriptor.Func.get -> System.Delegate?
+NextORM.Core.EntityFilterDescriptor.Func.init -> void
+NextORM.Core.EntityFilterDescriptor.Key.get -> string?
+NextORM.Core.EntityFilterDescriptor.Key.init -> void
+NextORM.Core.EntityFilterDescriptor.Lambda.get -> System.Linq.Expressions.LambdaExpression?
+NextORM.Core.EntityFilterDescriptor.Lambda.init -> void
+NextORM.Core.EntityMetadataDescriptor.Filters.get -> System.Collections.Generic.IReadOnlyList<NextORM.Core.EntityFilterDescriptor!>!
+NextORM.Core.EntityMetadataDescriptor.Filters.init -> void

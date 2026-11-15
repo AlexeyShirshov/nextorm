@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Linq.Expressions;
 using System.Reflection;
 
 namespace NextORM.Core;
@@ -71,6 +72,13 @@ public sealed class EntityMetadataDescriptor
     public IReadOnlyList<EntityPropertyDescriptor> Properties { get; init; } = Array.Empty<EntityPropertyDescriptor>();
 
     /// <summary>
+    /// The global query-filter declarations of the entity, in declaration order. Keys are resolved when
+    /// the mapping is built (a repeated key replaces the earlier filter, an anonymous declaration is
+    /// additive), so the declarations stay exactly as written.
+    /// </summary>
+    public IReadOnlyList<EntityFilterDescriptor> Filters { get; init; } = Array.Empty<EntityFilterDescriptor>();
+
+    /// <summary>
     /// Builds the mapping. The declaration order is kept as-is: the generator emits the properties in the
     /// order the compiler emits them, which is the order a reflective enumeration returns, so a generated
     /// mapping and the reflection fallback produce the same column order (and therefore the same SQL).
@@ -106,7 +114,43 @@ public sealed class EntityMetadataDescriptor
 
         InferKeyIfMissing(properties, TypeName);
 
-        return new EntityMetadata(TableName, properties, IsTableNameAuto, dynamicColumnsStore: null, filters: null, relationships: null, schema: Schema);
+        return new EntityMetadata(TableName, properties, IsTableNameAuto, dynamicColumnsStore: null, filters: BuildFilters(), relationships: null, schema: Schema);
+    }
+
+    // The key rules of the reflective build: an anonymous declaration is additive, a named one replaces
+    // an earlier declaration with the same key, and a named declaration without a lambda or function
+    // removes the slot.
+    private IReadOnlyList<IQueryFilterMetadata> BuildFilters()
+    {
+        var filters = new List<IQueryFilterMetadata>(Filters.Count);
+        for (var i = 0; i < Filters.Count; i++)
+        {
+            var declared = Filters[i];
+            var key = declared.Key;
+
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                if (declared.Lambda is not null || declared.Func is not null)
+                    filters.Add(new QueryFilterMetadata(QueryFilters.AnonymousKey, declared.Lambda, declared.Func));
+                continue;
+            }
+
+            var index = filters.FindIndex(filter => string.Equals(filter.Key, key, StringComparison.Ordinal));
+            if (declared.Lambda is null && declared.Func is null)
+            {
+                if (index >= 0)
+                    filters.RemoveAt(index);
+                continue;
+            }
+
+            var metadata = new QueryFilterMetadata(key, declared.Lambda, declared.Func);
+            if (index >= 0)
+                filters[index] = metadata;
+            else
+                filters.Add(metadata);
+        }
+
+        return filters;
     }
 
     // The convention the reflective auto-build applies: with no declared key, a property named "Id"
@@ -132,6 +176,23 @@ public sealed class EntityMetadataDescriptor
             }
         }
     }
+}
+
+/// <summary>
+/// One global query-filter declaration in a compile-time <see cref="EntityMetadataDescriptor"/>: the same
+/// three declarations the <c>[QueryFilter]</c> attribute carries, with the static member already
+/// resolved to its value by generated code instead of a reflective member lookup.
+/// </summary>
+public sealed class EntityFilterDescriptor
+{
+    /// <summary>The filter key, or <see langword="null"/>/empty for an anonymous filter.</summary>
+    public string? Key { get; init; }
+
+    /// <summary>The filter predicate, or <see langword="null"/> when the declaration carries a function instead.</summary>
+    public LambdaExpression? Lambda { get; init; }
+
+    /// <summary>The builder-function form of the filter, or <see langword="null"/> when the declaration carries a predicate instead.</summary>
+    public Delegate? Func { get; init; }
 }
 
 /// <summary>

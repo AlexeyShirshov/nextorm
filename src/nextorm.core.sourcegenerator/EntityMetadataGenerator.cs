@@ -43,6 +43,7 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
     private const string CollationAttribute = CoreNamespace + ".CollationAttribute";
     private const string DurationAttribute = CoreNamespace + ".DurationAttribute";
     private const string RangeColumnsAttribute = CoreNamespace + ".RangeColumnsAttribute";
+    private const string QueryFilterAttribute = CoreNamespace + ".QueryFilterAttribute";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -155,6 +156,29 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
         }
 
         source.AppendLine("                },");
+
+        if (entity.Filters.Count > 0)
+        {
+            source.AppendLine("                Filters = new global::NextORM.Core.EntityFilterDescriptor[]");
+            source.AppendLine("                {");
+            foreach (var filter in entity.Filters)
+            {
+                source.AppendLine("                    new global::NextORM.Core.EntityFilterDescriptor");
+                source.AppendLine("                    {");
+                if (filter.Key is not null)
+                    source.Append("                        Key = ").Append(Literal(filter.Key)).AppendLine(",");
+                if (filter.MemberReference is not null)
+                {
+                    source.Append("                        ").Append(filter.IsLambda ? "Lambda" : "Func")
+                        .Append(" = ").Append(filter.MemberReference).AppendLine(",");
+                }
+
+                source.AppendLine("                    },");
+            }
+
+            source.AppendLine("                },");
+        }
+
         source.AppendLine("            }.Build());");
     }
 
@@ -205,6 +229,7 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
         string? tableName = null;
         var tableNameAuto = true;
         var hasMappingAttribute = false;
+        var filters = new List<CoveredFilter>();
 
         foreach (var attribute in typeAttributes)
         {
@@ -226,6 +251,12 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
                     return null;
                 tableNameAuto = false;
                 hasMappingAttribute = true;
+            }
+            else if (name == QueryFilterAttribute)
+            {
+                if (DescribeFilter(symbol, attribute) is not { } filter)
+                    return null;
+                filters.Add(filter);
             }
             else if (IsUnreproducible(name))
             {
@@ -354,7 +385,7 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
             return null;
 
         var fullName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty);
-        return new CoveredEntity(fullName, tableName ?? symbol.Name, tableNameAuto, Schema: null, symbol.Name, properties);
+        return new CoveredEntity(fullName, tableName ?? symbol.Name, tableNameAuto, Schema: null, symbol.Name, properties, filters);
     }
 
     /// <summary>
@@ -366,11 +397,80 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
     private static bool IsUnreproducible(string attributeFullName)
     {
         if (attributeFullName is SqlTableAttribute or DecimalPrecisionAttribute or CollationAttribute
-            or DurationAttribute or RangeColumnsAttribute)
+            or DurationAttribute or RangeColumnsAttribute or QueryFilterAttribute)
             return false;
 
         var namespaceEnd = attributeFullName.LastIndexOf('.');
         return namespaceEnd > 0 && attributeFullName.Substring(0, namespaceEnd) == CoreNamespace;
+    }
+
+    /// <summary>
+    /// Reads one <c>[QueryFilter]</c> declaration, or returns <see langword="null"/> when it cannot be
+    /// reproduced: both forms declared (the reflective build throws), a member that is not accessible to
+    /// generated code, or a member whose type is not a predicate/function.
+    /// </summary>
+    private static CoveredFilter? DescribeFilter(INamedTypeSymbol entity, AttributeData attribute)
+    {
+        var key = NamedString(attribute, "FilterKey");
+        var lambdaName = NamedString(attribute, "FilterLambda");
+        var funcName = NamedString(attribute, "FilterFunc");
+
+        var hasLambda = !string.IsNullOrWhiteSpace(lambdaName);
+        var hasFunc = !string.IsNullOrWhiteSpace(funcName);
+        if (hasLambda && hasFunc)
+            return null;
+
+        if (!hasLambda && !hasFunc)
+            return string.IsNullOrWhiteSpace(key) ? null : new CoveredFilter(key, MemberReference: null, IsLambda: false);
+
+        var member = ResolveStaticMember(entity, hasLambda ? lambdaName! : funcName!, expectLambda: hasLambda);
+        return member is null ? null : new CoveredFilter(key, member, hasLambda);
+    }
+
+    /// <summary>
+    /// Names a static field, property or parameterless method of the entity so generated code reads it
+    /// directly, replacing the reflective <c>GetMember</c> + <c>GetValue</c>/<c>Invoke</c> lookup.
+    /// </summary>
+    private static string? ResolveStaticMember(INamedTypeSymbol entity, string name, bool expectLambda)
+    {
+        var typeReference = "global::" + entity.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty);
+
+        foreach (var member in entity.GetMembers(name))
+        {
+            switch (member)
+            {
+                case IPropertySymbol property when property.IsStatic && IsAccessibleToGeneratedCode(property.DeclaredAccessibility):
+                    return DerivesFrom(property.Type, expectLambda ? "System.Linq.Expressions.LambdaExpression" : "System.Delegate")
+                        ? typeReference + "." + property.Name
+                        : null;
+                case IFieldSymbol field when field.IsStatic && IsAccessibleToGeneratedCode(field.DeclaredAccessibility):
+                    return DerivesFrom(field.Type, expectLambda ? "System.Linq.Expressions.LambdaExpression" : "System.Delegate")
+                        ? typeReference + "." + field.Name
+                        : null;
+                case IMethodSymbol method when method.IsStatic && method.Parameters.Length == 0 && !method.IsGenericMethod
+                    && IsAccessibleToGeneratedCode(method.DeclaredAccessibility):
+                    return DerivesFrom(method.ReturnType, expectLambda ? "System.Linq.Expressions.LambdaExpression" : "System.Delegate")
+                        ? typeReference + "." + method.Name + "()"
+                        : null;
+            }
+        }
+
+        return null;
+    }
+
+    // A private member is not reachable from the generated class, so the type keeps the reflective path.
+    private static bool IsAccessibleToGeneratedCode(Accessibility accessibility)
+        => accessibility is Accessibility.Public or Accessibility.Internal or Accessibility.ProtectedOrInternal;
+
+    private static bool DerivesFrom(ITypeSymbol type, string baseTypeFullName)
+    {
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            if (current.ToDisplayString() == baseTypeFullName)
+                return true;
+        }
+
+        return false;
     }
 
     private static int? IntArgument(AttributeData attribute, int position, string name)
@@ -452,7 +552,15 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
         bool IsTableNameAuto,
         string? Schema,
         string TypeName,
-        List<CoveredProperty> Properties);
+        List<CoveredProperty> Properties,
+        List<CoveredFilter> Filters);
+
+    /// <summary>
+    /// One <c>[QueryFilter]</c> declaration. <paramref name="MemberReference"/> is the generated
+    /// expression naming the static member (or its invocation); <see langword="null"/> for a keyed
+    /// declaration that only removes a filter slot.
+    /// </summary>
+    private sealed record CoveredFilter(string? Key, string? MemberReference, bool IsLambda);
 
     private sealed record CoveredProperty(
         string Name,

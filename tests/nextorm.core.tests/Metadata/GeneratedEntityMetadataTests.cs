@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Linq.Expressions;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -27,6 +28,10 @@ public sealed class GeneratedEntityMetadataTests
     [Fact]
     public void GeneratedDescription_ShouldMatchReflectiveAutoBuild_ForTypedColumnAttributes()
         => AssertSameMetadata<GenTypedColumns>();
+
+    [Fact]
+    public void GeneratedDescription_ShouldMatchReflectiveAutoBuild_ForQueryFilters()
+        => AssertSameMetadata<GenFiltered>();
 
     [Fact]
     public void GeneratedDescription_ShouldMatchReflectiveAutoBuild_ForARangeColumnPair()
@@ -108,6 +113,21 @@ public sealed class GeneratedEntityMetadataTests
                 actual.RangeColumns.LowerInclusive.Should().Be(expected.RangeColumns.LowerInclusive);
                 actual.RangeColumns.UpperInclusive.Should().Be(expected.RangeColumns.UpperInclusive);
             }
+        }
+
+        generated.Filters.Should().HaveCount(reflected.Filters.Count);
+        for (var i = 0; i < reflected.Filters.Count; i++)
+        {
+            var expectedFilter = reflected.Filters[i];
+            var actualFilter = generated.Filters[i];
+
+            actualFilter.Key.Should().Be(expectedFilter.Key);
+            // The predicate is compared by its expression text rather than by reference: a filter declared
+            // as a computed property builds a new expression on every read.
+            (actualFilter.Lambda is null).Should().Be(expectedFilter.Lambda is null, $"filter #{i} must carry the same declaration form");
+            actualFilter.Lambda?.ToString().Should().Be(expectedFilter.Lambda?.ToString());
+            (actualFilter.Func is null).Should().Be(expectedFilter.Func is null, $"filter #{i} must carry the same declaration form");
+            actualFilter.Func?.Method.Name.Should().Be(expectedFilter.Func?.Method.Name);
         }
     }
 }
@@ -192,6 +212,24 @@ public sealed class GenRangeColumns
 
     [RangeColumns("lower_bound", "upper_bound", UpperInclusive = true)]
     public Range<int> Span { get; set; }
+}
+
+[SqlTable("gen_filtered")]
+[QueryFilter(FilterLambda = nameof(ActiveFilter))]
+[QueryFilter(FilterKey = "tenant", FilterFunc = nameof(TenantFunc))]
+[QueryFilter(FilterKey = "unused")]
+public sealed class GenFiltered
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    /// <summary>An anonymous filter: additive, combined with the others using <c>and</c>.</summary>
+    public static Expression<Func<GenFiltered, bool>> ActiveFilter => entity => entity.Id > 0;
+
+    /// <summary>A keyed builder-function filter.</summary>
+    public static readonly Func<EntityBuilder<GenFiltered>, IDataContext, EntityBuilder<GenFiltered>> TenantFunc =
+        (builder, _) => builder.Where(entity => entity.Id > 1);
 }
 
 [SqlTable("gen_bad_precision")]
