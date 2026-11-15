@@ -20,7 +20,7 @@ paging through `Paging` is not implied by an aggregate query.
 
 | Provider | Instrument | Native | JIT comparison |
 |---|---|---|---|
-| SQLite | `tests/nextorm.aot.runner`, 30 scenarios (21 harness + 9 shared-catalog shapes) | 30/30 | equal per scenario |
+| SQLite | `tests/nextorm.aot.runner`, 31 scenarios (21 harness + 10 shared-catalog shapes) | 31/31 | equal per scenario |
 | PostgreSQL | `examples/nextorm.aotexamples.postgres.aviasales`, 10 queries | 10/10 | 10/10 identical |
 | SQL Server | `examples/nextorm.aotexamples.mssql.adventureworks`, 11 queries | 11/11 | 11/11 identical |
 | MySQL | `tests/nextorm.aot.sqlprobe --provider mysql`, 7 shapes | 7/7 | 7/7 identical |
@@ -29,7 +29,7 @@ paging through `Paging` is not implied by an aggregate query.
 
 The shared catalog (`tests/nextorm.aot.scenarios`) holds the shapes that every instrument and the JIT
 control execute from one declaration, so a native arm and its control cannot drift. It currently carries
-the nine SQLite shapes above; the provider instruments keep their own dataset-specific queries because
+the ten SQLite shapes above; the provider instruments keep their own dataset-specific queries because
 their schemas differ.
 
 The MySQL/MariaDB probe's seven shapes are: `customer-filter` (typed scalar projection, constant
@@ -67,7 +67,7 @@ predicate, `OrderBy`), `orders-page` (`Paging`), `aggregate` (`GroupBy` + `count
 | Prepared command reuse / plan cache | P | U | U | P | P | U |
 | Eager loading (eager-load binding, per-parent paging) | U | U | U | U | U | U |
 | Composite junction (many-to-many `JoinInto`) | U | U | U | U | U | U |
-| Value converters (`[JsonColumn]`, custom converter) | U | U | U | U | U | U |
+| Value converters (`[JsonColumn]`, custom converter) | P | U | U | U | U | U |
 | CSV streaming (`WriteCsv`) | U | U | U | U | U | U |
 | JSON streaming (`WriteJson`) | U | U | U | U | U | U |
 | Row streaming (`IAsyncEnumerable`) | U | U | U | U | U | U |
@@ -75,18 +75,26 @@ predicate, `OrderBy`), `orders-page` (`Paging`), `aggregate` (`GroupBy` + `count
 | Raw SQL row mapping (`ExecuteRaw`) | U | U | U | U | U | U |
 | DML builders (insert/update/delete) | U | U | U | U | U | U |
 
-Cell totals: **85 `supported-proven`, 2 `supported-by-design`, 1 `fail-closed`, 104 `not-covered`**
+Cell totals: **86 `supported-proven`, 2 `supported-by-design`, 1 `fail-closed`, 103 `not-covered`**
 (192 cells across 32 capabilities and six providers; counted mechanically across the matrix rows).
 
 What each `P` rests on:
 
-- SQLite: the thirty-scenario native harness — typed/anonymous projection, captured parameter, ordering,
-  `count`/`sum`, `GroupBy`+`HAVING`, `SelectGroup`, `SelectGroupHaving`, JSON columns, decimal operators,
-  correlated subqueries, generated row materializers and the streaming writers, plus the nine
-  shared-catalog shapes (`tests/nextorm.aot.scenarios`): paging, `count_distinct`, `avg`, `min`, `max`,
-  join, CTE, two executions of one prepared command and a window aggregate. The window cell rests on
-  `OVER ()`; nextorm has no frame-specifier API (`ROWS BETWEEN`), so `OVER` is the whole surface the
-  cell can name.
+- SQLite: the thirty-one-scenario native harness — typed/anonymous projection, captured parameter,
+  ordering, `count`/`sum`, `GroupBy`+`HAVING`, `SelectGroup`, `SelectGroupHaving`, SQLite JSON functions,
+  decimal operators, correlated subqueries, generated row materializers and the streaming writers, plus
+  the ten shared-catalog shapes (`tests/nextorm.aot.scenarios`): paging, `count_distinct`, `avg`, `min`,
+  `max`, join, CTE, two executions of one prepared command, a window aggregate and the `value-converters`
+  shape. The window cell rests on `OVER ()`; nextorm has no frame-specifier API (`ROWS BETWEEN`), so
+  `OVER` is the whole surface the cell can name.
+- SQLite, **JSON columns** and **value converters**: the `value-converters` catalog shape writes a
+  `[JsonColumn(Storage = Text)]` property and a `[ValueConverter]` property through `Update` and reads
+  both back through the converter (`1:12.5:native/42;2:-3:null/null`). The mapping comes from the
+  compile-time entity description, so the converter is constructed by generated code
+  (`JsonColumnConverters.Create<TModel>` / `new TConverter()`) rather than by `MakeGenericType` +
+  `Activator`; the JSON contract metadata comes from a source-generated `JsonSerializerContext` that the
+  generator finds in the same assembly and passes to the converter, which is what a trimmed application
+  needs.
 - PostgreSQL: the ten-query probe — projection, ordering, paging, `count`/`count_distinct`/`sum`/`avg`,
   `GroupBy`, `SelectGroup`, join, CTE, windows, decimal operators.
 - SQL Server: the eleven-query probe — projection, ordering, paging,

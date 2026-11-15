@@ -149,6 +149,28 @@ internal interface IJsonColumnConverter
 }
 
 /// <summary>
+/// Creates the converter a <see cref="JsonColumnAttribute"/> maps a property with. Generated entity
+/// metadata calls the closed generic form, so the converter type is instantiated at compile time and no
+/// run-time generic instantiation is involved; the reflective auto-build keeps using the internal
+/// factory because it only knows the model type at run time.
+/// </summary>
+public static class JsonColumnConverters
+{
+    /// <summary>Creates the dialect-resolving converter of a JSON column.</summary>
+    /// <typeparam name="TModel">The CLR type serialized into the column.</typeparam>
+    /// <param name="storage">The storage form; <see cref="JsonColumnStorage.Auto"/> resolves from the dialect.</param>
+    /// <param name="options">
+    /// The serializer options, or <see langword="null"/> for the defaults. Generated entity metadata passes
+    /// the options of the source-generated <c>JsonSerializerContext</c> that covers the model, when the
+    /// assembly declares one: the default serializer options resolve contract metadata reflectively, which
+    /// a trimmed application does not keep.
+    /// </param>
+    /// <returns>The converter stored in the property metadata.</returns>
+    public static IPropertyValueConverter Create<TModel>(JsonColumnStorage storage = JsonColumnStorage.Auto, JsonSerializerOptions? options = null)
+        => new JsonColumnAutoConverter<TModel>(new JsonColumnOptions { Storage = storage, Options = options });
+}
+
+/// <summary>
 /// Resolves a JSON column converter for the active dialect and creates the converter instances used by
 /// the attribute and the fluent mapping. Kept internal so the dialect-dependent resolution stays an
 /// implementation detail of the read and write seams.

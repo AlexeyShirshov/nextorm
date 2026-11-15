@@ -20,25 +20,47 @@ dotnet publish -c Release
 
 The standard NativeAOT prerequisites apply: `clang`, `zlib1g-dev` and a native toolchain for the RID.
 
+Entity mappings are compiled as well: the package ships a source generator that describes every
+`[SqlTable]`/`[Table]` entity declared in your assembly — table, columns, keys, precision, collation,
+durations, range pairs, query filters and value/JSON converters — so building a mapping reads that
+description instead of reflecting over the entity's members. A type outside that coverage keeps the
+reflective path, so nothing has to be registered or opted in.
+
 ## What is supported
 
 Providers: **SQLite, PostgreSQL, SQL Server, MySQL, MariaDB, ClickHouse**.
 
-Query surface: typed and anonymous projections, filters, ordering, paging, aggregates,
+Query surface: typed and anonymous projections, whole-entity materialization, filters, ordering, paging, aggregates,
 `GROUP BY`/`HAVING`, joins, CTEs, window functions (where the provider supports them), SQLite JSON
 functions, ClickHouse arrays, `SelectGroup`/`SelectGroupHaving`, `SelectWhereMin`/`SelectWhereMax`,
-prepared-command reuse and correlated subqueries.
+prepared-command reuse, correlated subqueries, value converters and JSON columns (see below).
 
 Every supported scenario runs natively and under JIT and is compared row by row: row counts and
 values must match. That comparison runs automatically on every change, so "works natively" is a
 standing build condition, not a one-off check.
 
+## JSON columns
+
+The mapping side of a JSON column is native-ready: the converter is created by generated code, so
+there is no run-time generic instantiation. The JSON document itself is `System.Text.Json`'s, and a
+trimmed application has to give it the contract metadata it cannot build by reflection. Declare a
+source-generated context that lists every stored model type — the compile-time entity description finds
+that context and serializes through its options, so nothing is set up at run time:
+
+```csharp
+[JsonSerializable(typeof(Address))]
+internal sealed partial class AppJsonContext : JsonSerializerContext;
+```
+
+A column that declares its own serializer options
+(`b.Property(x => x.Address).JsonColumn(o => o.Options = ...)`) keeps them; the context supplies the
+contract metadata, not the settings. On the regular JIT runtime no context is required: a model no
+context declares is serialized with the default options.
+
 ## Limitations
 
 - The EF Core bridge (`nextorm.entityframeworkcore`), bulk insert, raw SQL row mapping and the DML
   builders are not part of the native build yet — keep those scenarios on the regular JIT runtime.
-- `System.Text.Json` converters work through `JsonSerializerContext`: serialization stays
-  reflection-based, so the context has to be set up as usual.
 - A query outside the surface above can fail on first execution. Run your own query set against the
   native build before shipping: the analyzers do not see through the dynamic query pipeline, so the
   native run is the check.

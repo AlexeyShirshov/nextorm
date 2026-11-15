@@ -44,6 +44,11 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
     private const string DurationAttribute = CoreNamespace + ".DurationAttribute";
     private const string RangeColumnsAttribute = CoreNamespace + ".RangeColumnsAttribute";
     private const string QueryFilterAttribute = CoreNamespace + ".QueryFilterAttribute";
+    private const string ValueConverterAttribute = CoreNamespace + ".ValueConverterAttribute";
+    private const string JsonColumnAttribute = CoreNamespace + ".JsonColumnAttribute";
+    private const string ConverterInterface = CoreNamespace + ".IPropertyValueConverter";
+    private const string JsonSerializerContextType = "System.Text.Json.Serialization.JsonSerializerContext";
+    private const string JsonSerializableAttribute = "System.Text.Json.Serialization.JsonSerializableAttribute";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -59,10 +64,11 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
     private static void Emit(SourceProductionContext context, ImmutableArray<INamedTypeSymbol> symbols)
     {
         var seen = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+        var jsonContexts = CollectJsonContexts(symbols);
         var covered = new List<CoveredEntity>();
         foreach (var symbol in symbols)
         {
-            if (!seen.Add(symbol) || Describe(symbol) is not { } entity)
+            if (!seen.Add(symbol) || Describe(symbol, jsonContexts) is not { } entity)
                 continue;
             covered.Add(entity);
         }
@@ -82,10 +88,11 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
         source.AppendLine("{");
 
         // One annotated type handle per entity: the annotation is what lets the generated code resolve a
-        // property by name without a trim warning, and it also tells the trimmer to keep the members.
+        // property by name without a trim warning, and it also tells the trimmer to keep the members. The
+        // constructors are part of it because materializing the entity instantiates it.
         for (var i = 0; i < covered.Count; i++)
         {
-            source.Append("    [global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicProperties)]")
+            source.Append("    [global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicProperties | global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicConstructors)]")
                 .AppendLine();
             source.Append("    private static readonly global::System.Type Entity").Append(i)
                 .Append(" = typeof(global::").Append(covered[i].FullName).AppendLine(");");
@@ -143,6 +150,8 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
                 source.Append("                        DurationUnit = (global::NextORM.Core.DurationUnit)").Append(durationUnit).AppendLine(",");
             if (property.DurationPrecision != 0)
                 source.Append("                        DurationPrecision = ").Append(property.DurationPrecision).AppendLine(",");
+            if (property.Converter is not null)
+                source.Append("                        Converter = ").Append(property.Converter).AppendLine(",");
             if (property.Range is { } range)
             {
                 source.Append("                        RangeColumns = new global::NextORM.Core.RangeColumnsMetadata(")
@@ -206,7 +215,47 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
         return builder.ToString();
     }
 
-    private static CoveredEntity? Describe(INamedTypeSymbol symbol)
+    /// <summary>
+    /// Maps a stored model type to the serializer options of the source-generated
+    /// <c>JsonSerializerContext</c> that declares it. A model declared by two contexts is left out: which
+    /// context's options apply is the application's choice, not something generated code should guess.
+    /// </summary>
+    private static Dictionary<INamedTypeSymbol, string> CollectJsonContexts(ImmutableArray<INamedTypeSymbol> symbols)
+    {
+        var contexts = new Dictionary<INamedTypeSymbol, string>(SymbolEqualityComparer.Default);
+        var ambiguous = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+
+        foreach (var symbol in symbols)
+        {
+            if (symbol.TypeKind != TypeKind.Class || !DerivesFrom(symbol, JsonSerializerContextType))
+                continue;
+            // The generated class that references it lives in this assembly, so an inaccessible context
+            // cannot be named from generated code.
+            if (!IsAccessibleInsideAssembly(symbol))
+                continue;
+
+            var options = TypeReference(symbol) + ".Default.Options";
+            foreach (var attribute in symbol.GetAttributes())
+            {
+                if (AttributeName(attribute) != JsonSerializableAttribute)
+                    continue;
+                if (attribute.ConstructorArguments.Length != 1 || attribute.ConstructorArguments[0].Value is not INamedTypeSymbol model)
+                    continue;
+
+                if (!contexts.ContainsKey(model))
+                    contexts[model] = options;
+                else
+                    ambiguous.Add(model);
+            }
+        }
+
+        foreach (var model in ambiguous)
+            contexts.Remove(model);
+
+        return contexts;
+    }
+
+    private static CoveredEntity? Describe(INamedTypeSymbol symbol, Dictionary<INamedTypeSymbol, string> jsonContexts)
     {
         if (symbol.TypeKind is not (TypeKind.Class or TypeKind.Interface))
             return null;
@@ -264,6 +313,57 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
             }
         }
 
+        // The reflective table-name resolution reads the implemented interfaces after the entity's own
+        // attributes and lets an interface declaration win, so the generated name has to follow it. Which
+        // interface wins is the reflection order, so two candidates are not reproducible and the type keeps
+        // the reflective path.
+        if (symbol.TypeKind == TypeKind.Class)
+        {
+            string? interfaceTableName = null;
+            var interfaceCandidates = 0;
+            foreach (var implemented in symbol.AllInterfaces)
+            {
+                foreach (var attribute in implemented.GetAttributes())
+                {
+                    var name = AttributeName(attribute);
+                    if (name is not (SqlTableAttribute or TableAttribute))
+                        continue;
+                    if (DeclaredTableName(name, attribute) is not { } declared)
+                        return null;
+                    interfaceCandidates++;
+                    interfaceTableName = declared;
+                }
+            }
+
+            if (interfaceCandidates > 1)
+                return null;
+            if (interfaceTableName is not null)
+            {
+                tableName = interfaceTableName;
+                tableNameAuto = false;
+                hasMappingAttribute = true;
+            }
+        }
+
+        // A class property may carry no mapping attribute because the mapping is declared on the interface
+        // it implements: the reflective build falls back to the interface property, attribute by attribute.
+        // Two interfaces declaring the same property make the winner order-dependent, so a type in that
+        // shape is not covered.
+        var interfaceProperties = new Dictionary<string, IPropertySymbol?>(StringComparer.Ordinal);
+        if (symbol.TypeKind == TypeKind.Class)
+        {
+            foreach (var implemented in symbol.AllInterfaces)
+            {
+                foreach (var member in implemented.GetMembers())
+                {
+                    if (member is not IPropertySymbol interfaceProperty || interfaceProperty.IsStatic || interfaceProperty.IsIndexer)
+                        continue;
+                    interfaceProperties[interfaceProperty.Name] =
+                        interfaceProperties.ContainsKey(interfaceProperty.Name) ? null : interfaceProperty;
+                }
+            }
+        }
+
         var properties = new List<CoveredProperty>();
         foreach (var member in symbol.GetMembers())
         {
@@ -273,109 +373,47 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
                 continue;
             if (property.DeclaredAccessibility != Accessibility.Public)
                 continue;
-            // GetProperties(Public | Instance) returns only writable properties; a get-only or init-only
-            // property is not a column. An init-only setter counts as writable for reflection.
+
+            var attributes = MergeAttributes(property.GetAttributes(), interfaceProperties, property);
+            if (attributes is null)
+                return null;
+
+            // GetProperties(Public | Instance) returns only writable properties, so a get-only navigation is
+            // not a column - but the attributes on it still shape the mapping: a relationship declared there
+            // is metadata this description does not carry, so the type keeps the reflective path.
             if (property.SetMethod is null)
+            {
+                if (attributes.Any(attribute => IsUnreproducible(AttributeName(attribute))))
+                    return null;
                 continue;
-
-            string? columnName = null;
-            string? declaredColumn = null;
-            var isKey = false;
-            var isIdentity = false;
-            var isComputed = false;
-            int? decimalPrecision = null;
-            int? decimalScale = null;
-            string? collation = null;
-            int? durationUnit = null;
-            var durationPrecision = 0;
-            RangeDescriptor? range = null;
-
-            foreach (var attribute in property.GetAttributes())
-            {
-                var name = attribute.AttributeClass?.ToDisplayString() ?? string.Empty;
-                if (name == ColumnAttribute)
-                {
-                    declaredColumn = attribute.ConstructorArguments.Length == 1
-                        ? attribute.ConstructorArguments[0].Value as string
-                        : NamedString(attribute, "Name");
-                }
-                else if (name == KeyAttribute)
-                {
-                    isKey = true;
-                }
-                else if (name == DatabaseGeneratedAttribute)
-                {
-                    // DatabaseGeneratedOption: None = 0, Identity = 1, Computed = 2.
-                    var option = attribute.ConstructorArguments.Length == 1 && attribute.ConstructorArguments[0].Value is int value
-                        ? value
-                        : 0;
-                    isIdentity = option == 1;
-                    isComputed = option == 2;
-                }
-                else if (name == DecimalPrecisionAttribute)
-                {
-                    decimalPrecision = IntArgument(attribute, 0, "Precision");
-                    decimalScale = IntArgument(attribute, 1, "Scale");
-                }
-                else if (name == CollationAttribute)
-                {
-                    collation = StringArgument(attribute, 0, "Name");
-                    if (string.IsNullOrEmpty(collation))
-                        return null;
-                }
-                else if (name == DurationAttribute)
-                {
-                    // The parameterless constructor means ticks, the CLR storage unit.
-                    durationUnit = IntArgument(attribute, 0, "Unit") ?? 0;
-                    durationPrecision = IntArgument(attribute, 1, "Precision") ?? 0;
-                }
-                else if (name == RangeColumnsAttribute)
-                {
-                    var lower = StringArgument(attribute, 0, "LowerColumn");
-                    var upper = StringArgument(attribute, 1, "UpperColumn");
-                    if (string.IsNullOrEmpty(lower) || string.IsNullOrEmpty(upper))
-                        return null;
-                    range = new RangeDescriptor(
-                        lower!,
-                        upper!,
-                        BoolArgument(attribute, "LowerInclusive") ?? true,
-                        BoolArgument(attribute, "UpperInclusive") ?? false);
-                }
-                else if (name is NotMappedAttribute or TimestampAttribute || IsUnreproducible(name))
-                {
-                    return null;
-                }
             }
 
-            // A range pair declares its own column names and is refused together with [Column] by the
-            // reflective build; the combination is not reproduced here, the type keeps that path.
-            if (range is not null)
-            {
-                if (declaredColumn is not null || !IsRangeType(property.Type))
-                    return null;
-                columnName = range.LowerColumn;
-            }
-            else if (!string.IsNullOrEmpty(declaredColumn))
-            {
-                columnName = declaredColumn;
-            }
+            if (ReadPropertyAttributes(property.Type, attributes, jsonContexts) is not { } declared)
+                return null;
 
-            if (columnName is not null || isKey)
+            if (declared.Range is not null && !IsRangeType(property.Type))
+                return null;
+
+            var columnName = declared.Range?.LowerColumn
+                ?? (string.IsNullOrEmpty(declared.DeclaredColumn) ? null : declared.DeclaredColumn);
+
+            if (columnName is not null || declared.IsKey)
                 hasMappingAttribute = true;
 
             properties.Add(new CoveredProperty(
                 Name: property.Name,
                 ColumnName: columnName ?? property.Name,
                 IsColumnNameAuto: columnName is null,
-                IsKey: isKey,
-                IsIdentity: isIdentity,
-                IsComputed: isComputed,
-                DecimalPrecision: decimalPrecision,
-                DecimalScale: decimalScale,
-                Collation: collation,
-                DurationUnit: durationUnit,
-                DurationPrecision: durationPrecision,
-                Range: range));
+                IsKey: declared.IsKey,
+                IsIdentity: declared.IsIdentity,
+                IsComputed: declared.IsComputed,
+                DecimalPrecision: declared.DecimalPrecision,
+                DecimalScale: declared.DecimalScale,
+                Collation: declared.Collation,
+                DurationUnit: declared.DurationUnit,
+                DurationPrecision: declared.DurationPrecision,
+                Range: declared.Range,
+                Converter: declared.Converter));
         }
 
         // A type with no mapping attribute at all is not necessarily an entity (the auto table name makes
@@ -389,6 +427,274 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
     }
 
     /// <summary>
+    /// Combines the attributes a class property declares with the ones declared on the matching interface
+    /// property, the way the reflective build falls back per attribute. Returns <see langword="null"/>
+    /// when more than one interface declares the property.
+    /// </summary>
+    private static List<AttributeData>? MergeAttributes(
+        ImmutableArray<AttributeData> own,
+        Dictionary<string, IPropertySymbol?> interfaceProperties,
+        IPropertySymbol property)
+    {
+        var merged = new List<AttributeData>(own.Length);
+        merged.AddRange(own);
+
+        if (!interfaceProperties.TryGetValue(property.Name, out var interfaceProperty))
+            return merged;
+        // More than one interface declares the property: which one the reflective fallback reads is the
+        // interface order, so the type keeps the reflective path.
+        if (interfaceProperty is null)
+            return null;
+        // An interface member of another type is not the member this property implements, so the
+        // reflective fallback does not read it either.
+        if (!SymbolEqualityComparer.Default.Equals(interfaceProperty.Type, property.Type))
+            return merged;
+
+        var declared = new HashSet<string>(own.Select(AttributeName), StringComparer.Ordinal);
+        foreach (var attribute in interfaceProperty.GetAttributes())
+        {
+            if (declared.Add(AttributeName(attribute)))
+                merged.Add(attribute);
+        }
+
+        return merged;
+    }
+
+    private static string AttributeName(AttributeData attribute)
+        => attribute.AttributeClass?.ToDisplayString() ?? string.Empty;
+
+    /// <summary>
+    /// Reads the table name a <see cref="SqlTableAttribute"/> or <c>TableAttribute</c> declares, or returns
+    /// <see langword="null"/> when the declaration cannot be read without invoking it.
+    /// </summary>
+    private static string? DeclaredTableName(string attributeName, AttributeData attribute)
+    {
+        if (attributeName == SqlTableAttribute)
+            return attribute.ConstructorArguments.Length == 1 && attribute.ConstructorArguments[0].Value is string declared
+                ? declared
+                : null;
+
+        return attribute.ConstructorArguments.Length == 1 && attribute.ConstructorArguments[0].Value is string declaredName
+            ? declaredName
+            : NamedString(attribute, "Name");
+    }
+
+    /// <summary>
+    /// Reads the mapping attributes of one property, or returns <see langword="null"/> when one of them
+    /// changes the metadata in a way this generator does not reproduce exactly (the type then keeps the
+    /// reflective path).
+    /// </summary>
+    private static PropertyMapping? ReadPropertyAttributes(
+        ITypeSymbol propertyType,
+        List<AttributeData> attributes,
+        Dictionary<INamedTypeSymbol, string> jsonContexts)
+    {
+        string? declaredColumn = null;
+        var isKey = false;
+        var isIdentity = false;
+        var isComputed = false;
+        int? decimalPrecision = null;
+        int? decimalScale = null;
+        string? collation = null;
+        int? durationUnit = null;
+        var durationPrecision = 0;
+        RangeDescriptor? range = null;
+        string? converter = null;
+        var hasValueConverter = false;
+        var hasJsonColumn = false;
+
+        foreach (var attribute in attributes)
+        {
+            var name = AttributeName(attribute);
+            if (name == ColumnAttribute)
+            {
+                declaredColumn = attribute.ConstructorArguments.Length == 1
+                    ? attribute.ConstructorArguments[0].Value as string
+                    : NamedString(attribute, "Name");
+            }
+            else if (name == KeyAttribute)
+            {
+                isKey = true;
+            }
+            else if (name == DatabaseGeneratedAttribute)
+            {
+                // DatabaseGeneratedOption: None = 0, Identity = 1, Computed = 2.
+                var option = attribute.ConstructorArguments.Length == 1 && attribute.ConstructorArguments[0].Value is int value
+                    ? value
+                    : 0;
+                isIdentity = option == 1;
+                isComputed = option == 2;
+            }
+            else if (name == DecimalPrecisionAttribute)
+            {
+                decimalPrecision = IntArgument(attribute, 0, "Precision");
+                decimalScale = IntArgument(attribute, 1, "Scale");
+            }
+            else if (name == CollationAttribute)
+            {
+                collation = StringArgument(attribute, 0, "Name");
+                if (string.IsNullOrEmpty(collation))
+                    return null;
+            }
+            else if (name == DurationAttribute)
+            {
+                // The parameterless constructor means ticks, the CLR storage unit.
+                durationUnit = IntArgument(attribute, 0, "Unit") ?? 0;
+                durationPrecision = IntArgument(attribute, 1, "Precision") ?? 0;
+            }
+            else if (name == RangeColumnsAttribute)
+            {
+                var lower = StringArgument(attribute, 0, "LowerColumn");
+                var upper = StringArgument(attribute, 1, "UpperColumn");
+                if (string.IsNullOrEmpty(lower) || string.IsNullOrEmpty(upper))
+                    return null;
+                range = new RangeDescriptor(
+                    lower!,
+                    upper!,
+                    BoolArgument(attribute, "LowerInclusive") ?? true,
+                    BoolArgument(attribute, "UpperInclusive") ?? false);
+            }
+            else if (name == ValueConverterAttribute)
+            {
+                if (DescribeValueConverter(attribute, propertyType) is not { } expression)
+                    return null;
+                converter = expression;
+                hasValueConverter = true;
+            }
+            else if (name == JsonColumnAttribute)
+            {
+                if (DescribeJsonColumn(attribute, propertyType, jsonContexts) is not { } expression)
+                    return null;
+                converter = expression;
+                hasJsonColumn = true;
+            }
+            else if (name is NotMappedAttribute or TimestampAttribute || IsUnreproducible(name))
+            {
+                return null;
+            }
+        }
+
+        // The reflective build refuses these combinations at run time; a generated mapping would have to
+        // pick one of them, so the type keeps the path that reports the failure.
+        if (hasValueConverter && hasJsonColumn)
+            return null;
+        if (range is not null && (converter is not null || declaredColumn is not null))
+            return null;
+
+        return new PropertyMapping(
+            declaredColumn,
+            isKey,
+            isIdentity,
+            isComputed,
+            decimalPrecision,
+            decimalScale,
+            collation,
+            durationUnit,
+            durationPrecision,
+            range,
+            converter);
+    }
+
+    /// <summary>
+    /// Names the converter expression of a <c>[ValueConverter]</c> declaration: a direct <c>new</c> of the
+    /// converter type, so the mapping needs no <c>Activator.CreateInstance</c>. Returns
+    /// <see langword="null"/> for a converter whose construction or model-type check cannot be settled at
+    /// compile time.
+    /// </summary>
+    private static string? DescribeValueConverter(AttributeData attribute, ITypeSymbol propertyType)
+    {
+        if (attribute.ConstructorArguments.Length != 1 || attribute.ConstructorArguments[0].Value is not INamedTypeSymbol converterType)
+            return null;
+
+        // Mirrors the run-time rules: a closed, non-abstract class with a public parameterless
+        // constructor that implements IPropertyValueConverter, whose typed model matches the property.
+        if (converterType.TypeKind != TypeKind.Class || converterType.IsAbstract)
+            return null;
+        if (converterType.IsUnboundGenericType || ContainsTypeParameter(converterType))
+            return null;
+        if (converterType.DeclaredAccessibility != Accessibility.Public)
+            return null;
+        if (!converterType.AllInterfaces.Any(implemented => implemented.ToDisplayString() == ConverterInterface))
+            return null;
+        if (!converterType.InstanceConstructors.Any(static constructor =>
+                constructor.Parameters.Length == 0 && constructor.DeclaredAccessibility == Accessibility.Public))
+            return null;
+
+        var modelType = ConverterModelType(converterType);
+        if (modelType is not null
+            && !SymbolEqualityComparer.Default.Equals(modelType, propertyType)
+            && !SymbolEqualityComparer.Default.Equals(modelType, NullableUnderlying(propertyType)))
+            return null;
+
+        return "new " + TypeReference(converterType) + "()";
+    }
+
+    /// <summary>
+    /// Names the converter expression of a <c>[JsonColumn]</c> declaration. The closed generic call is
+    /// instantiated by the compiler, so the mapping replaces the run-time
+    /// <c>MakeGenericType</c> + <c>Activator</c> the reflective build needs.
+    /// </summary>
+    private static string? DescribeJsonColumn(
+        AttributeData attribute,
+        ITypeSymbol propertyType,
+        Dictionary<INamedTypeSymbol, string> jsonContexts)
+    {
+        // JsonColumnStorage: Auto = 0, Native = 1, Text = 2.
+        var storage = IntArgument(attribute, 0, "Storage") ?? 0;
+        if (storage is < 0 or > 2 || ContainsTypeParameter(propertyType))
+            return null;
+
+        // The stored model may be declared by the application's source-generated JsonSerializerContext; its
+        // options are what a trimmed application needs, because the default options resolve contract
+        // metadata reflectively. Without one the column keeps the serializer defaults, which is enough on
+        // the JIT runtime.
+        var options = propertyType is INamedTypeSymbol model && jsonContexts.TryGetValue(model, out var declared)
+            ? ", " + declared
+            : string.Empty;
+
+        return "global::NextORM.Core.JsonColumnConverters.Create<" + TypeReference(propertyType)
+            + ">((global::NextORM.Core.JsonColumnStorage)" + storage + options + ")";
+    }
+
+    /// <summary>The model type of a <c>ValueConverter&lt;TModel, TProvider&gt;</c> subclass, or null for a plain implementation.</summary>
+    private static ITypeSymbol? ConverterModelType(INamedTypeSymbol converterType)
+    {
+        for (var type = converterType.BaseType; type is not null; type = type.BaseType)
+        {
+            if (type is { Arity: 2, Name: "ValueConverter" } && type.ContainingNamespace?.ToDisplayString() == CoreNamespace)
+                return type.TypeArguments[0];
+        }
+
+        return null;
+    }
+
+    private static ITypeSymbol? NullableUnderlying(ITypeSymbol type)
+        => type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable
+            ? nullable.TypeArguments[0]
+            : null;
+
+    private static bool ContainsTypeParameter(ITypeSymbol type)
+    {
+        if (type is ITypeParameterSymbol or IErrorTypeSymbol)
+            return true;
+        if (type is IArrayTypeSymbol array)
+            return ContainsTypeParameter(array.ElementType);
+        if (type is INamedTypeSymbol named)
+        {
+            foreach (var argument in named.TypeArguments)
+            {
+                if (ContainsTypeParameter(argument))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string TypeReference(ITypeSymbol type)
+        => type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+    /// <summary>
     /// Whether an attribute makes the mapping unreproducible. Every <c>NextORM.Core</c> mapping attribute
     /// other than <see cref="SqlTableAttribute"/> is excluded: relationships, query filters, value and JSON
     /// converters, range pairs, durations, collations, decimal precision, dynamic-columns stores and shard
@@ -397,7 +703,8 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
     private static bool IsUnreproducible(string attributeFullName)
     {
         if (attributeFullName is SqlTableAttribute or DecimalPrecisionAttribute or CollationAttribute
-            or DurationAttribute or RangeColumnsAttribute or QueryFilterAttribute)
+            or DurationAttribute or RangeColumnsAttribute or QueryFilterAttribute or ValueConverterAttribute
+            or JsonColumnAttribute)
             return false;
 
         var namespaceEnd = attributeFullName.LastIndexOf('.');
@@ -574,7 +881,22 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
         string? Collation,
         int? DurationUnit,
         int DurationPrecision,
-        RangeDescriptor? Range);
+        RangeDescriptor? Range,
+        string? Converter);
+
+    /// <summary>One property's mapping attributes, as read from its own and its interface's declaration.</summary>
+    private sealed record PropertyMapping(
+        string? DeclaredColumn,
+        bool IsKey,
+        bool IsIdentity,
+        bool IsComputed,
+        int? DecimalPrecision,
+        int? DecimalScale,
+        string? Collation,
+        int? DurationUnit,
+        int DurationPrecision,
+        RangeDescriptor? Range,
+        string? Converter);
 
     private sealed record RangeDescriptor(
         string LowerColumn,

@@ -365,3 +365,7 @@ NextORM.Core.EntityFilterDescriptor.Lambda.get -> System.Linq.Expressions.Lambda
 NextORM.Core.EntityFilterDescriptor.Lambda.init -> void
 NextORM.Core.EntityMetadataDescriptor.Filters.get -> System.Collections.Generic.IReadOnlyList<NextORM.Core.EntityFilterDescriptor!>!
 NextORM.Core.EntityMetadataDescriptor.Filters.init -> void
+NextORM.Core.EntityPropertyDescriptor.Converter.get -> NextORM.Core.IPropertyValueConverter?
+NextORM.Core.EntityPropertyDescriptor.Converter.init -> void
+NextORM.Core.JsonColumnConverters
+static NextORM.Core.JsonColumnConverters.Create<TModel>(NextORM.Core.JsonColumnStorage storage = NextORM.Core.JsonColumnStorage.Auto, System.Text.Json.JsonSerializerOptions? options = null) -> NextORM.Core.IPropertyValueConverter!

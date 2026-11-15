@@ -92,8 +92,13 @@ public sealed class EntityMetadataDescriptor
             var property = Properties[i];
 
             // Same fail-fast rule the reflective auto-build applies: a declared precision/scale pair is
-            // valid only on a decimal column, and only as a complete pair.
-            DecimalPrecisionRules.Validate(property.Property.PropertyType, property.Property.Name, property.DecimalPrecision, property.DecimalScale);
+            // valid only on the bound column type - the converter's provider type when the property has a
+            // converter, the model property type otherwise - and only as a complete pair.
+            DecimalPrecisionRules.Validate(
+                property.Converter?.ProviderType ?? property.Property.PropertyType,
+                property.Property.Name,
+                property.DecimalPrecision,
+                property.DecimalScale);
 
             properties.Add(new PropertyMetadata
             {
@@ -108,6 +113,7 @@ public sealed class EntityMetadataDescriptor
                 DecimalPrecision = property.DecimalPrecision,
                 DecimalScale = property.DecimalScale,
                 Collation = property.Collation,
+                Converter = property.Converter,
                 RangeColumns = property.RangeColumns,
             });
         }
@@ -235,4 +241,11 @@ public sealed class EntityPropertyDescriptor
 
     /// <summary>The column pair of a <see cref="Range{T}"/> property stored as two scalar columns, or <see langword="null"/> for a single column.</summary>
     public RangeColumnsMetadata? RangeColumns { get; init; }
+
+    /// <summary>
+    /// The value or JSON converter the property is mapped with, or <see langword="null"/> when the column
+    /// holds the model value as-is. Generated code constructs the converter directly, so no instance is
+    /// created by reflection.
+    /// </summary>
+    public IPropertyValueConverter? Converter { get; init; }
 }

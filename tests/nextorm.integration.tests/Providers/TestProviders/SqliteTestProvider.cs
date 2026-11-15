@@ -155,6 +155,14 @@ public sealed class SqliteTestProvider : ITestProvider
             (1, unhex(replace(hex(zeroblob(8388608)), '00', 'AB')),
                 replace(hex(zeroblob(8388608)), '00', 'x'));
 
+        -- D370 (#370): value and JSON converter fixtures. `amount` holds the converter's text form
+        -- ("v=<value>"), so a mapping that skipped the converter reads a different number; `payload` is the
+        -- JSON document of the model the entity projects.
+        create table aot_converter_entity (id integer primary key, amount text not null, payload text null);
+        insert into aot_converter_entity (id, amount, payload) values
+            (1, 'v=12.5', '{"name":"seed","value":7}'),
+            (2, 'v=-3', null);
+
         create table insert_entity (id integer primary key autoincrement, name text, age int);
 
         create table merge_entity (id integer primary key, name text, age int);

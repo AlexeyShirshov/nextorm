@@ -25,7 +25,8 @@ public static class AotScenarioCatalog
         new("join", Join),
         new("cte", Cte),
         new("prepared-reuse", PreparedReuse),
-        new("window-function", WindowFunction)
+        new("window-function", WindowFunction),
+        new("value-converters", ValueConverters)
     ];
 
     private static object? Paging(IDataContext context)
@@ -86,6 +87,22 @@ public static class AotScenarioCatalog
             .ToList();
 
         return string.Join(";", rows.Select(row => $"{row.Id}:{row.Running.ToString(CultureInfo.InvariantCulture)}"));
+    }
+
+    private static object? ValueConverters(IDataContext context)
+    {
+        // Both directions of a converter: the write binds the model value through the converter, the read
+        // applies it back. The update is idempotent, so the JIT control and the native arm share the row
+        // instead of accumulating one insert per arm.
+        context.CreateUpdateBuilder<AotConverterEntity>()
+            .Set(x => x.Amount, 12.5m)
+            .Set(x => x.Payload, new AotJsonPayload { Name = "native", Value = 42 })
+            .Where(x => x.Id == 1)
+            .Update();
+
+        var rows = context.From<AotConverterEntity>().OrderBy(x => x.Id).ToList();
+        return string.Join(";", rows.Select(row =>
+            $"{row.Id}:{row.Amount.ToString(CultureInfo.InvariantCulture)}:{row.Payload?.Name ?? "null"}/{row.Payload?.Value.ToString(CultureInfo.InvariantCulture) ?? "null"}"));
     }
 
     private static object? Cte(IDataContext context)
