@@ -40,9 +40,8 @@ standing build condition, not a one-off check.
 - `System.Text.Json` converters work through `JsonSerializerContext`: serialization stays
   reflection-based, so the context has to be set up as usual.
 - A query outside the surface above can fail on first execution. Run your own query set against the
-  native build before shipping.
-- The packages do not carry an `IsAotCompatible` marker yet, so analyzers do not warn ahead of time —
-  the check happens at run time.
+  native build before shipping: the analyzers do not see through the dynamic query pipeline, so the
+  native run is the check.
 
 ## Performance
 
