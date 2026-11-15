@@ -362,6 +362,27 @@ provider-side quoting instead.
 | ClickHouse | Names used as given; identifiers and aliases are backtick-quoted when the SQL is rendered. |
 | In-memory | Identical metadata, shared with the SQL contexts through [`DataContextCache`](xref:NextORM.Core.DataContextCache). |
 
+## Runtime mapping scope (one entity, several tables)
+
+One entity class can address a different physical table, schema or column set per runtime *scope* - the
+mechanism behind multi-tenancy and sharding. Choose the scope with `IEntityScopeResolver`, map it with
+`IEntityMetadataProvider`, and override the choice for a single command with `WithScope(...)`:
+
+```csharp
+var builder = new DataContextBuilder()
+    .UseScopeResolver(new TenantScopeResolver())
+    .UseEntityMetadataProvider(new TenantMetadataProvider());
+
+var rows = new SqliteDataContext(connectionString, builder)
+    .From<Order>()
+    .WithScope(new MappingScope("acme"))
+    .ToList();
+```
+
+`MappingScope.Default` keeps the ordinary mapping. Plans, metadata and parameter names are isolated per
+scope, and the DML builders resolve the scope before they build their statement. Full guide:
+[Runtime mapping scope](../guide/34-runtime-mapping-scope.md).
+
 ## See also
 
 * [Installation](01-installation.md)

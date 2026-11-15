@@ -342,6 +342,28 @@ public interface IOrder
 | ClickHouse | Имена используются как заданы; при отрисовке SQL идентификаторы и псевдонимы выделяются обратными кавычками. |
 | In-memory | Идентичные метаданные, общие с SQL-контекстами через [`DataContextCache`](xref:NextORM.Core.DataContextCache). |
 
+## Область сопоставления времени выполнения (одна сущность, несколько таблиц)
+
+Один класс сущности может обращаться к разным физическим таблицам, схемам или наборам колонок в
+зависимости от *области* времени выполнения — это механизм, на котором стоят multi-tenancy и
+шардирование. Область выбирает `IEntityScopeResolver`, отображает на имена `IEntityMetadataProvider`, а
+для одной команды выбор переопределяется через `WithScope(...)`:
+
+```csharp
+var builder = new DataContextBuilder()
+    .UseScopeResolver(new TenantScopeResolver())
+    .UseEntityMetadataProvider(new TenantMetadataProvider());
+
+var rows = new SqliteDataContext(connectionString, builder)
+    .From<Order>()
+    .WithScope(new MappingScope("acme"))
+    .ToList();
+```
+
+`MappingScope.Default` сохраняет обычный маппинг. Планы, метаданные и имена параметров изолированы по
+области, а DML-билдеры определяют область до построения команды. Полный гайд:
+[Область сопоставления времени выполнения](../guide/34-runtime-mapping-scope.md).
+
 ## См. также
 
 * [Установка](01-installation.md)

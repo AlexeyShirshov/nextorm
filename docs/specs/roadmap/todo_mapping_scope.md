@@ -254,8 +254,10 @@ public TBuilder WithScope(MappingScope scope);
   `Query/IParameterProvider.cs`, все `Builders/*Builder.cs`, `Query/QueryCommand.QueryPreparer.cs`.
 - Тесты: `tests/nextorm.core.tests/MappingScopeTests.cs`, правки `InMemoryTests.cs`, SQL-gen
   провайдеров, `tests/nextorm.integration.tests/CommonTestSuite.*.cs`.
-- Документация: `docs/getting-started/03-entities-and-metadata.md` (+RU), раздел по multi-tenancy,
-  `docs/specs/design/API-NAMING-REVIEW.md`, `docs/specs/design/code-smells-review.md`.
+- Документация: гайд `docs/guide/34-runtime-mapping-scope.md` (+RU, запись в `toc.yml`), раздел
+  «Runtime mapping scope» в `docs/getting-started/03-entities-and-metadata.md` (+RU), ссылки из
+  гайдов 21 (merge) и 33 (шардирование), `docs/specs/design/API-NAMING-REVIEW.md`,
+  `docs/specs/design/code-smells-review.md`.
 
 ## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
 
