@@ -55,6 +55,14 @@ internal abstract class MutationCommand
     /// </summary>
     internal MappingScope MappingScope { get; set; } = MappingScope.Default;
 
+    /// <summary>
+    /// The entity types the statement reads or writes, when they are not just <see cref="EntityType"/>.
+    /// A materialisation writes a literal table name and reads its source query, so it is routed by the
+    /// entities of that query instead of by its projected row type. <see langword="null"/> routes the
+    /// statement by <see cref="EntityType"/> alone.
+    /// </summary>
+    internal IReadOnlyList<Type>? RouteSources { get; set; }
+
 
     /// <summary>
     /// The mapped columns the statement returns through <c>RETURNING</c>/<c>OUTPUT</c>, or

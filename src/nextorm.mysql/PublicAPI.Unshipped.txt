@@ -1,1 +1,3 @@
 #nullable enable
+NextORM.MySql.MySqlDataContext.MySqlDataContext(NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+static NextORM.MySql.MySqlDataContextOptionsBuilderExtensions.UseMySql(this NextORM.Core.DataContextBuilder! builder) -> NextORM.Core.DataContextBuilder!

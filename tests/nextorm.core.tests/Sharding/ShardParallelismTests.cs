@@ -80,7 +80,7 @@ public sealed class ShardParallelismTests : IDisposable
     /// <summary>Four shards, each one a separate SQLite file standing in for its own server.</summary>
     private ShardTopology CreateTopology()
     {
-        var topology = new ShardTopology(BucketCount);
+        var topology = new ShardTopology(BucketCount, BucketPlacementMode.TableSuffix);
         for (var shard = 1; shard <= 4; shard++)
             topology.AddShard($"shard-{shard}", ConnectionString(shard.ToString(CultureInfo.InvariantCulture)));
 
@@ -90,7 +90,10 @@ public sealed class ShardParallelismTests : IDisposable
     private string ConnectionString(string name) => $"Data Source={Path.Combine(_directory, name + ".db")}";
 
     private static SqliteDataContext CreateContext(ShardTopology topology, IQueryInterceptor probe)
-        => new("Data Source=:memory:", new DataContextBuilder().UseSharding(topology).AddInterceptor(probe));
+        => new(new DataContextBuilder()
+            .UseSharding(topology)
+            .AddInterceptor(probe)
+            .UseDataRouting(routing => routing.UseDefaultTopology("main", "Data Source=:memory:")));
 
     private void Seed(ShardTopology topology)
     {

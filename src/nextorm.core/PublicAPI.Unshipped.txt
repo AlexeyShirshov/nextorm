@@ -144,14 +144,14 @@ NextORM.Core.ShardHash
 virtual NextORM.Core.BucketHash.Invoke(System.ReadOnlySpan<byte> key, int bucketCount) -> int
 virtual NextORM.Core.ShardHash.Invoke(int bucket, string! shardId) -> ulong
 NextORM.Core.BucketPlacementMode
-NextORM.Core.BucketPlacementMode.SchemaPerBucket = 1 -> NextORM.Core.BucketPlacementMode
-NextORM.Core.BucketPlacementMode.TableSuffix = 0 -> NextORM.Core.BucketPlacementMode
+NextORM.Core.BucketPlacementMode.SchemaPerBucket = 0 -> NextORM.Core.BucketPlacementMode
+NextORM.Core.BucketPlacementMode.TableSuffix = 1 -> NextORM.Core.BucketPlacementMode
 NextORM.Core.IShardTopology.GetConnectionString(string! shardId) -> string!
 NextORM.Core.IShardTopology.PlacementMode.get -> NextORM.Core.BucketPlacementMode
 NextORM.Core.ShardTopology.AddShard(string! shardId, string! connectionString) -> void
 NextORM.Core.ShardTopology.GetConnectionString(string! shardId) -> string!
 NextORM.Core.ShardTopology.PlacementMode.get -> NextORM.Core.BucketPlacementMode
-NextORM.Core.ShardTopology.ShardTopology(int bucketCount, NextORM.Core.BucketPlacementMode placementMode = NextORM.Core.BucketPlacementMode.TableSuffix) -> void
+NextORM.Core.ShardTopology.ShardTopology(int bucketCount, NextORM.Core.BucketPlacementMode placementMode = NextORM.Core.BucketPlacementMode.SchemaPerBucket) -> void
 NextORM.Core.IShardRouter.BucketCount.get -> int
 NextORM.Core.IShardRouter.GetShard(int bucket) -> string!
 NextORM.Core.ShardRouter.BucketCount.get -> int
@@ -271,7 +271,7 @@ static NextORM.Core.RouteTarget.operator ==(NextORM.Core.RouteTarget left, NextO
 ~override NextORM.Core.HostTarget.ToString() -> string
 ~override NextORM.Core.RouteTarget.Equals(object obj) -> bool
 ~override NextORM.Core.RouteTarget.ToString() -> string
-NextORM.Core.DataContext.PinHost(string! topology, string! hostId) -> NextORM.Core.DataContext!
+NextORM.Core.DataContext.PinHost(string! topology, string! hostId) -> NextORM.Core.HostPin!
 NextORM.Core.DataContext.UnpinHost(string! topology) -> NextORM.Core.DataContext!
 NextORM.Core.IRoutedTransactionManager
 NextORM.Core.IRoutedTransactionManager.CurrentTransaction(NextORM.Core.RouteTarget target) -> System.Data.Common.DbTransaction?
@@ -289,6 +289,31 @@ NextORM.Core.IRoutedTransactionManager.BeginTransaction(NextORM.Core.RouteTarget
 NextORM.Core.IRoutedTransactionManager.BeginTransactionAsync(NextORM.Core.RouteTarget target, NextORM.Core.MappingScope scope = default(NextORM.Core.MappingScope), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Data.Common.DbTransaction!>!
 static NextORM.Core.RoutedTransactionExtensions.BeginTransaction(this NextORM.Core.DataContext! context, NextORM.Core.RouteTarget target, NextORM.Core.MappingScope scope = default(NextORM.Core.MappingScope), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified) -> System.Data.Common.DbTransaction!
 static NextORM.Core.RoutedTransactionExtensions.BeginTransactionAsync(this NextORM.Core.DataContext! context, NextORM.Core.RouteTarget target, NextORM.Core.MappingScope scope = default(NextORM.Core.MappingScope), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Data.Common.DbTransaction!>!
+NextORM.Core.DataContextBuilder.DefaultTopologyName.get -> string?
+NextORM.Core.DataContextBuilder.UseDefaultTopology(string! topologyName) -> NextORM.Core.DataContextBuilder!
+NextORM.Core.DataRoutingBuilder.UseDefaultTopology(string! topologyName) -> NextORM.Core.DataRoutingBuilder!
+NextORM.Core.DataRoutingBuilder.UseDefaultTopology(string! topologyName, string! connectionString) -> NextORM.Core.DataRoutingBuilder!
+
+NextORM.Core.HostPin
+NextORM.Core.HostPin.Dispose() -> void
+NextORM.Core.HostPin.HostId.get -> string!
+NextORM.Core.HostPin.Topology.get -> string!
+NextORM.Core.DataContext.GetPhysicalTableName<TEntity>(NextORM.Core.MappingScope scope = default(NextORM.Core.MappingScope)) -> NextORM.Core.PhysicalTableName
+NextORM.Core.PhysicalTableName
+NextORM.Core.PhysicalTableName.Deconstruct(out string? Schema, out string! TableName) -> void
+NextORM.Core.PhysicalTableName.Equals(NextORM.Core.PhysicalTableName other) -> bool
+NextORM.Core.PhysicalTableName.PhysicalTableName() -> void
+NextORM.Core.PhysicalTableName.PhysicalTableName(string? Schema, string! TableName) -> void
+NextORM.Core.PhysicalTableName.QualifiedName.get -> string!
+NextORM.Core.PhysicalTableName.Schema.get -> string?
+NextORM.Core.PhysicalTableName.Schema.init -> void
+NextORM.Core.PhysicalTableName.TableName.get -> string!
+NextORM.Core.PhysicalTableName.TableName.init -> void
+override NextORM.Core.PhysicalTableName.GetHashCode() -> int
+override NextORM.Core.PhysicalTableName.ToString() -> string!
+static NextORM.Core.PhysicalTableName.operator !=(NextORM.Core.PhysicalTableName left, NextORM.Core.PhysicalTableName right) -> bool
+static NextORM.Core.PhysicalTableName.operator ==(NextORM.Core.PhysicalTableName left, NextORM.Core.PhysicalTableName right) -> bool
+~override NextORM.Core.PhysicalTableName.Equals(object obj) -> bool
 NextORM.Core.EntityMetadataDescriptor
 NextORM.Core.EntityMetadataDescriptor.Build() -> NextORM.Core.IEntityMetadata!
 NextORM.Core.EntityMetadataDescriptor.EntityMetadataDescriptor() -> void

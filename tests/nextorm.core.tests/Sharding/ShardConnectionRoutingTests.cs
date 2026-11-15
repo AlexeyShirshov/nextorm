@@ -117,7 +117,7 @@ public sealed class ShardConnectionRoutingTests : IDisposable
 
     private ShardTopology CreateTopology()
     {
-        var topology = new ShardTopology(BucketCount);
+        var topology = new ShardTopology(BucketCount, BucketPlacementMode.TableSuffix);
         topology.AddShard("server-a", ConnectionString("a"));
         topology.AddShard("server-b", ConnectionString("b"));
         return topology;
@@ -126,7 +126,9 @@ public sealed class ShardConnectionRoutingTests : IDisposable
     private string ConnectionString(string name) => $"Data Source={Path.Combine(_directory, name + ".db")}";
 
     private static SqliteDataContext CreateContext(ShardTopology topology)
-        => new("Data Source=:memory:", new DataContextBuilder().UseSharding(topology));
+        => new(new DataContextBuilder()
+            .UseSharding(topology)
+            .UseDataRouting(routing => routing.UseDefaultTopology("main", "Data Source=:memory:")));
 
     private static (string Tenant, int Bucket) FindTenant(ShardTopology topology, string shardId)
     {

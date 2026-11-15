@@ -107,9 +107,9 @@ public sealed class DataRoutingTests : IDisposable
             .Insert();
         inserted.Should().Be(1);
 
-        using var routed = new SqliteDataContext(
-            RoutedConnectionString(),
-            new DataContextBuilder().UseDataRouting(routing => routing.AddTopology(CrmTopology())));
+        using var routed = new SqliteDataContext(new DataContextBuilder().UseDataRouting(routing => routing
+            .UseDefaultTopology("main", RoutedConnectionString())
+            .AddTopology(CrmTopology())));
         routed.From<CrmRow>().ToList().Should().ContainSingle(row => row.Name == "inserted");
         context.From<CrmRow>().ToList().Should().HaveCount(2);
     }
@@ -163,8 +163,7 @@ public sealed class DataRoutingTests : IDisposable
 
     private SqliteDataContext CreateContext(Action<DataRoutingBuilder> configure)
     {
-        var builder = new DataContextBuilder().UseDataRouting(configure);
-        using (var context = new SqliteDataContext(DefaultConnectionString(), builder))
+        using (var context = new SqliteDataContext(DefaultConnectionString(), new DataContextBuilder()))
         {
             context.EnsureConnectionOpen();
             foreach (var table in new[] { nameof(CrmRow), nameof(PlainRow) })
@@ -186,8 +185,14 @@ public sealed class DataRoutingTests : IDisposable
             }
         }
 
-        var contextBuilder = new DataContextBuilder().UseDataRouting(configure);
-        return new SqliteDataContext(DefaultConnectionString(), contextBuilder);
+        // A routed context is created from the builder alone: the default topology supplies its own
+        // connection, and unrouted entities, raw SQL and transactions run there.
+        var contextBuilder = new DataContextBuilder().UseDataRouting(routing =>
+        {
+            routing.UseDefaultTopology("main", DefaultConnectionString());
+            configure(routing);
+        });
+        return new SqliteDataContext(contextBuilder);
     }
 
     private FileTopology CrmTopology() => new(RoutedTopology, RoutedConnectionString());

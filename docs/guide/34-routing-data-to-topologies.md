@@ -24,20 +24,29 @@ Register the topologies and the rules on the context builder:
 ```csharp
 var builder = new DataContextBuilder()
     .UseDataRouting(routing => routing
+        .UseDefaultTopology("main", "Host=app-1;Database=app")
         .AddTopology(new RoundRobinTopology(
             "reports",
             "Host=reports-1;Database=warehouse",
             "Host=reports-2;Database=warehouse"))
         .RouteNamespace("MyApp.Reports", "reports"));
 
-using var context = new PostgresDataContext(
-    "Host=app-1;Database=app",
-    builder);
+using var context = new PostgresDataContext(builder);
 ```
+
+A routed context is created from the builder alone. Its own connection — the one that unsharded
+entities, raw SQL and the context transaction use — is the **default topology's** host, and a single
+connection string is the simplest topology. Passing a connection string to the context constructor as
+well is rejected: there would be two answers to "where do commands without a rule run". The
+`DataContextBuilder` chain follows the same rule: `UsePostgres(connectionString)` (or
+`UseSqlite(filepath)`, …) is the unrouted form, and the parameterless `UsePostgres()` creates the context
+from the builder alone.
 
 `RoundRobinTopology` is the reference implementation for routing without sharding: one host per
 command, in rotation. Host ids are `host-1`, `host-2`, … in declaration order, or any ids you choose
-through the `IEnumerable<HostTarget>` constructor.
+through the `IEnumerable<HostTarget>` constructor. A one-host round-robin is what `UseDefaultTopology`
+registers for a connection string; to use a topology you configured yourself, register it first and
+name it — `UseDefaultTopology("main")`.
 
 The other rules are the same shape:
 
@@ -89,11 +98,63 @@ belong to a single topology; split it into one command per topology.
 Split such a statement into separate commands, or move both entity types to one topology. nextorm never
 merges results across hosts.
 
+## One batch, one topology
+
+A batch (`CreateBatchBuilder`) is one SQL session and one round trip, not several statements that happen
+to travel together, so the rule applies to the batch as a whole: the entity types of every step must
+resolve to one topology and one mapping scope. The first routed step decides the host, a step with no
+rule rides along on it, and a step that needs another topology or another scope is rejected **while the
+batch is rendered** — `ToSql()` fails too, before a connection is opened:
+
+```text
+A batch runs on one host, but its statements span topologies 'billing' and 'crm'. A batch is one SQL
+session (one round trip), so every statement of it must belong to a single topology; split it into one
+batch per topology.
+```
+
+A batch with any side-effecting step — DML, a materialisation, an output capture or a raw step — asks
+the topology for a writer (`CommandKind.Write`); a batch of result-bearing queries only asks for a
+reader. Inside a routed transaction the whole batch joins the transaction's host, and a batch that would
+leave it fails like any other command.
+
+### Temporary tables are one batch too
+
+The lazy temporary table is exactly this case. Reading an `AsTempTable` source runs one batch — `DROP`,
+`CREATE TEMPORARY TABLE ... AS SELECT`, then the read — on one session, so it must be one host, and the
+table is materialised from its source query **under that query's own scope**. Scope the source like the
+read:
+
+```csharp
+var scope = new MappingScope("3");
+
+var source = context.From<Order>()
+    .WithScope(scope)                       // the rows of bucket 3
+    .Select(order => new { order.Id, order.Total })
+    .AsTempTable();
+
+var rows = context.From(source)
+    .WithScope(scope)                       // the same bucket: one batch, one host
+    .Select(row => new { Id = row.GetInt32("Id"), Total = row.GetDecimal("Total") })
+    .ToList();
+```
+
+A source that resolves to another bucket than the read is rejected: its `CREATE ... AS SELECT` and the
+read would have to run on two hosts.
+
+An eager materialisation follows the same rule: `ToTable`/`ToTempTable` writes a literal target name, so
+it is routed by the entities its **source query** reads — not by the row type it projects — and runs under
+that query's scope. With `DropExisting` the drop accompanies the create to the same host.
+
+`ExecuteRaw`, `ExecuteProcedure` and bulk insert take no part in routing: they run on the context
+connection. A batch is how several statements are kept together on one routed host.
+
 ## Connections, transactions and pinning
 
 Every host keeps its own lazily opened connection, cached per `topology/host` for the lifetime of the
-context and closed with it. The connection string the context was created with is used only by
-statements that no rule routes.
+context and closed with it. The default topology is asked once, when the context is created; its host
+becomes the context connection, so it is used by statements that no rule routes, by raw SQL and by the
+context transaction. It is stable for the lifetime of the context: pin it or route commands elsewhere
+instead of expecting the default host to change per command.
 
 A transaction covers one connection. While one is open on the context connection, a command that routes
 elsewhere fails with an explicit error instead of writing outside the transaction.
@@ -120,9 +181,16 @@ An explicit pin keeps a session on one server for other reasons — a replica yo
 are about to load:
 
 ```csharp
-context.PinHost("reports", "host-2");   // the picker no longer chooses
-context.UnpinHost("reports");           // the picker chooses again
+using (context.PinHost("reports", "host-2"))   // the picker no longer chooses
+{
+    // every command routed to "reports" runs on host-2 here
+}
+// the handle released the pin; the picker chooses again
 ```
+
+`PinHost` returns a handle that releases the pin when disposed, so a pin covers exactly the scope you
+give it. `UnpinHost("reports")` releases it explicitly when the handle is not kept. A pin belongs to the
+topology: pinning the same topology again replaces it, and disposing the older handle then does nothing.
 
 A topology must return the pinned host from `TryGetHost` (or decline); the context verifies this and
 fails rather than silently routing elsewhere.
@@ -147,7 +215,8 @@ public sealed class HealthAwareTopology : IHostTopology
 }
 ```
 
-`TryGetHost` returns `false` to leave the command on the context connection. Everything else — weighted
+`TryGetHost` returns `false` to leave the command on the context's own connection (the default
+topology's host). Everything else — weighted
 selection, request-rate balancing, health checks, a read/write split — is implemented inside the method.
 
 ## Relation to sharding

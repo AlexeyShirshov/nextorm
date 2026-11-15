@@ -83,7 +83,7 @@ public sealed class ShardingDialectTests
 
     private static ShardTopology CreateTopology()
     {
-        var topology = new ShardTopology(4096);
+        var topology = new ShardTopology(4096, BucketPlacementMode.TableSuffix);
         topology.AddShard("east", "Server=east");
         topology.AddShard("west", "Server=west");
         return topology;
@@ -115,13 +115,30 @@ public sealed class ShardingDialectTests
     }
 
     private static DataContext CreateContext(string provider, DataContextBuilder builder)
+    {
+        // A routed context is created from the builder alone: its own connection is the default
+        // topology's host.
+        var routed = builder.UseDataRouting(routing => routing.UseDefaultTopology("main", ConnectionStringFor(provider)));
+
+        return provider switch
+        {
+            "sqlite" => new SqliteDataContext(routed),
+            "postgres" => new PostgresDataContext(routed),
+            "sqlserver" => new SqlServerDataContext(routed),
+            "mysql" => new MySqlDataContext(routed),
+            "clickhouse" => new ClickHouseDataContext(routed),
+            _ => throw new ArgumentOutOfRangeException(nameof(provider), provider, null),
+        };
+    }
+
+    private static string ConnectionStringFor(string provider)
         => provider switch
         {
-            "sqlite" => new SqliteDataContext("Data Source=:memory:", builder),
-            "postgres" => new PostgresDataContext("Host=localhost;Database=test;Username=test;Password=test", builder),
-            "sqlserver" => new SqlServerDataContext("Server=localhost;Database=test;User Id=test;Password=test;TrustServerCertificate=True", builder),
-            "mysql" => new MySqlDataContext("Server=localhost;Database=test;User=test;Password=test", builder),
-            "clickhouse" => new ClickHouseDataContext("Host=localhost;Database=test;Username=test;Password=test", builder),
+            "sqlite" => "Data Source=:memory:",
+            "postgres" => "Host=localhost;Database=test;Username=test;Password=test",
+            "sqlserver" => "Server=localhost;Database=test;User Id=test;Password=test;TrustServerCertificate=True",
+            "mysql" => "Server=localhost;Database=test;User=test;Password=test",
+            "clickhouse" => "Host=localhost;Database=test;Username=test;Password=test",
             _ => throw new ArgumentOutOfRangeException(nameof(provider), provider, null),
         };
 

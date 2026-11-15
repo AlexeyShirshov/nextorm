@@ -58,6 +58,17 @@ public class PostgresDataContext : DataContext, IBulkInsertExecutor, IBulkInsert
     }
 
     /// <summary>
+    /// Creates a PostgreSQL context from the builder alone. The builder must configure routing and name a
+    /// default topology; its host supplies the connection, so no connection string is passed here.
+    /// </summary>
+    /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
+    /// <exception cref="InvalidOperationException">The builder configures no routing, or no default topology.</exception>
+    public PostgresDataContext(DataContextBuilder optionsBuilder)
+        : this(null, null, optionsBuilder, null)
+    {
+    }
+
+    /// <summary>
     /// Creates a version-aware PostgreSQL context that owns a connection built lazily from
     /// <paramref name="connectionString"/>.
     /// </summary>

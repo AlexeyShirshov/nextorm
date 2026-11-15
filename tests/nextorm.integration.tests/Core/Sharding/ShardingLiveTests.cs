@@ -175,14 +175,16 @@ public sealed class SqliteShardingLiveTests : IDisposable
 
     private SqliteDataContext CreateContext(ShardTopology topology)
     {
-        var context = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder().UseSharding(topology));
+        var context = new SqliteDataContext(new DataContextBuilder()
+            .UseSharding(topology)
+            .UseDataRouting(routing => routing.UseDefaultTopology("main", "Data Source=:memory:")));
         context.EnsureConnectionOpen();
         return context;
     }
 
     private ShardTopology CreateTopology()
     {
-        var topology = new ShardTopology(BucketCount);
+        var topology = new ShardTopology(BucketCount, BucketPlacementMode.TableSuffix);
         for (var shard = 1; shard <= 3; shard++)
             topology.AddShard($"shard-{shard}", ConnectionString($"shard-{shard}"));
 

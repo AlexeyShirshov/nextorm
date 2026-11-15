@@ -46,33 +46,88 @@ var topology = new ShardTopology(bucketCount: 1024);
 topology.AddShard("pg-1", "Host=pg-1;Database=app");
 topology.AddShard("pg-2", "Host=pg-2;Database=app");
 
-// Serves only statements that never reach a bucket: unsharded entities, raw SQL and
-// transactions. It is not a routing target and never decides where a sharded
-// statement runs.
-var nonRoutedDefaultConnectionString = "Host=pg-1;Database=app_master";
+var builder = new DataContextBuilder()
+    .UseSharding(topology)
+    .UseDataRouting(routing => routing
+        // The simplest topology: one connection string. It serves only statements that never
+        // reach a bucket — unsharded entities, raw SQL and the context transaction. It is not a
+        // routing target and never decides where a sharded statement runs.
+        .UseDefaultTopology("main", "Host=pg-1;Database=app_master"));
 
-var builder = new DataContextBuilder().UseSharding(topology);
-using var context = new PostgresDataContext(nonRoutedDefaultConnectionString, builder);
+using var context = new PostgresDataContext(builder);
 ```
 
-`UseSharding` installs a `ShardRouter` as the scope resolver and wraps the current metadata provider in
-a shard-aware decorator, so an existing `IEntityMetadataProvider` keeps working. Every statement routed
-to a bucket runs on that bucket's shard connection, which the context opens lazily, one per shard, from
-the topology — the connection the context was created with is never part of that decision.
+The context is created from the builder alone: its own connection comes from the default topology, and
+passing a connection string to the constructor as well is rejected. `UseSharding` installs a `ShardRouter`
+as the scope resolver and wraps the current metadata provider in a shard-aware decorator, so an existing
+`IEntityMetadataProvider` keeps working. Every statement routed to a bucket runs on that bucket's shard
+connection, which the context opens lazily, one per shard, from the topology — the default host is never
+part of that decision.
 
 ### Placement of a bucket
 
 The placement mode decides how a bucket becomes a physical name. Both modes depend on the bucket number
-only:
+only, never on the shard set.
 
-| Mode | Physical name for bucket `b` |
-| --- | --- |
-| `BucketPlacementMode.TableSuffix` (default) | `{mappedTable}_{b}` in the mapped schema |
-| `BucketPlacementMode.SchemaPerBucket` | `{mappedSchema}_{b}` with the mapped table name |
+With `SchemaPerBucket` — the default — the bucket becomes the schema and the table keeps its mapped name:
+
+```text
+{placeholder}_{bucket}.{table}
+```
+
+`{placeholder}` is the schema the entity is mapped to, or the literal `bucket` when it declares no
+schema; `{table}` is the mapped table name, unchanged. With `TableSuffix` the table name carries the
+suffix and the schema does not change:
+
+| Entity | Bucket | `SchemaPerBucket` (default) | `TableSuffix` |
+| --- | --- | --- | --- |
+| `Order` — table `Orders`, no schema | 1 | `bucket_1.Orders` | `Orders_1` |
+| `Invoice` — schema `sales`, table `invoices` | 1 | `sales_1.invoices` | `sales.invoices_1` |
+| `Order` | 7 | `bucket_7.Orders` | `Orders_7` |
 
 ```csharp
-var bySchema = new ShardTopology(bucketCount: 1024, BucketPlacementMode.SchemaPerBucket);
+// SchemaPerBucket is the default; ask for the suffixed table explicitly.
+var byTable = new ShardTopology(bucketCount: 1024, BucketPlacementMode.TableSuffix);
 ```
+
+The same answer is available to code that composes SQL itself:
+
+```csharp
+var placement = context.GetPhysicalTableName<Order>(new MappingScope("1"));
+// placement.Schema == "bucket_1", placement.TableName == "Orders"
+// placement.QualifiedName == "bucket_1.Orders"
+```
+
+### Raw SQL and the bucket name
+
+Raw SQL is opaque to the planner, so it is never rewritten by accident. When the statement itself needs
+the bucket's physical name, bind the entity to the raw source and use one of the tokens:
+
+| Token | Expands to |
+| --- | --- |
+| `{table}` | the mapped table name, e.g. `Orders_1` |
+| `{schema}` | the mapped schema, e.g. `sales_1` or `bucket_1` |
+| `{qualified}` | `<schema>.<table>`, or the table alone when the entity declares no schema |
+
+```csharp
+var top = context.FromSql("select Id, Tenant, Total from {qualified} where Total > @min", new { min = 100 })
+    .BindEntity<Order>(["Id", "Tenant", "Total"])
+    .WithShardKey(tenant)                    // or .WithScope(...) for an explicit bucket
+    .Select(order => new { order.Id, order.Total })
+    .OrderByDescending(row => row.Total)
+    .ToList();
+```
+
+The tokens are expanded while the plan is built, from the bound entity's metadata and the command's
+mapping scope — the same point where a mapped source gets its name — so the executed SQL carries
+`bucket_7.Orders` (or `Orders_7`) and the statement runs on that bucket's shard. Quoting follows the
+context (`QuoteIdentifiers`). A fragment without any of the three tokens is emitted verbatim, and braces
+that are not a token are left alone. `{schema}` on an entity that declares no schema is an error: use
+`{table}` or `{qualified}`.
+
+`ExecuteRaw`/`ExecuteProcedure` run on the context's own connection and carry no scope, so they cannot
+address a bucket's table on its shard; use `FromSql` with a scope for that, or compose the statement for a
+context already pointed at the shard.
 
 ### Custom hash functions
 
@@ -207,6 +262,12 @@ context.PinHost("sharding", "pg-2");
 
 The topology name sharding rules refer to is `"sharding"`.
 
+A batch and a lazy temporary table are one session each, so they are routed as a unit: a batch whose
+steps all belong to one bucket runs on that bucket's shard, and a temporary-table read of bucket `b`
+must scope its source query to `b` as well — the `CREATE ... AS SELECT` and the read then share the
+shard ([One batch, one topology](34-routing-data-to-topologies.md#one-batch-one-topology)). A batch
+that would span two buckets is rejected; run one batch per bucket.
+
 ## Limitations
 
 - Fan-out results are per-bucket vectors. Global `ORDER BY`, `LIMIT`/`OFFSET`, `DISTINCT` and aggregates
@@ -218,3 +279,5 @@ The topology name sharding rules refer to is `"sharding"`.
 - A `params`-supplied value that only exists at execution time cannot be extracted from the predicate;
   capture the value in a closure, call `WithShardKey(...)`, or fan out.
 - Bulk insert (`BulkInsertBuilder`) is not shard-aware in this version.
+- `ExecuteRaw`/`ExecuteProcedure` run on the context connection and carry no scope: address a bucket's
+  table on its shard with `FromSql` under a scope, or with a context already pointed at that shard.

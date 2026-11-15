@@ -30,7 +30,7 @@ public sealed class ShardParityTests
     }
 
     private static SqliteDataContext CreateContext(DataContextBuilder builder)
-        => new("Data Source=:memory:", builder);
+        => new(builder.UseDataRouting(routing => routing.UseDefaultTopology("main", "Data Source=:memory:")));
 
     private static (string Sql, string[] ParameterNames) Prepare(SqliteDataContext context)
     {

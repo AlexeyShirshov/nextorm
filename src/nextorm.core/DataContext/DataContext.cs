@@ -28,6 +28,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     private readonly LoggingOptions _connectionLogging;
     private readonly IReadOnlyDictionary<string, IHostTopology> _topologies;
     private readonly RouteTable _routes;
+    // The topology that serves unrouted commands, raw SQL and the context transaction. Its host is
+    // resolved once when the context is created: the context owns exactly one connection besides the
+    // routed hosts, and that connection is the default topology's.
+    private readonly string? _defaultTopologyName;
     private readonly ConcurrentDictionary<string, DbConnectionManager> _hostConnectionManagers = new(StringComparer.Ordinal);
     // Hosts the caller pinned by topology name, and the host a routed transaction is bound to. A routed
     // transaction pins lazily: the entry disappears once its transaction is over.
@@ -116,6 +120,50 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
                     "Register it with AddTopology (or UseDataRouting) before creating the context.");
             }
         }
+        // The context's own connection is the default topology's host. A routed context therefore gets
+        // its connection from the builder, never from the constructor: passing both a connection string
+        // and a routing configuration would leave two answers to "where do unrouted commands run".
+        if (_topologies.Count > 0)
+        {
+            if (connectionString is not null || providedConnection is not null)
+            {
+                throw new InvalidOperationException(
+                    "This builder configures routing, so the context is created from the builder alone: its " +
+                    "connection comes from the default topology. Do not pass a connection string or a connection " +
+                    "to the context constructor; register the fallback with UseDefaultTopology instead.");
+            }
+
+            _defaultTopologyName = optionsBuilder.DefaultTopologyName
+                ?? throw new InvalidOperationException(
+                    "Routing is configured but no default topology is set. Commands that no rule routes, raw SQL " +
+                    "and the context transaction run on the default topology; set it with UseDefaultTopology.");
+
+            if (!_topologies.TryGetValue(_defaultTopologyName, out var defaultTopology))
+            {
+                throw new InvalidOperationException(
+                    $"The default topology '{_defaultTopologyName}' is not registered. Register it with AddTopology " +
+                    "(or UseDataRouting) before creating the context.");
+            }
+
+            var defaultRoute = new TopologyContext(MappingScope.Default, CommandKind.Read);
+            if (!defaultTopology.TryGetHost(in defaultRoute, out var defaultHost)
+                || string.IsNullOrWhiteSpace(defaultHost.ConnectionString))
+            {
+                throw new InvalidOperationException(
+                    $"Topology '{_defaultTopologyName}' is the default topology but did not return a host with a " +
+                    "connection string. The default topology must serve one connection; a single connection " +
+                    "string is the simplest one.");
+            }
+
+            connectionString = defaultHost.ConnectionString;
+        }
+        else if (optionsBuilder.DefaultTopologyName is not null)
+        {
+            throw new InvalidOperationException(
+                $"The default topology '{optionsBuilder.DefaultTopologyName}' is not registered. Register it with " +
+                "AddTopology (or UseDataRouting) before creating the context.");
+        }
+
         _connectionManager = new DbConnectionManager(
             this,
             _connectionHooks,
@@ -314,6 +362,35 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     public DbConnection GetConnection() => _connectionManager.GetConnection();
 
     /// <summary>
+    /// Resolves the physical schema and table an entity uses under <paramref name="scope"/>, using the
+    /// context's metadata provider (shard-aware when sharding is configured). This is the same answer the
+    /// planner bakes into a statement, exposed for raw SQL assembled outside the query builder.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type.</typeparam>
+    /// <param name="scope">The mapping scope, for example a bucket scope; the default scope keeps the mapping.</param>
+    /// <returns>The physical schema and table for that scope.</returns>
+    /// <exception cref="InvalidOperationException">The provider returned no table name for the type.</exception>
+    public PhysicalTableName GetPhysicalTableName<TEntity>(MappingScope scope = default)
+        => GetPhysicalTableName(typeof(TEntity), scope);
+
+    private PhysicalTableName GetPhysicalTableName(Type entityType, MappingScope scope)
+    {
+        ArgumentNullException.ThrowIfNull(entityType);
+
+        var metadata = EntityMetadataProvider.GetMetadata(entityType, in scope);
+        if (string.IsNullOrEmpty(metadata.TableName))
+        {
+            throw new InvalidOperationException(
+                $"Entity '{entityType}' has no mapped table name under scope '{scope.Key}'. Materialize the entity " +
+                "first (for example with From<TEntity>()) so its mapping is registered.");
+        }
+
+        return new PhysicalTableName(
+            string.IsNullOrEmpty(metadata.Schema) ? null : metadata.Schema,
+            metadata.TableName);
+    }
+
+    /// <summary>
     /// Resolves the topology every source of a command belongs to. A statement is one server-side
     /// operation, so its sources must agree: two different topologies are rejected instead of silently
     /// running one side of the statement on a host it does not belong to.
@@ -375,17 +452,28 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// Pins every command routed to <paramref name="topology"/> to one host: the topology is still the
     /// one the rules select, but its own picker no longer chooses, which is how a caller keeps a session
     /// on one server (a replica it warmed up, a shard it is about to transact on). The pin lasts until
-    /// <see cref="UnpinHost"/> or the context is disposed.
+    /// the returned handle is disposed, <see cref="UnpinHost"/> is called, or the context is disposed.
     /// </summary>
     /// <param name="topology">The registered topology name.</param>
     /// <param name="hostId">The identifier of one of its hosts.</param>
-    /// <returns>This context, to allow chaining.</returns>
+    /// <returns>A handle that releases the pin when disposed.</returns>
     /// <exception cref="ArgumentException">The topology is not registered or does not have that host.</exception>
-    /// <exception cref="InvalidOperationException">The topology does not honour host pinning.</exception>
-    public DataContext PinHost(string topology, string hostId)
+    /// <exception cref="InvalidOperationException">
+    /// The topology is the default one, does not honour host pinning, or a routed transaction is open on
+    /// another host of it.
+    /// </exception>
+    public HostPin PinHost(string topology, string hostId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(topology);
         ArgumentException.ThrowIfNullOrWhiteSpace(hostId);
+
+        if (string.Equals(topology, _defaultTopologyName, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Topology '{topology}' is the default topology: its host is fixed when the context is created, " +
+                "because unrouted commands, raw SQL and the context transaction run there. Pin a non-default " +
+                "topology instead.");
+        }
 
         var resolved = GetTopology(topology);
         var probe = new TopologyContext(MappingScope.Default, CommandKind.Read, hostId);
@@ -405,10 +493,13 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         EnsurePinDoesNotLeaveRoutedTransaction(topology, hostId);
 
         _pinnedHosts[topology] = hostId;
-        return this;
+        return new HostPin(this, topology, hostId);
     }
 
-    /// <summary>Removes the pin set by <see cref="PinHost"/>, so the topology's own picker chooses again.</summary>
+    /// <summary>
+    /// Removes the pin set by <see cref="PinHost"/> without a handle, so the topology's own picker
+    /// chooses again. A pin is normally released by disposing its <see cref="HostPin"/>.
+    /// </summary>
     /// <param name="topology">The registered topology name.</param>
     /// <returns>This context, to allow chaining.</returns>
     public DataContext UnpinHost(string topology)
@@ -416,6 +507,16 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         ArgumentException.ThrowIfNullOrWhiteSpace(topology);
         _pinnedHosts.TryRemove(topology, out _);
         return this;
+    }
+
+    /// <summary>Releases a pin created by <see cref="PinHost"/>, unless the topology was re-pinned since.</summary>
+    /// <param name="topology">The topology the handle was created for.</param>
+    /// <param name="hostId">The host the handle pinned.</param>
+    internal void ReleaseHostPin(string topology, string hostId)
+    {
+        // Atomic compare-and-remove: a handle whose pin was replaced by a newer one must not remove it.
+        ((ICollection<KeyValuePair<string, string>>)_pinnedHosts)
+            .Remove(new KeyValuePair<string, string>(topology, hostId));
     }
 
     private IHostTopology GetTopology(string topology)
@@ -626,6 +727,13 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// </summary>
     private (DbConnectionManager Manager, string HostId) RoutedTransactionHost(RouteTarget target, MappingScope scope)
     {
+        if (string.Equals(target.Topology, _defaultTopologyName, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Topology '{target.Topology}' is the default topology. Use ITransactionManager.BeginTransaction " +
+                "for the context connection; a routed transaction targets a non-default topology.");
+        }
+
         if (_connectionManager.CurrentTransaction is not null)
         {
             throw new InvalidOperationException(
@@ -1310,26 +1418,26 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         var (sql, parameters) = BuildInsertSql((InsertCommand)command);
         // The identity function runs in the same batch as the insert: SCOPE_IDENTITY() is scoped to the
         // batch, so issuing it as a separate command would return NULL on SQL Server.
-        return _executor.ExecuteScalar(sql + "; " + Dialect.MakeIdentityFunction(KeywordCase), parameters, command.MappingScope, command.EntityType);
+        return _executor.ExecuteScalar(sql + "; " + Dialect.MakeIdentityFunction(KeywordCase), parameters, command.MappingScope, command.EntityType, command.RouteSources);
     }
 
     async Task<object?> IMutationExecutor.ExecuteIdentityFunction(MutationCommand command, CancellationToken cancellationToken)
     {
         EnsureIdentityFunctionSupported();
         var (sql, parameters) = BuildInsertSql((InsertCommand)command);
-        return await _executor.ExecuteScalarAsync(sql + "; " + Dialect.MakeIdentityFunction(KeywordCase), parameters, cancellationToken, command.MappingScope, command.EntityType).ConfigureAwait(false);
+        return await _executor.ExecuteScalarAsync(sql + "; " + Dialect.MakeIdentityFunction(KeywordCase), parameters, cancellationToken, command.MappingScope, command.EntityType, command.RouteSources).ConfigureAwait(false);
     }
 
     int IMutationExecutor.Execute(MutationCommand command)
     {
         var (sql, parameters) = BuildMutationSql(command);
-        return _executor.ExecuteNonQuery(sql, parameters, command.MappingScope, command.EntityType);
+        return _executor.ExecuteNonQuery(sql, parameters, command.MappingScope, command.EntityType, command.RouteSources);
     }
 
     async Task<int> IMutationExecutor.Execute(MutationCommand command, CancellationToken cancellationToken)
     {
         var (sql, parameters) = BuildMutationSql(command);
-        return await _executor.ExecuteNonQueryAsync(sql, parameters, cancellationToken, command.MappingScope, command.EntityType).ConfigureAwait(false);
+        return await _executor.ExecuteNonQueryAsync(sql, parameters, cancellationToken, command.MappingScope, command.EntityType, command.RouteSources).ConfigureAwait(false);
     }
 
     object? IMutationExecutor.ExecuteIdentity(MutationCommand command)
@@ -1337,15 +1445,15 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         if (Dialect.SupportsReturning || Dialect.SupportsOutput)
         {
             var (sql, parameters) = BuildInsertSql((InsertCommand)command);
-            return _executor.ExecuteScalar(sql, parameters, command.MappingScope, command.EntityType);
+            return _executor.ExecuteScalar(sql, parameters, command.MappingScope, command.EntityType, command.RouteSources);
         }
 
         if (Dialect.SupportsLastInsertId)
         {
             EnsureIdentityColumn(command);
             var (sql, parameters) = BuildInsertSql((InsertCommand)command);
-            _executor.ExecuteNonQuery(sql, parameters, command.MappingScope, command.EntityType);
-            return _executor.ExecuteScalar(Dialect.MakeLastInsertId(KeywordCase), [], command.MappingScope, command.EntityType);
+            _executor.ExecuteNonQuery(sql, parameters, command.MappingScope, command.EntityType, command.RouteSources);
+            return _executor.ExecuteScalar(Dialect.MakeLastInsertId(KeywordCase), [], command.MappingScope, command.EntityType, command.RouteSources);
         }
 
         throw new NotSupportedException(
@@ -1357,15 +1465,15 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         if (Dialect.SupportsReturning || Dialect.SupportsOutput)
         {
             var (sql, parameters) = BuildInsertSql((InsertCommand)command);
-            return await _executor.ExecuteScalarAsync(sql, parameters, cancellationToken, command.MappingScope, command.EntityType).ConfigureAwait(false);
+            return await _executor.ExecuteScalarAsync(sql, parameters, cancellationToken, command.MappingScope, command.EntityType, command.RouteSources).ConfigureAwait(false);
         }
 
         if (Dialect.SupportsLastInsertId)
         {
             EnsureIdentityColumn(command);
             var (sql, parameters) = BuildInsertSql((InsertCommand)command);
-            await _executor.ExecuteNonQueryAsync(sql, parameters, cancellationToken, command.MappingScope, command.EntityType).ConfigureAwait(false);
-            return await _executor.ExecuteScalarAsync(Dialect.MakeLastInsertId(KeywordCase), [], cancellationToken, command.MappingScope, command.EntityType).ConfigureAwait(false);
+            await _executor.ExecuteNonQueryAsync(sql, parameters, cancellationToken, command.MappingScope, command.EntityType, command.RouteSources).ConfigureAwait(false);
+            return await _executor.ExecuteScalarAsync(Dialect.MakeLastInsertId(KeywordCase), [], cancellationToken, command.MappingScope, command.EntityType, command.RouteSources).ConfigureAwait(false);
         }
 
         throw new NotSupportedException(
@@ -1378,7 +1486,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         EnsureReturningMaterializable<TResult>(oneColumn);
         var (sql, parameters) = BuildReturningSql(command);
         var mapper = RowMapperFactory.GetOrBuild<TResult>(sql, GetType(), selectList, oneColumn, MapColumnExpression);
-        return _executor.ExecuteReader(sql, parameters, mapper, command.MappingScope, command.EntityType);
+        return _executor.ExecuteReader(sql, parameters, mapper, command.MappingScope, command.EntityType, command.RouteSources);
     }
 
     async Task<IReadOnlyList<TResult>> IMutationExecutor.ExecuteReturning<TResult>(MutationCommand command, SelectExpression[] selectList, bool oneColumn, CancellationToken cancellationToken)
@@ -1387,7 +1495,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         EnsureReturningMaterializable<TResult>(oneColumn);
         var (sql, parameters) = BuildReturningSql(command);
         var mapper = RowMapperFactory.GetOrBuild<TResult>(sql, GetType(), selectList, oneColumn, MapColumnExpression);
-        return await _executor.ExecuteReaderAsync(sql, parameters, mapper, cancellationToken, command.MappingScope, command.EntityType).ConfigureAwait(false);
+        return await _executor.ExecuteReaderAsync(sql, parameters, mapper, cancellationToken, command.MappingScope, command.EntityType, command.RouteSources).ConfigureAwait(false);
     }
 
     // Raw command execution (IRawCommandExecutor). Public so a concrete context exposes the entry
@@ -1959,6 +2067,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         if (firstResult < 0)
             throw new InvalidOperationException("A batch must end with at least one result-bearing query.");
 
+        var kind = BatchKind(steps);
+        var route = ResolveBatchRoute(steps, kind);
+
         var provider = new DefaultParameterProvider();
         var accumulator = new List<Parameter>();
         var statements = new List<BatchStatement>(steps.Count);
@@ -2019,8 +2130,101 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             statements.Add(new BatchStatement(sql, SliceStatementParameters(accumulator, start, count)));
         }
 
-        return new BatchPlan(statements, results, Dialect.BatchUsesJoinedCommand, MultilineBatchSql);
+        return new BatchPlan(statements, results, route, Dialect.BatchUsesJoinedCommand, MultilineBatchSql);
     }
+
+    /// <summary>
+    /// Whether a batch must be served by a writer: any statement other than a result-bearing query may
+    /// change data, a schema or a session (a DML step, a materialisation, a capture or a raw step).
+    /// </summary>
+    /// <param name="steps">The batch steps in execution order.</param>
+    /// <returns><see cref="CommandKind.Write"/> when the batch has a side-effecting step.</returns>
+    private static CommandKind BatchKind(IReadOnlyList<BatchStepSpec> steps)
+    {
+        for (var i = 0; i < steps.Count; i++)
+        {
+            if (steps[i].Query is null)
+                return CommandKind.Write;
+        }
+
+        return CommandKind.Read;
+    }
+
+    /// <summary>
+    /// Resolves the one host a batch runs on. A batch is a single session and a single round trip, so its
+    /// statements cannot span topologies or mapping scopes any more than the sources of one statement can:
+    /// the first routed step decides, and a step that disagrees is rejected instead of silently running on
+    /// a host its names were not rendered for.
+    /// </summary>
+    /// <param name="steps">The batch steps in execution order.</param>
+    /// <param name="kind">Whether the batch must be served by a writer.</param>
+    /// <returns>The route the context resolves into a connection when the batch executes.</returns>
+    /// <exception cref="NotSupportedException">The steps resolve to different topologies or scopes.</exception>
+    private BatchRoute ResolveBatchRoute(IReadOnlyList<BatchStepSpec> steps, CommandKind kind)
+    {
+        var route = BatchRoute.OnContext(kind);
+
+        for (var i = 0; i < steps.Count; i++)
+        {
+            if (BatchStepRoute(steps[i]) is not var (scope, sources))
+                continue;
+
+            var plan = RouteFor(sources, scope);
+            if (!plan.HasTopology)
+                continue;
+
+            if (!route.Plan.HasTopology)
+            {
+                route = new BatchRoute(plan, scope, sources, kind);
+                continue;
+            }
+
+            if (route.Plan != plan)
+            {
+                throw new NotSupportedException(
+                    $"A batch runs on one host, but its statements span topologies '{route.Plan.TopologyName}' and " +
+                    $"'{plan.TopologyName}'. A batch is one SQL session (one round trip), so every statement of it " +
+                    "must belong to a single topology; split it into one batch per topology.");
+            }
+
+            if (route.Scope != scope)
+            {
+                throw new NotSupportedException(
+                    $"A batch runs on one host, but its statements span the mapping scopes " +
+                    $"'{ScopeName(route.Scope)}' and '{ScopeName(scope)}'. A batch is one SQL session, so every " +
+                    "statement of it must run under one scope; scope the statements the same way (a lazy " +
+                    "temporary table also takes the scope of its source query, not only of the read).");
+            }
+        }
+
+        return route;
+    }
+
+    /// <summary>
+    /// The scope and entity types one batch step executes with, or <see langword="null"/> for a raw step
+    /// (which carries no entity and rides along on the host the other steps choose).
+    /// </summary>
+    /// <param name="step">The step being rendered.</param>
+    /// <returns>The step's mapping scope and entities, or <see langword="null"/>.</returns>
+    private static (MappingScope Scope, IReadOnlyList<Type> Sources)? BatchStepRoute(BatchStepSpec step)
+    {
+        if (step.Query is { } query)
+            return (query.MappingScope, CommandRouteSources.Collect(query));
+
+        if (step.CreateTableAs is { } createTableAs)
+            return (createTableAs.MappingScope, createTableAs.RouteSources ?? CommandRouteSources.Collect(createTableAs.Source));
+
+        if (step.Mutation is { } mutation)
+            return (mutation.MappingScope, [mutation.EntityType]);
+
+        if (step.Capture is { } capture)
+            return (capture.Mutation.MappingScope, [capture.Mutation.EntityType]);
+
+        return null;
+    }
+
+    private static string ScopeName(in MappingScope scope)
+        => string.IsNullOrEmpty(scope.Key) ? "default" : scope.Key;
 
     // A statement's parameters are the accumulator slice it produced. A captured member referenced more
     // than once in the same statement is visited once per reference, so its (member-named) parameter is

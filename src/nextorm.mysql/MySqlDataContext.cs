@@ -41,6 +41,17 @@ public class MySqlDataContext : DataContext, IBulkInsertExecutor, IBulkInsertNat
     }
 
     /// <summary>
+    /// Creates a MySQL context from the builder alone. The builder must configure routing and name a
+    /// default topology; its host supplies the connection, so no connection string is passed here.
+    /// </summary>
+    /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
+    /// <exception cref="InvalidOperationException">The builder configures no routing, or no default topology.</exception>
+    public MySqlDataContext(DataContextBuilder optionsBuilder)
+        : this(null, null, optionsBuilder, null)
+    {
+    }
+
+    /// <summary>
     /// Creates a context with an optional connection string or a caller-supplied connection and
     /// snapshots the provider server <paramref name="serverVersion"/> once. Derived providers (MariaDB)
     /// forward their version here so the base <see cref="DataContext.ServerVersion"/> snapshot agrees

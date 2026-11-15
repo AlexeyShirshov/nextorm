@@ -1,1 +1,3 @@
 #nullable enable
+NextORM.ClickHouse.ClickHouseDataContext.ClickHouseDataContext(NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+static NextORM.ClickHouse.ClickHouseDataContextOptionsBuilderExtensions.UseClickHouse(this NextORM.Core.DataContextBuilder! builder) -> NextORM.Core.DataContextBuilder!

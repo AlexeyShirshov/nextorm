@@ -10,6 +10,11 @@ namespace NextORM.Core;
 /// and the read — on a single session, so the table is always freshly materialised and never depends on
 /// connection pinning (safe under a connection-level pooler such as PgBouncer).
 /// </para>
+/// <para>
+/// The batch runs on the host the read is routed to, and the source query is rendered under its own
+/// mapping scope: scope the source like the read, so the materialisation and the read address the same
+/// bucket. A source that resolves to another bucket than the read is rejected.
+/// </para>
 /// </summary>
 /// <typeparam name="TResult">The source query's projected row type. The rows are read back through
 /// <see cref="TableAlias"/> column accessors, not through this type's mapping.</typeparam>

@@ -1,1 +1,3 @@
 #nullable enable
+NextORM.Sqlite.SqliteDataContext.SqliteDataContext(NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+static NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions.UseSqlite(this NextORM.Core.DataContextBuilder! builder) -> NextORM.Core.DataContextBuilder!

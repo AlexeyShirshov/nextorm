@@ -63,7 +63,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         _interceptors = interceptors;
         _dialect = dialect;
         _raiseCommandInitialized = RaiseCommandInitialized;
-        _batchRunner = new BatchRunner(connectionManager, createParam, createParamSimple, () => currentTransaction(connectionManager), isDisposed, logging, context.CommandTimeout, dialect);
+        _batchRunner = new BatchRunner(currentTransaction, createParam, createParamSimple, isDisposed, logging, context.CommandTimeout, dialect);
     }
 
     /// <summary>
@@ -318,14 +318,14 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     /// the current connection. Unlike a prepared query command, a mutation command is not reused across
     /// executions, so the parameters are added each time.
     /// </summary>
-    private DbCommand CreateMutationCommand(string sql, IReadOnlyList<Parameter> parameters, MappingScope scope, Type? entityType)
+    private DbCommand CreateMutationCommand(string sql, IReadOnlyList<Parameter> parameters, MappingScope scope, Type? entityType, IReadOnlyList<Type>? sources)
     {
         // Execution-time PostgreSQL guard: every ad-hoc mutation renderer ends here before the command
         // exists, including the ones that do not consult the MySQL-family lowering seam (the multi-table
         // UPDATE/DELETE renders). The final values are already converted, so this is the last seam that
         // sees them before the driver.
         PostgresParameterGuard.Validate(StringLiteralPolicy, parameters);
-        return CreateCommand(sql, new MutationParameterState(parameters, _createParam), BindMutationParameters, CommandType.Text, scope, entityType);
+        return CreateCommand(sql, new MutationParameterState(parameters, _createParam), BindMutationParameters, CommandType.Text, scope, entityType, sources);
     }
 
     /// <summary>
@@ -336,9 +336,11 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     private DbCommand CreateRawCommand(string commandText, IReadOnlyList<ProcedureParameter> parameters, CommandType commandType)
         => CreateCommand(commandText, new ProcedureParameterState(parameters, _createProcedureParam), BindProcedureParameters, commandType);
 
-    private DbCommand CreateCommand<TState>(string commandText, TState state, Action<DbCommand, TState> bindParameters, CommandType commandType = CommandType.Text, MappingScope scope = default, Type? entityType = null)
+    private DbCommand CreateCommand<TState>(string commandText, TState state, Action<DbCommand, TState> bindParameters, CommandType commandType = CommandType.Text, MappingScope scope = default, Type? entityType = null, IReadOnlyList<Type>? sources = null)
     {
-        var sources = entityType is null ? null : new[] { entityType };
+        // A mutation with no target entity (a materialisation) names the entities it reads instead, so its
+        // statement is routed by what it reads rather than by the row type it projects.
+        sources ??= entityType is null ? null : new[] { entityType };
         var connectionManager = _managerFor(scope, sources, CommandKind.Write);
         connectionManager.EnsureConnectionOpen();
         return InitCommand(connectionManager.GetConnection(), commandText, state, bindParameters, commandType, _currentTransaction(connectionManager));
@@ -560,11 +562,12 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>
     /// <param name="scope">The mapping scope that selects the shard connection; the default scope keeps the context connection.</param>
     /// <param name="entityType">The entity type the command is routed by, or <see langword="null"/> when it has none.</param>
+    /// <param name="sources">The entity types the statement reads or writes, replacing <paramref name="entityType"/> when set.</param>
     /// <returns>The number of rows affected, as reported by the provider.</returns>
-    public int ExecuteNonQuery(string sql, IReadOnlyList<Parameter> parameters, MappingScope scope = default, Type? entityType = null)
+    public int ExecuteNonQuery(string sql, IReadOnlyList<Parameter> parameters, MappingScope scope = default, Type? entityType = null, IReadOnlyList<Type>? sources = null)
     {
         CheckDisposed();
-        using var cmd = CreateMutationCommand(sql, parameters, scope, entityType);
+        using var cmd = CreateMutationCommand(sql, parameters, scope, entityType, sources);
         return RunNonQuery(cmd);
     }
 
@@ -574,11 +577,12 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     /// <param name="cancellationToken">Cancels execution.</param>
     /// <param name="scope">The mapping scope that selects the shard connection; the default scope keeps the context connection.</param>
     /// <param name="entityType">The entity type the command is routed by, or <see langword="null"/> when it has none.</param>
+    /// <param name="sources">The entity types the statement reads or writes, replacing <paramref name="entityType"/> when set.</param>
     /// <returns>A task producing the number of rows affected.</returns>
-    public async Task<int> ExecuteNonQueryAsync(string sql, IReadOnlyList<Parameter> parameters, CancellationToken cancellationToken, MappingScope scope = default, Type? entityType = null)
+    public async Task<int> ExecuteNonQueryAsync(string sql, IReadOnlyList<Parameter> parameters, CancellationToken cancellationToken, MappingScope scope = default, Type? entityType = null, IReadOnlyList<Type>? sources = null)
     {
         CheckDisposed();
-        using var cmd = CreateMutationCommand(sql, parameters, scope, entityType);
+        using var cmd = CreateMutationCommand(sql, parameters, scope, entityType, sources);
         return await RunNonQueryAsync(cmd, cancellationToken).ConfigureAwait(false);
     }
 
@@ -587,11 +591,12 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>
     /// <param name="scope">The mapping scope that selects the shard connection; the default scope keeps the context connection.</param>
     /// <param name="entityType">The entity type the command is routed by, or <see langword="null"/> when it has none.</param>
+    /// <param name="sources">The entity types the statement reads or writes, replacing <paramref name="entityType"/> when set.</param>
     /// <returns>The scalar value, with <see cref="DBNull"/> normalized to <see langword="null"/>.</returns>
-    public object? ExecuteScalar(string sql, IReadOnlyList<Parameter> parameters, MappingScope scope = default, Type? entityType = null)
+    public object? ExecuteScalar(string sql, IReadOnlyList<Parameter> parameters, MappingScope scope = default, Type? entityType = null, IReadOnlyList<Type>? sources = null)
     {
         CheckDisposed();
-        using var cmd = CreateMutationCommand(sql, parameters, scope, entityType);
+        using var cmd = CreateMutationCommand(sql, parameters, scope, entityType, sources);
         var result = RunScalar(cmd);
         return result is DBNull ? null : result;
     }
@@ -602,11 +607,12 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     /// <param name="cancellationToken">Cancels execution.</param>
     /// <param name="scope">The mapping scope that selects the shard connection; the default scope keeps the context connection.</param>
     /// <param name="entityType">The entity type the command is routed by, or <see langword="null"/> when it has none.</param>
+    /// <param name="sources">The entity types the statement reads or writes, replacing <paramref name="entityType"/> when set.</param>
     /// <returns>A task producing the scalar value, with <see cref="DBNull"/> normalized to <see langword="null"/>.</returns>
-    public async Task<object?> ExecuteScalarAsync(string sql, IReadOnlyList<Parameter> parameters, CancellationToken cancellationToken, MappingScope scope = default, Type? entityType = null)
+    public async Task<object?> ExecuteScalarAsync(string sql, IReadOnlyList<Parameter> parameters, CancellationToken cancellationToken, MappingScope scope = default, Type? entityType = null, IReadOnlyList<Type>? sources = null)
     {
         CheckDisposed();
-        using var cmd = CreateMutationCommand(sql, parameters, scope, entityType);
+        using var cmd = CreateMutationCommand(sql, parameters, scope, entityType, sources);
         var result = await RunScalarAsync(cmd, cancellationToken).ConfigureAwait(false);
         return result is DBNull ? null : result;
     }
@@ -621,11 +627,12 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     /// <param name="mapper">The compiled row mapper.</param>
     /// <param name="scope">The mapping scope that selects the shard connection; the default scope keeps the context connection.</param>
     /// <param name="entityType">The entity type the command is routed by, or <see langword="null"/> when it has none.</param>
+    /// <param name="sources">The entity types the statement reads or writes, replacing <paramref name="entityType"/> when set.</param>
     /// <returns>The returned rows, materialized in result-set order.</returns>
-    public List<TResult> ExecuteReader<TResult>(string sql, IReadOnlyList<Parameter> parameters, Func<IDataRecord, TResult> mapper, MappingScope scope = default, Type? entityType = null)
+    public List<TResult> ExecuteReader<TResult>(string sql, IReadOnlyList<Parameter> parameters, Func<IDataRecord, TResult> mapper, MappingScope scope = default, Type? entityType = null, IReadOnlyList<Type>? sources = null)
     {
         CheckDisposed();
-        using var cmd = CreateMutationCommand(sql, parameters, scope, entityType);
+        using var cmd = CreateMutationCommand(sql, parameters, scope, entityType, sources);
         using var reader = RunReader(cmd, CommandBehavior.Default);
 
         var list = new List<TResult>();
@@ -643,11 +650,12 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     /// <param name="cancellationToken">Cancels execution.</param>
     /// <param name="scope">The mapping scope that selects the shard connection; the default scope keeps the context connection.</param>
     /// <param name="entityType">The entity type the command is routed by, or <see langword="null"/> when it has none.</param>
+    /// <param name="sources">The entity types the statement reads or writes, replacing <paramref name="entityType"/> when set.</param>
     /// <returns>A task producing the returned rows, materialized in result-set order.</returns>
-    public async Task<List<TResult>> ExecuteReaderAsync<TResult>(string sql, IReadOnlyList<Parameter> parameters, Func<IDataRecord, TResult> mapper, CancellationToken cancellationToken, MappingScope scope = default, Type? entityType = null)
+    public async Task<List<TResult>> ExecuteReaderAsync<TResult>(string sql, IReadOnlyList<Parameter> parameters, Func<IDataRecord, TResult> mapper, CancellationToken cancellationToken, MappingScope scope = default, Type? entityType = null, IReadOnlyList<Type>? sources = null)
     {
         CheckDisposed();
-        using var cmd = CreateMutationCommand(sql, parameters, scope, entityType);
+        using var cmd = CreateMutationCommand(sql, parameters, scope, entityType, sources);
         using var reader = await RunReaderAsync(cmd, CommandBehavior.Default, cancellationToken).ConfigureAwait(false);
 
         var list = new List<TResult>();
@@ -657,24 +665,34 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         return list;
     }
 
+    /// <summary>
+    /// Resolves the connection a rendered batch runs on: the host its route selected, or the context
+    /// connection when no statement of the batch belongs to a topology. The batch is one session, so the
+    /// route is resolved once, here, before any statement is sent.
+    /// </summary>
+    /// <param name="plan">The rendered batch.</param>
+    /// <returns>The connection manager that executes it, with its transaction.</returns>
+    private IConnectionManager BatchManager(BatchPlan plan)
+        => _managerFor(plan.Route.Scope, plan.Route.Sources, plan.Route.Kind);
+
     /// <summary>Executes a rendered batch in one round trip and materialises its result rows.</summary>
     public List<TResult> RunBatch<TResult>(BatchPlan plan, Func<IDataRecord, TResult> mapper)
-        => _batchRunner.Run(plan, mapper);
+        => _batchRunner.Run(plan, mapper, BatchManager(plan));
 
     /// <summary>Asynchronously executes a rendered batch in one round trip and materialises its result rows.</summary>
     public Task<List<TResult>> RunBatchAsync<TResult>(BatchPlan plan, Func<IDataRecord, TResult> mapper, CancellationToken cancellationToken)
-        => _batchRunner.RunAsync(plan, mapper, cancellationToken);
+        => _batchRunner.RunAsync(plan, mapper, cancellationToken, BatchManager(plan));
 
     /// <summary>Streams a rendered batch's result rows; the reader stays open for the whole batch.</summary>
     public IAsyncEnumerable<TResult> RunBatchStream<TResult>(BatchPlan plan, Func<IDataRecord, TResult> mapper, CancellationToken cancellationToken)
-        => _batchRunner.RunStream(plan, mapper, cancellationToken);
+        => _batchRunner.RunStream(plan, mapper, cancellationToken, BatchManager(plan));
 
     /// <summary>Executes a rendered batch in one round trip and eagerly materialises every result set.</summary>
     /// <param name="plan">The rendered plan.</param>
     /// <param name="materializers">One materialiser per result set, in result-set order.</param>
     /// <returns>The eagerly materialised result sets.</returns>
     public BatchResult RunBatchMultiple(BatchPlan plan, IReadOnlyList<IBatchResultMaterializer> materializers)
-        => _batchRunner.RunBatchMultiple(plan, materializers);
+        => _batchRunner.RunBatchMultiple(plan, materializers, BatchManager(plan));
 
     /// <summary>Asynchronously executes a rendered batch in one round trip and eagerly materialises every result set.</summary>
     /// <param name="plan">The rendered plan.</param>
@@ -682,7 +700,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     /// <param name="cancellationToken">Cancels execution.</param>
     /// <returns>A task producing the eagerly materialised result sets.</returns>
     public Task<BatchResult> RunBatchMultipleAsync(BatchPlan plan, IReadOnlyList<IBatchResultMaterializer> materializers, CancellationToken cancellationToken)
-        => _batchRunner.RunBatchMultipleAsync(plan, materializers, cancellationToken);
+        => _batchRunner.RunBatchMultipleAsync(plan, materializers, cancellationToken, BatchManager(plan));
 
     /// <summary>
     /// Single entry guard for the public execution overloads: a context only executes the command
@@ -715,7 +733,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
         if (compiledQuery.PendingBatch is { } batch)
-            return _batchRunner.RunStream(batch, BeginBatch(compiledQuery, @params), cancellationToken).GetAsyncEnumerator(cancellationToken);
+            return _batchRunner.RunStream(batch, BeginBatch(compiledQuery, @params), cancellationToken, BatchManager(batch)).GetAsyncEnumerator(cancellationToken);
 
         var sqlEnumerator = RequireEnumerator(compiledQuery);
         var connectionManager = _managerFor(compiledQuery.MappingScope, compiledQuery.RouteSources, CommandKind.Read);
@@ -728,7 +746,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
         if (compiledQuery.PendingBatch is { } batch)
-            return _batchRunner.Run(batch, BeginBatch(compiledQuery, @params)).GetEnumerator();
+            return _batchRunner.Run(batch, BeginBatch(compiledQuery, @params), BatchManager(batch)).GetEnumerator();
 
         var sqlEnumerator = RequireEnumerator(compiledQuery);
         var connectionManager = _managerFor(compiledQuery.MappingScope, compiledQuery.RouteSources, CommandKind.Read);
@@ -744,7 +762,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
         if (compiledQuery.PendingBatch is { } batch)
         {
-            var rows = await _batchRunner.RunAsync(batch, BeginBatch(compiledQuery, @params), cancellationToken).ConfigureAwait(false);
+            var rows = await _batchRunner.RunAsync(batch, BeginBatch(compiledQuery, @params), cancellationToken, BatchManager(batch)).ConfigureAwait(false);
             return rows.GetEnumerator();
         }
 
@@ -789,7 +807,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
         if (compiledQuery.PendingBatch is { } batch)
         {
-            var rows = await _batchRunner.RunAsync(batch, BeginBatch(compiledQuery, @params), cancellationToken).ConfigureAwait(false);
+            var rows = await _batchRunner.RunAsync(batch, BeginBatch(compiledQuery, @params), cancellationToken, BatchManager(batch)).ConfigureAwait(false);
             return rows;
         }
 
@@ -827,7 +845,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
         if (compiledQuery.PendingBatch is { } batch)
         {
-            var rows = _batchRunner.Run(batch, BeginBatch(compiledQuery, @params));
+            var rows = _batchRunner.Run(batch, BeginBatch(compiledQuery, @params), BatchManager(batch));
             return rows;
         }
 
@@ -971,7 +989,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         object? r;
         if (compiledQuery.PendingBatch is { } batch)
         {
-            r = _batchRunner.RunScalar(batch);
+            r = _batchRunner.RunScalar(batch, BatchManager(batch));
         }
         else
         {
@@ -1010,7 +1028,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         object? r;
         if (compiledQuery.PendingBatch is { } batch)
         {
-            r = await _batchRunner.RunScalarAsync(batch, cancellationToken).ConfigureAwait(false);
+            r = await _batchRunner.RunScalarAsync(batch, cancellationToken, BatchManager(batch)).ConfigureAwait(false);
         }
         else
         {
@@ -1191,7 +1209,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
         if (compiledQuery.PendingBatch is { } batch)
         {
-            var rows = _batchRunner.Run(batch, BeginBatch(compiledQuery, @params));
+            var rows = _batchRunner.Run(batch, BeginBatch(compiledQuery, @params), BatchManager(batch));
             if (rows.Count > 0)
                 return rows[0];
 
@@ -1211,7 +1229,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
         if (compiledQuery.PendingBatch is { } batch)
         {
-            var rows = await _batchRunner.RunAsync(batch, BeginBatch(compiledQuery, @params), cancellationToken).ConfigureAwait(false);
+            var rows = await _batchRunner.RunAsync(batch, BeginBatch(compiledQuery, @params), cancellationToken, BatchManager(batch)).ConfigureAwait(false);
             if (rows.Count > 0)
                 return rows[0];
 
@@ -1231,7 +1249,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
         if (compiledQuery.PendingBatch is { } batch)
         {
-            var rows = _batchRunner.Run(batch, BeginBatch(compiledQuery, @params));
+            var rows = _batchRunner.Run(batch, BeginBatch(compiledQuery, @params), BatchManager(batch));
             return rows.Count > 0 ? rows[0] : default;
         }
 
@@ -1248,7 +1266,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
         if (compiledQuery.PendingBatch is { } batch)
         {
-            var rows = await _batchRunner.RunAsync(batch, BeginBatch(compiledQuery, @params), cancellationToken).ConfigureAwait(false);
+            var rows = await _batchRunner.RunAsync(batch, BeginBatch(compiledQuery, @params), cancellationToken, BatchManager(batch)).ConfigureAwait(false);
             return rows.Count > 0 ? rows[0] : default;
         }
 
@@ -1261,7 +1279,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
         if (compiledQuery.PendingBatch is { } batch)
         {
-            var rows = _batchRunner.Run(batch, BeginBatch(compiledQuery, @params));
+            var rows = _batchRunner.Run(batch, BeginBatch(compiledQuery, @params), BatchManager(batch));
             if (rows.Count != 1)
                 throw new InvalidOperationException();
 
@@ -1277,7 +1295,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
         if (compiledQuery.PendingBatch is { } batch)
         {
-            var rows = await _batchRunner.RunAsync(batch, BeginBatch(compiledQuery, @params), cancellationToken).ConfigureAwait(false);
+            var rows = await _batchRunner.RunAsync(batch, BeginBatch(compiledQuery, @params), cancellationToken, BatchManager(batch)).ConfigureAwait(false);
             if (rows.Count != 1)
                 throw new InvalidOperationException();
 
@@ -1293,7 +1311,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
         if (compiledQuery.PendingBatch is { } batch)
         {
-            var rows = _batchRunner.Run(batch, BeginBatch(compiledQuery, @params));
+            var rows = _batchRunner.Run(batch, BeginBatch(compiledQuery, @params), BatchManager(batch));
             if (rows.Count > 1)
                 throw new InvalidOperationException();
 
@@ -1309,7 +1327,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
         if (compiledQuery.PendingBatch is { } batch)
         {
-            var rows = await _batchRunner.RunAsync(batch, BeginBatch(compiledQuery, @params), cancellationToken).ConfigureAwait(false);
+            var rows = await _batchRunner.RunAsync(batch, BeginBatch(compiledQuery, @params), cancellationToken, BatchManager(batch)).ConfigureAwait(false);
             if (rows.Count > 1)
                 throw new InvalidOperationException();
 

@@ -99,8 +99,9 @@ public sealed class PostgresShardingLiveTests : ProviderTestSuite
 
     private static PostgresDataContext CreateContext(ShardTopology topology)
     {
-        var context = new PostgresDataContext(
-            PostgresContainer.ConnectionString, new DataContextBuilder().UseSharding(topology));
+        var context = new PostgresDataContext(new DataContextBuilder()
+            .UseSharding(topology)
+            .UseDataRouting(routing => routing.UseDefaultTopology("main", PostgresContainer.ConnectionString)));
         context.EnsureConnectionOpen();
         return context;
     }
@@ -111,7 +112,7 @@ public sealed class PostgresShardingLiveTests : ProviderTestSuite
         EnsureDatabase(ShardADatabase);
         EnsureDatabase(ShardBDatabase);
 
-        var topology = new ShardTopology(BucketCount);
+        var topology = new ShardTopology(BucketCount, BucketPlacementMode.TableSuffix);
         topology.AddShard("shard-a", WithDatabase(ShardADatabase));
         topology.AddShard("shard-b", WithDatabase(ShardBDatabase));
         return topology;

@@ -44,7 +44,7 @@ public sealed class ShardTopology : IShardTopology
     /// </param>
     /// <param name="placementMode">How each bucket is realized physically; the names depend on the bucket only.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="bucketCount"/> is not positive.</exception>
-    public ShardTopology(int bucketCount, BucketPlacementMode placementMode = BucketPlacementMode.TableSuffix)
+    public ShardTopology(int bucketCount, BucketPlacementMode placementMode = BucketPlacementMode.SchemaPerBucket)
     {
         _ring = new ConsistentHashRing(bucketCount);
         _ringView = new RingView(_ring);

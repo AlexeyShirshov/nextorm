@@ -67,7 +67,9 @@ public sealed class ShardFanOutTests
     }
 
     private static SqliteDataContext CreateContext(IShardTopology topology)
-        => new("Data Source=:memory:", new DataContextBuilder().UseSharding(topology));
+        => new(new DataContextBuilder()
+            .UseSharding(topology)
+            .UseDataRouting(routing => routing.UseDefaultTopology("main", "Data Source=:memory:")));
 
     private sealed class UnshardedRow
     {

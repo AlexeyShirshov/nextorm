@@ -32,6 +32,16 @@ var orders = ctx.From("recent_orders")
 
 `ToTempTableSql(name)` renders the statement without opening a connection; `ToTempTable` / `ToTempTableAsync` execute it.
 
+## Placement and routing
+
+The target name is literal, so a materialisation is routed by the entities its **source query** reads, not
+by the row type it projects: `ToTable`/`ToTempTable` on a routed entity creates the table on that entity's
+topology host, and on a bucket-scoped query it creates it on that bucket's shard, rendered under the same
+scope as the query. With `DropExisting` the `DROP` follows the create to the same host, so a
+materialisation never drops a table on one server and creates it on another. The lazy `AsTempTable` read is
+one batch (drop, create, read) and obeys the same rule — see
+[One batch, one topology](34-routing-data-to-topologies.md#one-batch-one-topology).
+
 ## Session affinity and connection poolers
 
 A temporary table lives in the database **session** (the server backend), not merely on the client connection. When PostgreSQL sits behind a connection pooler that reassigns the backend per transaction — PgBouncer in `transaction` mode, or any connection-level load balancer — two commands on the same client connection can be routed to different backends, and the one that reads the table fails with `relation "recent_orders" does not exist`.

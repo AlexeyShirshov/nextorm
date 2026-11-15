@@ -12,6 +12,7 @@ namespace NextORM.Core.Tests.Routing;
 /// </summary>
 public sealed class TopologyRoutingTests : IDisposable
 {
+    private const string DefaultTopology = "main";
     private const string PoolTopology = "pool";
     private const string CrmTopology = "crm";
     private const string BillingTopology = "billing";
@@ -40,22 +41,50 @@ public sealed class TopologyRoutingTests : IDisposable
     }
 
     [Fact]
-    public void PinnedHost_ShouldOverrideTheRotation_UntilUnpinned()
+    public void PinnedHost_ShouldOverrideTheRotation_UntilTheHandleIsDisposed()
+    {
+        using var context = CreateContext(routing => routing
+            .AddTopology(new RoundRobinTopology(PoolTopology, PoolConnectionString("a"), PoolConnectionString("b")))
+            .UseResolver(new TypeNameResolver(nameof(PoolRow), PoolTopology)));
+
+        using (context.PinHost(PoolTopology, "host-2"))
+        {
+            Enumerable.Range(0, 3).Select(_ => context.From<PoolRow>().Single().Name)
+                .Should().Equal("b", "b", "b");
+        }
+
+        Enumerable.Range(0, 4).Select(_ => context.From<PoolRow>().Single().Name)
+            .Should().Contain("a").And.Contain("b");
+    }
+
+    [Fact]
+    public void DisposingAnOlderPin_ShouldNotReleaseANewerOne()
+    {
+        using var context = CreateContext(routing => routing
+            .AddTopology(new RoundRobinTopology(PoolTopology, PoolConnectionString("a"), PoolConnectionString("b")))
+            .UseResolver(new TypeNameResolver(nameof(PoolRow), PoolTopology)));
+
+        var first = context.PinHost(PoolTopology, "host-1");
+        using var second = context.PinHost(PoolTopology, "host-2");
+
+        first.Dispose();
+        first.Dispose();   // idempotent
+
+        context.From<PoolRow>().Single().Name.Should().Be("b");
+    }
+
+    [Fact]
+    public void UnpinHost_ShouldReleaseThePinWithoutTheHandle()
     {
         using var context = CreateContext(routing => routing
             .AddTopology(new RoundRobinTopology(PoolTopology, PoolConnectionString("a"), PoolConnectionString("b")))
             .UseResolver(new TypeNameResolver(nameof(PoolRow), PoolTopology)));
 
         context.PinHost(PoolTopology, "host-2");
-
-        Enumerable.Range(0, 3).Select(_ => context.From<PoolRow>().Single().Name)
-            .Should().Equal("b", "b", "b");
-
         context.UnpinHost(PoolTopology);
 
-        Enumerable.Range(0, 3).Select(_ => context.From<PoolRow>().Single().Name)
-            .Should().OnlyContain(name => name == "a" || name == "b")
-            .And.HaveCount(3);
+        Enumerable.Range(0, 4).Select(_ => context.From<PoolRow>().Single().Name)
+            .Should().Contain("a").And.Contain("b");
     }
 
     [Fact]
@@ -133,6 +162,22 @@ public sealed class TopologyRoutingTests : IDisposable
     }
 
     [Fact]
+    public void RawSqlWithPlaceholder_ShouldRunOnTheRoutedHost()
+    {
+        using var context = CreateContext(routing => routing
+            .AddTopology(new FileTopology(CrmTopology, CrmConnectionString())));
+
+        // {qualified} is expanded while the plan is built, from the entity the source is bound to, and
+        // the binding also routes the statement to the entity's topology.
+        var rows = context.FromSql("select Id, Name from {qualified}")
+            .BindEntity<CrmRow>(["Id", "Name"])
+            .Select(row => new { row.Id, row.Name })
+            .ToList();
+
+        rows.Should().ContainSingle().Which.Name.Should().Be("routed");
+    }
+
+    [Fact]
     public void TwoTypesMappedToTheSameTable_ShouldNotShareAPlanAcrossTopologies()
     {
         using var context = CreateContext(routing => routing
@@ -160,6 +205,71 @@ public sealed class TopologyRoutingTests : IDisposable
         FluentActions.Invoking(() => context.PinHost(PoolTopology, "host-2"))
             .Should().Throw<InvalidOperationException>()
             .WithMessage("*transaction is open on topology 'pool'*pinned to host 'host-2'*");
+    }
+
+    [Fact]
+    public void RoutedContextWithAConnectionString_ShouldFail()
+    {
+        var builder = new DataContextBuilder().UseDataRouting(routing => routing
+            .UseDefaultTopology(DefaultTopology, PoolConnectionString("a"))
+            .AddTopology(new RoundRobinTopology(PoolTopology, PoolConnectionString("a"), PoolConnectionString("b"))));
+
+        FluentActions.Invoking(() => new SqliteDataContext(PoolConnectionString("a"), builder))
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*created from the builder alone*");
+    }
+
+    [Fact]
+    public void RoutedContextWithoutADefaultTopology_ShouldFail()
+    {
+        var builder = new DataContextBuilder().UseDataRouting(routing => routing
+            .AddTopology(new RoundRobinTopology(PoolTopology, PoolConnectionString("a"), PoolConnectionString("b"))));
+
+        FluentActions.Invoking(() => new SqliteDataContext(builder))
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*no default topology is set*");
+    }
+
+    [Fact]
+    public void DefaultTopology_ShouldServeUnroutedCommands()
+    {
+        using var context = CreateContext(_ => { });
+
+        var rows = context.From<PlainRow>().ToList();
+
+        rows.Should().ContainSingle().Which.Name.Should().Be("home");
+    }
+
+    [Fact]
+    public void DefaultTopologyRegisteredByName_ShouldServeUnroutedCommands()
+    {
+        var builder = new DataContextBuilder().UseDataRouting(routing => routing
+            .AddTopology(new RoundRobinTopology(DefaultTopology, PoolConnectionString("a")))
+            .UseDefaultTopology(DefaultTopology));
+
+        using var context = new SqliteDataContext(builder);
+
+        context.From<PlainRow>().Single().Name.Should().Be("home");
+    }
+
+    [Fact]
+    public void PinningTheDefaultTopology_ShouldFail()
+    {
+        using var context = CreateContext(_ => { });
+
+        FluentActions.Invoking(() => context.PinHost(DefaultTopology, "host-1"))
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*is the default topology*");
+    }
+
+    [Fact]
+    public void RoutedTransactionOnTheDefaultTopology_ShouldFail()
+    {
+        using var context = CreateContext(_ => { });
+
+        FluentActions.Invoking(() => context.BeginTransaction(new RouteTarget(DefaultTopology)))
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*is the default topology*");
     }
 
     [Fact]
@@ -223,8 +333,12 @@ public sealed class TopologyRoutingTests : IDisposable
 
     private SqliteDataContext CreateContext(Action<DataRoutingBuilder> configure)
     {
-        var builder = new DataContextBuilder().UseDataRouting(configure);
-        return new SqliteDataContext(PoolConnectionString("a"), builder);
+        var builder = new DataContextBuilder().UseDataRouting(routing =>
+        {
+            routing.UseDefaultTopology(DefaultTopology, PoolConnectionString("a"));
+            configure(routing);
+        });
+        return new SqliteDataContext(builder);
     }
 
     private void Seed(string connectionString, string sql)
@@ -266,6 +380,7 @@ public sealed class TopologyRoutingTests : IDisposable
             Table("SharedItems") + Insert("SharedItems", 1, "crm"));
 
         Seed(PoolConnectionString("a"),
+            Table(nameof(PlainRow)) + Insert(nameof(PlainRow), 2, "home") +
             Table("SharedItems") + Insert("SharedItems", 1, "default") + Insert("SharedItems", 2, "default"));
 
         Seed(BillingConnectionString(), Table(nameof(BillingRow)) + Insert(nameof(BillingRow), 1, "billing"));

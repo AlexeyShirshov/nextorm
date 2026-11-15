@@ -18,14 +18,40 @@ public sealed class ShardEntityMetadataProviderTests
     }
 
     [Fact]
-    public void TableSuffixPlacement_ShouldDeriveTheTableFromTheBucket()
+    public void DefaultPlacement_ShouldBeSchemaPerBucket()
     {
         var provider = new ShardEntityMetadataProvider(new DefaultEntityMetadataProvider(), CreateTopology());
 
         var metadata = provider.GetMetadata(typeof(Orders), BucketScope(7));
 
+        metadata.Schema.Should().Be("bucket_7");
+        metadata.TableName.Should().Be("Orders");
+    }
+
+    [Fact]
+    public void TableSuffixPlacement_ShouldDeriveTheTableFromTheBucket()
+    {
+        var topology = new ShardTopology(4096, BucketPlacementMode.TableSuffix);
+        topology.AddShard("east", "Server=east");
+        var provider = new ShardEntityMetadataProvider(new DefaultEntityMetadataProvider(), topology);
+
+        var metadata = provider.GetMetadata(typeof(Orders), BucketScope(7));
+
         metadata.TableName.Should().Be("Orders_7");
         metadata.Schema.Should().BeNull();
+    }
+
+    [Fact]
+    public void SchemaPerBucketPlacement_ShouldKeepTheMappedSchemaAsTheBase()
+    {
+        var topology = new ShardTopology(4096, BucketPlacementMode.SchemaPerBucket);
+        topology.AddShard("east", "Server=east");
+        var provider = new ShardEntityMetadataProvider(new SchemaProvider(), topology);
+
+        var metadata = provider.GetMetadata(typeof(Orders), BucketScope(7));
+
+        metadata.Schema.Should().Be("sales_7");
+        metadata.TableName.Should().Be("Orders");
     }
 
     [Fact]
@@ -120,6 +146,32 @@ public sealed class ShardEntityMetadataProviderTests
     private sealed class Orders
     {
         public int Id { get; set; }
+    }
+
+    /// <summary>Reports the entity as mapped to the <c>sales</c> schema.</summary>
+    private sealed class SchemaProvider : IEntityMetadataProvider
+    {
+        private readonly DefaultEntityMetadataProvider _inner = new();
+
+        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingScope scope)
+        {
+            var metadata = _inner.GetMetadata(entityType, scope);
+            return new SchemaMetadata(metadata);
+        }
+
+        public string GetColumnName(PropertyInfo property, in global::NextORM.Core.MappingScope scope, INamingConvention? convention)
+            => _inner.GetColumnName(property, scope, convention);
+
+        private sealed class SchemaMetadata(IEntityMetadata inner) : IEntityMetadata
+        {
+            public IReadOnlyList<IPropertyMetadata> Properties => inner.Properties;
+            public string? TableName => inner.TableName;
+            public string? Schema => "sales";
+            public bool IsTableNameAuto => inner.IsTableNameAuto;
+            public IPropertyMetadata? DynamicColumnsStore => inner.DynamicColumnsStore;
+            public IReadOnlyList<IQueryFilterMetadata> Filters => inner.Filters;
+            public IReadOnlyList<IRelationshipMetadata> Relationships => inner.Relationships;
+        }
     }
 
     private sealed class ColumnMarkerProvider : IEntityMetadataProvider

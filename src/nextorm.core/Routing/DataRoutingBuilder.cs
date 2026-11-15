@@ -21,6 +21,29 @@ public sealed class DataRoutingBuilder
         return this;
     }
 
+    /// <summary>Designates a registered topology as the one unrouted commands run on.</summary>
+    /// <param name="topologyName">The name of a topology registered with <see cref="AddTopology"/>.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    public DataRoutingBuilder UseDefaultTopology(string topologyName)
+    {
+        _builder.UseDefaultTopology(topologyName);
+        return this;
+    }
+
+    /// <summary>
+    /// Registers a one-connection topology under <paramref name="topologyName"/> and makes it the default
+    /// one: a single connection string is the simplest topology.
+    /// </summary>
+    /// <param name="topologyName">The name to register the topology under.</param>
+    /// <param name="connectionString">The connection string that addresses its only host.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    public DataRoutingBuilder UseDefaultTopology(string topologyName, string connectionString)
+    {
+        AddTopology(new RoundRobinTopology(topologyName, connectionString));
+        _builder.UseDefaultTopology(topologyName);
+        return this;
+    }
+
     /// <summary>Routes every entity type under <paramref name="namespacePrefix"/> to a topology.</summary>
     /// <param name="namespacePrefix">The namespace (or namespace prefix) the rule covers.</param>
     /// <param name="topology">The registered topology name.</param>

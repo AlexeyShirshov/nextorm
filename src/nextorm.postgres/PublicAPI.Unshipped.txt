@@ -57,3 +57,5 @@ static NextORM.Postgres.PgVector.operator -(NextORM.Postgres.PgVector left, Next
 static NextORM.Postgres.PgVector.implicit operator NextORM.Core.Vector!(NextORM.Postgres.PgVector value) -> NextORM.Core.Vector!
 static NextORM.Postgres.PgVector.implicit operator NextORM.Postgres.PgVector(NextORM.Core.Vector! value) -> NextORM.Postgres.PgVector
 override NextORM.Postgres.PostgresDialect.SupportsVectorSearch.get -> bool
+NextORM.Postgres.PostgresDataContext.PostgresDataContext(NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+static NextORM.Postgres.PostgresDataContextOptionsBuilderExtensions.UsePostgres(this NextORM.Core.DataContextBuilder! builder) -> NextORM.Core.DataContextBuilder!

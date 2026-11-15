@@ -1,1 +1,3 @@
 #nullable enable
+NextORM.MariaDb.MariaDbDataContext.MariaDbDataContext(NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+static NextORM.MariaDb.MariaDbDataContextOptionsBuilderExtensions.UseMariaDb(this NextORM.Core.DataContextBuilder! builder) -> NextORM.Core.DataContextBuilder!

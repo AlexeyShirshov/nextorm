@@ -30,6 +30,7 @@ public class DataContextBuilder
     // Topologies routed commands may run on, by name, plus the rules that choose one per entity type.
     private readonly Dictionary<string, IHostTopology> _topologies = new(StringComparer.Ordinal);
     private readonly RouteTable _routes = new();
+    private string? _defaultTopologyName;
     // Resolved for the current creation only (cleared by CreateDataContext), so a transient service
     // is resolved once per context and never reused across creations.
     private IQueryInterceptor[]? _resolvedQueryInterceptors;
@@ -154,6 +155,27 @@ public class DataContextBuilder
 
     /// <summary>The routing rules that choose a topology per entity type.</summary>
     internal RouteTable Routes => _routes;
+
+    /// <summary>
+    /// The topology that serves commands no rule routes, raw SQL and the context transaction, or
+    /// <see langword="null"/> when routing is not configured. Set through <see cref="UseDefaultTopology"/>.
+    /// </summary>
+    public string? DefaultTopologyName => _defaultTopologyName;
+
+    /// <summary>
+    /// Designates a registered topology as the default one. A routed context is created from the builder
+    /// alone, so its own connection comes from this topology; commands no rule routes, raw SQL and the
+    /// context transaction run there.
+    /// </summary>
+    /// <param name="topologyName">The name of the topology registered with <see cref="AddTopology"/>.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    /// <exception cref="ArgumentException"><paramref name="topologyName"/> is empty.</exception>
+    public DataContextBuilder UseDefaultTopology(string topologyName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(topologyName);
+        _defaultTopologyName = topologyName;
+        return this;
+    }
 
     /// <summary>
     /// Registers a topology that routing rules can refer to by <see cref="IHostTopology.Name"/>.

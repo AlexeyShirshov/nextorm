@@ -9,3 +9,5 @@ static NextORM.SqlServer.SqlServerDataContextOptionsBuilderExtensions.UseSqlServ
 override NextORM.SqlServer.SqlServerDialect.SupportsVectorSearch.get -> bool
 override NextORM.SqlServer.SqlServerDialect.MakeApproximateTop(string! limitSql, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
 override NextORM.SqlServer.SqlServerDialect.ApproximateVectorSearchTopNArgumentName.get -> string?
+NextORM.SqlServer.SqlServerDataContext.SqlServerDataContext(NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+static NextORM.SqlServer.SqlServerDataContextOptionsBuilderExtensions.UseSqlServer(this NextORM.Core.DataContextBuilder! builder) -> NextORM.Core.DataContextBuilder!

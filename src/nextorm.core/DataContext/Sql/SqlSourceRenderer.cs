@@ -1037,6 +1037,7 @@ internal static class SqlSourceRenderer
             throw new NotSupportedException("Raw SQL as a FROM source is not supported by this SQL dialect");
 
         var raw = from.RawSqlSource!;
+        var sql = RawSqlPlaceholders.Expand(raw.Sql, from.SourceBinding?.EntityType, in ctx);
 
         if (raw.Parameters is not null)
         {
@@ -1054,7 +1055,7 @@ internal static class SqlSourceRenderer
         var sqlBuilder = StringBuilderPool.Shared.Get();
         try
         {
-            sqlBuilder.Append('(').Append(raw.Sql).Append(')');
+            sqlBuilder.Append('(').Append(sql).Append(')');
 
             if (needAlias || ctx.Dialect.RequireSubqueryAlias)
             {
@@ -1106,7 +1107,9 @@ internal static class SqlSourceRenderer
         var sqlBuilder = StringBuilderPool.Shared.Get();
         try
         {
-            sqlBuilder.Append('(').Append(from.TableExpressionOverride).Append(')');
+            var tableExpression = RawSqlPlaceholders.Expand(
+                from.TableExpressionOverride!, from.SourceType ?? entityType, in ctx);
+            sqlBuilder.Append('(').Append(tableExpression).Append(')');
 
             if (entityType is not null)
                 ctx.ColumnsProvider.Add(entityType, false);

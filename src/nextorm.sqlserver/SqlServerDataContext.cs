@@ -67,6 +67,17 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
     }
 
     /// <summary>
+    /// Creates a SQL Server context from the builder alone. The builder must configure routing and name a
+    /// default topology; its host supplies the connection, so no connection string is passed here.
+    /// </summary>
+    /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
+    /// <exception cref="InvalidOperationException">The builder configures no routing, or no default topology.</exception>
+    public SqlServerDataContext(DataContextBuilder optionsBuilder)
+        : this(null, null, optionsBuilder, null, null, SqlServerVectorSearchSyntax.TopN)
+    {
+    }
+
+    /// <summary>
     /// Creates a SQL Server context bound to an explicitly declared server version that owns a
     /// connection built lazily from <paramref name="connectionString"/>. The declared version decides
     /// the version-gated capabilities (for example native <c>json</c> storage, which needs major 17);

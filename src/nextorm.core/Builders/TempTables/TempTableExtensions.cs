@@ -453,7 +453,17 @@ public static class TempTableExtensions
     // validated and the options checked by BuildCommand, and the create is rendered (validated) before
     // this runs, so the drop is only issued once the create is known to be executable.
     private static DropTableCommand BuildDropCommand<TResult>(QueryCommand<TResult> source, string name)
-        => new(name, source.QuoteIdentifiers, source.KeywordCase);
+    {
+        // The drop addresses the same literal target as the materialisation, so it has to run where that
+        // materialisation runs: under the source's scope and routed by the source's own entities.
+        var command = new DropTableCommand(name, source.QuoteIdentifiers, source.KeywordCase)
+        {
+            MappingScope = source.MappingScope,
+            RouteSources = CommandRouteSources.Collect(source),
+        };
+
+        return command;
+    }
 
     // Renders the drop + create pair a DropExisting materialisation executes, for the diagnostic
     // ToTableSql/ToTempTableSql form.

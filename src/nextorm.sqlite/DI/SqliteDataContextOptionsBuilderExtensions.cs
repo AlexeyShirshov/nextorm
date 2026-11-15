@@ -9,6 +9,21 @@ namespace NextORM.Sqlite;
 public static class SqliteDataContextOptionsBuilderExtensions
 {
     /// <summary>
+    /// Configures the builder to create contexts from the builder alone. The builder must configure routing
+    /// and name a default topology; its host supplies the connection, so no connection string is given here.
+    /// </summary>
+    /// <param name="builder">The builder to configure.</param>
+    /// <returns>The same builder, to allow chaining.</returns>
+    public static DataContextBuilder UseSqlite(this DataContextBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.Factory = (b) => new SqliteDataContext(b);
+
+        return builder;
+    }
+
+    /// <summary>
     /// Configures the builder to create SQLite contexts over the database file at
     /// <paramref name="filepath"/> (opened with <c>Data Source='{filepath}'</c>).
     /// </summary>

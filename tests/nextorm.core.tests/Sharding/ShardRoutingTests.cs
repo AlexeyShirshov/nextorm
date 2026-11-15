@@ -171,14 +171,16 @@ public sealed class ShardRoutingTests
 
     private static ShardTopology CreateTopology()
     {
-        var topology = new ShardTopology(4096);
+        var topology = new ShardTopology(4096, BucketPlacementMode.TableSuffix);
         topology.AddShard("east", "Server=east");
         topology.AddShard("west", "Server=west");
         return topology;
     }
 
     private static SqliteDataContext CreateContext(ShardTopology topology)
-        => new("Data Source=:memory:", new DataContextBuilder().UseSharding(topology));
+        => new(new DataContextBuilder()
+            .UseSharding(topology)
+            .UseDataRouting(routing => routing.UseDefaultTopology("main", "Data Source=:memory:")));
 
     private static (string Tenant, int Bucket) FindTenant(ShardTopology topology, string desiredShard)
     {

@@ -97,6 +97,17 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
     }
 
     /// <summary>
+    /// Creates a ClickHouse context from the builder alone. The builder must configure routing and name a
+    /// default topology; its host supplies the connection, so no connection string is passed here.
+    /// </summary>
+    /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
+    /// <exception cref="InvalidOperationException">The builder configures no routing, or no default topology.</exception>
+    public ClickHouseDataContext(DataContextBuilder optionsBuilder)
+        : this(null, null, optionsBuilder, null)
+    {
+    }
+
+    /// <summary>
     /// Creates a ClickHouse context bound to an explicitly declared server version over a
     /// caller-supplied connection, which the context does not dispose.
     /// </summary>
