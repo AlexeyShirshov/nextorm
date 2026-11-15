@@ -1,9 +1,9 @@
 # Sharding and horizontal partitioning
 
 nextorm can route one entity type to several physical tables or schemas from a single connection.
-The mapping layer is the one described in [Per-query source overrides](01-query-sources.md#per-query-source-overrides)
-and the mapping scope: sharding adds a consistent-hash ring, a shard topology and a router on top of
-`MappingScope`, `IEntityScopeResolver` and `IEntityMetadataProvider`.
+It is built on the [runtime mapping scope](33-runtime-mapping-scope.md): sharding adds a consistent-hash
+ring, a shard topology and a router on top of `MappingScope`, `IEntityScopeResolver` and
+`IEntityMetadataProvider`.
 
 ## Declare a shard key
 

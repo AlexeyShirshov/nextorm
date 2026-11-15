@@ -117,7 +117,7 @@
 - выполнение сырых команд в контексте (`ExecuteRaw`/`ExecuteRawAsync`, а также хранимые процедуры через `ExecuteProcedure`/`ExecuteProcedureAsync`, возвращающие освобождаемый `ProcedureResult`) с именованными параметрами/`DbType`/`Size`, последовательными наборами результатов и выходными параметрами/возвращаемым значением (см. [Сырой SQL](../guide/14-raw-sql.md#выполнение-сырых-команд-executeraw));
 - переопределение источника на запрос (`WithTableName`/`WithSchema`/`WithDatabase`/`WithServer`/`WithTableExpression`) у всех SQL-провайдеров, входит в ключ кэша планов (см. [Переопределение источника для запроса](../guide/01-query-sources.md#переопределение-источника-для-запроса)).
 
-- сбор по шардам: `AcrossShards()` объединяет строки на клиенте, поэтому кросс-шардовые `ORDER BY`/`LIMIT`/`OFFSET`/`DISTINCT`/агрегаты бросают `NotSupportedException`, а `BulkInsertBuilder` не учитывает шардирование (см. [Шардирование](../guide/33-sharding-and-horizontal-partitioning.md)).
+- сбор по шардам: `AcrossShards()` объединяет строки на клиенте, поэтому кросс-шардовые `ORDER BY`/`LIMIT`/`OFFSET`/`DISTINCT`/агрегаты бросают `NotSupportedException`, а `BulkInsertBuilder` не учитывает шардирование (см. [Шардирование](../guide/34-sharding-and-horizontal-partitioning.md)).
 
 ## См. также
 

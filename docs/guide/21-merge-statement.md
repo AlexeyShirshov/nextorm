@@ -28,6 +28,9 @@ ctx.CreateMergeBuilder<Order>()
 
 `CreateTruncateBuilder<TEntity>()` resolves the context's configured entity scope as well, so the truncate target uses the corresponding table and schema.
 
+The scope itself — its resolver, the metadata provider that derives table/schema/column names and the
+isolation it guarantees — is described in [Runtime mapping scope](33-runtime-mapping-scope.md).
+
 ## Upsert (key merge)
 
 [`CreateMergeBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateMergeBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) writes a source row set into the table and lets the database decide, per declared key, whether to update the existing row or insert a new one. The source is a single mapped entity or a batch, the match key is resolved from the entity mapping with `OnKeys()`, and both branches — `WhenMatchedUpdate()` (set every non-key writable column from the source) and `WhenNotMatchedInsert()` — are required:

@@ -28,6 +28,10 @@ ctx.CreateMergeBuilder<Order>()
 
 `CreateTruncateBuilder<TEntity>()` также разрешает настроенную для контекста область сущности, поэтому `TRUNCATE` использует соответствующую таблицу и схему.
 
+Сам механизм области — резолвер, провайдер метаданных, выводящий имена таблицы/схемы/колонок, и
+гарантии изоляции — описан в разделе
+[Область сопоставления времени выполнения](33-runtime-mapping-scope.md).
+
 ## Upsert (key merge)
 
 [`CreateMergeBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateMergeBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) записывает набор строк-источника в таблицу и позволяет базе по объявленному ключу решить: обновить существующую строку или вставить новую. Источник — одна сущность или батч, ключ совпадения разрешается из маппинга сущности через `OnKeys()`, и обе ветки — `WhenMatchedUpdate()` (присвоить все не-key записываемые колонки из источника) и `WhenNotMatchedInsert()` — обязательны:

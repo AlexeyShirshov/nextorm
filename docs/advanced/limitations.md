@@ -117,7 +117,7 @@ limitations:
 - raw command execution against the context (`ExecuteRaw`/`ExecuteRawAsync`, and stored procedures through `ExecuteProcedure`/`ExecuteProcedureAsync`, returning a disposable `ProcedureResult`) with named/`DbType`/`Size` parameters, sequential result sets, and output/return-value parameters (see [Raw SQL](../guide/14-raw-sql.md#executing-raw-commands-executeraw));
 - per-query source overrides (`WithTableName`/`WithSchema`/`WithDatabase`/`WithServer`/`WithTableExpression`) on every SQL provider, part of the plan-cache key (see [Per-query source overrides](../guide/01-query-sources.md#per-query-source-overrides)).
 
-- sharding fan-out: `AcrossShards()` merges rows on the client, so cross-shard `ORDER BY`/`LIMIT`/`OFFSET`/`DISTINCT`/aggregates throw `NotSupportedException`, and `BulkInsertBuilder` is not shard-aware (see [Sharding](../guide/33-sharding-and-horizontal-partitioning.md)).
+- sharding fan-out: `AcrossShards()` merges rows on the client, so cross-shard `ORDER BY`/`LIMIT`/`OFFSET`/`DISTINCT`/aggregates throw `NotSupportedException`, and `BulkInsertBuilder` is not shard-aware (see [Sharding](../guide/34-sharding-and-horizontal-partitioning.md)).
 
 ## See also
 
