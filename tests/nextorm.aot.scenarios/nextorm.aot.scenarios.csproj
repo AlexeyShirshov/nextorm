@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>NextORM.AotScenarios</RootNamespace>
+    <!--
+      Shared NativeAOT scenario catalog (#370). One shape is declared once and executed by every native
+      instrument (the SQLite runner, the MySQL/MariaDB probe, the provider examples) and by the JIT
+      control, so a shape can never drift between the arms it is compared across.
+    -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/nextorm.core.sourcegenerator/nextorm.core.sourcegenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="../../src/nextorm.core/nextorm.core.csproj" />
+    <ProjectReference Include="../../src/nextorm.sqlite/nextorm.sqlite.csproj" />
+    <ProjectReference Include="../../src/nextorm.extensions/nextorm.extensions.csproj" />
+  </ItemGroup>
+
+</Project>

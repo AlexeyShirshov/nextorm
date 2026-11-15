@@ -20,12 +20,17 @@ paging through `Paging` is not implied by an aggregate query.
 
 | Provider | Instrument | Native | JIT comparison |
 |---|---|---|---|
-| SQLite | `tests/nextorm.aot.runner`, 9 scenarios | 9/9 | equal per scenario |
+| SQLite | `tests/nextorm.aot.runner`, 30 scenarios (21 harness + 9 shared-catalog shapes) | 30/30 | equal per scenario |
 | PostgreSQL | `examples/nextorm.aotexamples.postgres.aviasales`, 10 queries | 10/10 | 10/10 identical |
 | SQL Server | `examples/nextorm.aotexamples.mssql.adventureworks`, 11 queries | 11/11 | 11/11 identical |
 | MySQL | `tests/nextorm.aot.sqlprobe --provider mysql`, 7 shapes | 7/7 | 7/7 identical |
 | MariaDB | `tests/nextorm.aot.sqlprobe --provider mariadb`, 7 shapes | 7/7 | 7/7 identical |
 | ClickHouse | `examples/nextorm.aotexamples.clickhouse.analytics`, 9 queries | 9/9 | 9/9 identical (sorted-row-set oracle) |
+
+The shared catalog (`tests/nextorm.aot.scenarios`) holds the shapes that every instrument and the JIT
+control execute from one declaration, so a native arm and its control cannot drift. It currently carries
+the nine SQLite shapes above; the provider instruments keep their own dataset-specific queries because
+their schemas differ.
 
 The MySQL/MariaDB probe's seven shapes are: `customer-filter` (typed scalar projection, constant
 predicate, `OrderBy`), `orders-page` (`Paging`), `aggregate` (`GroupBy` + `count` + `sum(decimal)`),
@@ -41,25 +46,25 @@ predicate, `OrderBy`), `orders-page` (`Paging`), `aggregate` (`GroupBy` + `count
 | Anonymous / named shape projection | P | P | P | P | P | P |
 | Filter with a captured parameter | P | U | U | U | U | U |
 | Ordering | P | P | P | P | P | P |
-| Paging (`Paging.Offset/Limit`, `.Limit`) | U | P | P | P | P | P |
+| Paging (`Paging.Offset/Limit`, `.Limit`) | P | P | P | P | P | P |
 | Aggregate `count` | P | P | P | P | P | P |
-| Aggregate `count_distinct` | U | P | U | U | U | P |
+| Aggregate `count_distinct` | P | P | U | U | U | P |
 | Aggregate `sum` | P | P | P | P | P | U |
-| Aggregate `avg` | U | P | P | U | U | U |
-| Aggregate `min` | U | U | U | U | U | P |
-| Aggregate `max` | U | U | P | U | U | P |
+| Aggregate `avg` | P | P | P | U | U | U |
+| Aggregate `min` | P | U | U | U | U | P |
+| Aggregate `max` | P | U | P | U | U | P |
 | Explicit grouping (`GroupBy`) | P | P | P | P | P | P |
 | `HAVING` | P | U | U | U | U | U |
 | `SelectGroup` | P | P | P | P | P | P |
 | `SelectGroupHaving` | P | U | U | U | U | U |
-| Join | U | P | P | P | P | P |
-| CTE (`AsCte`) | U | P | P | P | P | P |
-| Window functions (`Over`, frames) | U | P | P | U | U | P |
+| Join | P | P | P | P | P | P |
+| CTE (`AsCte`) | P | P | P | P | P | P |
+| Window functions (`Over`, frames) | P | P | P | U | U | P |
 | JSON columns | P | U | U | U | U | U |
 | Array / nested types | U | U | U | U | U | P |
 | Tuple-typed **result column** | U | U | U | U | U | **F** |
 | Decimal binary/comparison operators in rewriting | P | P | P | D | D | U |
-| Prepared command reuse / plan cache | U | U | U | P | P | U |
+| Prepared command reuse / plan cache | P | U | U | P | P | U |
 | Eager loading (eager-load binding, per-parent paging) | U | U | U | U | U | U |
 | Composite junction (many-to-many `JoinInto`) | U | U | U | U | U | U |
 | Value converters (`[JsonColumn]`, custom converter) | U | U | U | U | U | U |
@@ -70,15 +75,18 @@ predicate, `OrderBy`), `orders-page` (`Paging`), `aggregate` (`GroupBy` + `count
 | Raw SQL row mapping (`ExecuteRaw`) | U | U | U | U | U | U |
 | DML builders (insert/update/delete) | U | U | U | U | U | U |
 
-Cell totals: **76 `supported-proven`, 2 `supported-by-design`, 1 `fail-closed`, 113 `not-covered`**
+Cell totals: **85 `supported-proven`, 2 `supported-by-design`, 1 `fail-closed`, 104 `not-covered`**
 (192 cells across 32 capabilities and six providers; counted mechanically across the matrix rows).
 
 What each `P` rests on:
 
-- SQLite: the nine-scenario native harness — typed/anonymous projection, captured parameter, ordering,
-  `count`/`sum`, `GroupBy`+`HAVING`, `SelectGroup`, `SelectGroupHaving`, JSON columns, decimal operators.
-  The two component slices (`CsvStreamOptions`, `JsonShapePlan`) are native-only runs with no JIT
-  comparison, so CSV/JSON streaming stay `not-covered` under this ledger's evidence rule.
+- SQLite: the thirty-scenario native harness — typed/anonymous projection, captured parameter, ordering,
+  `count`/`sum`, `GroupBy`+`HAVING`, `SelectGroup`, `SelectGroupHaving`, JSON columns, decimal operators,
+  correlated subqueries, generated row materializers and the streaming writers, plus the nine
+  shared-catalog shapes (`tests/nextorm.aot.scenarios`): paging, `count_distinct`, `avg`, `min`, `max`,
+  join, CTE, two executions of one prepared command and a window aggregate. The window cell rests on
+  `OVER ()`; nextorm has no frame-specifier API (`ROWS BETWEEN`), so `OVER` is the whole surface the
+  cell can name.
 - PostgreSQL: the ten-query probe — projection, ordering, paging, `count`/`count_distinct`/`sum`/`avg`,
   `GroupBy`, `SelectGroup`, join, CTE, windows, decimal operators.
 - SQL Server: the eleven-query probe — projection, ordering, paging,

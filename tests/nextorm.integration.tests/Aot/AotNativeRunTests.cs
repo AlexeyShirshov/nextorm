@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Diagnostics;
 using System.Text;
 using FluentAssertions;
+using NextORM.AotScenarios;
 using NextORM.Core;
 using NextORM.Extensions;
 using NextORM.Sqlite;
@@ -12,8 +13,8 @@ namespace NextORM.Integration.Tests;
 [Collection("Sqlite")]
 public sealed class AotNativeRunTests
 {
-    private static readonly string[] ScenarioIds =
-    [
+    private static readonly string[] ScenarioIds = new[]
+    {
         "interface-entity",
         "captured-predicate",
         "anonymous-projection",
@@ -35,7 +36,7 @@ public sealed class AotNativeRunTests
         "correlated-outer-member",
         "generated-row-materializer",
         "streaming-writers"
-    ];
+    }.Concat(AotScenarioCatalog.Sqlite.Select(scenario => scenario.Id)).ToArray();
 
     [Fact]
     public async Task PublishedNativeRunner_UsesParentSqliteDatabase_AndReportsEveryScenario()
@@ -350,6 +351,12 @@ public sealed class AotNativeRunTests
                 return string.Join(";", rows.OrderBy(row => row.Id).Select(row => $"{row.Id}:{row.N}"));
             })
         };
+
+        // The shared catalog runs on both arms: the native binary executes the same declarations, so a
+        // capability is only proven when these two produce the same text.
+        foreach (var scenario in AotScenarioCatalog.Sqlite)
+            results[scenario.Id] = CaptureJit(() => scenario.Run(context)?.ToString() ?? "null");
+
         return results;
     }
 

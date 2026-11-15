@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Diagnostics;
 using System.Text;
 using System.Globalization;
+using NextORM.AotScenarios;
 using NextORM.Core;
 using NextORM.Extensions;
 using NextORM.Sqlite;
@@ -217,6 +218,8 @@ Run("streaming-writers", () =>
     context.From<SimpleEntity>().Where(x => x.Id <= 3).OrderBy(x => x.Id).WriteJson(jsonOutput, new JsonStreamOptions());
     return $"csv={Encoding.UTF8.GetString(csvOutput.ToArray())}|json={Encoding.UTF8.GetString(jsonOutput.ToArray())}";
 });
+foreach (var scenario in AotScenarioCatalog.Sqlite)
+    Run(scenario.Id, () => scenario.Run(context));
 RunComponentSlices(args[0]);
 return 0;
 
