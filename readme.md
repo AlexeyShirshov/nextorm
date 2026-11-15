@@ -132,13 +132,18 @@ is [Extensibility](https://alexeyshirshov.github.io/nextorm/advanced/extensibili
 
 ## NativeAOT
 
-Partial and experimental: published native binaries run with the SQLite provider on `net11.0`
-(`linux-x64`), with JIT-parity checks for interface entities, captured predicates, anonymous
-projections, nullable scalars, SQLite JSON functions and grouped aggregates. Every push publishes
-the native runner and executes it in CI. The remaining providers, the EF Core bridge and the
-residual AOT/trim diagnostics are tracked in
+Partial support: native binaries run against all six measured providers on `net11.0` (`linux-x64`) —
+SQLite, PostgreSQL, SQL Server, MySQL, MariaDB and ClickHouse — with a fail-closed JIT-parity check on
+every scenario: 19 SQLite scenarios plus 10 / 11 / 7 / 7 / 9 provider queries, values equal to JIT in
+every cell. Every push publishes the native runner and executes it in CI. The unmeasured surface — the
+EF Core bridge, bulk insert, raw SQL row mapping, DML builders — and the residual AOT/trim diagnostics
+are tracked in
 [#370](https://github.com/AlexeyShirshov/nextorm/issues/370); see the
 [NativeAOT guide](https://alexeyshirshov.github.io/nextorm/infrastructure/05-nativeaot.html).
+
+Row materializers are generated at build time for projection types marked `[RowMaterializer]`
+(`[SqlTable]` entities are covered automatically), so a prepared query keeps compiled-class
+materialization under AOT instead of falling back to the expression interpreter.
 
 That is the lightest AOT migration contract among the compared libraries. EF Core needs a compiled model
 plus interceptor-based query precompilation and rejects dynamically composed queries; Dapper needs
