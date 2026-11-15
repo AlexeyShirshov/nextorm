@@ -87,14 +87,27 @@ internal static class JsonRowWriterFactory
 
     /// <summary>Compiles the row writer for a frozen shape plan.</summary>
     /// <param name="plan">The validated shape.</param>
+    /// <param name="allowDirectWriters">
+    /// When <see langword="true"/> (the default), a flat shape whose columns are all plain scalars is
+    /// written by already-compiled code instead of a compiled expression tree. The caller passes
+    /// <see langword="false"/> to obtain the expression writer, which the parity tests compare the
+    /// direct one against.
+    /// </param>
     /// <returns>A delegate that writes one row value per call.</returns>
-    public static JsonRowWriter Build(JsonShapePlan plan)
+    public static JsonRowWriter Build(JsonShapePlan plan, bool allowDirectWriters = true)
     {
         // A captured recursive shape (nested construction, array member or expanded entity item) carries
         // its own descriptor, scoped name validation and per-object presence rule; compile the recursive
         // writer from it. The flat phase-1 column plan is not built for such a shape (see JsonShapePlan).
         if (plan.Shape is not null)
             return BuildRecursive(plan.Shape, plan.Options);
+
+        // A flat shape of plain scalars needs no tree: the reads, the value writers and the NULL branch
+        // are all compiled code. NativeAOT cannot compile an expression tree and interprets it per row,
+        // so this is the path that keeps streaming JSON compiled there. Anything the direct writer does
+        // not reproduce exactly keeps the tree below.
+        if (allowDirectWriters && TryBuildDirect(plan, out var direct))
+            return direct;
 
         var record = Expression.Parameter(typeof(IDataRecord), "record");
         var writer = Expression.Parameter(typeof(Utf8JsonWriter), "writer");
@@ -149,6 +162,305 @@ internal static class JsonRowWriterFactory
 
         return Expression.Lambda<JsonRowWriter>(Expression.Block(body), record, writer).Compile();
     }
+
+    /// <summary>
+    /// Whether the plan is written by the direct flat writer. Exposed for tests, which assert that a
+    /// shape is either served directly or deliberately kept on the expression path.
+    /// </summary>
+    /// <param name="plan">The frozen shape plan.</param>
+    internal static bool CanWriteDirectly(JsonShapePlan plan)
+        => plan.Shape is null && TryBuildDirect(plan, out _);
+
+    /// <summary>
+    /// Builds the direct flat-row writer, or declines the shape so <see cref="Build"/> keeps the
+    /// expression tree. Eligible columns are the plain scalar whitelist without a default-on-null
+    /// substitution; a Base64 column, an enum written as a string, a default-on-null scalar or any other
+    /// write kind is declined, because its NULL/default behaviour is not reproduced here.
+    /// </summary>
+    /// <param name="plan">The flat shape plan.</param>
+    /// <param name="writer">The direct writer, or <see langword="null"/> when the shape is declined.</param>
+    private static bool TryBuildDirect(JsonShapePlan plan, out JsonRowWriter writer)
+    {
+        writer = null!;
+        var columns = plan.Columns;
+        var writes = new Action<IDataRecord, int, Utf8JsonWriter>[columns.Length];
+        var names = new JsonEncodedText[columns.Length];
+
+        for (var i = 0; i < columns.Length; i++)
+        {
+            var column = columns[i];
+            if (column.DefaultOnNull || DirectValueWriter(column) is not { } write)
+                return false;
+
+            writes[i] = write;
+            names[i] = JsonEncodedText.Encode(column.Name);
+        }
+
+        var isScalar = plan.IsScalar;
+        var ignoreNull = plan.Options.IgnoreNull;
+        writer = (record, json) => WriteDirectRow(record, json, columns, writes, names, isScalar, ignoreNull);
+        return true;
+    }
+
+    /// <summary>
+    /// Writes one row from pre-classified per-column delegates. Presence is decided from the raw
+    /// <c>IsDBNull</c> input, exactly like the expression writer: a scalar emits <c>null</c>, an object
+    /// member is skipped under <see cref="JsonStreamOptions.IgnoreNull"/> and otherwise emitted as
+    /// <c>null</c>. Default-on-null columns never reach this path.
+    /// </summary>
+    private static void WriteDirectRow(
+        IDataRecord record,
+        Utf8JsonWriter writer,
+        JsonShapeColumn[] columns,
+        Action<IDataRecord, int, Utf8JsonWriter>[] writes,
+        JsonEncodedText[] names,
+        bool isScalar,
+        bool ignoreNull)
+    {
+        if (!isScalar)
+            writer.WriteStartObject();
+
+        for (var i = 0; i < columns.Length; i++)
+        {
+            var ordinal = columns[i].Ordinal;
+            if (record.IsDBNull(ordinal))
+            {
+                if (isScalar)
+                {
+                    writer.WriteNullValue();
+                }
+                else if (!ignoreNull)
+                {
+                    writer.WritePropertyName(names[i]);
+                    writer.WriteNullValue();
+                }
+
+                continue;
+            }
+
+            if (!isScalar)
+                writer.WritePropertyName(names[i]);
+
+            writes[i](record, ordinal, writer);
+        }
+
+        if (!isScalar)
+            writer.WriteEndObject();
+    }
+
+    /// <summary>
+    /// Selects the direct value writer for a column, or returns <see langword="null"/> for a write kind
+    /// that stays on the expression path (Base64 and enum-as-string).
+    /// </summary>
+    private static Action<IDataRecord, int, Utf8JsonWriter>? DirectValueWriter(in JsonShapeColumn column)
+    {
+        if (column.Kind == JsonWriteKind.Number)
+        {
+            var valueType = column.ValueType;
+            if (valueType == typeof(byte)) return WriteByteNumber;
+            if (valueType == typeof(short)) return WriteInt16Number;
+            if (valueType == typeof(int)) return WriteInt32Number;
+            if (valueType == typeof(long)) return WriteInt64Number;
+            if (valueType == typeof(float)) return WriteSingleNumber;
+            if (valueType == typeof(double)) return WriteDoubleNumber;
+            if (valueType == typeof(decimal)) return WriteDecimalNumber;
+            return null;
+        }
+
+        return column.Kind switch
+        {
+            JsonWriteKind.Boolean => static (record, ordinal, writer) => writer.WriteBooleanValue(record.GetBoolean(ordinal)),
+            JsonWriteKind.String => static (record, ordinal, writer) => writer.WriteStringValue(record.GetString(ordinal)),
+            JsonWriteKind.Guid => static (record, ordinal, writer) => writer.WriteStringValue(record.GetGuid(ordinal)),
+            JsonWriteKind.DateTime => static (record, ordinal, writer) => writer.WriteStringValue(record.GetDateTime(ordinal)),
+            _ => null,
+        };
+    }
+
+    // The numeric writers below reproduce BuildNumericRead step by step: the provider field type selects
+    // the getter, the value is converted with the typed Convert overload for the declared CLR type, and a
+    // REAL/float column projected as decimal is read with GetDecimal so the streamed JSON matches what
+    // ToList() materializes. sbyte/ushort/uint/ulong have no typed IDataRecord getter and are read through
+    // GetValue, as in the tree.
+
+    private static void WriteByteNumber(IDataRecord record, int ordinal, Utf8JsonWriter writer)
+    {
+        var field = record.GetFieldType(ordinal);
+        if (IsClickHouseDecimalFieldType(field))
+            writer.WriteNumberValue(Convert.ToByte(record.GetDecimal(ordinal)));
+        else if (field == typeof(byte))
+            writer.WriteNumberValue(record.GetByte(ordinal));
+        else if (field == typeof(short))
+            writer.WriteNumberValue(Convert.ToByte(record.GetInt16(ordinal)));
+        else if (field == typeof(int))
+            writer.WriteNumberValue(Convert.ToByte(record.GetInt32(ordinal)));
+        else if (field == typeof(long))
+            writer.WriteNumberValue(Convert.ToByte(record.GetInt64(ordinal)));
+        else if (field == typeof(float))
+            writer.WriteNumberValue(Convert.ToByte(record.GetFloat(ordinal)));
+        else if (field == typeof(double))
+            writer.WriteNumberValue(Convert.ToByte(record.GetDouble(ordinal)));
+        else if (field == typeof(decimal))
+            writer.WriteNumberValue(Convert.ToByte(record.GetDecimal(ordinal)));
+        else if (field == typeof(sbyte) || field == typeof(ushort) || field == typeof(uint) || field == typeof(ulong))
+            writer.WriteNumberValue(Convert.ToByte(record.GetValue(ordinal)));
+        else
+            throw NumericFieldTypeFailure(ordinal, typeof(byte));
+    }
+
+    private static void WriteInt16Number(IDataRecord record, int ordinal, Utf8JsonWriter writer)
+    {
+        var field = record.GetFieldType(ordinal);
+        if (IsClickHouseDecimalFieldType(field))
+            writer.WriteNumberValue(Convert.ToInt16(record.GetDecimal(ordinal)));
+        else if (field == typeof(short))
+            writer.WriteNumberValue(record.GetInt16(ordinal));
+        else if (field == typeof(byte))
+            writer.WriteNumberValue(Convert.ToInt16(record.GetByte(ordinal)));
+        else if (field == typeof(int))
+            writer.WriteNumberValue(Convert.ToInt16(record.GetInt32(ordinal)));
+        else if (field == typeof(long))
+            writer.WriteNumberValue(Convert.ToInt16(record.GetInt64(ordinal)));
+        else if (field == typeof(float))
+            writer.WriteNumberValue(Convert.ToInt16(record.GetFloat(ordinal)));
+        else if (field == typeof(double))
+            writer.WriteNumberValue(Convert.ToInt16(record.GetDouble(ordinal)));
+        else if (field == typeof(decimal))
+            writer.WriteNumberValue(Convert.ToInt16(record.GetDecimal(ordinal)));
+        else if (field == typeof(sbyte) || field == typeof(ushort) || field == typeof(uint) || field == typeof(ulong))
+            writer.WriteNumberValue(Convert.ToInt16(record.GetValue(ordinal)));
+        else
+            throw NumericFieldTypeFailure(ordinal, typeof(short));
+    }
+
+    private static void WriteInt32Number(IDataRecord record, int ordinal, Utf8JsonWriter writer)
+    {
+        var field = record.GetFieldType(ordinal);
+        if (IsClickHouseDecimalFieldType(field))
+            writer.WriteNumberValue(Convert.ToInt32(record.GetDecimal(ordinal)));
+        else if (field == typeof(int))
+            writer.WriteNumberValue(record.GetInt32(ordinal));
+        else if (field == typeof(byte))
+            writer.WriteNumberValue(Convert.ToInt32(record.GetByte(ordinal)));
+        else if (field == typeof(short))
+            writer.WriteNumberValue(Convert.ToInt32(record.GetInt16(ordinal)));
+        else if (field == typeof(long))
+            writer.WriteNumberValue(Convert.ToInt32(record.GetInt64(ordinal)));
+        else if (field == typeof(float))
+            writer.WriteNumberValue(Convert.ToInt32(record.GetFloat(ordinal)));
+        else if (field == typeof(double))
+            writer.WriteNumberValue(Convert.ToInt32(record.GetDouble(ordinal)));
+        else if (field == typeof(decimal))
+            writer.WriteNumberValue(Convert.ToInt32(record.GetDecimal(ordinal)));
+        else if (field == typeof(sbyte) || field == typeof(ushort) || field == typeof(uint) || field == typeof(ulong))
+            writer.WriteNumberValue(Convert.ToInt32(record.GetValue(ordinal)));
+        else
+            throw NumericFieldTypeFailure(ordinal, typeof(int));
+    }
+
+    private static void WriteInt64Number(IDataRecord record, int ordinal, Utf8JsonWriter writer)
+    {
+        var field = record.GetFieldType(ordinal);
+        if (IsClickHouseDecimalFieldType(field))
+            writer.WriteNumberValue(Convert.ToInt64(record.GetDecimal(ordinal)));
+        else if (field == typeof(long))
+            writer.WriteNumberValue(record.GetInt64(ordinal));
+        else if (field == typeof(byte))
+            writer.WriteNumberValue(Convert.ToInt64(record.GetByte(ordinal)));
+        else if (field == typeof(short))
+            writer.WriteNumberValue(Convert.ToInt64(record.GetInt16(ordinal)));
+        else if (field == typeof(int))
+            writer.WriteNumberValue(Convert.ToInt64(record.GetInt32(ordinal)));
+        else if (field == typeof(float))
+            writer.WriteNumberValue(Convert.ToInt64(record.GetFloat(ordinal)));
+        else if (field == typeof(double))
+            writer.WriteNumberValue(Convert.ToInt64(record.GetDouble(ordinal)));
+        else if (field == typeof(decimal))
+            writer.WriteNumberValue(Convert.ToInt64(record.GetDecimal(ordinal)));
+        else if (field == typeof(sbyte) || field == typeof(ushort) || field == typeof(uint) || field == typeof(ulong))
+            writer.WriteNumberValue(Convert.ToInt64(record.GetValue(ordinal)));
+        else
+            throw NumericFieldTypeFailure(ordinal, typeof(long));
+    }
+
+    private static void WriteSingleNumber(IDataRecord record, int ordinal, Utf8JsonWriter writer)
+    {
+        var field = record.GetFieldType(ordinal);
+        if (IsClickHouseDecimalFieldType(field))
+            writer.WriteNumberValue(Convert.ToSingle(record.GetDecimal(ordinal)));
+        else if (field == typeof(float))
+            writer.WriteNumberValue(record.GetFloat(ordinal));
+        else if (field == typeof(byte))
+            writer.WriteNumberValue(Convert.ToSingle(record.GetByte(ordinal)));
+        else if (field == typeof(short))
+            writer.WriteNumberValue(Convert.ToSingle(record.GetInt16(ordinal)));
+        else if (field == typeof(int))
+            writer.WriteNumberValue(Convert.ToSingle(record.GetInt32(ordinal)));
+        else if (field == typeof(long))
+            writer.WriteNumberValue(Convert.ToSingle(record.GetInt64(ordinal)));
+        else if (field == typeof(double))
+            writer.WriteNumberValue(Convert.ToSingle(record.GetDouble(ordinal)));
+        else if (field == typeof(decimal))
+            writer.WriteNumberValue(Convert.ToSingle(record.GetDecimal(ordinal)));
+        else if (field == typeof(sbyte) || field == typeof(ushort) || field == typeof(uint) || field == typeof(ulong))
+            writer.WriteNumberValue(Convert.ToSingle(record.GetValue(ordinal)));
+        else
+            throw NumericFieldTypeFailure(ordinal, typeof(float));
+    }
+
+    private static void WriteDoubleNumber(IDataRecord record, int ordinal, Utf8JsonWriter writer)
+    {
+        var field = record.GetFieldType(ordinal);
+        if (IsClickHouseDecimalFieldType(field))
+            writer.WriteNumberValue(Convert.ToDouble(record.GetDecimal(ordinal)));
+        else if (field == typeof(double))
+            writer.WriteNumberValue(record.GetDouble(ordinal));
+        else if (field == typeof(byte))
+            writer.WriteNumberValue(Convert.ToDouble(record.GetByte(ordinal)));
+        else if (field == typeof(short))
+            writer.WriteNumberValue(Convert.ToDouble(record.GetInt16(ordinal)));
+        else if (field == typeof(int))
+            writer.WriteNumberValue(Convert.ToDouble(record.GetInt32(ordinal)));
+        else if (field == typeof(long))
+            writer.WriteNumberValue(Convert.ToDouble(record.GetInt64(ordinal)));
+        else if (field == typeof(float))
+            writer.WriteNumberValue(Convert.ToDouble(record.GetFloat(ordinal)));
+        else if (field == typeof(decimal))
+            writer.WriteNumberValue(Convert.ToDouble(record.GetDecimal(ordinal)));
+        else if (field == typeof(sbyte) || field == typeof(ushort) || field == typeof(uint) || field == typeof(ulong))
+            writer.WriteNumberValue(Convert.ToDouble(record.GetValue(ordinal)));
+        else
+            throw NumericFieldTypeFailure(ordinal, typeof(double));
+    }
+
+    private static void WriteDecimalNumber(IDataRecord record, int ordinal, Utf8JsonWriter writer)
+    {
+        var field = record.GetFieldType(ordinal);
+        if (IsClickHouseDecimalFieldType(field) || field == typeof(decimal))
+            writer.WriteNumberValue(record.GetDecimal(ordinal));
+        else if (field == typeof(float) || field == typeof(double))
+            // A REAL/float column surfaces as float/double; the row materializer reads it with GetDecimal
+            // and gets the provider-rounded value, so the streamed JSON matches ToList().
+            writer.WriteNumberValue(record.GetDecimal(ordinal));
+        else if (field == typeof(byte))
+            writer.WriteNumberValue(Convert.ToDecimal(record.GetByte(ordinal)));
+        else if (field == typeof(short))
+            writer.WriteNumberValue(Convert.ToDecimal(record.GetInt16(ordinal)));
+        else if (field == typeof(int))
+            writer.WriteNumberValue(Convert.ToDecimal(record.GetInt32(ordinal)));
+        else if (field == typeof(long))
+            writer.WriteNumberValue(Convert.ToDecimal(record.GetInt64(ordinal)));
+        else if (field == typeof(sbyte) || field == typeof(ushort) || field == typeof(uint) || field == typeof(ulong))
+            writer.WriteNumberValue(Convert.ToDecimal(record.GetValue(ordinal)));
+        else
+            throw NumericFieldTypeFailure(ordinal, typeof(decimal));
+    }
+
+    private static bool IsClickHouseDecimalFieldType(Type fieldType)
+        => ClickHouseDecimalFieldType is not null && fieldType == ClickHouseDecimalFieldType;
+
+    private static NotSupportedException NumericFieldTypeFailure(int ordinal, Type declaredType)
+        => new($"JSON streaming validation [reader-binding]: The numeric column at ordinal {ordinal} (declared {declaredType.Name}) has a provider field type that is not one of sbyte, byte, short, ushort, int, uint, long, ulong, float, double, decimal or ClickHouseDecimal.");
 
     /// <summary>
     /// Validates that the prepared JSON plan can be read from the supplied open reader: every numeric

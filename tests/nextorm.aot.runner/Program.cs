@@ -1,6 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Diagnostics;
+using System.Text;
+using System.Globalization;
 using NextORM.Core;
 using NextORM.Extensions;
 using NextORM.Sqlite;
@@ -191,6 +193,30 @@ Run("correlated-outer-member", () =>
         .ToList();
     return string.Join(";", rows.OrderBy(row => row.Id).Select(row => $"{row.Id}:{row.N}"));
 });
+Run("generated-row-materializer", () =>
+{
+    // The [RowMaterializer] DTO is materialized by the source-generated provider registered by its module
+    // initializer, not by a compiled expression tree. Under NativeAOT the expression path is interpreted,
+    // so this scenario proves the generated provider is present, registered and correct on a native build:
+    // its values are compared with the JIT run of the same binary by the harness.
+    var rows = context.From<IComplexEntity>()
+        .OrderBy(x => x.Id)
+        .Select(x => new AotComplexDto(x.Id, x.Int, x.String, x.Numeric))
+        .ToList();
+    return string.Join(";", rows.Select(row =>
+        $"{row.Id}:{row.Int?.ToString(CultureInfo.InvariantCulture) ?? "null"}:{row.String ?? "null"}:{row.Numeric?.ToString(CultureInfo.InvariantCulture) ?? "null"}"));
+});
+Run("streaming-writers", () =>
+{
+    // WriteCsv/WriteJson do not materialize rows: a flat projection is written by the direct scalar
+    // column writers, which are ordinary compiled code rather than a compiled expression tree. Comparing
+    // the full text with the JIT control proves the native build emits byte-identical CSV and JSON.
+    using var csvOutput = new MemoryStream();
+    context.From<SimpleEntity>().Where(x => x.Id <= 3).OrderBy(x => x.Id).WriteCsv(csvOutput, new CsvStreamOptions());
+    using var jsonOutput = new MemoryStream();
+    context.From<SimpleEntity>().Where(x => x.Id <= 3).OrderBy(x => x.Id).WriteJson(jsonOutput, new JsonStreamOptions());
+    return $"csv={Encoding.UTF8.GetString(csvOutput.ToArray())}|json={Encoding.UTF8.GetString(jsonOutput.ToArray())}";
+});
 RunComponentSlices(args[0]);
 return 0;
 
@@ -259,6 +285,10 @@ static void Run(string id, Func<object?> action)
 }
 
 static string Escape(string value) => value.Replace("\\", "\\\\").Replace("\t", "\\t").Replace("\r", "\\r").Replace("\n", "\\n");
+
+/// <summary>A projection DTO covered by the compile-time row materializer generator.</summary>
+[RowMaterializer]
+public sealed record AotComplexDto(long Id, int? Int, string? String, decimal? Numeric);
 
 [SqlTable("simple_entity")]
 public interface ISimpleEntity

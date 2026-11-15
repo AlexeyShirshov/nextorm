@@ -32,7 +32,9 @@ public sealed class AotNativeRunTests
         "correlated-sum",
         "correlated-nested-depth2",
         "correlated-exists",
-        "correlated-outer-member"
+        "correlated-outer-member",
+        "generated-row-materializer",
+        "streaming-writers"
     ];
 
     [Fact]
@@ -101,8 +103,10 @@ public sealed class AotNativeRunTests
             native.GetValueOrDefault("status").Should().Be(
                 "pass",
                 $"native scenario '{id}' must pass; message: {native.GetValueOrDefault("message")}");
+            // The child reports an escaped `values` field, so the control is escaped the same way; a
+            // value with CRLF (the streaming-writers CSV) would otherwise compare raw against escaped.
             native.GetValueOrDefault("values").Should().Be(
-                jitResults[id].Values,
+                Escape(jitResults[id].Values),
                 $"scenario '{id}' must match its JIT control");
         }
 
@@ -145,6 +149,12 @@ public sealed class AotNativeRunTests
         componentReports["nextorm.extensions.SelectWhereMin"].GetValueOrDefault("status").Should().Be("pass");
         componentReports.Should().ContainKey("nextorm.extensions.SelectWhereMax");
         componentReports["nextorm.extensions.SelectWhereMax"].GetValueOrDefault("status").Should().Be("pass");
+        // The streaming terminals write flat projections with the direct column writers; a native-only
+        // regression there must fail this harness, not only the child's own output.
+        componentReports.Should().ContainKey("CsvStreamOptions");
+        componentReports["CsvStreamOptions"].GetValueOrDefault("status").Should().Be("pass");
+        componentReports.Should().ContainKey("JsonShapePlan");
+        componentReports["JsonShapePlan"].GetValueOrDefault("status").Should().Be("pass");
         reportedConnection.Should().Be($"connection={databasePath}", "the child must report the parent's database path");
         File.Exists(childDatabasePath).Should().BeFalse("the child must not derive its own process-specific database");
     }
@@ -310,6 +320,26 @@ public sealed class AotNativeRunTests
                     .Select(outer => outer.Id)
                     .ToList();
                 return string.Join(";", ids);
+            }),
+            ["streaming-writers"] = CaptureJit(() =>
+            {
+                using var csvOutput = new MemoryStream();
+                context.From<SimpleEntity>().Where(x => x.Id <= 3).OrderBy(x => x.Id).WriteCsv(csvOutput, new CsvStreamOptions());
+                using var jsonOutput = new MemoryStream();
+                context.From<SimpleEntity>().Where(x => x.Id <= 3).OrderBy(x => x.Id).WriteJson(jsonOutput, new JsonStreamOptions());
+                return $"csv={Encoding.UTF8.GetString(csvOutput.ToArray())}|json={Encoding.UTF8.GetString(jsonOutput.ToArray())}";
+            }),
+            ["generated-row-materializer"] = CaptureJit(() =>
+            {
+                // The native runner projects this shape through a [RowMaterializer] DTO, so its rows are
+                // materialized by generated code; this control uses the expression path. Equal values
+                // therefore prove the generated materializer reproduces the built-in one row for row.
+                var rows = context.From<IComplexEntity>()
+                    .OrderBy(x => x.Id)
+                    .Select(x => new { x.Id, x.Int, x.String, x.Numeric })
+                    .ToList();
+                return string.Join(";", rows.Select(row =>
+                    $"{row.Id}:{row.Int?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "null"}:{row.String ?? "null"}:{row.Numeric?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "null"}"));
             }),
             ["correlated-outer-member"] = CaptureJit(() =>
             {
