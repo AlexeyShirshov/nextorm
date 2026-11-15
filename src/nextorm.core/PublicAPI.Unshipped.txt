@@ -289,3 +289,44 @@ NextORM.Core.IRoutedTransactionManager.BeginTransaction(NextORM.Core.RouteTarget
 NextORM.Core.IRoutedTransactionManager.BeginTransactionAsync(NextORM.Core.RouteTarget target, NextORM.Core.MappingScope scope = default(NextORM.Core.MappingScope), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Data.Common.DbTransaction!>!
 static NextORM.Core.RoutedTransactionExtensions.BeginTransaction(this NextORM.Core.DataContext! context, NextORM.Core.RouteTarget target, NextORM.Core.MappingScope scope = default(NextORM.Core.MappingScope), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified) -> System.Data.Common.DbTransaction!
 static NextORM.Core.RoutedTransactionExtensions.BeginTransactionAsync(this NextORM.Core.DataContext! context, NextORM.Core.RouteTarget target, NextORM.Core.MappingScope scope = default(NextORM.Core.MappingScope), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Data.Common.DbTransaction!>!
+NextORM.Core.EntityMetadataDescriptor
+NextORM.Core.EntityMetadataDescriptor.Build() -> NextORM.Core.IEntityMetadata!
+NextORM.Core.EntityMetadataDescriptor.EntityMetadataDescriptor() -> void
+NextORM.Core.EntityMetadataDescriptor.IsTableNameAuto.get -> bool
+NextORM.Core.EntityMetadataDescriptor.IsTableNameAuto.init -> void
+NextORM.Core.EntityMetadataDescriptor.Properties.get -> System.Collections.Generic.IReadOnlyList<NextORM.Core.EntityPropertyDescriptor!>!
+NextORM.Core.EntityMetadataDescriptor.Properties.init -> void
+NextORM.Core.EntityMetadataDescriptor.Schema.get -> string?
+NextORM.Core.EntityMetadataDescriptor.Schema.init -> void
+NextORM.Core.EntityMetadataDescriptor.TableName.get -> string?
+NextORM.Core.EntityMetadataDescriptor.TableName.init -> void
+NextORM.Core.EntityMetadataDescriptor.TypeName.get -> string!
+NextORM.Core.EntityMetadataDescriptor.TypeName.init -> void
+NextORM.Core.EntityPropertyDescriptor
+NextORM.Core.EntityPropertyDescriptor.ColumnName.get -> string!
+NextORM.Core.EntityPropertyDescriptor.ColumnName.init -> void
+NextORM.Core.EntityPropertyDescriptor.EntityPropertyDescriptor() -> void
+NextORM.Core.EntityPropertyDescriptor.IsColumnNameAuto.get -> bool
+NextORM.Core.EntityPropertyDescriptor.IsColumnNameAuto.init -> void
+NextORM.Core.EntityPropertyDescriptor.IsComputed.get -> bool
+NextORM.Core.EntityPropertyDescriptor.IsComputed.init -> void
+NextORM.Core.EntityPropertyDescriptor.IsIdentity.get -> bool
+NextORM.Core.EntityPropertyDescriptor.IsIdentity.init -> void
+NextORM.Core.EntityPropertyDescriptor.IsKey.get -> bool
+NextORM.Core.EntityPropertyDescriptor.IsKey.init -> void
+NextORM.Core.EntityPropertyDescriptor.Property.get -> System.Reflection.PropertyInfo!
+NextORM.Core.EntityPropertyDescriptor.Property.init -> void
+NextORM.Core.GeneratedEntityMetadata
+static NextORM.Core.GeneratedEntityMetadata.Register(System.Type! entityType, System.Func<NextORM.Core.IEntityMetadata!>! factory) -> bool
+NextORM.Core.EntityPropertyDescriptor.Collation.get -> string?
+NextORM.Core.EntityPropertyDescriptor.Collation.init -> void
+NextORM.Core.EntityPropertyDescriptor.DecimalPrecision.get -> int?
+NextORM.Core.EntityPropertyDescriptor.DecimalPrecision.init -> void
+NextORM.Core.EntityPropertyDescriptor.DecimalScale.get -> int?
+NextORM.Core.EntityPropertyDescriptor.DecimalScale.init -> void
+NextORM.Core.EntityPropertyDescriptor.DurationPrecision.get -> int
+NextORM.Core.EntityPropertyDescriptor.DurationPrecision.init -> void
+NextORM.Core.EntityPropertyDescriptor.DurationUnit.get -> NextORM.Core.DurationUnit?
+NextORM.Core.EntityPropertyDescriptor.DurationUnit.init -> void
+NextORM.Core.EntityPropertyDescriptor.RangeColumns.get -> NextORM.Core.RangeColumnsMetadata?
+NextORM.Core.EntityPropertyDescriptor.RangeColumns.init -> void

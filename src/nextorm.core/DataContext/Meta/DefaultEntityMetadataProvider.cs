@@ -47,6 +47,11 @@ public sealed class DefaultEntityMetadataProvider : IEntityMetadataProvider
 
     private static IEntityMetadata BuildMetadata(Type entityType)
     {
+        // A type the source generator described is built from that description, without reflecting over
+        // its members. Everything else keeps the reflective auto-build.
+        if (GeneratedEntityMetadata.TryGet(entityType, out var generated))
+            return generated();
+
         var builderType = typeof(EntityMetadataBuilder<>).MakeGenericType(entityType);
         var builder = Activator.CreateInstance(builderType)
             ?? throw new InvalidOperationException($"Could not create metadata builder for {entityType}.");

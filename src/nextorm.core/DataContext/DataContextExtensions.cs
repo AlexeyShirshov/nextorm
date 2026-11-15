@@ -301,10 +301,20 @@ public static class DataContextExtensions
 
         if (!DataContextCache.Metadata.TryGetValue(typeof(TEntity), out var metadata) || string.IsNullOrEmpty(metadata.TableName))
         {
-            // Build outside the registration gate (no user code is invoked under it).
-            var eb = new EntityMetadataBuilder<TEntity>();
-            configEntity?.Invoke(eb);
-            var built = eb.Build();
+            // Build outside the registration gate (no user code is invoked under it). A fluent mapping is
+            // user code and always runs the builder; a configless resolve uses the generated description
+            // when the generator covered the type, falling back to the reflective auto-build otherwise.
+            IEntityMetadata built;
+            if (configEntity is null && GeneratedEntityMetadata.TryGet(typeof(TEntity), out var generated))
+            {
+                built = generated();
+            }
+            else
+            {
+                var eb = new EntityMetadataBuilder<TEntity>();
+                configEntity?.Invoke(eb);
+                built = eb.Build();
+            }
 
             EnsureExpectedFiltersPresent(dataContext, typeof(TEntity), built);
 
@@ -372,6 +382,14 @@ public static class DataContextExtensions
         {
             QueryFilterExpectations.EnsureFiltersPresent(dataContext, entityType, autoMetadata.Filters);
             return autoMetadata;
+        }
+
+        if (GeneratedEntityMetadata.TryGet(entityType, out var generated))
+        {
+            var generatedMetadata = generated();
+            QueryFilterExpectations.EnsureFiltersPresent(dataContext, entityType, generatedMetadata.Filters);
+            DataContextCache.TvpMetadata[entityType] = generatedMetadata;
+            return generatedMetadata;
         }
 
         var builderType = typeof(EntityMetadataBuilder<>).MakeGenericType(entityType);
