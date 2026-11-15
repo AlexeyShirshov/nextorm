@@ -29,7 +29,7 @@ ctx.CreateMergeBuilder<Order>()
 `CreateTruncateBuilder<TEntity>()` resolves the context's configured entity scope as well, so the truncate target uses the corresponding table and schema.
 
 The scope itself — its resolver, the metadata provider that derives table/schema/column names and the
-isolation it guarantees — is described in [Runtime mapping scope](34-runtime-mapping-scope.md).
+isolation it guarantees — is described in [Runtime mapping scope](33-runtime-mapping-scope.md).
 
 ## Upsert (key merge)
 

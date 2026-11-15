@@ -5,7 +5,7 @@ table next to `orders` on one server, a tenant-specific schema, or — on top of
 *mapping scope* is the runtime decision behind that: a key that the mapping layer turns into a table
 name, a schema, column names and a parameter prefix.
 
-The mechanism is provider- and sharding-agnostic. [Sharding and horizontal partitioning](33-sharding-and-horizontal-partitioning.md)
+The mechanism is provider- and sharding-agnostic. [Sharding and horizontal partitioning](34-sharding-and-horizontal-partitioning.md)
 is one consumer of it.
 
 ## Two contracts
@@ -146,15 +146,13 @@ Points worth keeping:
 
 ## Scope and sharding
 
-Sharding is built on this mechanism and adds nothing to its contract:
-
-- `ShardRouter` implements `IEntityScopeResolver` and uses the **bucket number** as the key;
-- `ShardEntityMetadataProvider` implements `IEntityMetadataProvider` and derives `{table}_{bucket}` or
-  `{schema}_{bucket}` from that key;
-- a shard topology, connection-per-shard routing and the bucket fan-out sit on top of those two.
+Sharding is built on this mechanism and adds nothing to its contract: its router implements
+`IEntityScopeResolver` and chooses the scope, its metadata provider implements `IEntityMetadataProvider`
+and derives the physical names from it, and the shard topology plus the routing of a scope to its server
+sit on top of those two.
 
 Nothing in this page requires sharding to be configured. See
-[Sharding and horizontal partitioning](33-sharding-and-horizontal-partitioning.md) for the shard-specific
+[Sharding and horizontal partitioning](34-sharding-and-horizontal-partitioning.md) for the shard-specific
 part.
 
 ## Limitations
@@ -162,7 +160,7 @@ part.
 - The default provider builds the same mapping for every scope: names only change when a provider derives
   them from the key.
 - `WithScope` exists on the query and merge builders. Insert, update, delete and truncate take the
-  resolver's answer (sharding adds `WithShardKey(...)` for an explicit bucket).
+  resolver's answer (sharding adds `WithShardKey(...)` for an explicit key).
 - One scope means one cached plan per query shape: many tenants times many shapes grows the plan cache,
   and each entry holds its own prepared statement.
 - A scope renames objects; it does not add predicates. A table shared by several tenants still needs the

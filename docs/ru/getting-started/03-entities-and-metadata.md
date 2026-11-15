@@ -362,7 +362,7 @@ var rows = new SqliteDataContext(connectionString, builder)
 
 `MappingScope.Default` сохраняет обычный маппинг. Планы, метаданные и имена параметров изолированы по
 области, а DML-билдеры определяют область до построения команды. Полный гайд:
-[Область сопоставления времени выполнения](../guide/34-runtime-mapping-scope.md).
+[Область сопоставления времени выполнения](../guide/33-runtime-mapping-scope.md).
 
 ## См. также
 

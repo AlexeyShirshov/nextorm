@@ -95,7 +95,7 @@ using var context = new PostgresDataContext(topology.GetConnectionString("server
   DML-команда несёт scope (иначе UPDATE попадал на соединение по умолчанию).
 - Скалярные терминалы на бакетном builder не используют общие артефакты/команду `Any` без scope.
 - `AcrossShards()`/`Concatenate` → `AcrossBuckets()` с векторами по бакетам.
-- Тесты, live-сьюты, гайд (`docs/guide/33-*`, `docs/ru/guide/33-*`).
+- Тесты, live-сьюты, гайд (`docs/guide/34-*`, `docs/ru/guide/34-*`).
 
 ## 7. Ограничения
 

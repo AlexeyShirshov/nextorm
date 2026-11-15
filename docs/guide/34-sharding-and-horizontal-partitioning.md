@@ -12,7 +12,7 @@ nextorm can spread one entity type over several database servers. Three ideas dr
 The application works with buckets. Shard ids are only used to address servers: they never appear in a
 SQL identifier, and no query result is grouped by them.
 
-Sharding builds on the [runtime mapping scope](34-runtime-mapping-scope.md): the bucket travels as a
+Sharding builds on the [runtime mapping scope](33-runtime-mapping-scope.md): the bucket travels as a
 `MappingScope`, the topology decorates the metadata provider and the router resolves it. The scope
 mechanism is independent of sharding and is described on its own page.
 

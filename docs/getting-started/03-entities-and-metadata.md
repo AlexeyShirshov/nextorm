@@ -381,7 +381,7 @@ var rows = new SqliteDataContext(connectionString, builder)
 
 `MappingScope.Default` keeps the ordinary mapping. Plans, metadata and parameter names are isolated per
 scope, and the DML builders resolve the scope before they build their statement. Full guide:
-[Runtime mapping scope](../guide/34-runtime-mapping-scope.md).
+[Runtime mapping scope](../guide/33-runtime-mapping-scope.md).
 
 ## See also
 
