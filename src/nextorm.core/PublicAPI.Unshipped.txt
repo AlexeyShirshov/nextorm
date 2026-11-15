@@ -204,3 +204,16 @@ virtual NextORM.Core.SqlDialectBase.SupportsVectorSearch.get -> bool
 virtual NextORM.Core.SqlDialectBase.MakeApproximateTop(string! limitSql, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
 virtual NextORM.Core.SqlDialectBase.ApproximateVectorSearchTopNArgumentName.get -> string?
 NextORM.Core.EntityBuilder<TEntity>.VectorSearch<TVector>(System.Linq.Expressions.Expression<System.Func<TEntity, TVector>!>! vectorSelector, TVector queryVector, NextORM.Core.VectorDistanceMetric metric, int topK, NextORM.Core.VectorSearchMode mode = NextORM.Core.VectorSearchMode.Exact) -> NextORM.Core.QueryCommand<NextORM.Core.VectorSearchResult<TEntity>!>!
+NextORM.Core.IRowMaterializerProvider
+NextORM.Core.IRowMaterializerProvider.TryCreate(System.Type! resultType, System.ReadOnlySpan<NextORM.Core.RowMaterializerColumn> columns) -> System.Delegate?
+NextORM.Core.RowMaterializerColumn
+NextORM.Core.RowMaterializerColumn.Name.get -> string?
+NextORM.Core.RowMaterializerColumn.Nullable.get -> bool
+NextORM.Core.RowMaterializerColumn.Ordinal.get -> int
+NextORM.Core.RowMaterializerColumn.RowMaterializerColumn() -> void
+NextORM.Core.RowMaterializerColumn.RowMaterializerColumn(int ordinal, string? name, System.Type! type, bool nullable) -> void
+NextORM.Core.RowMaterializerColumn.Type.get -> System.Type!
+NextORM.Core.RowMaterializerRegistry
+static NextORM.Core.RowMaterializerRegistry.Register(NextORM.Core.IRowMaterializerProvider! provider) -> void
+NextORM.Core.RowMaterializerAttribute
+NextORM.Core.RowMaterializerAttribute.RowMaterializerAttribute() -> void

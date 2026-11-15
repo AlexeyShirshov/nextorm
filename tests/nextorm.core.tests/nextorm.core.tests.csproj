@@ -35,4 +35,13 @@
   </ItemGroup>
 
   <ItemGroup><ProjectReference Include="../../src/nextorm.extensions/nextorm.extensions.csproj" /></ItemGroup>
+
+  <ItemGroup>
+    <!-- Runs the row-materializer generator over this assembly, so the annotated test DTOs get a
+         provider exactly the way a consumer project does. -->
+    <ProjectReference Include="..\..\src\nextorm.core.sourcegenerator\nextorm.core.sourcegenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
 </Project>
