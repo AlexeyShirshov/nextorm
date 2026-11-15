@@ -140,6 +140,13 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     private bool _dontCache;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
     internal MappingScope MappingScope { get; set; } = MappingScope.Default;
+
+    /// <summary>
+    /// The entity type the command is routed by. Projected and scalar commands have no
+    /// <see cref="EntityType"/>, so the builder records the entity it was built from here and the
+    /// planner resolves the routing rule from it.
+    /// </summary>
+    internal Type? RouteEntityType { get; set; }
     internal int ColumnsPlanHash;
     internal int JoinPlanHash;
     internal int SortingPlanHash;

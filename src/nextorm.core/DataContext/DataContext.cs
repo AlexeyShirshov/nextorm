@@ -26,8 +26,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     private readonly DbConnectionManager _connectionManager;
     private readonly ConnectionHooks _connectionHooks;
     private readonly LoggingOptions _connectionLogging;
-    private readonly IShardTopology? _shardTopology;
-    private readonly ConcurrentDictionary<string, DbConnectionManager> _shardConnectionManagers = new(StringComparer.Ordinal);
+    private readonly IReadOnlyDictionary<string, IHostTopology> _topologies;
+    private readonly RouteTable _routes;
+    private readonly ConcurrentDictionary<string, DbConnectionManager> _hostConnectionManagers = new(StringComparer.Ordinal);
     private readonly QueryExecutor _executor;
     private readonly QueryPlanner _planner;
     private readonly InterceptorHooks _interceptors;
@@ -97,7 +98,20 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // disposes only the connection it creates from the string.
         _connectionHooks = new ConnectionHooks(CreateDbConnection, OnConnectionCreated);
         _connectionLogging = new LoggingOptions(_environment.Logger, LogSensitiveData: _environment.LogSensitiveData);
-        _shardTopology = optionsBuilder.ShardTopology;
+        _topologies = optionsBuilder.Topologies;
+        _routes = optionsBuilder.Routes;
+
+        // A structural rule naming an unregistered topology is a configuration error: report it before
+        // the first command instead of on the first routed one.
+        foreach (var declaredTopology in optionsBuilder.Routes.DeclaredTopologies)
+        {
+            if (!_topologies.ContainsKey(declaredTopology))
+            {
+                throw new InvalidOperationException(
+                    $"A routing rule points at topology '{declaredTopology}', which is not registered. " +
+                    "Register it with AddTopology (or UseDataRouting) before creating the context.");
+            }
+        }
         _connectionManager = new DbConnectionManager(
             this,
             _connectionHooks,
@@ -300,26 +314,61 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// bucket scope selects the shard (server) that owns the bucket, and every shard keeps its own lazy
     /// connection; the default scope keeps the context connection.
     /// </summary>
-    internal IConnectionManager ManagerFor(MappingScope scope)
+    /// <summary>
+    /// Resolves the topology a command runs on. A rule that names an unregistered topology is a
+    /// configuration error, not a silent fallback.
+    /// </summary>
+    internal RoutePlan RouteFor(Type? entityType, MappingScope scope)
     {
-        if (scope == MappingScope.Default || string.IsNullOrEmpty(scope.Key) || _shardTopology is null)
-            return _connectionManager;
+        var target = _routes.Resolve(entityType, in scope);
+        if (target is not { } route)
+            return RoutePlan.None;
 
-        if (!int.TryParse(scope.Key, NumberStyles.None, CultureInfo.InvariantCulture, out var bucket) ||
-            (uint)bucket >= (uint)_shardTopology.Ring.BucketCount)
+        if (!_topologies.ContainsKey(route.Topology))
         {
-            return _connectionManager;
+            throw new InvalidOperationException(
+                $"Entity '{entityType}' is routed to topology '{route.Topology}', which is not registered. " +
+                "Register it with AddTopology (or UseDataRouting).");
         }
 
-        var shardId = _shardTopology.Ring.GetShard(bucket);
-        return _shardConnectionManagers.GetOrAdd(shardId, CreateShardConnectionManager);
+        return new RoutePlan(route.Topology);
     }
 
-    private DbConnectionManager CreateShardConnectionManager(string shardId)
+    /// <summary>
+    /// Resolves the connection manager that executes a command: the routed topology's host for a routed
+    /// command, the context connection otherwise. Every host keeps its own lazy connection, cached by
+    /// <c>topology/host</c> for the lifetime of the context.
+    /// </summary>
+    internal IConnectionManager ManagerFor(MappingScope scope, Type? entityType, CommandKind kind)
+    {
+        var route = RouteFor(entityType, scope);
+        if (!route.HasTopology)
+            return _connectionManager;
+
+        if (_connectionManager.CurrentTransaction is not null)
+        {
+            throw new InvalidOperationException(
+                $"Topology '{route.TopologyName}' routes this command to another host, but a transaction is open " +
+                "on the context connection. A transaction covers one connection: commit or roll back first.");
+        }
+
+        if (!_topologies.TryGetValue(route.TopologyName!, out var topology))
+            return _connectionManager;
+
+        var context = new TopologyContext(scope, kind);
+        if (!topology.TryGetHost(in context, out var host))
+            return _connectionManager;
+
+        return _hostConnectionManagers.GetOrAdd(
+            string.Concat(route.TopologyName, "/", host.Id),
+            _ => CreateHostConnectionManager(host.ConnectionString));
+    }
+
+    private DbConnectionManager CreateHostConnectionManager(string connectionString)
         => new(
             this,
             _connectionHooks,
-            _shardTopology!.GetConnectionString(shardId),
+            connectionString,
             providedConnection: null,
             _connectionLogging,
             () => Dialect.SupportsTransactions,
@@ -1006,26 +1055,26 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         var (sql, parameters) = BuildInsertSql((InsertCommand)command);
         // The identity function runs in the same batch as the insert: SCOPE_IDENTITY() is scoped to the
         // batch, so issuing it as a separate command would return NULL on SQL Server.
-        return _executor.ExecuteScalar(sql + "; " + Dialect.MakeIdentityFunction(KeywordCase), parameters, command.MappingScope);
+        return _executor.ExecuteScalar(sql + "; " + Dialect.MakeIdentityFunction(KeywordCase), parameters, command.MappingScope, command.EntityType);
     }
 
     async Task<object?> IMutationExecutor.ExecuteIdentityFunction(MutationCommand command, CancellationToken cancellationToken)
     {
         EnsureIdentityFunctionSupported();
         var (sql, parameters) = BuildInsertSql((InsertCommand)command);
-        return await _executor.ExecuteScalarAsync(sql + "; " + Dialect.MakeIdentityFunction(KeywordCase), parameters, cancellationToken, command.MappingScope).ConfigureAwait(false);
+        return await _executor.ExecuteScalarAsync(sql + "; " + Dialect.MakeIdentityFunction(KeywordCase), parameters, cancellationToken, command.MappingScope, command.EntityType).ConfigureAwait(false);
     }
 
     int IMutationExecutor.Execute(MutationCommand command)
     {
         var (sql, parameters) = BuildMutationSql(command);
-        return _executor.ExecuteNonQuery(sql, parameters, command.MappingScope);
+        return _executor.ExecuteNonQuery(sql, parameters, command.MappingScope, command.EntityType);
     }
 
     async Task<int> IMutationExecutor.Execute(MutationCommand command, CancellationToken cancellationToken)
     {
         var (sql, parameters) = BuildMutationSql(command);
-        return await _executor.ExecuteNonQueryAsync(sql, parameters, cancellationToken, command.MappingScope).ConfigureAwait(false);
+        return await _executor.ExecuteNonQueryAsync(sql, parameters, cancellationToken, command.MappingScope, command.EntityType).ConfigureAwait(false);
     }
 
     object? IMutationExecutor.ExecuteIdentity(MutationCommand command)
@@ -1033,15 +1082,15 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         if (Dialect.SupportsReturning || Dialect.SupportsOutput)
         {
             var (sql, parameters) = BuildInsertSql((InsertCommand)command);
-            return _executor.ExecuteScalar(sql, parameters, command.MappingScope);
+            return _executor.ExecuteScalar(sql, parameters, command.MappingScope, command.EntityType);
         }
 
         if (Dialect.SupportsLastInsertId)
         {
             EnsureIdentityColumn(command);
             var (sql, parameters) = BuildInsertSql((InsertCommand)command);
-            _executor.ExecuteNonQuery(sql, parameters, command.MappingScope);
-            return _executor.ExecuteScalar(Dialect.MakeLastInsertId(KeywordCase), [], command.MappingScope);
+            _executor.ExecuteNonQuery(sql, parameters, command.MappingScope, command.EntityType);
+            return _executor.ExecuteScalar(Dialect.MakeLastInsertId(KeywordCase), [], command.MappingScope, command.EntityType);
         }
 
         throw new NotSupportedException(
@@ -1053,15 +1102,15 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         if (Dialect.SupportsReturning || Dialect.SupportsOutput)
         {
             var (sql, parameters) = BuildInsertSql((InsertCommand)command);
-            return await _executor.ExecuteScalarAsync(sql, parameters, cancellationToken, command.MappingScope).ConfigureAwait(false);
+            return await _executor.ExecuteScalarAsync(sql, parameters, cancellationToken, command.MappingScope, command.EntityType).ConfigureAwait(false);
         }
 
         if (Dialect.SupportsLastInsertId)
         {
             EnsureIdentityColumn(command);
             var (sql, parameters) = BuildInsertSql((InsertCommand)command);
-            await _executor.ExecuteNonQueryAsync(sql, parameters, cancellationToken, command.MappingScope).ConfigureAwait(false);
-            return await _executor.ExecuteScalarAsync(Dialect.MakeLastInsertId(KeywordCase), [], cancellationToken, command.MappingScope).ConfigureAwait(false);
+            await _executor.ExecuteNonQueryAsync(sql, parameters, cancellationToken, command.MappingScope, command.EntityType).ConfigureAwait(false);
+            return await _executor.ExecuteScalarAsync(Dialect.MakeLastInsertId(KeywordCase), [], cancellationToken, command.MappingScope, command.EntityType).ConfigureAwait(false);
         }
 
         throw new NotSupportedException(
@@ -1074,7 +1123,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         EnsureReturningMaterializable<TResult>(oneColumn);
         var (sql, parameters) = BuildReturningSql(command);
         var mapper = RowMapperFactory.GetOrBuild<TResult>(sql, GetType(), selectList, oneColumn, MapColumnExpression);
-        return _executor.ExecuteReader(sql, parameters, mapper, command.MappingScope);
+        return _executor.ExecuteReader(sql, parameters, mapper, command.MappingScope, command.EntityType);
     }
 
     async Task<IReadOnlyList<TResult>> IMutationExecutor.ExecuteReturning<TResult>(MutationCommand command, SelectExpression[] selectList, bool oneColumn, CancellationToken cancellationToken)
@@ -1083,7 +1132,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         EnsureReturningMaterializable<TResult>(oneColumn);
         var (sql, parameters) = BuildReturningSql(command);
         var mapper = RowMapperFactory.GetOrBuild<TResult>(sql, GetType(), selectList, oneColumn, MapColumnExpression);
-        return await _executor.ExecuteReaderAsync(sql, parameters, mapper, cancellationToken, command.MappingScope).ConfigureAwait(false);
+        return await _executor.ExecuteReaderAsync(sql, parameters, mapper, cancellationToken, command.MappingScope, command.EntityType).ConfigureAwait(false);
     }
 
     // Raw command execution (IRawCommandExecutor). Public so a concrete context exposes the entry
@@ -1933,9 +1982,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // a disposed context must not keep anything alive through the fast path.
         _queryCache.ClearScalarArtifacts();
         _connectionManager.DisposeConnection();
-        foreach (var shardManager in _shardConnectionManagers.Values)
-            shardManager.DisposeConnection();
-        _shardConnectionManagers.Clear();
+        foreach (var hostManager in _hostConnectionManagers.Values)
+            hostManager.DisposeConnection();
+        _hostConnectionManagers.Clear();
         Disposed?.Invoke(this, EventArgs.Empty);
     }
 

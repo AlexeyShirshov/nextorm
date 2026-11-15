@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Reflection;
 
 namespace NextORM.Core;
 
@@ -26,6 +27,9 @@ public class DataContextBuilder
     // Registration order is the invocation order in each event pipeline.
     private readonly List<object> _interceptorEntries = [];
     private readonly IServiceProvider? _serviceProvider;
+    // Topologies routed commands may run on, by name, plus the rules that choose one per entity type.
+    private readonly Dictionary<string, IHostTopology> _topologies = new(StringComparer.Ordinal);
+    private readonly RouteTable _routes = new();
     // Resolved for the current creation only (cleared by CreateDataContext), so a transient service
     // is resolved once per context and never reused across creations.
     private IQueryInterceptor[]? _resolvedQueryInterceptors;
@@ -142,6 +146,61 @@ public class DataContextBuilder
     {
         ArgumentNullException.ThrowIfNull(resolver);
         _entityScopeResolver = resolver;
+        return this;
+    }
+
+    /// <summary>The topologies routed commands may run on, by name.</summary>
+    internal IReadOnlyDictionary<string, IHostTopology> Topologies => _topologies;
+
+    /// <summary>The routing rules that choose a topology per entity type.</summary>
+    internal RouteTable Routes => _routes;
+
+    /// <summary>
+    /// Registers a topology that routing rules can refer to by <see cref="IHostTopology.Name"/>.
+    /// </summary>
+    /// <param name="topology">The topology to register.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="topology"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">
+    /// The topology has no name, or a topology with the same name is already registered.
+    /// </exception>
+    public DataContextBuilder AddTopology(IHostTopology topology)
+    {
+        ArgumentNullException.ThrowIfNull(topology);
+        if (string.IsNullOrWhiteSpace(topology.Name))
+            throw new ArgumentException("A topology must have a non-empty name.", nameof(topology));
+        if (!_topologies.TryAdd(topology.Name, topology))
+            throw new ArgumentException($"A topology named '{topology.Name}' is already registered.", nameof(topology));
+
+        return this;
+    }
+
+    /// <summary>Routes every entity type under <paramref name="namespacePrefix"/> to a topology.</summary>
+    /// <param name="namespacePrefix">The namespace (or namespace prefix) the rule covers.</param>
+    /// <param name="topology">The registered topology name.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    public DataContextBuilder RouteNamespace(string namespacePrefix, string topology)
+    {
+        _routes.AddNamespace(namespacePrefix, topology);
+        return this;
+    }
+
+    /// <summary>Routes every entity type declared in <paramref name="assembly"/> to a topology.</summary>
+    /// <param name="assembly">The assembly the rule covers.</param>
+    /// <param name="topology">The registered topology name.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    public DataContextBuilder RouteAssembly(Assembly assembly, string topology)
+    {
+        _routes.AddAssembly(assembly, topology);
+        return this;
+    }
+
+    /// <summary>Appends a custom routing rule; rules are consulted in registration order.</summary>
+    /// <param name="resolver">The rule.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    public DataContextBuilder UseRouteResolver(IEntityRouteResolver resolver)
+    {
+        _routes.AddResolver(resolver);
         return this;
     }
 

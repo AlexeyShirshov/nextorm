@@ -86,7 +86,7 @@ internal static class PreparedCommandHarness
         => new(
             context,
             connectionManager,
-            _ => connectionManager,
+            (_, _, _) => connectionManager,
             CreateParam,
             CreateParamSimple,
             static (_, _) => throw new NotSupportedException("No procedure parameter is used by these tests."),

@@ -217,3 +217,58 @@ NextORM.Core.RowMaterializerRegistry
 static NextORM.Core.RowMaterializerRegistry.Register(NextORM.Core.IRowMaterializerProvider! provider) -> void
 NextORM.Core.RowMaterializerAttribute
 NextORM.Core.RowMaterializerAttribute.RowMaterializerAttribute() -> void
+NextORM.Core.CommandKind
+NextORM.Core.CommandKind.Read = 0 -> NextORM.Core.CommandKind
+NextORM.Core.CommandKind.Write = 1 -> NextORM.Core.CommandKind
+NextORM.Core.DataContextBuilder.AddTopology(NextORM.Core.IHostTopology! topology) -> NextORM.Core.DataContextBuilder!
+NextORM.Core.DataContextBuilder.RouteAssembly(System.Reflection.Assembly! assembly, string! topology) -> NextORM.Core.DataContextBuilder!
+NextORM.Core.DataContextBuilder.RouteNamespace(string! namespacePrefix, string! topology) -> NextORM.Core.DataContextBuilder!
+NextORM.Core.DataContextBuilder.UseRouteResolver(NextORM.Core.IEntityRouteResolver! resolver) -> NextORM.Core.DataContextBuilder!
+NextORM.Core.DataRoutingBuilder
+NextORM.Core.DataRoutingBuilder.AddTopology(NextORM.Core.IHostTopology! topology) -> NextORM.Core.DataRoutingBuilder!
+NextORM.Core.DataRoutingBuilder.RouteAssembly(System.Reflection.Assembly! assembly, string! topology) -> NextORM.Core.DataRoutingBuilder!
+NextORM.Core.DataRoutingBuilder.RouteNamespace(string! namespacePrefix, string! topology) -> NextORM.Core.DataRoutingBuilder!
+NextORM.Core.DataRoutingBuilder.UseResolver(NextORM.Core.IEntityRouteResolver! resolver) -> NextORM.Core.DataRoutingBuilder!
+NextORM.Core.DataRoutingBuilderExtensions
+NextORM.Core.HostTarget
+NextORM.Core.HostTarget.ConnectionString.get -> string!
+NextORM.Core.HostTarget.ConnectionString.init -> void
+NextORM.Core.HostTarget.Deconstruct(out string! Id, out string! ConnectionString) -> void
+NextORM.Core.HostTarget.Equals(NextORM.Core.HostTarget other) -> bool
+NextORM.Core.HostTarget.HostTarget() -> void
+NextORM.Core.HostTarget.HostTarget(string! Id, string! ConnectionString) -> void
+NextORM.Core.HostTarget.Id.get -> string!
+NextORM.Core.HostTarget.Id.init -> void
+NextORM.Core.IEntityRouteResolver
+NextORM.Core.IEntityRouteResolver.TryResolve(System.Type! entityType, in NextORM.Core.MappingScope scope, out NextORM.Core.RouteTarget target) -> bool
+NextORM.Core.IHostTopology
+NextORM.Core.IHostTopology.Name.get -> string!
+NextORM.Core.IHostTopology.TryGetHost(in NextORM.Core.TopologyContext context, out NextORM.Core.HostTarget host) -> bool
+NextORM.Core.RouteTarget
+NextORM.Core.RouteTarget.Deconstruct(out string! Topology) -> void
+NextORM.Core.RouteTarget.Equals(NextORM.Core.RouteTarget other) -> bool
+NextORM.Core.RouteTarget.RouteTarget() -> void
+NextORM.Core.RouteTarget.RouteTarget(string! Topology) -> void
+NextORM.Core.RouteTarget.Topology.get -> string!
+NextORM.Core.RouteTarget.Topology.init -> void
+NextORM.Core.RouteToAttribute
+NextORM.Core.RouteToAttribute.RouteToAttribute(string! topology) -> void
+NextORM.Core.RouteToAttribute.Topology.get -> string!
+NextORM.Core.ShardTopology.Name.get -> string!
+NextORM.Core.ShardTopology.TryGetHost(in NextORM.Core.TopologyContext context, out NextORM.Core.HostTarget host) -> bool
+NextORM.Core.TopologyContext
+NextORM.Core.TopologyContext.Kind.get -> NextORM.Core.CommandKind
+NextORM.Core.TopologyContext.Scope.get -> NextORM.Core.MappingScope
+NextORM.Core.TopologyContext.TopologyContext() -> void
+NextORM.Core.TopologyContext.TopologyContext(NextORM.Core.MappingScope scope, NextORM.Core.CommandKind kind) -> void
+override NextORM.Core.HostTarget.GetHashCode() -> int
+override NextORM.Core.RouteTarget.GetHashCode() -> int
+static NextORM.Core.DataRoutingBuilderExtensions.UseDataRouting(this NextORM.Core.DataContextBuilder! builder, System.Action<NextORM.Core.DataRoutingBuilder!>? configure = null) -> NextORM.Core.DataContextBuilder!
+static NextORM.Core.HostTarget.operator !=(NextORM.Core.HostTarget left, NextORM.Core.HostTarget right) -> bool
+static NextORM.Core.HostTarget.operator ==(NextORM.Core.HostTarget left, NextORM.Core.HostTarget right) -> bool
+static NextORM.Core.RouteTarget.operator !=(NextORM.Core.RouteTarget left, NextORM.Core.RouteTarget right) -> bool
+static NextORM.Core.RouteTarget.operator ==(NextORM.Core.RouteTarget left, NextORM.Core.RouteTarget right) -> bool
+~override NextORM.Core.HostTarget.Equals(object obj) -> bool
+~override NextORM.Core.HostTarget.ToString() -> string
+~override NextORM.Core.RouteTarget.Equals(object obj) -> bool
+~override NextORM.Core.RouteTarget.ToString() -> string

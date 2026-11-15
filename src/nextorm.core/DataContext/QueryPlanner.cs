@@ -1030,6 +1030,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             })
             {
                 MappingScope = queryCommand.MappingScope,
+                RouteEntityType = queryCommand.RouteEntityType,
             };
 
             // Attach the policy the planning dialect resolved and, when the statement is planner-rendered,

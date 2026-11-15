@@ -840,6 +840,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
         // (#249 / T353). Empty for every ordinary command, so unrelated plan keys are untouched.
         cmd.CollectionSlotShape = _collectionSlotShape;
         cmd.MappingScope = ResolveCommandScope();
+        cmd.RouteEntityType = _sourceEntityType ?? typeof(TEntity);
 
         // Eager-load strategy and graph identity: only commands that actually carry eager loads record
         // them, so a command with no eager loads is never touched. The requested override (or null to

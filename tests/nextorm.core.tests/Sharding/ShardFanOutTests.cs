@@ -85,6 +85,8 @@ public sealed class ShardFanOutTests
     /// </summary>
     private sealed class CustomTopology(IConsistentHashRing ring, params string[] shardIds) : IShardTopology
     {
+        public string Name => "custom";
+
         public int Version => ring.Version;
 
         public IConsistentHashRing Ring => ring;
@@ -94,5 +96,18 @@ public sealed class ShardFanOutTests
         public BucketPlacementMode PlacementMode => BucketPlacementMode.TableSuffix;
 
         public string GetConnectionString(string shardId) => $"Server={shardId}";
+
+        public bool TryGetHost(in TopologyContext context, out HostTarget host)
+        {
+            host = default;
+            if (context.Scope == global::NextORM.Core.MappingScope.Default || string.IsNullOrEmpty(context.Scope.Key))
+                return false;
+            if (!int.TryParse(context.Scope.Key, out var bucket))
+                return false;
+
+            var shardId = ring.GetShard(bucket);
+            host = new HostTarget(shardId, GetConnectionString(shardId));
+            return true;
+        }
     }
 }

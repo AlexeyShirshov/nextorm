@@ -381,6 +381,9 @@ public static class EntityBuilderExtensions
     {
         var queryCommand = AnyCommand(builder);
         queryCommand.MappingScope = builder.MappingScope;
+        // The EXISTS command is built from a query definition, so it has no source type of its own; record
+        // the entity the scope belongs to so the planner can route the bucket to its topology's host.
+        queryCommand.RouteEntityType = typeof(TEntity);
         return builder.DataProvider.GetPreparedQueryCommand(queryCommand, false, true, CancellationToken.None);
     }
 

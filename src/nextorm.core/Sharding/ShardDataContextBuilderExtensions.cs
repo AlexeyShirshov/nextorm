@@ -32,6 +32,10 @@ public static class ShardDataContextBuilderExtensions
         var shardRouter = new ShardRouter(topology, keyProvider);
         builder.UseEntityMetadataProvider(metadataProvider);
         builder.UseScopeResolver(shardRouter);
+        // The sharding topology is one implementation of the general hosting contract: the router claims
+        // the sharded types and the topology turns the bucket scope into the owning shard's host.
+        builder.AddTopology(topology);
+        builder.UseRouteResolver(new ShardRouteResolver(shardRouter, topology.Name));
         builder.ShardTopology = topology;
         return builder;
     }

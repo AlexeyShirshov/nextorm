@@ -1,7 +1,13 @@
+using System.Globalization;
+
 namespace NextORM.Core;
 
-/// <summary>Provides the bucket ring, the placement mode and the configured shards with their connections.</summary>
-public interface IShardTopology
+/// <summary>
+/// Provides the bucket ring, the placement mode and the configured shards with their connections. A
+/// sharding topology is one implementation of the general <see cref="IHostTopology"/>: the ring turns
+/// the bucket scope into a shard, and the shard's connection string into a host.
+/// </summary>
+public interface IShardTopology : IHostTopology
 {
     /// <summary>Gets the topology version, incremented when shard membership changes.</summary>
     int Version { get; }
@@ -14,6 +20,7 @@ public interface IShardTopology
 
     /// <summary>Gets how a bucket is realized physically.</summary>
     BucketPlacementMode PlacementMode { get; }
+
 
     /// <summary>Gets the connection string of a configured shard (server).</summary>
     /// <param name="shardId">The configured shard identifier.</param>
@@ -44,6 +51,9 @@ public sealed class ShardTopology : IShardTopology
         PlacementMode = placementMode;
     }
 
+    /// <summary>The topology name every sharding routing rule refers to.</summary>
+    public string Name => "sharding";
+
     /// <inheritdoc />
     public int Version => _ring.Version;
 
@@ -52,6 +62,30 @@ public sealed class ShardTopology : IShardTopology
 
     /// <inheritdoc />
     public IReadOnlyList<string> ShardIds => _ring.ShardIds;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The mapping scope carries the bucket number (the shard router put it there); the ring turns the
+    /// bucket into a shard and the shard into its connection string. A default or non-bucket scope is
+    /// not claimed, so the command stays on the context connection.
+    /// </remarks>
+    public bool TryGetHost(in TopologyContext context, out HostTarget host)
+    {
+        host = default;
+        var scope = context.Scope;
+        if (scope == MappingScope.Default || string.IsNullOrEmpty(scope.Key))
+            return false;
+
+        if (!int.TryParse(scope.Key, NumberStyles.None, CultureInfo.InvariantCulture, out var bucket) ||
+            (uint)bucket >= (uint)_ring.BucketCount)
+        {
+            return false;
+        }
+
+        var shardId = _ring.GetShard(bucket);
+        host = new HostTarget(shardId, GetConnectionString(shardId));
+        return true;
+    }
 
     /// <inheritdoc />
     public BucketPlacementMode PlacementMode { get; }
