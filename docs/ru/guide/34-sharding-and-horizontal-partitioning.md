@@ -47,14 +47,20 @@ var topology = new ShardTopology(bucketCount: 1024);
 topology.AddShard("pg-1", "Host=pg-1;Database=app");
 topology.AddShard("pg-2", "Host=pg-2;Database=app");
 
+// Обслуживает только команды, которые не попадают в бакет: нешардированные сущности,
+// сырой SQL и транзакции. Это не адрес маршрутизации: он никогда не решает, на каком
+// шарде выполнится шардированная команда.
+var nonRoutedDefaultConnectionString = "Host=pg-1;Database=app_master";
+
 var builder = new DataContextBuilder().UseSharding(topology);
-using var context = new PostgresDataContext(topology.GetConnectionString("pg-1"), builder);
+using var context = new PostgresDataContext(nonRoutedDefaultConnectionString, builder);
 ```
 
 `UseSharding` устанавливает `ShardRouter` в качестве резолвера scope и оборачивает текущий провайдер
 метаданных в шард-осведомлённый декоратор, поэтому существующий `IEntityMetadataProvider` продолжает
-работать. Каждая команда, направленная в бакет, выполняется на соединении шарда-владельца; собственное
-соединение контекста обслуживает нешардированные сущности.
+работать. Каждая команда, направленная в бакет, выполняется на соединении шарда-владельца, которое
+контекст открывает лениво, по одному на шард, из топологии; строка, с которой создан контекст, в этом
+решении не участвует.
 
 ### Размещение бакета
 
@@ -85,7 +91,7 @@ var ring = new ConsistentHashRing(
     shardHash: (bucket, shardId) => MyHash.Score(bucket, shardId));
 
 var topology = new MyTopology(ring);   // любая реализация IShardTopology
-using var context = new PostgresDataContext(connectionString, new DataContextBuilder().UseSharding(topology));
+using var context = new PostgresDataContext(nonRoutedDefaultConnectionString, new DataContextBuilder().UseSharding(topology));
 ```
 
 Своя функция должна быть детерминированной между процессами и перезапусками: маршрутизация хранится

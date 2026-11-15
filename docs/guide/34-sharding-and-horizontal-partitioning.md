@@ -46,14 +46,19 @@ var topology = new ShardTopology(bucketCount: 1024);
 topology.AddShard("pg-1", "Host=pg-1;Database=app");
 topology.AddShard("pg-2", "Host=pg-2;Database=app");
 
+// Serves only statements that never reach a bucket: unsharded entities, raw SQL and
+// transactions. It is not a routing target and never decides where a sharded
+// statement runs.
+var nonRoutedDefaultConnectionString = "Host=pg-1;Database=app_master";
+
 var builder = new DataContextBuilder().UseSharding(topology);
-using var context = new PostgresDataContext(topology.GetConnectionString("pg-1"), builder);
+using var context = new PostgresDataContext(nonRoutedDefaultConnectionString, builder);
 ```
 
 `UseSharding` installs a `ShardRouter` as the scope resolver and wraps the current metadata provider in
 a shard-aware decorator, so an existing `IEntityMetadataProvider` keeps working. Every statement routed
-to a bucket runs on that bucket's shard connection; the context's own connection serves unsharded
-entities.
+to a bucket runs on that bucket's shard connection, which the context opens lazily, one per shard, from
+the topology — the connection the context was created with is never part of that decision.
 
 ### Placement of a bucket
 
@@ -83,7 +88,7 @@ var ring = new ConsistentHashRing(
     shardHash: (bucket, shardId) => MyHash.Score(bucket, shardId));
 
 var topology = new MyTopology(ring);   // any IShardTopology implementation
-using var context = new PostgresDataContext(connectionString, new DataContextBuilder().UseSharding(topology));
+using var context = new PostgresDataContext(nonRoutedDefaultConnectionString, new DataContextBuilder().UseSharding(topology));
 ```
 
 A custom function must be deterministic across processes and restarts: routing is stored in the data,

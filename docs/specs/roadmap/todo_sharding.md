@@ -1,5 +1,9 @@
 # TODO: Шардирование (consistent hashing) поверх mapping scope
 > Tracking issue: [#69](https://github.com/AlexeyShirshov/nextorm/issues/69).
+> Шардирование — частный случай общего слоя роутинга данных, вынесенного в
+> [#394](https://github.com/AlexeyShirshov/nextorm/issues/394)
+> (`docs/specs/design/issue-394-data-routing.md`); `IShardTopology` станет производным от
+> общего `IHostTopology`.
 
 > **МОДЕЛЬ v2.** Прежний текст этого файла трактовал шард как «схема/таблица на одном соединении» и
 > вводил виртуальные узлы. Это отменено: шард — физический сервер (`connection-per-shard` в области),
@@ -46,8 +50,11 @@ var topology = new ShardTopology(bucketCount: 4096);              // BucketPlace
 topology.AddShard("server-eu-1", "Host=eu-1;Database=app");
 topology.AddShard("server-eu-2", "Host=eu-2;Database=app");
 
+// не адрес маршрутизации: только нешардированные сущности, сырой SQL и транзакции
+var nonRoutedDefaultConnectionString = "Host=eu-1;Database=app_master";
+
 var builder = new DataContextBuilder().UseSharding(topology);
-using var context = new PostgresDataContext(topology.GetConnectionString("server-eu-1"), builder);
+using var context = new PostgresDataContext(nonRoutedDefaultConnectionString, builder);
 ```
 
 - `IShardTopology`: `Version`, `Ring`, `ShardIds`, `PlacementMode`, `GetConnectionString(shardId)`;
