@@ -22,6 +22,12 @@ public class PreparedQueryCommand<TResult, TRecord> : IPreparedQueryCommand<TRes
     internal Type? RouteEntityType { get; init; }
 
     /// <summary>
+    /// Every entity type the statement reads or writes. Routing resolves them all per execution and
+    /// rejects a statement whose sources belong to different topologies: one SQL text runs on one host.
+    /// </summary>
+    internal Type[]? RouteSources { get; init; }
+
+    /// <summary>
     /// Creates a prepared command with a fixed record-to-result mapper.
     /// </summary>
     /// <param name="mapDelegate">Maps a record to a result, or <see langword="null"/> when no projection is needed.</param>

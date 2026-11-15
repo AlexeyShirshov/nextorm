@@ -415,6 +415,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _condition = forCache ? null : source._condition;
         _filterScope = source._filterScope;
         MappingScope = source.MappingScope;
+        RouteEntityType = source.RouteEntityType;
         // Own a private array, exactly like the definition constructor: preparation writes the prepared
         // copy back into the array (PrepareJoin), so sharing it would let one command's preparation
         // rewrite a source's or sibling's joins. The cache clone deep-clones instead.

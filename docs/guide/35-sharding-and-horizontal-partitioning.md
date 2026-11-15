@@ -192,6 +192,21 @@ var vectors = await context.From<Order>()
 - When a bucket changes owner, its rows still live in the old server. Copying them is the application's
   responsibility; the library only computes the ring and the placement.
 
+## Sharding as data routing
+
+Sharding is one rule in the general routing model. `ShardTopology` implements `IHostTopology` (see
+[Routing data to topologies](34-routing-data-to-topologies.md)): the shard router claims the entity types
+that declare a shard key or carry a bucket scope, and the topology turns the bucket into the owning
+shard's connection string. The rest of the routing machinery — the single-topology rule for one
+statement, host pinning and transactions on a routed host — applies to sharded statements unchanged:
+
+```csharp
+// Keep a session on one shard, for example one you are about to load.
+context.PinHost("sharding", "pg-2");
+```
+
+The topology name sharding rules refer to is `"sharding"`.
+
 ## Limitations
 
 - Fan-out results are per-bucket vectors. Global `ORDER BY`, `LIMIT`/`OFFSET`, `DISTINCT` and aggregates

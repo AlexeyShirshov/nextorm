@@ -22,10 +22,15 @@ public readonly struct TopologyContext
     /// <summary>Creates a context for one command.</summary>
     /// <param name="scope">The mapping scope the command was planned for.</param>
     /// <param name="kind">Whether the command reads or writes.</param>
-    public TopologyContext(MappingScope scope, CommandKind kind)
+    /// <param name="hostId">
+    /// The host the caller pinned, or <see langword="null"/> to let the topology choose. A topology must
+    /// return that host when the id is set.
+    /// </param>
+    public TopologyContext(MappingScope scope, CommandKind kind, string? hostId = null)
     {
         Scope = scope;
         Kind = kind;
+        HostId = hostId;
     }
 
     /// <summary>The mapping scope of the command.</summary>
@@ -33,6 +38,12 @@ public readonly struct TopologyContext
 
     /// <summary>Whether the command reads or writes.</summary>
     public CommandKind Kind { get; }
+
+    /// <summary>
+    /// The host the caller pinned, or <see langword="null"/> when the topology may choose. A topology
+    /// that receives a pinned id must return that host (or decline); it must not silently pick another.
+    /// </summary>
+    public string? HostId { get; }
 }
 
 /// <summary>
@@ -57,11 +68,12 @@ public interface IHostTopology
     string Name { get; }
 
     /// <summary>Chooses the host that executes the command described by <paramref name="context"/>.</summary>
-    /// <param name="context">The scope and kind of the command.</param>
+    /// <param name="context">The scope, kind and optional pinned host of the command.</param>
     /// <param name="host">Receives the chosen host when the topology claims the command.</param>
     /// <returns>
     /// <see langword="true"/> when the topology claims the command; <see langword="false"/> leaves the
-    /// command on the context's own connection.
+    /// command on the context's own connection. A topology that receives a pinned
+    /// <see cref="TopologyContext.HostId"/> returns that host, or declines.
     /// </returns>
     bool TryGetHost(in TopologyContext context, out HostTarget host);
 }

@@ -102,7 +102,7 @@ using var context = new PostgresDataContext(nonRoutedDefaultConnectionString, bu
   DML-команда несёт scope (иначе UPDATE попадал на соединение по умолчанию).
 - Скалярные терминалы на бакетном builder не используют общие артефакты/команду `Any` без scope.
 - `AcrossShards()`/`Concatenate` → `AcrossBuckets()` с векторами по бакетам.
-- Тесты, live-сьюты, гайд (`docs/guide/34-*`, `docs/ru/guide/34-*`).
+- Тесты, live-сьюты, гайд (`docs/guide/35-*`, `docs/ru/guide/35-*`).
 
 ## 7. Ограничения
 

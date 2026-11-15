@@ -104,8 +104,10 @@
       href: guide/32-inheritance-and-derived-entities.md
     - name: Область сопоставления времени выполнения (multi-tenancy)
       href: guide/33-runtime-mapping-scope.md
+    - name: Маршрутизация данных по топологиям
+      href: guide/34-routing-data-to-topologies.md
     - name: Шардирование и горизонтальное партиционирование
-      href: guide/34-sharding-and-horizontal-partitioning.md
+      href: guide/35-sharding-and-horizontal-partitioning.md
     - name: Специфичный для провайдеров SQL
       items:
         - name: Обзор

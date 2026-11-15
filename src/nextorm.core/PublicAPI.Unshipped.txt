@@ -260,7 +260,6 @@ NextORM.Core.TopologyContext
 NextORM.Core.TopologyContext.Kind.get -> NextORM.Core.CommandKind
 NextORM.Core.TopologyContext.Scope.get -> NextORM.Core.MappingScope
 NextORM.Core.TopologyContext.TopologyContext() -> void
-NextORM.Core.TopologyContext.TopologyContext(NextORM.Core.MappingScope scope, NextORM.Core.CommandKind kind) -> void
 override NextORM.Core.HostTarget.GetHashCode() -> int
 override NextORM.Core.RouteTarget.GetHashCode() -> int
 static NextORM.Core.DataRoutingBuilderExtensions.UseDataRouting(this NextORM.Core.DataContextBuilder! builder, System.Action<NextORM.Core.DataRoutingBuilder!>? configure = null) -> NextORM.Core.DataContextBuilder!
@@ -272,3 +271,21 @@ static NextORM.Core.RouteTarget.operator ==(NextORM.Core.RouteTarget left, NextO
 ~override NextORM.Core.HostTarget.ToString() -> string
 ~override NextORM.Core.RouteTarget.Equals(object obj) -> bool
 ~override NextORM.Core.RouteTarget.ToString() -> string
+NextORM.Core.DataContext.PinHost(string! topology, string! hostId) -> NextORM.Core.DataContext!
+NextORM.Core.DataContext.UnpinHost(string! topology) -> NextORM.Core.DataContext!
+NextORM.Core.IRoutedTransactionManager
+NextORM.Core.IRoutedTransactionManager.CurrentTransaction(NextORM.Core.RouteTarget target) -> System.Data.Common.DbTransaction?
+NextORM.Core.RoundRobinTopology
+NextORM.Core.RoundRobinTopology.Hosts.get -> System.Collections.Generic.IReadOnlyList<NextORM.Core.HostTarget>!
+NextORM.Core.RoundRobinTopology.Name.get -> string!
+NextORM.Core.RoundRobinTopology.RoundRobinTopology(string! name, System.Collections.Generic.IEnumerable<NextORM.Core.HostTarget>! hosts) -> void
+NextORM.Core.RoundRobinTopology.RoundRobinTopology(string! name, params string![]! connectionStrings) -> void
+NextORM.Core.RoundRobinTopology.TryGetHost(in NextORM.Core.TopologyContext context, out NextORM.Core.HostTarget host) -> bool
+NextORM.Core.RoutedTransactionExtensions
+NextORM.Core.TopologyContext.HostId.get -> string?
+NextORM.Core.TopologyContext.TopologyContext(NextORM.Core.MappingScope scope, NextORM.Core.CommandKind kind, string? hostId = null) -> void
+static NextORM.Core.RoutedTransactionExtensions.GetCurrentTransaction(this NextORM.Core.DataContext! context, NextORM.Core.RouteTarget target) -> System.Data.Common.DbTransaction?
+NextORM.Core.IRoutedTransactionManager.BeginTransaction(NextORM.Core.RouteTarget target, NextORM.Core.MappingScope scope = default(NextORM.Core.MappingScope), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified) -> System.Data.Common.DbTransaction!
+NextORM.Core.IRoutedTransactionManager.BeginTransactionAsync(NextORM.Core.RouteTarget target, NextORM.Core.MappingScope scope = default(NextORM.Core.MappingScope), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Data.Common.DbTransaction!>!
+static NextORM.Core.RoutedTransactionExtensions.BeginTransaction(this NextORM.Core.DataContext! context, NextORM.Core.RouteTarget target, NextORM.Core.MappingScope scope = default(NextORM.Core.MappingScope), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified) -> System.Data.Common.DbTransaction!
+static NextORM.Core.RoutedTransactionExtensions.BeginTransactionAsync(this NextORM.Core.DataContext! context, NextORM.Core.RouteTarget target, NextORM.Core.MappingScope scope = default(NextORM.Core.MappingScope), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Data.Common.DbTransaction!>!

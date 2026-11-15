@@ -66,12 +66,23 @@ public sealed class ShardTopology : IShardTopology
     /// <inheritdoc />
     /// <remarks>
     /// The mapping scope carries the bucket number (the shard router put it there); the ring turns the
-    /// bucket into a shard and the shard into its connection string. A default or non-bucket scope is
-    /// not claimed, so the command stays on the context connection.
+    /// bucket into a shard and the shard into its connection string. A pinned host id selects that shard
+    /// directly, whatever the bucket would have chosen — that is how a session keeps one server. A
+    /// default or non-bucket scope is not claimed, so the command stays on the context connection.
     /// </remarks>
     public bool TryGetHost(in TopologyContext context, out HostTarget host)
     {
         host = default;
+
+        if (context.HostId is { } pinned)
+        {
+            if (!_ring.ShardIds.Contains(pinned, StringComparer.Ordinal))
+                return false;
+
+            host = new HostTarget(pinned, GetConnectionString(pinned));
+            return true;
+        }
+
         var scope = context.Scope;
         if (scope == MappingScope.Default || string.IsNullOrEmpty(scope.Key))
             return false;

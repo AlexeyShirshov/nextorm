@@ -14,7 +14,7 @@ namespace NextORM.Core;
 /// commands. Providers derive from it and supply the SQL dialect, the connection factory and
 /// parameter creation.
 /// </summary>
-public abstract class DataContext : IDataContext, IConnectionManager, ITransactionManager, IMutationExecutor, IBulkInsertExecutor, IBatchExecutor
+public abstract class DataContext : IDataContext, IConnectionManager, ITransactionManager, IRoutedTransactionManager, IMutationExecutor, IBulkInsertExecutor, IBatchExecutor
 {
     private bool _disposed;
     private readonly ContextEnvironment _environment;
@@ -29,6 +29,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     private readonly IReadOnlyDictionary<string, IHostTopology> _topologies;
     private readonly RouteTable _routes;
     private readonly ConcurrentDictionary<string, DbConnectionManager> _hostConnectionManagers = new(StringComparer.Ordinal);
+    // Hosts the caller pinned by topology name, and the host a routed transaction is bound to. A routed
+    // transaction pins lazily: the entry disappears once its transaction is over.
+    private readonly ConcurrentDictionary<string, string> _pinnedHosts = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, string> _transactionPins = new(StringComparer.Ordinal);
     private readonly QueryExecutor _executor;
     private readonly QueryPlanner _planner;
     private readonly InterceptorHooks _interceptors;
@@ -141,7 +145,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             _createProcedureParam,
             new LoggingOptions(_environment.Logger, LogSensitiveData: _environment.LogSensitiveData, LogParams: _environment.LogParams),
             () => _disposed,
-            () => _connectionManager.CurrentTransaction,
+            manager => manager is DbConnectionManager dbConnectionManager ? dbConnectionManager.CurrentTransaction : _connectionManager.CurrentTransaction,
             _interceptors,
             GetDialect);
 
@@ -310,40 +314,129 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     public DbConnection GetConnection() => _connectionManager.GetConnection();
 
     /// <summary>
-    /// Resolves the connection manager that executes a command planned for <paramref name="scope"/>: a
-    /// bucket scope selects the shard (server) that owns the bucket, and every shard keeps its own lazy
-    /// connection; the default scope keeps the context connection.
+    /// Resolves the topology every source of a command belongs to. A statement is one server-side
+    /// operation, so its sources must agree: two different topologies are rejected instead of silently
+    /// running one side of the statement on a host it does not belong to.
     /// </summary>
-    /// <summary>
-    /// Resolves the topology a command runs on. A rule that names an unregistered topology is a
-    /// configuration error, not a silent fallback.
-    /// </summary>
-    internal RoutePlan RouteFor(Type? entityType, MappingScope scope)
+    /// <param name="sources">The entity types the statement reads or writes, or <see langword="null"/> when it has none.</param>
+    /// <param name="scope">The mapping scope the command runs under.</param>
+    /// <returns>The topology the statement runs on, or <see cref="RoutePlan.None"/> for the context connection.</returns>
+    /// <exception cref="NotSupportedException">The sources resolve to different topologies.</exception>
+    /// <exception cref="InvalidOperationException">A rule names a topology that is not registered.</exception>
+    internal RoutePlan RouteFor(IReadOnlyList<Type>? sources, MappingScope scope)
     {
-        var target = _routes.Resolve(entityType, in scope);
-        if (target is not { } route)
+        RouteTarget? resolved = null;
+        Type? resolvedType = null;
+
+        if (sources is { Count: > 0 } list)
+        {
+            for (var i = 0; i < list.Count; i++)
+            {
+                var entityType = list[i];
+                var target = _routes.Resolve(entityType, in scope);
+                if (target is not { } candidate)
+                    continue;
+
+                if (resolved is null)
+                {
+                    resolved = candidate;
+                    resolvedType = entityType;
+                    continue;
+                }
+
+                if (resolved.Value != candidate)
+                {
+                    throw new NotSupportedException(
+                        $"The statement reads '{resolvedType}' routed to topology '{resolved.Value.Topology}' and " +
+                        $"'{entityType}' routed to topology '{candidate.Topology}'. One SQL statement runs on one host, " +
+                        "so its sources must belong to a single topology; split it into one command per topology.");
+                }
+            }
+        }
+
+        if (resolved is not { } route)
             return RoutePlan.None;
 
         if (!_topologies.ContainsKey(route.Topology))
         {
             throw new InvalidOperationException(
-                $"Entity '{entityType}' is routed to topology '{route.Topology}', which is not registered. " +
+                $"Entity '{resolvedType}' is routed to topology '{route.Topology}', which is not registered. " +
                 "Register it with AddTopology (or UseDataRouting).");
         }
 
         return new RoutePlan(route.Topology);
     }
 
+    /// <inheritdoc cref="RouteFor(IReadOnlyList{Type}?, MappingScope)"/>
+    internal RoutePlan RouteFor(Type? entityType, MappingScope scope)
+        => entityType is null ? RouteFor((IReadOnlyList<Type>?)null, scope) : RouteFor([entityType], scope);
+
+    /// <summary>
+    /// Pins every command routed to <paramref name="topology"/> to one host: the topology is still the
+    /// one the rules select, but its own picker no longer chooses, which is how a caller keeps a session
+    /// on one server (a replica it warmed up, a shard it is about to transact on). The pin lasts until
+    /// <see cref="UnpinHost"/> or the context is disposed.
+    /// </summary>
+    /// <param name="topology">The registered topology name.</param>
+    /// <param name="hostId">The identifier of one of its hosts.</param>
+    /// <returns>This context, to allow chaining.</returns>
+    /// <exception cref="ArgumentException">The topology is not registered or does not have that host.</exception>
+    /// <exception cref="InvalidOperationException">The topology does not honour host pinning.</exception>
+    public DataContext PinHost(string topology, string hostId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(topology);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hostId);
+
+        var resolved = GetTopology(topology);
+        var probe = new TopologyContext(MappingScope.Default, CommandKind.Read, hostId);
+        if (!resolved.TryGetHost(in probe, out var host))
+        {
+            throw new ArgumentException(
+                $"Topology '{topology}' has no host '{hostId}'.", nameof(hostId));
+        }
+
+        if (!string.Equals(host.Id, hostId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Topology '{topology}' returned host '{host.Id}' for the pinned id '{hostId}': " +
+                "a topology that is pinned to a host must return that host from TryGetHost.");
+        }
+
+        EnsurePinDoesNotLeaveRoutedTransaction(topology, hostId);
+
+        _pinnedHosts[topology] = hostId;
+        return this;
+    }
+
+    /// <summary>Removes the pin set by <see cref="PinHost"/>, so the topology's own picker chooses again.</summary>
+    /// <param name="topology">The registered topology name.</param>
+    /// <returns>This context, to allow chaining.</returns>
+    public DataContext UnpinHost(string topology)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(topology);
+        _pinnedHosts.TryRemove(topology, out _);
+        return this;
+    }
+
+    private IHostTopology GetTopology(string topology)
+        => _topologies.TryGetValue(topology, out var resolved)
+            ? resolved
+            : throw new InvalidOperationException(
+                $"Topology '{topology}' is not registered. Register it with AddTopology (or UseDataRouting).");
+
     /// <summary>
     /// Resolves the connection manager that executes a command: the routed topology's host for a routed
     /// command, the context connection otherwise. Every host keeps its own lazy connection, cached by
     /// <c>topology/host</c> for the lifetime of the context.
     /// </summary>
-    internal IConnectionManager ManagerFor(MappingScope scope, Type? entityType, CommandKind kind)
+    internal IConnectionManager ManagerFor(MappingScope scope, IReadOnlyList<Type>? sources, CommandKind kind)
     {
-        var route = RouteFor(entityType, scope);
+        var route = RouteFor(sources, scope);
         if (!route.HasTopology)
+        {
+            EnsureNoRoutedTransaction(route);
             return _connectionManager;
+        }
 
         if (_connectionManager.CurrentTransaction is not null)
         {
@@ -352,17 +445,111 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
                 "on the context connection. A transaction covers one connection: commit or roll back first.");
         }
 
-        if (!_topologies.TryGetValue(route.TopologyName!, out var topology))
-            return _connectionManager;
+        EnsureNoRoutedTransaction(route);
+        EnsurePinDoesNotLeaveRoutedTransaction(route.TopologyName!, explicitHostId: null);
 
-        var context = new TopologyContext(scope, kind);
+        var topology = GetTopology(route.TopologyName!);
+        var pinnedHost = PinnedHostFor(route.TopologyName!);
+        var context = new TopologyContext(scope, kind, pinnedHost);
+
         if (!topology.TryGetHost(in context, out var host))
-            return _connectionManager;
+        {
+            if (pinnedHost is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Topology '{route.TopologyName}' is pinned to host '{pinnedHost}', but the topology could not " +
+                    "serve it for this command.");
+            }
 
-        return _hostConnectionManagers.GetOrAdd(
-            string.Concat(route.TopologyName, "/", host.Id),
-            _ => CreateHostConnectionManager(host.ConnectionString));
+            return _connectionManager;
+        }
+
+        if (pinnedHost is not null && !string.Equals(host.Id, pinnedHost, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Topology '{route.TopologyName}' returned host '{host.Id}' for the pinned id '{pinnedHost}': " +
+                "a topology that is pinned to a host must return that host from TryGetHost.");
+        }
+
+        return HostManager(route.TopologyName!, host);
     }
+
+    /// <summary>
+    /// Rejects a command that would leave the connection a routed transaction is bound to: like a
+    /// transaction on the context connection, a routed transaction covers exactly one host.
+    /// </summary>
+    private void EnsureNoRoutedTransaction(RoutePlan route)
+    {
+        if (_transactionPins.IsEmpty)
+            return;
+
+        foreach (var (topology, hostId) in _transactionPins)
+        {
+            if (!TransactionPinIsActive(topology, hostId))
+                continue;
+
+            if (route.HasTopology && string.Equals(topology, route.TopologyName, StringComparison.Ordinal))
+                continue;
+
+            throw new InvalidOperationException(
+                $"A transaction is open on topology '{topology}', host '{hostId}', and this command does not run " +
+                "there. A transaction covers one connection: commit or roll back first.");
+        }
+    }
+
+    /// <summary>
+    /// Rejects a pin that would move a topology away from the host a routed transaction is open on: an
+    /// explicit pin silently winning over the transaction would execute commands outside it.
+    /// </summary>
+    /// <param name="topology">The topology being pinned or routed.</param>
+    /// <param name="explicitHostId">The host being pinned, or <see langword="null"/> to use the current pin.</param>
+    private void EnsurePinDoesNotLeaveRoutedTransaction(string topology, string? explicitHostId)
+    {
+        if (!_transactionPins.TryGetValue(topology, out var transactionHostId))
+            return;
+
+        if (!TransactionPinIsActive(topology, transactionHostId))
+        {
+            _transactionPins.TryRemove(topology, out _);
+            return;
+        }
+
+        var pinnedHostId = explicitHostId
+            ?? (_pinnedHosts.TryGetValue(topology, out var pinned) ? pinned : transactionHostId);
+
+        if (!string.Equals(pinnedHostId, transactionHostId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"A transaction is open on topology '{topology}', host '{transactionHostId}', but the topology is " +
+                $"pinned to host '{pinnedHostId}'. Commit or roll back the transaction before moving the pin.");
+        }
+    }
+
+    private string? PinnedHostFor(string topology)
+    {
+        if (_pinnedHosts.TryGetValue(topology, out var pinned))
+            return pinned;
+
+        if (!_transactionPins.TryGetValue(topology, out var hostId))
+            return null;
+
+        if (TransactionPinIsActive(topology, hostId))
+            return hostId;
+
+        _transactionPins.TryRemove(topology, out _);
+        return null;
+    }
+
+    private bool TransactionPinIsActive(string topology, string hostId)
+        => _hostConnectionManagers.TryGetValue(HostKey(topology, hostId), out var manager)
+            && manager.CurrentTransaction is not null;
+
+    private static string HostKey(string topology, string hostId) => string.Concat(topology, "/", hostId);
+
+    private DbConnectionManager HostManager(string topology, HostTarget host)
+        => _hostConnectionManagers.GetOrAdd(
+            HostKey(topology, host.Id),
+            _ => CreateHostConnectionManager(host.ConnectionString));
 
     private DbConnectionManager CreateHostConnectionManager(string connectionString)
         => new(
@@ -400,6 +587,74 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     void ITransactionManager.ReleaseSavepoint(string name) => _connectionManager.ReleaseSavepoint(name);
 
     Task ITransactionManager.ReleaseSavepointAsync(string name, CancellationToken cancellationToken) => _connectionManager.ReleaseSavepointAsync(name, cancellationToken);
+
+    // Routed transactions: a transaction on a host other than the context connection. Starting one pins
+    // the topology to that host, so later commands routed there join the transaction instead of picking
+    // another host and writing outside it.
+    DbTransaction IRoutedTransactionManager.BeginTransaction(RouteTarget target, MappingScope scope, IsolationLevel isolationLevel)
+        => BeginRoutedTransaction(target, scope, isolationLevel);
+
+    Task<DbTransaction> IRoutedTransactionManager.BeginTransactionAsync(RouteTarget target, MappingScope scope, IsolationLevel isolationLevel, CancellationToken cancellationToken)
+        => BeginRoutedTransactionAsync(target, scope, isolationLevel, cancellationToken);
+
+    DbTransaction? IRoutedTransactionManager.CurrentTransaction(RouteTarget target)
+        => _transactionPins.TryGetValue(target.Topology, out var hostId)
+            && _hostConnectionManagers.TryGetValue(HostKey(target.Topology, hostId), out var manager)
+                ? manager.CurrentTransaction
+                : null;
+
+    private DbTransaction BeginRoutedTransaction(RouteTarget target, MappingScope scope, IsolationLevel isolationLevel)
+    {
+        var (manager, hostId) = RoutedTransactionHost(target, scope);
+        var transaction = manager.BeginTransaction(isolationLevel);
+        _transactionPins[target.Topology] = hostId;
+        return transaction;
+    }
+
+    private async Task<DbTransaction> BeginRoutedTransactionAsync(RouteTarget target, MappingScope scope, IsolationLevel isolationLevel, CancellationToken cancellationToken)
+    {
+        var (manager, hostId) = RoutedTransactionHost(target, scope);
+        var transaction = await manager.BeginTransactionAsync(isolationLevel, cancellationToken).ConfigureAwait(false);
+        _transactionPins[target.Topology] = hostId;
+        return transaction;
+    }
+
+    /// <summary>
+    /// Picks the host a routed transaction will own: the explicit pin, or the topology's own choice for
+    /// <paramref name="scope"/>. Refuses when another transaction already holds a connection of this
+    /// context, because one context carries one transaction at a time.
+    /// </summary>
+    private (DbConnectionManager Manager, string HostId) RoutedTransactionHost(RouteTarget target, MappingScope scope)
+    {
+        if (_connectionManager.CurrentTransaction is not null)
+        {
+            throw new InvalidOperationException(
+                "A transaction is already open on the context connection. A context carries one transaction at a " +
+                "time: commit or roll it back before starting one on a routed host.");
+        }
+
+        EnsureNoRoutedTransaction(new RoutePlan(target.Topology));
+
+        var topology = GetTopology(target.Topology);
+        var pinnedHost = PinnedHostFor(target.Topology);
+        var context = new TopologyContext(scope, CommandKind.Write, pinnedHost);
+
+        if (!topology.TryGetHost(in context, out var host))
+        {
+            throw new InvalidOperationException(
+                $"Topology '{target.Topology}' did not select a host for this scope, so a transaction cannot be " +
+                "started on it.");
+        }
+
+        if (pinnedHost is not null && !string.Equals(host.Id, pinnedHost, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Topology '{target.Topology}' returned host '{host.Id}' for the pinned id '{pinnedHost}': " +
+                "a topology that is pinned to a host must return that host from TryGetHost.");
+        }
+
+        return (HostManager(target.Topology, host), host.Id);
+    }
 
     /// <summary>Creates the provider-specific connection. Called only when no connection was supplied.</summary>
     protected abstract DbConnection CreateDbConnection(string? connectionString);
@@ -1985,6 +2240,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         foreach (var hostManager in _hostConnectionManagers.Values)
             hostManager.DisposeConnection();
         _hostConnectionManagers.Clear();
+        _pinnedHosts.Clear();
+        _transactionPins.Clear();
         Disposed?.Invoke(this, EventArgs.Empty);
     }
 

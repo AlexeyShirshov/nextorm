@@ -18,7 +18,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 {
     private readonly IDataContext _context;
     private readonly IConnectionManager _connectionManager;
-    private readonly Func<MappingScope, Type?, CommandKind, IConnectionManager> _managerFor;
+    private readonly Func<MappingScope, IReadOnlyList<Type>?, CommandKind, IConnectionManager> _managerFor;
     private readonly Func<DbCommand, string, object?, DbParameter> _createParam;
     private readonly Func<string, object?, DbParameter> _createParamSimple;
     private readonly Func<DbCommand, ProcedureParameter, DbParameter> _createProcedureParam;
@@ -26,7 +26,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     private readonly bool _logParams;
     private readonly bool _logSensitiveData;
     private readonly Func<bool> _isDisposed;
-    private readonly Func<DbTransaction?> _currentTransaction;
+    private readonly Func<IConnectionManager, DbTransaction?> _currentTransaction;
     private readonly InterceptorHooks _interceptors;
     private readonly Action<DbCommand> _raiseCommandInitialized;
     private readonly BatchRunner _batchRunner;
@@ -39,13 +39,13 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     internal QueryExecutor(
         IDataContext context,
         IConnectionManager connectionManager,
-        Func<MappingScope, Type?, CommandKind, IConnectionManager> managerFor,
+        Func<MappingScope, IReadOnlyList<Type>?, CommandKind, IConnectionManager> managerFor,
         Func<DbCommand, string, object?, DbParameter> createParam,
         Func<string, object?, DbParameter> createParamSimple,
         Func<DbCommand, ProcedureParameter, DbParameter> createProcedureParam,
         LoggingOptions logging,
         Func<bool> isDisposed,
-        Func<DbTransaction?> currentTransaction,
+        Func<IConnectionManager, DbTransaction?> currentTransaction,
         InterceptorHooks interceptors,
         Func<ISqlDialect> dialect)
     {
@@ -63,7 +63,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         _interceptors = interceptors;
         _dialect = dialect;
         _raiseCommandInitialized = RaiseCommandInitialized;
-        _batchRunner = new BatchRunner(connectionManager, createParam, createParamSimple, currentTransaction, isDisposed, logging, context.CommandTimeout, dialect);
+        _batchRunner = new BatchRunner(connectionManager, createParam, createParamSimple, () => currentTransaction(connectionManager), isDisposed, logging, context.CommandTimeout, dialect);
     }
 
     /// <summary>
@@ -265,11 +265,11 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     /// </summary>
     private CommandLease AcquireLease<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, ReadOnlySpan<object?> @params)
     {
-        var connectionManager = _managerFor(compiledQuery.MappingScope, compiledQuery.RouteEntityType, CommandKind.Read);
+        var connectionManager = _managerFor(compiledQuery.MappingScope, compiledQuery.RouteSources, CommandKind.Read);
         connectionManager.EnsureConnectionOpen();
         var conn = connectionManager.GetConnection();
 
-        var lease = compiledQuery.Acquire(conn, _createParam, @params, _currentTransaction(), _raiseCommandInitialized);
+        var lease = compiledQuery.Acquire(conn, _createParam, @params, _currentTransaction(connectionManager), _raiseCommandInitialized);
 
         if (_logParams) LogParams(lease.Command);
 
@@ -284,11 +284,11 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Bug", "S2583:Conditionally executed code should be reachable", Justification = "A pooled connection may be open or closed depending on prior use, so the connection-state check is reachable on both sides; the analyzer cannot assume state across the pool.")]
     private async ValueTask<CommandLease> AcquireLeaseAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, object[]? @params, CancellationToken cancellationToken)
     {
-        var connectionManager = _managerFor(compiledQuery.MappingScope, compiledQuery.RouteEntityType, CommandKind.Read);
+        var connectionManager = _managerFor(compiledQuery.MappingScope, compiledQuery.RouteSources, CommandKind.Read);
         await connectionManager.EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
         var conn = connectionManager.GetConnection();
 
-        var lease = compiledQuery.Acquire(conn, _createParam, @params, _currentTransaction(), _raiseCommandInitialized);
+        var lease = compiledQuery.Acquire(conn, _createParam, @params, _currentTransaction(connectionManager), _raiseCommandInitialized);
 
         if (_logParams) LogParams(lease.Command);
 
@@ -338,16 +338,17 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
     private DbCommand CreateCommand<TState>(string commandText, TState state, Action<DbCommand, TState> bindParameters, CommandType commandType = CommandType.Text, MappingScope scope = default, Type? entityType = null)
     {
-        var connectionManager = _managerFor(scope, entityType, CommandKind.Write);
+        var sources = entityType is null ? null : new[] { entityType };
+        var connectionManager = _managerFor(scope, sources, CommandKind.Write);
         connectionManager.EnsureConnectionOpen();
-        return InitCommand(connectionManager.GetConnection(), commandText, state, bindParameters, commandType);
+        return InitCommand(connectionManager.GetConnection(), commandText, state, bindParameters, commandType, _currentTransaction(connectionManager));
     }
 
     // Shared per-call command construction: create the command, attach the active transaction and the
     // configured timeout, bind the parameters, then raise the interceptor and logging hooks. The
     // command is disposed when any step after its creation throws, so a rejected descriptor (for
     // example an unsupported TypeName) or a throwing interceptor cannot leak it.
-    private DbCommand InitCommand<TState>(DbConnection conn, string commandText, TState state, Action<DbCommand, TState> bindParameters, CommandType commandType = CommandType.Text)
+    private DbCommand InitCommand<TState>(DbConnection conn, string commandText, TState state, Action<DbCommand, TState> bindParameters, CommandType commandType, DbTransaction? transaction)
     {
         var cmd = conn.CreateCommand();
         try
@@ -357,7 +358,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             if (commandType != CommandType.Text)
                 cmd.CommandType = commandType;
 
-            if (_currentTransaction() is { } transaction)
+            if (transaction is not null)
                 cmd.Transaction = transaction;
 
             if (_context.CommandTimeout is int commandTimeout)
@@ -425,7 +426,8 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
                 commandText,
                 new ProcedureParameterState(parameters, _createProcedureParam),
                 BindProcedureParameters,
-                commandType);
+                commandType,
+                _currentTransaction(_connectionManager));
 
             var reader = await RunReaderAsync(command, CommandBehavior.Default, cancellationToken).ConfigureAwait(false);
             var owner = new CommandReaderOwner(command, reader, lease: null);
@@ -716,7 +718,8 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return _batchRunner.RunStream(batch, BeginBatch(compiledQuery, @params), cancellationToken).GetAsyncEnumerator(cancellationToken);
 
         var sqlEnumerator = RequireEnumerator(compiledQuery);
-        sqlEnumerator.InitEnumerator(_managerFor(compiledQuery.MappingScope, compiledQuery.RouteEntityType, CommandKind.Read), _createParam, @params, cancellationToken, _currentTransaction, _interceptors, _context);
+        var connectionManager = _managerFor(compiledQuery.MappingScope, compiledQuery.RouteSources, CommandKind.Read);
+        sqlEnumerator.InitEnumerator(connectionManager, _createParam, @params, cancellationToken, _currentTransaction, _interceptors, _context);
         return sqlEnumerator;
     }
 
@@ -728,7 +731,8 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return _batchRunner.Run(batch, BeginBatch(compiledQuery, @params)).GetEnumerator();
 
         var sqlEnumerator = RequireEnumerator(compiledQuery);
-        sqlEnumerator.InitEnumerator(_managerFor(compiledQuery.MappingScope, compiledQuery.RouteEntityType, CommandKind.Read), _createParam, @params, CancellationToken.None, _currentTransaction, _interceptors, _context);
+        var connectionManager = _managerFor(compiledQuery.MappingScope, compiledQuery.RouteSources, CommandKind.Read);
+        sqlEnumerator.InitEnumerator(connectionManager, _createParam, @params, CancellationToken.None, _currentTransaction, _interceptors, _context);
         sqlEnumerator.InitReader(@params);
 
         return sqlEnumerator;

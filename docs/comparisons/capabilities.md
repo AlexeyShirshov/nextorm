@@ -33,6 +33,7 @@ provider list is not scored). The per-engine API breadth is on [Provider feature
 | Extreme-row selection (`SelectWhereMax`/`SelectWhereMin`) | yes | partial (window functions + `OrderBy`/`Take`) | partial (`OrderBy`+`First`) |
 | Per-query source overrides (table/schema/database/server) | yes | partial | partial (model-level) |
 | Runtime mapping scope (per-command table/schema/column names and parameter prefix, chosen from a key) | yes (`IEntityScopeResolver` + `IEntityMetadataProvider`, `WithScope(...)`, metadata, plans and parameter prefixes isolated per scope) | partial (a per-connection `MappingSchema` renames tables and columns; no per-command scope and no per-scope plan isolation) | partial (database per tenant only by choosing the connection string per `DbContext` instance, and switching it needs a `Transient` lifetime; schema per tenant is documented as unsupported; no renaming at query time) |
+| Routing a statement to a server by entity type (structure and data rules, host pinning, transactions on a routed host) | yes (`[RouteTo]`, `RouteNamespace`/`RouteAssembly`, a custom `IEntityRouteResolver`, `RoundRobinTopology`, `PinHost`, `IRoutedTransactionManager`) | no (the connection is fixed per `DataConnection` instance; no per-type rules) | partial (a connection string per `DbContext` instance; no per-entity rules and no routing inside one context) |
 | Sharding (bucket placement across servers and per-bucket fan-out) | yes (consistent-hash bucket ring over shards, a connection per shard, `AcrossBuckets()` returning one result vector per bucket with no client-side merge) | no | no (provider-level multi-host load balancing, e.g. Npgsql `Load Balance Hosts` / `Target Session Attributes`, picks a host when a connection opens and is not routing) |
 | Temporal tables (`FOR SYSTEM_TIME`) | yes (SQL Server, MariaDB) | no | partial (SQL Server only) |
 | Row locking (`FOR UPDATE`/`FOR SHARE`, `NOWAIT`/`SKIP LOCKED`) | yes | yes | no (raw SQL only) |
@@ -96,7 +97,7 @@ provider list is not scored). The per-engine API breadth is on [Provider feature
 | In-memory provider (query-only, registered CLR datasets) | yes | partial | partial |
 | Connection lifecycle (`IConnectionManager`: supplied vs owned, reuse, disposal) | yes | yes | yes |
 | Extensibility (dialect, `[SqlFunction]`/`TvfEntityBuilder<T>` factories, interceptors, global query filters, raw SQL; plus **query components** — reusable structural operators added by third parties without friend access, keeping the plan cache and parameter binding) | yes (query components) | partial (`Sql.Ext`/`Sql.Function`/interceptors; no structural component contract) | partial (interceptors, global filters; no structural component contract) |
-| **Total** | 75 / 5 / 3 | 49 / 23 / 11 | 28 / 28 / 26 |
+| **Total** | 76 / 5 / 3 | 49 / 23 / 12 | 28 / 29 / 26 |
 
 ## Where Nextorm leads
 

@@ -92,7 +92,7 @@ internal static class PreparedCommandHarness
             static (_, _) => throw new NotSupportedException("No procedure parameter is used by these tests."),
             new LoggingOptions(null),
             static () => false,
-            currentTransaction ?? (() => null),
+            currentTransaction is null ? static _ => null : _ => currentTransaction(),
             new InterceptorHooks([], []),
             // The executor takes the dialect as a lazy delegate; these probes execute only
             // parameterised commands, so the SQLite dialect never renders anything here.
@@ -111,7 +111,7 @@ internal static class PreparedCommandHarness
             CreateParam,
             @params,
             cancellationToken,
-            static () => null,
+            static _ => null,
             new InterceptorHooks([], []),
             new ProbeHarnessContext());
         return enumerator;
