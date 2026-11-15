@@ -50,15 +50,25 @@ Publishing natively removes the JIT and the cold start; on short-lived processes
 win. A start-up plus one small query drops from almost a second to tens of milliseconds, and the 13 GB
 `oc-report` run below finishes in tenths of a second instead of one to two seconds.
 
-That win has a price: without JIT the row materializer expressions are interpreted, at roughly
-0.9 µs per row against 0.14 µs for compiled code. To remove it, mark projection types with
-`[RowMaterializer]` (types mapped with `[SqlTable]` are covered automatically): the materializer is
-generated at build time and a prepared query keeps its usual speed.
+That win has a price: without JIT the row materializer expressions are interpreted — roughly twice
+the time and several times the allocations of compiled code. The build removes most of it for you: a
+source generator covers every projection type declared in your assembly — named types and record DTOs,
+and anonymous types as well — so a prepared query keeps its usual speed on a native build. On a
+prepared 500-row, three-column command that is 543 → 364 µs and 246 → 39 KB.
 
 ```csharp
-[RowMaterializer]
+// no attribute, no registration: covered automatically
 public sealed record OrderSummary(int Id, string? Customer, decimal Total);
+
+var summaries = context.From<Order>()
+    .Select(order => new OrderSummary(order.Id, order.Customer, order.Total))
+    .ToList();
+
+var rows = context.From<Order>().Select(order => new { order.Id, order.Customer }).ToList();
 ```
+
+Streaming terminals are not affected by that cost: `WriteCsv` and `WriteJson` do not materialize rows
+and write scalar columns with compiled code on a native build as well.
 
 For bulk exports of wide rows on the AOT runtime the interpretation is still noticeable — such jobs
 are better left on the JIT runtime.

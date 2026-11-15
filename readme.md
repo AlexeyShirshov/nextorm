@@ -141,8 +141,8 @@ are tracked in
 [#370](https://github.com/AlexeyShirshov/nextorm/issues/370); see the
 [NativeAOT guide](https://alexeyshirshov.github.io/nextorm/infrastructure/05-nativeaot.html).
 
-Row materializers are generated at build time for projection types marked `[RowMaterializer]`
-(`[SqlTable]` entities are covered automatically), so a prepared query keeps compiled-class
+Row materializers are generated at build time for every projection type in the assembly — named
+types, record DTOs and anonymous types alike — so a prepared query keeps compiled-class
 materialization under AOT instead of falling back to the expression interpreter.
 
 That is the lightest AOT migration contract among the compared libraries. EF Core needs a compiled model
