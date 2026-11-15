@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 
 namespace NextORM.Core;
@@ -18,10 +19,18 @@ public interface IShardRouter : IEntityScopeResolver
     /// <summary>Gets every configured shard identifier, in deterministic ordinal order.</summary>
     IReadOnlyList<string> ShardIds { get; }
 
+    /// <summary>Gets the fixed bucket count; it never depends on the shard count.</summary>
+    int BucketCount { get; }
+
+    /// <summary>Gets the shard that currently owns the supplied bucket.</summary>
+    /// <param name="bucket">A bucket in the range <c>[0, BucketCount)</c>.</param>
+    /// <returns>The owning shard identifier.</returns>
+    string GetShard(int bucket);
+
     /// <summary>Resolves an ordered list of shard-key values to a mapping scope.</summary>
     /// <param name="entityType">The entity type being routed.</param>
     /// <param name="keyValues">The shard-key values in declared property order.</param>
-    /// <returns>The default scope for an unsharded type; otherwise the selected shard scope.</returns>
+    /// <returns>The default scope for an unsharded type; otherwise the selected bucket scope.</returns>
     /// <exception cref="InvalidOperationException">A sharded entity has missing or mismatched key values.</exception>
     MappingScope ResolveShard(Type entityType, IReadOnlyList<object?> keyValues);
 }
@@ -59,6 +68,12 @@ public sealed class ShardRouter : IShardRouter
 
     /// <inheritdoc />
     public IReadOnlyList<string> ShardIds => _topology.ShardIds;
+
+    /// <inheritdoc />
+    public int BucketCount => _topology.Ring.BucketCount;
+
+    /// <inheritdoc />
+    public string GetShard(int bucket) => _topology.Ring.GetShard(bucket);
 
     /// <inheritdoc />
     public MappingScope Resolve(Type entityType)
@@ -102,6 +117,6 @@ public sealed class ShardRouter : IShardRouter
 
         var bytes = ShardKeyHasher.GetCanonicalBytes(keyValues);
         var bucket = _topology.Ring.GetBucket(bytes);
-        return new MappingScope(_topology.Ring.GetShard(bucket));
+        return new MappingScope(bucket.ToString(CultureInfo.InvariantCulture));
     }
 }

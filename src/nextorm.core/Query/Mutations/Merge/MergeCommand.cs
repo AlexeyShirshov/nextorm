@@ -156,7 +156,6 @@ internal sealed class MergeCommand : MutationCommand
     /// </summary>
     public object? SourceRow { get; }
 
-    public MappingScope MappingScope { get; }
 
     /// <summary>
     /// The full-<c>MERGE</c> branches, or <see langword="null"/> for a key upsert. When set, the dialect

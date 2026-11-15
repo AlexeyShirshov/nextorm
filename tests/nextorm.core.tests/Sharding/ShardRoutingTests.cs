@@ -14,36 +14,34 @@ public sealed class ShardRoutingTests
     public void PredicateEquality_ShouldRouteSelectToTheShardTable()
     {
         var topology = CreateTopology();
-        var (tenant, shard) = FindTenant(topology, "east");
+        var (tenant, bucket) = FindTenant(topology, "east");
         using var context = CreateContext(topology);
 
         var sql = PrepareSelect(context, tenant);
 
-        sql.Should().Contain($"ShardedRow_{shard}");
-        sql.Should().Contain("sales.");
-        sql.Should().Contain($"{shard}_");
+        sql.Should().Contain($"ShardedRow_{bucket}");
+        sql.Should().Contain($"{bucket}_");
     }
 
     [Fact]
     public void ExplicitShardKey_ShouldRenderTheShardTable()
     {
         var topology = CreateTopology();
-        var (tenant, shard) = FindTenant(topology, "west");
+        var (tenant, bucket) = FindTenant(topology, "west");
         using var context = CreateContext(topology);
 
         var builder = context.From<ShardedRow>().WithShardKey(tenant).Select(row => row.Id);
         var sql = PrepareSelect(context, builder);
 
-        sql.Should().Contain($"ShardedRow_{shard}");
-        sql.Should().Contain("sales.");
+        sql.Should().Contain($"ShardedRow_{bucket}");
     }
 
     [Fact]
     public void ExplicitScope_ShouldNotBeOverriddenByPredicate()
     {
         var topology = CreateTopology();
-        var (eastTenant, eastShard) = FindTenant(topology, "east");
-        var (westTenant, westShard) = FindTenant(topology, "west");
+        var (eastTenant, eastBucket) = FindTenant(topology, "east");
+        var (westTenant, westBucket) = FindTenant(topology, "west");
         using var context = CreateContext(topology);
 
         var builder = context.From<ShardedRow>()
@@ -52,8 +50,8 @@ public sealed class ShardRoutingTests
             .Select(row => row.Id);
         var sql = PrepareSelect(context, builder);
 
-        sql.Should().Contain($"ShardedRow_{westShard}");
-        sql.Should().NotContain($"ShardedRow_{eastShard}");
+        sql.Should().Contain($"ShardedRow_{westBucket}");
+        sql.Should().NotContain($"ShardedRow_{eastBucket}");
     }
 
     [Fact]
@@ -69,15 +67,14 @@ public sealed class ShardRoutingTests
     public void InsertInstance_ShouldRouteToTheShardTable()
     {
         var topology = CreateTopology();
-        var (tenant, shard) = FindTenant(topology, "east");
+        var (tenant, bucket) = FindTenant(topology, "east");
         using var context = CreateContext(topology);
 
         var sql = context.CreateInsertBuilder<ShardedRow>()
             .Values(new ShardedRow { Id = 1, Tenant = tenant, Name = "row" })
             .ToSql();
 
-        sql.Should().Contain($"ShardedRow_{shard}");
-        sql.Should().Contain("sales.");
+        sql.Should().Contain($"ShardedRow_{bucket}");
     }
 
     [Fact]
@@ -111,14 +108,14 @@ public sealed class ShardRoutingTests
     public void UpdatePredicate_ShouldRouteAndUnroutedUpdateShouldFail()
     {
         var topology = CreateTopology();
-        var (tenant, shard) = FindTenant(topology, "east");
+        var (tenant, bucket) = FindTenant(topology, "east");
         using var context = CreateContext(topology);
 
         var sql = context.CreateUpdateBuilder<ShardedRow>()
             .Set(row => row.Name, "updated")
             .Where(row => row.Tenant == tenant)
             .ToSql();
-        sql.Should().Contain($"ShardedRow_{shard}");
+        sql.Should().Contain($"ShardedRow_{bucket}");
 
         FluentActions.Invoking(() => context.CreateUpdateBuilder<ShardedRow>()
                 .Set(row => row.Name, "updated")
@@ -131,13 +128,13 @@ public sealed class ShardRoutingTests
     public void DeletePredicate_ShouldRouteAndUnroutedDeleteShouldFail()
     {
         var topology = CreateTopology();
-        var (tenant, shard) = FindTenant(topology, "west");
+        var (tenant, bucket) = FindTenant(topology, "west");
         using var context = CreateContext(topology);
 
         var sql = context.CreateDeleteBuilder<ShardedRow>()
             .Where(row => row.Tenant == tenant)
             .ToSql();
-        sql.Should().Contain($"ShardedRow_{shard}");
+        sql.Should().Contain($"ShardedRow_{bucket}");
 
         FluentActions.Invoking(() => context.CreateDeleteBuilder<ShardedRow>()
                 .Where(row => row.Id > 1)
@@ -158,8 +155,8 @@ public sealed class ShardRoutingTests
     public void DifferentShards_ShouldProduceIsolatedSqlAndParameters()
     {
         var topology = CreateTopology();
-        var (eastTenant, eastShard) = FindTenant(topology, "east");
-        var (westTenant, westShard) = FindTenant(topology, "west");
+        var (eastTenant, eastBucket) = FindTenant(topology, "east");
+        var (westTenant, westBucket) = FindTenant(topology, "west");
         using var context = CreateContext(topology);
 
         var eastSql = PrepareSelect(context, eastTenant);
@@ -167,31 +164,32 @@ public sealed class ShardRoutingTests
         var eastAgain = PrepareSelect(context, eastTenant);
 
         eastSql.Should().NotBe(westSql);
-        eastSql.Should().Contain($"ShardedRow_{eastShard}");
-        westSql.Should().Contain($"ShardedRow_{westShard}");
+        eastSql.Should().Contain($"ShardedRow_{eastBucket}");
+        westSql.Should().Contain($"ShardedRow_{westBucket}");
         eastAgain.Should().Be(eastSql);
     }
 
     private static ShardTopology CreateTopology()
     {
-        var topology = new ShardTopology();
-        topology.AddShard("east", "sales");
-        topology.AddShard("west", "sales");
+        var topology = new ShardTopology(4096);
+        topology.AddShard("east", "Server=east");
+        topology.AddShard("west", "Server=west");
         return topology;
     }
 
     private static SqliteDataContext CreateContext(ShardTopology topology)
         => new("Data Source=:memory:", new DataContextBuilder().UseSharding(topology));
 
-    private static (string Tenant, string Shard) FindTenant(ShardTopology topology, string desiredShard)
+    private static (string Tenant, int Bucket) FindTenant(ShardTopology topology, string desiredShard)
     {
         var router = new ShardRouter(topology);
-        for (var index = 0; index < 1000; index++)
+        for (var index = 0; index < 10_000; index++)
         {
             var tenant = $"tenant-{index}";
             var scope = router.ResolveShard(typeof(ShardedRow), [tenant]);
-            if (scope.Key == desiredShard)
-                return (tenant, desiredShard);
+            var bucket = int.Parse(scope.Key!, System.Globalization.CultureInfo.InvariantCulture);
+            if (router.GetShard(bucket) == desiredShard)
+                return (tenant, bucket);
         }
 
         throw new InvalidOperationException($"No tenant mapped to shard '{desiredShard}'.");

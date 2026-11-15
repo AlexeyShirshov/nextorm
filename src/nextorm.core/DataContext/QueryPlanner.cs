@@ -1027,7 +1027,10 @@ internal sealed class QueryPlanner : IQueryPlanner
             {
                 SequentialAccess = sequentialAccess,
                 Cache = cache,
-            });
+            })
+            {
+                MappingScope = queryCommand.MappingScope,
+            };
 
             // Attach the policy the planning dialect resolved and, when the statement is planner-rendered,
             // the immutable occurrence template. The policy is attached even without a template because it

@@ -1,8 +1,9 @@
+using System.Globalization;
 using System.Reflection;
 
 namespace NextORM.Core;
 
-/// <summary>Decorates entity metadata with the physical placement selected by a shard scope.</summary>
+/// <summary>Decorates entity metadata with the physical placement selected by a bucket scope.</summary>
 public sealed class ShardEntityMetadataProvider : IEntityMetadataProvider
 {
     private readonly IEntityMetadataProvider _inner;
@@ -10,7 +11,7 @@ public sealed class ShardEntityMetadataProvider : IEntityMetadataProvider
 
     /// <summary>Creates a shard-aware metadata provider that preserves an existing provider.</summary>
     /// <param name="inner">The provider that supplies base entity metadata and column names.</param>
-    /// <param name="topology">The topology that supplies per-shard placements.</param>
+    /// <param name="topology">The topology that supplies the bucket count and the placement mode.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public ShardEntityMetadataProvider(IEntityMetadataProvider inner, IShardTopology topology)
     {
@@ -27,21 +28,41 @@ public sealed class ShardEntityMetadataProvider : IEntityMetadataProvider
         if (scope == MappingScope.Default)
             return _inner.GetMetadata(entityType, scope);
 
-        var defaultScope = MappingScope.Default;
-        var metadata = _inner.GetMetadata(entityType, defaultScope);
-        var shardId = scope.Key;
-        if (string.IsNullOrEmpty(shardId))
-            throw new InvalidOperationException("A non-default shard scope must contain a shard id.");
-
-        var placement = _topology.GetPlacement(entityType, shardId);
-        var tableName = placement.TableName
-            ?? (metadata.TableName is null ? null : $"{metadata.TableName}_{shardId}");
-        return new ShardMetadata(metadata, placement.Schema ?? metadata.Schema, tableName);
+        var bucket = ParseBucket(scope.Key, _topology.Ring.BucketCount);
+        var metadata = _inner.GetMetadata(entityType, MappingScope.Default);
+        return _topology.PlacementMode switch
+        {
+            BucketPlacementMode.SchemaPerBucket => new ShardMetadata(
+                metadata,
+                metadata.Schema is null or "" ? $"bucket_{bucket}" : $"{metadata.Schema}_{bucket}",
+                metadata.TableName),
+            _ => new ShardMetadata(
+                metadata,
+                metadata.Schema,
+                metadata.TableName is null ? null : $"{metadata.TableName}_{bucket}"),
+        };
     }
 
     /// <inheritdoc />
     public string GetColumnName(PropertyInfo property, in MappingScope scope, INamingConvention? convention)
         => _inner.GetColumnName(property, scope, convention);
+
+    private static int ParseBucket(string? scopeKey, int bucketCount)
+    {
+        if (string.IsNullOrEmpty(scopeKey))
+            throw new InvalidOperationException("A non-default bucket scope must contain a bucket number.");
+
+        if (!int.TryParse(scopeKey, NumberStyles.None, CultureInfo.InvariantCulture, out var bucket))
+            throw new InvalidOperationException($"The mapping scope key '{scopeKey}' is not a bucket number.");
+
+        if ((uint)bucket >= (uint)bucketCount)
+        {
+            throw new InvalidOperationException(
+                $"The mapping scope key '{scopeKey}' is outside [0, {bucketCount}).");
+        }
+
+        return bucket;
+    }
 
     private sealed class ShardMetadata(IEntityMetadata inner, string? schema, string? tableName) : IEntityMetadata
     {

@@ -24,5 +24,4 @@ internal sealed class TruncateCommand : MutationCommand
 
     /// <summary>Whether <see cref="TableName"/> was auto-derived and the naming convention applies to it.</summary>
     public bool IsTableNameAuto { get; }
-    public MappingScope MappingScope { get; }
 }

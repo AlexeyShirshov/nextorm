@@ -10,9 +10,9 @@ public sealed class ShardParityTests
     public void UnshardedEntity_ShouldKeepSqlAndParameterNamesWithUseSharding()
     {
         var plain = CreateContext(new DataContextBuilder());
-        var topology = new ShardTopology();
-        topology.AddShard("east");
-        topology.AddShard("west");
+        var topology = new ShardTopology(4096);
+        topology.AddShard("east", "Server=east");
+        topology.AddShard("west", "Server=west");
         var sharded = CreateContext(new DataContextBuilder().UseSharding(topology));
         using (plain)
         using (sharded)

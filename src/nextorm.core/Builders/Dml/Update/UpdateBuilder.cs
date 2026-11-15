@@ -288,8 +288,29 @@ public sealed class UpdateBuilder<TEntity>
             throw new InvalidOperationException("An update needs at least one assignment; call Set(...) or Set(entity).");
 
         var source = FilterSource().ToCommand();
-        return new UpdateCommand(typeof(TEntity), _targetMetadata.TableName!, _targetMetadata.IsTableNameAuto, _assignments, source, keys, dynamicColumns: _dynamicColumns, tableSchema: _targetMetadata.Schema);
+        return CreateCommand(source, keys);
     }
+
+    /// <summary>
+    /// Builds the update command for <paramref name="source"/>, carrying the mapping scope the statement
+    /// must execute under. The source command resolves a shard scope from its predicate when the builder
+    /// carries no explicit scope, and the renderer reads the source's scope while the executor reads the
+    /// command's own: both have to name the same bucket.
+    /// </summary>
+    /// <param name="source">The command that carries the <c>SET</c> target's <c>WHERE</c>.</param>
+    /// <param name="keys">The key equalities of the key form, or <see langword="null"/>.</param>
+    /// <param name="returningColumns">The mapped columns to return, or <see langword="null"/>.</param>
+    /// <param name="outputInto">The <c>OUTPUT ... INTO</c> target, or <see langword="null"/>.</param>
+    /// <returns>The update command.</returns>
+    private UpdateCommand CreateCommand(
+        QueryCommand source,
+        IReadOnlyList<KeyValue>? keys,
+        IReadOnlyList<IPropertyMetadata>? returningColumns = null,
+        OutputIntoClause? outputInto = null)
+        => new(typeof(TEntity), _targetMetadata.TableName!, _targetMetadata.IsTableNameAuto, _assignments, source, keys, returningColumns, outputInto, _dynamicColumns, _targetMetadata.Schema)
+        {
+            MappingScope = _mappingScope != MappingScope.Default ? _mappingScope : source.MappingScope,
+        };
 
     /// <summary>Builds the update command for use as a side-effecting step of a batch.</summary>
     /// <returns>The update command.</returns>
@@ -305,7 +326,7 @@ public sealed class UpdateBuilder<TEntity>
             throw new InvalidOperationException("An update needs at least one assignment; call Set(...) or Set(entity).");
 
         var source = FilterSource().ToCommand();
-        return new UpdateCommand(typeof(TEntity), _targetMetadata.TableName!, _targetMetadata.IsTableNameAuto, _assignments, source, null, returningColumns, outputInto, _dynamicColumns, _targetMetadata.Schema);
+        return CreateCommand(source, null, returningColumns, outputInto);
     }
 
     /// <summary>Builds the update command for an <c>OUTPUT ... INTO</c>-only terminal: the updated rows are written into the target and nothing is returned to the client.</summary>
@@ -317,7 +338,7 @@ public sealed class UpdateBuilder<TEntity>
             throw new InvalidOperationException("An update needs at least one assignment; call Set(...) or Set(entity).");
 
         var source = FilterSource().ToCommand();
-        return new UpdateCommand(typeof(TEntity), _targetMetadata.TableName!, _targetMetadata.IsTableNameAuto, _assignments, source, null, null, outputInto, _dynamicColumns, _targetMetadata.Schema);
+        return CreateCommand(source, null, outputInto: outputInto);
     }
 
     // The source command that carries the UPDATE's WHERE and drives the assignments. It always carries

@@ -49,6 +49,12 @@ internal abstract class MutationCommand
     /// <summary>The CLR entity type targeted by the mutation.</summary>
     public Type EntityType { get; }
 
+    /// <summary>
+    /// The mapping scope (bucket) the mutation was built for; it selects the shard connection that
+    /// executes the statement. The default scope keeps the context connection.
+    /// </summary>
+    internal MappingScope MappingScope { get; set; } = MappingScope.Default;
+
 
     /// <summary>
     /// The mapped columns the statement returns through <c>RETURNING</c>/<c>OUTPUT</c>, or
@@ -307,6 +313,4 @@ internal sealed class InsertCommand : MutationCommand
     /// </summary>
     public bool IsBulkReturning { get; }
 
-    /// <summary>The runtime mapping scope selected for the insert target.</summary>
-    internal MappingScope MappingScope { get; init; }
 }

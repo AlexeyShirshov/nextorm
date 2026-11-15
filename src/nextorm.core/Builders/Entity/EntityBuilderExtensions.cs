@@ -298,6 +298,12 @@ public static class EntityBuilderExtensions
         if (NativeAnyRoute.TryExecute(builder, @params, out var native))
             return native;
 
+        // A shard-scoped builder renders its bucket's table names and runs on that bucket's connection. The
+        // context-wide Any command is a single shared instance carrying one MappingScope, so reusing it for a
+        // second bucket would render and execute the first bucket's statement; a scoped call builds its own.
+        if (builder.IsShardScoped)
+            return ExecuteScopedAny(builder, @params);
+
         var cmd = builder.ToParentCommand();
         cmd.IgnoreColumns = true;
         var queryCommand = GetAnyCommand(builder.DataProvider, cmd);
@@ -328,12 +334,54 @@ public static class EntityBuilderExtensions
         if (NativeAnyRoute.TryExecuteAsync(builder, cancellationToken, @params, out var native))
             return await native.ConfigureAwait(false);
 
+        // Shard-scoped calls never share the context-wide Any command; see AnyCore.
+        if (builder.IsShardScoped)
+            return await ExecuteScopedAnyAsync(builder, cancellationToken, @params).ConfigureAwait(false);
+
         var cmd = builder.ToParentCommand();
         cmd.IgnoreColumns = true;
         var queryCommand = GetAnyCommand(builder.DataProvider, cmd);
         var preparedCommand = builder.DataProvider.GetPreparedQueryCommand(queryCommand, false, true, cancellationToken);
         NativeAnyRoute.Publish(builder, preparedCommand);
         return await builder.DataProvider.ExecuteScalar<bool>(preparedCommand, @params, true, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Evaluates <c>EXISTS</c> for a shard-scoped builder on a command of its own, so the bucket's scope
+    /// reaches both the rendered table names and the connection the statement runs on.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The builder carrying the bucket scope.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns><see langword="true"/> when the bucket has at least one matching row.</returns>
+    private static bool ExecuteScopedAny<TEntity>(EntityBuilder<TEntity> builder, ReadOnlySpan<object?> @params)
+    {
+        var preparedCommand = PrepareScopedAny(builder);
+        return builder.DataProvider.ExecuteScalar<bool>(preparedCommand, @params, true);
+    }
+
+    /// <summary>Asynchronous twin of <c>ExecuteScopedAny</c>.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The builder carrying the bucket scope.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is whether the bucket has at least one matching row.</returns>
+    private static Task<bool> ExecuteScopedAnyAsync<TEntity>(
+        EntityBuilder<TEntity> builder, CancellationToken cancellationToken, object[] @params)
+    {
+        var preparedCommand = PrepareScopedAny(builder);
+        return builder.DataProvider.ExecuteScalar<bool>(preparedCommand, @params, true, cancellationToken);
+    }
+
+    /// <summary>Builds and prepares a private <c>EXISTS</c> command carrying the builder's bucket scope.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The builder carrying the bucket scope.</param>
+    /// <returns>The prepared command bound to the bucket's scope.</returns>
+    private static IPreparedQueryCommand<bool> PrepareScopedAny<TEntity>(EntityBuilder<TEntity> builder)
+    {
+        var queryCommand = AnyCommand(builder);
+        queryCommand.MappingScope = builder.MappingScope;
+        return builder.DataProvider.GetPreparedQueryCommand(queryCommand, false, true, CancellationToken.None);
     }
 
     /// <summary>
@@ -2654,6 +2702,12 @@ public static class EntityBuilderExtensions
         // The builder must prove that nothing besides the entity source and the terminal projection can
         // shape the statement.
         if (!builder.IsPlainScalarScope)
+            return false;
+
+        // A shard-scoped builder aggregates one bucket: its artifact would render that bucket's table names
+        // and run on that bucket's connection. The key holds no scope, so a second bucket would replay the
+        // first bucket's prepared statement; scoped terminals take the ordinary per-call path instead.
+        if (builder.IsShardScoped)
             return false;
 
         // Metadata-only applicability probe: a global/builder filter injects a predicate during

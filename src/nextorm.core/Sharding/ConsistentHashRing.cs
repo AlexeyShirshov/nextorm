@@ -3,73 +3,102 @@ using System.Text;
 
 namespace NextORM.Core;
 
-/// <summary>Maps keys to stable integer buckets and buckets to shard identifiers.</summary>
+/// <summary>Maps keys to stable buckets and buckets to shard identifiers.</summary>
 public interface IConsistentHashRing
 {
-    /// <summary>Gets the number of stable buckets represented by the ring.</summary>
+    /// <summary>Gets the fixed number of buckets; it never depends on the shard count.</summary>
     int BucketCount { get; }
 
-    /// <summary>Gets the version, incremented whenever shard membership changes.</summary>
+    /// <summary>Gets the ring version, incremented whenever shard membership changes.</summary>
     int Version { get; }
+
+    /// <summary>Gets the configured shard identifiers in ordinal order.</summary>
+    IReadOnlyList<string> ShardIds { get; }
 
     /// <summary>Maps the supplied key bytes to a stable bucket.</summary>
     /// <param name="key">The canonical key bytes.</param>
     /// <returns>A bucket in the range <c>[0, BucketCount)</c>.</returns>
+    /// <exception cref="InvalidOperationException">The ring has no configured shards.</exception>
     int GetBucket(ReadOnlySpan<byte> key);
 
     /// <summary>Gets the shard currently owning a bucket.</summary>
     /// <param name="bucket">A bucket in the range <c>[0, BucketCount)</c>.</param>
     /// <returns>The owning shard identifier.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The bucket is outside the configured range.</exception>
+    /// <exception cref="InvalidOperationException">The ring has no configured shards.</exception>
     string GetShard(int bucket);
-
-    /// <summary>Gets the configured shard identifiers in ordinal order.</summary>
-    IReadOnlyList<string> ShardIds { get; }
 }
 
-/// <summary>Implements a deterministic consistent-hash ring with virtual nodes and fixed buckets.</summary>
+/// <summary>Maps canonical shard-key bytes to a bucket index.</summary>
+/// <param name="key">The canonical key bytes.</param>
+/// <param name="bucketCount">The ring's configured bucket count.</param>
+/// <returns>A bucket index in the range <c>[0, bucketCount)</c>.</returns>
+public delegate int BucketHash(ReadOnlySpan<byte> key, int bucketCount);
+
+/// <summary>Scores one <paramref name="bucket"/> / <paramref name="shardId"/> pair for rendezvous hashing.</summary>
+/// <param name="bucket">The bucket being assigned.</param>
+/// <param name="shardId">The candidate shard identifier.</param>
+/// <returns>The score; the highest score among the configured shards wins the bucket.</returns>
+public delegate ulong ShardHash(int bucket, string shardId);
+
+/// <summary>
+/// Maps buckets to shards with rendezvous hashing: adding a shard takes over only the buckets it wins, and
+/// removing a shard returns its buckets to their previous owners. No virtual nodes are involved.
+/// </summary>
 public sealed class ConsistentHashRing : IConsistentHashRing
 {
     private readonly object _gate = new();
-    private readonly int _virtualNodesPerShard;
+    private readonly int _bucketCount;
+    private readonly BucketHash _bucketHash;
+    private readonly ShardHash _shardHash;
     private string[] _shardIds;
     private IReadOnlyList<string> _readOnlyShardIds;
     private string[] _bucketOwners;
     private int _version;
 
-    /// <summary>Creates a ring over a non-empty set of shard identifiers.</summary>
+    /// <summary>
+    /// Creates a ring over a non-empty set of shard identifiers. The bucket count is chosen by the caller and
+    /// never defaulted; a custom hash function may replace either stage, but it must be deterministic across
+    /// processes and restarts, because routing is stored in the data and not in the process.
+    /// </summary>
     /// <param name="shardIds">The initial shard identifiers.</param>
-    /// <param name="virtualNodesPerShard">The number of virtual nodes created for each shard.</param>
     /// <param name="bucketCount">The number of stable buckets exposed by the ring.</param>
+    /// <param name="bucketHash">The key-to-bucket hash, or <see langword="null"/> for the built-in FNV-1a selector.</param>
+    /// <param name="shardHash">The bucket-to-shard score, or <see langword="null"/> for the built-in avalanche score.</param>
     /// <exception cref="ArgumentNullException"><paramref name="shardIds"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="shardIds"/> is empty, contains an empty id, or contains duplicates.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="virtualNodesPerShard"/> or <paramref name="bucketCount"/> is not positive.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="bucketCount"/> is not positive.</exception>
     public ConsistentHashRing(
         IEnumerable<string> shardIds,
-        int virtualNodesPerShard = 128,
-        int bucketCount = 4096)
+        int bucketCount,
+        BucketHash? bucketHash = null,
+        ShardHash? shardHash = null)
     {
         ArgumentNullException.ThrowIfNull(shardIds);
-        ValidateConfiguration(virtualNodesPerShard, bucketCount);
+        ValidateBucketCount(bucketCount);
 
-        _virtualNodesPerShard = virtualNodesPerShard;
+        _bucketCount = bucketCount;
+        _bucketHash = bucketHash ?? DefaultBucketHash;
+        _shardHash = shardHash ?? DefaultShardHash;
         _shardIds = ValidateShardIds(shardIds, allowEmpty: false);
         _readOnlyShardIds = Array.AsReadOnly(_shardIds);
-        BucketCount = bucketCount;
-        (_, _bucketOwners) = BuildRingState(_shardIds);
+        _bucketOwners = BuildBucketOwners(_shardIds);
     }
 
-    internal ConsistentHashRing(int virtualNodesPerShard, int bucketCount)
+    internal ConsistentHashRing(int bucketCount, BucketHash? bucketHash = null, ShardHash? shardHash = null)
     {
-        ValidateConfiguration(virtualNodesPerShard, bucketCount);
-        _virtualNodesPerShard = virtualNodesPerShard;
+        ValidateBucketCount(bucketCount);
+
+        _bucketCount = bucketCount;
+        _bucketHash = bucketHash ?? DefaultBucketHash;
+        _shardHash = shardHash ?? DefaultShardHash;
         _shardIds = [];
         _readOnlyShardIds = Array.AsReadOnly(_shardIds);
         _bucketOwners = [];
-        BucketCount = bucketCount;
     }
 
     /// <inheritdoc />
-    public int BucketCount { get; }
+    public int BucketCount => _bucketCount;
 
     /// <inheritdoc />
     public int Version
@@ -91,9 +120,9 @@ public sealed class ConsistentHashRing : IConsistentHashRing
         }
     }
 
-    /// <summary>Adds a shard and rebuilds the ring using the same deterministic hash basis.</summary>
+    /// <summary>Adds a shard; it takes over only the buckets it wins in the rendezvous hash.</summary>
     /// <param name="shardId">The identifier to add.</param>
-    /// <exception cref="ArgumentException"><paramref name="shardId"/> is empty or already configured.</exception>
+    /// <exception cref="ArgumentException">The identifier is empty or already configured.</exception>
     public void AddShard(string shardId)
     {
         ValidateShardId(shardId, nameof(shardId));
@@ -110,7 +139,7 @@ public sealed class ConsistentHashRing : IConsistentHashRing
         }
     }
 
-    /// <summary>Removes a shard and rebuilds the ring.</summary>
+    /// <summary>Removes a shard; its buckets return to the shards that owned them before it was added.</summary>
     /// <param name="shardId">The identifier to remove.</param>
     /// <exception cref="ArgumentException">The identifier is empty, absent, or its removal would leave no shards.</exception>
     public void RemoveShard(string shardId)
@@ -141,14 +170,21 @@ public sealed class ConsistentHashRing : IConsistentHashRing
             if (_shardIds.Length == 0)
                 throw new InvalidOperationException("The ring has no configured shards.");
 
-            return (int)(ShardKeyHasher.HashBytes(key) % (uint)BucketCount);
+            var bucket = _bucketHash(key, _bucketCount);
+            if ((uint)bucket >= (uint)_bucketCount)
+            {
+                throw new InvalidOperationException(
+                    $"The configured bucket hash returned {bucket}, which is outside [0, {_bucketCount}).");
+            }
+
+            return bucket;
         }
     }
 
     /// <inheritdoc />
     public string GetShard(int bucket)
     {
-        if ((uint)bucket >= (uint)BucketCount)
+        if ((uint)bucket >= (uint)_bucketCount)
             throw new ArgumentOutOfRangeException(nameof(bucket), bucket, "Bucket must be within the ring's configured range.");
 
         lock (_gate)
@@ -161,68 +197,66 @@ public sealed class ConsistentHashRing : IConsistentHashRing
 
     private void ApplyShardIds(string[] shardIds)
     {
-        var (nodes, bucketOwners) = BuildRingState(shardIds);
+        var bucketOwners = BuildBucketOwners(shardIds);
         _shardIds = shardIds;
         _readOnlyShardIds = Array.AsReadOnly(shardIds);
         _bucketOwners = bucketOwners;
         _version = unchecked(_version + 1);
     }
 
-    private (VirtualNode[] Nodes, string[] BucketOwners) BuildRingState(string[] shardIds)
+    private string[] BuildBucketOwners(string[] shardIds)
     {
         if (shardIds.Length == 0)
-            return ([], []);
+            return [];
 
-        var nodeCount = checked(shardIds.Length * _virtualNodesPerShard);
-        var nodes = new VirtualNode[nodeCount];
-        var nodeIndex = 0;
-        foreach (var shardId in shardIds)
+        var owners = new string[_bucketCount];
+        for (var bucket = 0; bucket < _bucketCount; bucket++)
         {
-            var shardBytes = Encoding.UTF8.GetBytes(shardId);
-            var input = new byte[sizeof(int) + shardBytes.Length + sizeof(int)];
-            BinaryPrimitives.WriteInt32LittleEndian(input, shardBytes.Length);
-            shardBytes.CopyTo(input.AsSpan(sizeof(int)));
-            for (var virtualNode = 0; virtualNode < _virtualNodesPerShard; virtualNode++)
+            var bestShard = shardIds[0];
+            var bestScore = _shardHash(bucket, bestShard);
+            for (var index = 1; index < shardIds.Length; index++)
             {
-                BinaryPrimitives.WriteInt32LittleEndian(input.AsSpan(sizeof(int) + shardBytes.Length), virtualNode);
-                nodes[nodeIndex++] = new VirtualNode(
-                    ShardKeyHasher.HashBytes(input), shardId, virtualNode);
+                var score = _shardHash(bucket, shardIds[index]);
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestShard = shardIds[index];
+                }
             }
+
+            owners[bucket] = bestShard;
         }
 
-        Array.Sort(nodes, static (left, right) =>
-        {
-            var byPosition = left.Position.CompareTo(right.Position);
-            if (byPosition != 0)
-                return byPosition;
-            var byShard = StringComparer.Ordinal.Compare(left.ShardId, right.ShardId);
-            return byShard != 0 ? byShard : left.Index.CompareTo(right.Index);
-        });
-
-        var bucketOwners = new string[BucketCount];
-        for (var bucket = 0; bucket < bucketOwners.Length; bucket++)
-        {
-            var position = (ulong)(((UInt128)(uint)bucket << 64) / (uint)BucketCount);
-            bucketOwners[bucket] = nodes[FindSuccessor(nodes, position)].ShardId;
-        }
-
-        return (nodes, bucketOwners);
+        return owners;
     }
 
-    private static int FindSuccessor(VirtualNode[] nodes, ulong position)
-    {
-        var low = 0;
-        var high = nodes.Length;
-        while (low < high)
-        {
-            var middle = low + ((high - low) / 2);
-            if (nodes[middle].Position < position)
-                low = middle + 1;
-            else
-                high = middle;
-        }
+    private static int DefaultBucketHash(ReadOnlySpan<byte> key, int bucketCount)
+        => (int)(ShardKeyHasher.HashBytes(key) % (uint)bucketCount);
 
-        return low == nodes.Length ? 0 : low;
+    private static ulong DefaultShardHash(int bucket, string shardId)
+    {
+        var byteCount = Encoding.UTF8.GetByteCount(shardId);
+        Span<byte> input = byteCount <= 256
+            ? stackalloc byte[sizeof(int) + byteCount]
+            : new byte[sizeof(int) + byteCount];
+        BinaryPrimitives.WriteInt32LittleEndian(input, bucket);
+        Encoding.UTF8.GetBytes(shardId, input[sizeof(int)..]);
+        return Mix(ShardKeyHasher.HashBytes(input));
+    }
+
+    /// <summary>
+    /// Finalizes the hash with a 64-bit avalanche (murmur3 <c>fmix64</c>). Rendezvous hashing compares scores
+    /// across shard ids for the same bucket, so weak diffusion in the raw hash would let one shard win
+    /// systematically and skew the ownership split.
+    /// </summary>
+    private static ulong Mix(ulong value)
+    {
+        value ^= value >> 33;
+        value *= 0xFF51AFD7ED558CCDUL;
+        value ^= value >> 33;
+        value *= 0xC4CEB9FE1A85EC53UL;
+        value ^= value >> 33;
+        return value;
     }
 
     private static string[] ValidateShardIds(IEnumerable<string> shardIds, bool allowEmpty)
@@ -250,13 +284,9 @@ public sealed class ConsistentHashRing : IConsistentHashRing
             throw new ArgumentException("Shard ids must not be empty.", parameterName);
     }
 
-    private static void ValidateConfiguration(int virtualNodesPerShard, int bucketCount)
+    private static void ValidateBucketCount(int bucketCount)
     {
-        if (virtualNodesPerShard <= 0)
-            throw new ArgumentOutOfRangeException(nameof(virtualNodesPerShard), virtualNodesPerShard, "Virtual node count must be positive.");
         if (bucketCount <= 0)
             throw new ArgumentOutOfRangeException(nameof(bucketCount), bucketCount, "Bucket count must be positive.");
     }
-
-    private readonly record struct VirtualNode(ulong Position, string ShardId, int Index);
 }
