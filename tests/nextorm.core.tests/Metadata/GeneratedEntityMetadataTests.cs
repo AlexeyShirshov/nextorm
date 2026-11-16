@@ -71,6 +71,23 @@ public sealed class GeneratedEntityMetadataTests
         => AssertSameMetadata<GenCompositeParent>();
 
     [Fact]
+    public void GeneratedDescription_ShouldMatchReflectiveAutoBuild_ForABaseTypeMapping()
+        => AssertSameMetadata<GenInheritanceEntity>();
+
+    [Fact]
+    public void GeneratedDescription_ShouldMatchReflectiveAutoBuild_ForAnInheritedTableName()
+        => AssertSameMetadata<GenInheritedTableEntity>();
+
+    [Fact]
+    public void GeneratedDescription_ShouldMatchReflectiveAutoBuild_ForAnInheritedNavigation()
+        => AssertSameMetadata<GenInheritanceNavEntity>();
+
+    [Fact]
+    public void TypeWithAHiddenBaseMember_ShouldKeepTheReflectivePath()
+        => GeneratedEntityMetadata.TryGet(typeof(GenHidingEntity), out _).Should().BeFalse(
+            "the flattened enumeration returns a hidden base property twice, which the generated description does not reproduce");
+
+    [Fact]
     public void GeneratedConverter_ShouldBeConstructedFromGeneratedCode()
     {
         GeneratedEntityMetadata.TryGet(typeof(GenConverted), out var factory).Should().BeTrue();
@@ -459,6 +476,81 @@ public sealed class GenRelationshipChildMapped
 
     [Relationship(ForeignKey = nameof(ParentId))]
     public GenRelationshipParentMapped? Parent { get; set; }
+}
+
+/// <summary>
+/// A base entity: the key, a virtual mapped column and a keyed query filter live here, so the derived
+/// mapping has to read the column attribute through the override and apply the filters base-first.
+/// </summary>
+public abstract class GenInheritanceRoot
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("root_name")]
+    public virtual string? Name { get; set; }
+
+    public static Expression<Func<GenInheritanceRoot, bool>> RootFilter => entity => entity.Id > 0;
+}
+
+[SqlTable("gen_inheritance")]
+[QueryFilter(FilterKey = "active", FilterLambda = nameof(DerivedFilter))]
+public sealed class GenInheritanceEntity : GenInheritanceRoot
+{
+    [Column("child_value")]
+    public int Value { get; set; }
+
+    /// <summary>An override without attributes: the column mapping is read through to the base declaration.</summary>
+    public override string? Name { get; set; }
+
+    public static Expression<Func<GenInheritanceEntity, bool>> DerivedFilter => entity => entity.Value > 1;
+}
+
+/// <summary>The table name is declared on the base type only; the type attribute is inherited.</summary>
+[SqlTable("gen_inherited_table")]
+public abstract class GenInheritedTableRoot
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+}
+
+public sealed class GenInheritedTableEntity : GenInheritedTableRoot
+{
+    [Column("label")]
+    public string? Label { get; set; }
+}
+
+/// <summary>A navigation declared on the base class is part of the derived entity's mapping.</summary>
+public abstract class GenInheritanceNavRoot
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Relationship(ForeignKey = nameof(GenRelationshipChild.ParentId))]
+    public ICollection<GenRelationshipChild> Children { get; } = new List<GenRelationshipChild>();
+}
+
+[SqlTable("gen_inheritance_nav")]
+public sealed class GenInheritanceNavEntity : GenInheritanceNavRoot
+{
+    [Column("label")]
+    public string? Label { get; set; }
+}
+
+/// <summary>A base property hidden rather than overridden: the reflective enumeration returns both.</summary>
+public abstract class GenHidingRoot
+{
+    [Column("root_value")]
+    public int Value { get; set; }
+}
+
+[SqlTable("gen_hiding")]
+public sealed class GenHidingEntity : GenHidingRoot
+{
+    public new int Value { get; set; }
 }
 
 public sealed class GenCompositeChild

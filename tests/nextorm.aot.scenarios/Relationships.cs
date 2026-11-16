@@ -4,13 +4,20 @@ using NextORM.Core;
 
 namespace NextORM.AotScenarios;
 
-[SqlTable("person")]
-public sealed class AotRelCustomer
+/// <summary>
+/// The key of both relationship fixtures lives on the base type, so the shape also proves that a mapping
+/// described at compile time covers the base chain rather than only the declaring type.
+/// </summary>
+public abstract class AotRelEntity
 {
     [Key]
     [Column("id")]
     public int Id { get; set; }
+}
 
+[SqlTable("person")]
+public sealed class AotRelCustomer : AotRelEntity
+{
     [Column("name")]
     public string? Name { get; set; }
 
@@ -19,12 +26,8 @@ public sealed class AotRelCustomer
 }
 
 [SqlTable("orders")]
-public sealed class AotRelOrder
+public sealed class AotRelOrder : AotRelEntity
 {
-    [Key]
-    [Column("id")]
-    public int Id { get; set; }
-
     [Column("buyer_id")]
     public int BuyerId { get; set; }
 

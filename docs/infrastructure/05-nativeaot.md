@@ -22,8 +22,9 @@ The standard NativeAOT prerequisites apply: `clang`, `zlib1g-dev` and a native t
 
 Entity mappings are compiled as well: the package ships a source generator that describes every
 `[SqlTable]`/`[Table]` entity declared in your assembly — table, columns, keys, precision, collation,
-durations, range pairs, query filters and value/JSON converters — so building a mapping reads that
-description instead of reflecting over the entity's members. A type outside that coverage keeps the
+durations, range pairs, query filters, value/JSON converters and relationship navigations, across the
+type's base classes — so building a mapping reads that description instead of reflecting over the
+entity's members. A type outside that coverage keeps the
 reflective path, so nothing has to be registered or opted in.
 
 ## What is supported

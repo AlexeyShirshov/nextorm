@@ -13,11 +13,12 @@ namespace NextORM.Core.SourceGenerator;
 /// build the mapping without reflecting over the entity's members.
 /// <para>
 /// The description is the same data the reflective auto-build derives from attributes: the table name,
-/// the mapped columns, keys and identity/computed flags. The generator is deliberately conservative —
-/// a type that uses a construct it does not reproduce exactly (a relationship, a query filter, a value or
-/// JSON converter, a range pair, a duration or decimal-precision mapping, inheritance, a generic or
-/// nested-in-generic declaration) is simply not covered, and the runtime keeps the reflective path for
-/// it. Coverage therefore grows by widening this description, never by guessing.
+/// the mapped columns, keys and identity/computed flags, query filters and relationship navigations, over
+/// the type's base chain. The generator is deliberately conservative — a type that uses a construct it
+/// does not reproduce exactly (an attribute it does not model, a range pair it cannot pair, a converter it
+/// cannot settle at compile time, a hidden member, a generic or nested-in-generic declaration) is simply
+/// not covered, and the runtime keeps the reflective path for it. Coverage therefore grows by widening this
+/// description, never by guessing.
 /// </para>
 /// <para>
 /// Run-time mappings are unaffected: a fluent <c>From&lt;T&gt;(cfg =&gt; ...)</c> mapping, an EF Core
@@ -332,49 +333,63 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
         if (!IsAccessibleInsideAssembly(symbol))
             return null;
 
-        // Inheritance changes which properties are visible (FlattenHierarchy) and lets an attribute on a
-        // base interface win, so the reflective result is not reproducible from this declaration alone.
-        if (symbol.TypeKind == TypeKind.Class && symbol.BaseType is { SpecialType: not SpecialType.System_Object })
-            return null;
+        // A base interface changes which members the flattened enumeration returns, so it keeps the
+        // reflective path; a class hierarchy is described level by level below.
         if (symbol.TypeKind == TypeKind.Interface && symbol.Interfaces.Length != 0)
             return null;
 
-        var typeAttributes = symbol.GetAttributes();
+        // The base chain, most derived first. Every level has to be a type this description can name, because
+        // the flattened property enumeration and the attribute inheritance both reach into it.
+        var levels = new List<INamedTypeSymbol> { symbol };
+        for (var baseType = symbol.BaseType; baseType is not null && baseType.SpecialType != SpecialType.System_Object; baseType = baseType.BaseType)
+        {
+            if (baseType.TypeKind != TypeKind.Class || !IsAccessibleInsideAssembly(baseType))
+                return null;
+            levels.Add(baseType);
+        }
+
         string? tableName = null;
         var tableNameAuto = true;
         var hasMappingAttribute = false;
         var filters = new List<CoveredFilter>();
 
-        foreach (var attribute in typeAttributes)
+        // A type-level attribute is inherited: GetCustomAttribute(..., inherit: true) returns the nearest
+        // declaration of that attribute type, so each kind is resolved on its own through the chain.
+        var sqlTable = FindInheritedTableName(levels, SqlTableAttribute);
+        var table = FindInheritedTableName(levels, TableAttribute);
+        if ((sqlTable.Found && sqlTable.Name is null) || (table.Found && table.Name is null))
+            return null;
+        if (sqlTable.Found)
         {
-            var name = attribute.AttributeClass?.ToDisplayString() ?? string.Empty;
-            if (name == SqlTableAttribute)
+            tableName = sqlTable.Name;
+            tableNameAuto = false;
+            hasMappingAttribute = true;
+        }
+        else if (table.Found)
+        {
+            tableName = table.Name;
+            tableNameAuto = false;
+            hasMappingAttribute = true;
+        }
+
+        // Filters apply from the base type down to the most derived one, which is the order the reflective
+        // filter chain walks, so a keyed declaration here overrides the inherited one. Any other attribute
+        // this generator does not model keeps the reflective path wherever it is declared.
+        for (var levelIndex = levels.Count - 1; levelIndex >= 0; levelIndex--)
+        {
+            foreach (var attribute in levels[levelIndex].GetAttributes())
             {
-                if (attribute.ConstructorArguments.Length != 1 || attribute.ConstructorArguments[0].Value is not string declared)
+                var name = AttributeName(attribute);
+                if (name == QueryFilterAttribute)
+                {
+                    if (DescribeFilter(levels, attribute) is not { } filter)
+                        return null;
+                    filters.Add(filter);
+                }
+                else if (name is not (SqlTableAttribute or TableAttribute) && IsUnreproducible(name))
+                {
                     return null;
-                tableName = declared;
-                tableNameAuto = false;
-                hasMappingAttribute = true;
-            }
-            else if (name == TableAttribute)
-            {
-                tableName = attribute.ConstructorArguments.Length == 1 && attribute.ConstructorArguments[0].Value is string declared
-                    ? declared
-                    : NamedString(attribute, "Name");
-                if (tableName is null)
-                    return null;
-                tableNameAuto = false;
-                hasMappingAttribute = true;
-            }
-            else if (name == QueryFilterAttribute)
-            {
-                if (DescribeFilter(symbol, attribute) is not { } filter)
-                    return null;
-                filters.Add(filter);
-            }
-            else if (IsUnreproducible(name))
-            {
-                return null;
+                }
             }
         }
 
@@ -429,18 +444,41 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
             }
         }
 
+        // The flattened properties, most derived declaration first - the order GetProperties returns them
+        // in. A same-named declaration further up the chain is either an override, whose mapping attributes
+        // read through to the base declaration, or a hiding declaration that the reflective enumeration
+        // returns twice; that second shape is not reproduced here.
+        var flattened = new List<IPropertySymbol>();
+        var declaredNames = new Dictionary<string, IPropertySymbol>(StringComparer.Ordinal);
+        foreach (var level in levels)
+        {
+            foreach (var member in level.GetMembers())
+            {
+                if (member is not IPropertySymbol property)
+                    continue;
+                if (property.IsStatic || property.IsIndexer)
+                    continue;
+                if (property.DeclaredAccessibility != Accessibility.Public)
+                    continue;
+
+                if (declaredNames.TryGetValue(property.Name, out var derived))
+                {
+                    if (!Overrides(derived, property))
+                        return null;
+                    continue;
+                }
+
+                declaredNames[property.Name] = property;
+                flattened.Add(property);
+            }
+        }
+
         var properties = new List<CoveredProperty>();
         var relationships = new List<CoveredRelationship>();
-        foreach (var member in symbol.GetMembers())
+        foreach (var property in flattened)
         {
-            if (member is not IPropertySymbol property)
-                continue;
-            if (property.IsStatic || property.IsIndexer)
-                continue;
-            if (property.DeclaredAccessibility != Accessibility.Public)
-                continue;
-
-            var attributes = MergeAttributes(property.GetAttributes(), interfaceProperties, property);
+            var inherited = WithInheritedAttributes(property);
+            var attributes = MergeAttributes(inherited, interfaceProperties, property);
             if (attributes is null)
                 return null;
 
@@ -448,7 +486,7 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
             // it reads any other attribute, and so does this description. Only the property's own
             // declaration counts: unlike the column attributes, the reflective relationship scan has no
             // interface fallback.
-            if (property.GetAttributes().FirstOrDefault(attribute => AttributeName(attribute) == RelationshipAttribute) is { } relationshipAttribute)
+            if (inherited.FirstOrDefault(attribute => AttributeName(attribute) == RelationshipAttribute) is { } relationshipAttribute)
             {
                 if (DescribeRelationship(symbol, property, relationshipAttribute) is not { } relationship)
                     return null;
@@ -501,6 +539,69 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
 
         var fullName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty);
         return new CoveredEntity(fullName, tableName ?? symbol.Name, tableNameAuto, Schema: null, symbol.Name, properties, filters, relationships);
+    }
+
+    /// <summary>
+    /// Resolves a type-level table attribute through the inheritance chain: the nearest declaration of that
+    /// attribute type wins, which is what <c>GetCustomAttribute(..., inherit: true)</c> returns.
+    /// </summary>
+    /// <param name="levels">The type and its base types, most derived first.</param>
+    /// <param name="attributeName">The full name of the table attribute.</param>
+    /// <returns>Whether the declaration exists, and the name it carries (<see langword="null"/> when unreadable).</returns>
+    private static (bool Found, string? Name) FindInheritedTableName(IReadOnlyList<INamedTypeSymbol> levels, string attributeName)
+    {
+        foreach (var level in levels)
+        {
+            foreach (var attribute in level.GetAttributes())
+            {
+                if (AttributeName(attribute) != attributeName)
+                    continue;
+                return (true, DeclaredTableName(attributeName, attribute));
+            }
+        }
+
+        return (false, null);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="candidate"/> overrides <paramref name="baseProperty"/> anywhere in its
+    /// override chain, so the flattened enumeration returns the derived member only.
+    /// </summary>
+    private static bool Overrides(IPropertySymbol candidate, IPropertySymbol baseProperty)
+    {
+        for (var current = candidate.OverriddenProperty; current is not null; current = current.OverriddenProperty)
+        {
+            if (SymbolEqualityComparer.Default.Equals(current, baseProperty))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The property's own attributes plus the ones its overridden base declarations carry, the way
+    /// <c>GetCustomAttribute(..., inherit: true)</c> reads through an override: the most derived declaration
+    /// of each attribute type wins and the nearest base declaration fills in the rest.
+    /// </summary>
+    private static ImmutableArray<AttributeData> WithInheritedAttributes(IPropertySymbol property)
+    {
+        if (property.OverriddenProperty is null)
+            return property.GetAttributes();
+
+        var own = property.GetAttributes();
+        var merged = new List<AttributeData>(own.Length);
+        merged.AddRange(own);
+        var declared = new HashSet<string>(own.Select(AttributeName), StringComparer.Ordinal);
+        for (var baseProperty = property.OverriddenProperty; baseProperty is not null; baseProperty = baseProperty.OverriddenProperty)
+        {
+            foreach (var attribute in baseProperty.GetAttributes())
+            {
+                if (declared.Add(AttributeName(attribute)))
+                    merged.Add(attribute);
+            }
+        }
+
+        return ImmutableArray.CreateRange(merged);
     }
 
     /// <summary>
@@ -974,7 +1075,9 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
     /// reproduced: both forms declared (the reflective build throws), a member that is not accessible to
     /// generated code, or a member whose type is not a predicate/function.
     /// </summary>
-    private static CoveredFilter? DescribeFilter(INamedTypeSymbol entity, AttributeData attribute)
+    private static CoveredFilter? DescribeFilter(
+        IReadOnlyList<INamedTypeSymbol> levels,
+        AttributeData attribute)
     {
         var key = NamedString(attribute, "FilterKey");
         var lambdaName = NamedString(attribute, "FilterLambda");
@@ -988,7 +1091,7 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
         if (!hasLambda && !hasFunc)
             return string.IsNullOrWhiteSpace(key) ? null : new CoveredFilter(key, MemberReference: null, IsLambda: false);
 
-        var member = ResolveStaticMember(entity, hasLambda ? lambdaName! : funcName!, expectLambda: hasLambda);
+        var member = ResolveStaticMember(levels, hasLambda ? lambdaName! : funcName!, expectLambda: hasLambda);
         return member is null ? null : new CoveredFilter(key, member, hasLambda);
     }
 
@@ -996,28 +1099,52 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
     /// Names a static field, property or parameterless method of the entity so generated code reads it
     /// directly, replacing the reflective <c>GetMember</c> + <c>GetValue</c>/<c>Invoke</c> lookup.
     /// </summary>
-    private static string? ResolveStaticMember(INamedTypeSymbol entity, string name, bool expectLambda)
+    /// <summary>
+    /// Resolves the static member a filter declaration names, searching the inheritance chain the way
+    /// <c>Type.GetMember(..., FlattenHierarchy)</c> does: a base declaration is referenced through its own
+    /// type. The member is named from generated code, so an inaccessible type or member is not covered.
+    /// </summary>
+    private static string? ResolveStaticMember(IReadOnlyList<INamedTypeSymbol> levels, string name, bool expectLambda)
     {
-        var typeReference = "global::" + entity.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty);
-
-        foreach (var member in entity.GetMembers(name))
+        string? reference = null;
+        foreach (var level in levels)
         {
-            switch (member)
-            {
-                case IPropertySymbol property when property.IsStatic && IsAccessibleToGeneratedCode(property.DeclaredAccessibility):
-                    return DerivesFrom(property.Type, expectLambda ? "System.Linq.Expressions.LambdaExpression" : "System.Delegate")
-                        ? typeReference + "." + property.Name
-                        : null;
-                case IFieldSymbol field when field.IsStatic && IsAccessibleToGeneratedCode(field.DeclaredAccessibility):
-                    return DerivesFrom(field.Type, expectLambda ? "System.Linq.Expressions.LambdaExpression" : "System.Delegate")
-                        ? typeReference + "." + field.Name
-                        : null;
-                case IMethodSymbol method when method.IsStatic && method.Parameters.Length == 0 && !method.IsGenericMethod
-                    && IsAccessibleToGeneratedCode(method.DeclaredAccessibility):
-                    return DerivesFrom(method.ReturnType, expectLambda ? "System.Linq.Expressions.LambdaExpression" : "System.Delegate")
-                        ? typeReference + "." + method.Name + "()"
-                        : null;
-            }
+            var members = level.GetMembers(name);
+            if (members.Length == 0)
+                continue;
+
+            // Two declarations of one name (a hidden static, an overload) leave the winner to the reflection
+            // order, so the type keeps the reflective path.
+            if (reference is not null || members.Length > 1)
+                return null;
+
+            reference = StaticMemberReference(level, members[0], expectLambda);
+            if (reference is null)
+                return null;
+        }
+
+        return reference;
+    }
+
+    private static string? StaticMemberReference(INamedTypeSymbol level, ISymbol member, bool expectLambda)
+    {
+        var typeReference = "global::" + level.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty);
+
+        switch (member)
+        {
+            case IPropertySymbol property when property.IsStatic && IsAccessibleToGeneratedCode(property.DeclaredAccessibility):
+                return DerivesFrom(property.Type, expectLambda ? "System.Linq.Expressions.LambdaExpression" : "System.Delegate")
+                    ? typeReference + "." + property.Name
+                    : null;
+            case IFieldSymbol field when field.IsStatic && IsAccessibleToGeneratedCode(field.DeclaredAccessibility):
+                return DerivesFrom(field.Type, expectLambda ? "System.Linq.Expressions.LambdaExpression" : "System.Delegate")
+                    ? typeReference + "." + field.Name
+                    : null;
+            case IMethodSymbol method when method.IsStatic && method.Parameters.Length == 0 && !method.IsGenericMethod
+                && IsAccessibleToGeneratedCode(method.DeclaredAccessibility):
+                return DerivesFrom(method.ReturnType, expectLambda ? "System.Linq.Expressions.LambdaExpression" : "System.Delegate")
+                    ? typeReference + "." + method.Name + "()"
+                    : null;
         }
 
         return null;
