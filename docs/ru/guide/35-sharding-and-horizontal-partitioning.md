@@ -17,6 +17,14 @@ nextorm умеет разносить один тип сущности по не
 `MappingVariant`, топология оборачивает провайдер метаданных, а роутер его разрешает. Сам механизм
 варианта не зависит от шардирования и описан на отдельной странице.
 
+`IShardTopology : IHostTopology` — шардовая топология не отдельный механизм: она наследует общий контракт
+топологии («дай соединение для этой команды») и добавляет к нему кольцо, шарды и режим размещения —
+ровно так же, как `RoundRobinTopology` является ещё одной такой топологией. `TryGetHost` получает тот же
+`TopologyContext`: бакет приходит в `context.Variant` (туда его положил роутер в роли резолвера
+варианта), кольцо превращает его в идентификатор шарда, а идентификатор — в строку подключения.
+Закреплённый `context.HostId` перекрывает бакет. Без варианта бакета топология команду не заявляет, и та
+остаётся на соединении контекста — тот же `false`, что возвращает любая другая топология.
+
 ## Объявление shard key
 
 Shard key — одно или несколько читаемых свойств экземпляра:
@@ -60,11 +68,19 @@ using var context = new PostgresDataContext(builder);
 ```
 
 Контекст создаётся только из билдера: его собственное соединение берётся у дефолтной топологии, а
-передать в конструктор ещё и строку подключения нельзя. `UseSharding` устанавливает `ShardRouter` в
-качестве резолвера scope и оборачивает текущий провайдер метаданных в шард-осведомлённый декоратор,
-поэтому существующий `IEntityMetadataProvider` продолжает работать. Каждая команда, направленная в
-бакет, выполняется на соединении шарда-владельца, которое контекст открывает лениво, по одному на шард,
-из топологии; дефолтный хост в этом решении не участвует.
+передать в конструктор ещё и строку подключения нельзя. Каждая команда, направленная в бакет,
+выполняется на соединении шарда-владельца, которое контекст открывает лениво, по одному на шард, из
+топологии; дефолтный хост в этом решении не участвует.
+
+`UseSharding` не заводит второй механизм — он собирает шардирование из тех же трёх слоёв:
+
+- **вариант**: `ShardRouter` *становится* `IEntityVariantResolver`, а `ShardEntityMetadataProvider`
+  оборачивает текущий `IEntityMetadataProvider`, поэтому ваш собственный провайдер продолжает работать и
+  по-прежнему обязан делегировать вариант по умолчанию;
+- **маршрутизация**: та же топология регистрируется в таблице топологий (`builder.AddTopology(topology)`)
+  под именем `"sharding"`, а `ShardRouteResolver` — обычное правило `IEntityRouteResolver`, которое
+  забирает шардированные типы и любую команду с вариантом бакета;
+- **шардирование**: что такое бакет, где он лежит физически и что хеширует shard key.
 
 ### Размещение бакета
 
@@ -247,6 +263,10 @@ var shard = router.GetShard(bucket);                              // "pg-2"
 `MappingVariant.Default`. Остальной контракт — `GetShardKey`, `ShardIds`, `BucketCount` — перечислен
 на `IShardRouter`.
 
+Для списка строк ту же работу делает контекст: `GroupByBucket(rows)` разрешает каждый экземпляр и
+возвращает по группе на бакет, в порядке номеров, — с номером `Bucket`, адресующим его `Variant` и
+строками `Rows`.
+
 Строка подключения шарда — это данные топологии, а не маршрутизации: соединение шарда контекст
 открывает сам по идентификатору шарда, и топология нужна только коду, который открывает своё
 ADO.NET-соединение.
@@ -254,18 +274,16 @@ ADO.NET-соединение.
 ### Работа по бакетам и шардам
 
 Запись маршрутизируется по экземпляру, поэтому группе строк бакет не нужно считать вручную — ей нужен
-**один statement на бакет**, потому что бакет — это физическая таблица на шарде. Многострочный insert
-принимает последовательность и пишет её за один round trip; строки разных бакетов в одном insert
+**один statement на бакет**, потому что бакет — это физическая таблица на шарде. `GroupByBucket`
+разрешает каждую строку роутером самого контекста и отдаёт по группе на бакет. Многострочный insert
+принимает строки группы и пишет их за один round trip; строки разных бакетов в одном insert
 отклоняются до SQL, ведь один `INSERT` называет одну таблицу:
 
 ```csharp
-var router = context.GetShardRouter();
-int BucketOf(Order order) => router.GetBucket(order);
-
-foreach (var bucket in orders.GroupBy(BucketOf))
+foreach (var entitiesPerBucket in context.GroupByBucket(orders))
 {
     context.CreateInsertBuilder<Order>()
-        .Values(bucket)              // IEnumerable<TEntity>: один многострочный INSERT на бакет
+        .Values(entitiesPerBucket.Rows)  // один многострочный INSERT на бакет
         .Insert();
 }
 ```
@@ -273,11 +291,11 @@ foreach (var bucket in orders.GroupBy(BucketOf))
 Несколько statement'ов по одному бакету — это батч: одна сессия, один round trip, один вариант.
 
 ```csharp
-foreach (var bucket in orders.GroupBy(BucketOf))
+foreach (var entitiesPerBucket in context.GroupByBucket(orders))
 {
     context.CreateBatchBuilder()
-        .Insert(context.CreateInsertBuilder<Order>().Values(bucket))
-        .Query(context.From<Order>().WithVariant(router.GetScope(bucket.Key)).Select(order => order.Id))
+        .Insert(context.CreateInsertBuilder<Order>().Values(entitiesPerBucket.Rows))
+        .Query(context.From<Order>().WithVariant(entitiesPerBucket.Variant).Select(order => order.Id))
         .ToList();                   // все шаги на шарде этого бакета, за один round trip
 }
 ```
@@ -302,9 +320,13 @@ foreach (var bucket in orders.GroupBy(BucketOf))
 - шард, который собираетесь загружать и хотите держать прогретым.
 
 ```csharp
-foreach (var group in orders.GroupBy(order => router.GetShard(BucketOf(order))))
+var router = context.GetShardRouter();
+var shards = context.GroupByBucket(orders)
+    .GroupBy(entitiesPerBucket => router.GetShard(entitiesPerBucket.Bucket));
+
+foreach (var shard in shards)
 {
-    using var pin = context.PinHost("sharding", group.Key);   // у этой топологии host id — это id шарда
+    using var pin = context.PinHost("sharding", shard.Key);   // у этой топологии host id — это id шарда
     // все команды топологии идут на этот шард, пока блок не закончится
 }
 ```
@@ -386,9 +408,11 @@ var vectors = await context.From<Order>()
 Шардирование — одно правило общей модели маршрутизации. `ShardTopology` реализует `IHostTopology` (см.
 [«Маршрутизация данных по топологиям»](34-routing-data-to-topologies.md)): роутер шардирования забирает
 типы сущностей с объявленным shard key или с вариантом бакета, а топология превращает бакет в строку
-подключения владеющего шарда. Остальной механизм маршрутизации — правило «один запрос — одна
-топология», пиннинг хоста и транзакции на маршрутизированном хосте — работает для шардированных
-запросов без изменений:
+подключения владеющего шарда. Это ровно те два контракта, на которых стоит шардирование: общий
+`IHostTopology` и [`MappingVariant`](33-runtime-mapping-variant.md). Шардирование не расширяет их и не
+подменяет — оно только решает, кто кладёт бакет в вариант и что этот бакет означает физически.
+Остальной механизм маршрутизации — правило «один запрос — одна топология», пиннинг хоста и транзакции
+на маршрутизированном хосте — работает для шардированных запросов без изменений:
 
 ```csharp
 // Удержать сессию на одном шарде, например на том, который собираетесь загрузить.

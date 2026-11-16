@@ -169,6 +169,67 @@ public sealed class ShardRoutingTests
         eastAgain.Should().Be(eastSql);
     }
 
+    [Fact]
+    public void GroupByBucket_ShouldReturnOneGroupPerBucketInBucketOrder()
+    {
+        var topology = CreateTopology();
+        var router = new ShardRouter(topology);
+        var (eastTenant, eastBucket) = FindTenant(topology, "east");
+        var (westTenant, westBucket) = FindTenant(topology, "west");
+        using var context = CreateContext(topology);
+        var rows = new[]
+        {
+            new ShardedRow { Id = 1, Tenant = eastTenant, Name = "east-1" },
+            new ShardedRow { Id = 2, Tenant = westTenant, Name = "west-1" },
+            new ShardedRow { Id = 3, Tenant = eastTenant, Name = "east-2" },
+        };
+
+        var groups = context.GroupByBucket(rows);
+
+        var buckets = new[] { eastBucket, westBucket }.Order().ToArray();
+        groups.Select(group => group.Bucket).Should().Equal(buckets);
+        groups.Select(group => group.Variant).Should().Equal(buckets.Select(router.GetScope));
+        groups.Single(group => group.Bucket == eastBucket).Rows.Select(row => row.Name)
+            .Should().Equal("east-1", "east-2");
+        groups.Sum(group => group.Rows.Count).Should().Be(rows.Length);
+    }
+
+    [Fact]
+    public void GroupByBucket_OfNoRows_ShouldReturnNoGroups()
+    {
+        using var context = CreateContext(CreateTopology());
+
+        context.GroupByBucket(Array.Empty<ShardedRow>()).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void GroupByBucket_ForAnUnshardedType_ShouldFailFast()
+    {
+        using var context = CreateContext(CreateTopology());
+
+        FluentActions.Invoking(() => context.GroupByBucket(new[] { new PlainRow() }))
+            .Should().Throw<InvalidOperationException>().WithMessage("*shard key*");
+    }
+
+    [Fact]
+    public void GroupByBucket_WithANullRow_ShouldNameItsIndex()
+    {
+        using var context = CreateContext(CreateTopology());
+        var rows = new ShardedRow?[] { new() { Id = 1, Tenant = "tenant-1" }, null };
+
+        FluentActions.Invoking(() => context.GroupByBucket(rows!))
+            .Should().Throw<ArgumentException>().WithMessage("*index 1*");
+    }
+
+    [Fact]
+    public void GroupByBucket_OfAnUnshardedContext_ShouldFailFast()
+    {
+        using var context = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
+
+        FluentActions.Invoking(() => context.GroupByBucket(new[] { new ShardedRow() }))
+            .Should().Throw<InvalidOperationException>().WithMessage("*no shard router*");
+    }
+
     private static ShardTopology CreateTopology()
     {
         var topology = new ShardTopology(4096, BucketPlacementMode.TableSuffix);
@@ -213,5 +274,10 @@ public sealed class ShardRoutingTests
         public int Id { get; set; }
         public string Tenant { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
+    }
+
+    private sealed class PlainRow
+    {
+        public int Id { get; set; }
     }
 }

@@ -16,6 +16,14 @@ Sharding builds on the [runtime mapping variant](33-runtime-mapping-variant.md):
 `MappingVariant`, the topology decorates the metadata provider and the router resolves it. The variant
 mechanism is independent of sharding and is described on its own page.
 
+`IShardTopology : IHostTopology` — the sharding topology is no separate mechanism: it inherits the general
+topology contract ("give me a connection for this statement") and adds the ring, the shards and the
+placement mode on top, exactly like `RoundRobinTopology` is another such topology. `TryGetHost` receives
+the same `TopologyContext`: the bucket arrives in `context.Variant` (the router put it there in its variant-resolver
+role), the ring turns it into a shard id and the shard id into a connection string. A pinned
+`context.HostId` overrules the bucket. With no bucket variant the topology does not claim the statement,
+and it stays on the context connection — the same `false` any other topology returns.
+
 ## Declare a shard key
 
 A shard key is one or more readable instance properties. Declare it with the attribute:
@@ -58,11 +66,19 @@ using var context = new PostgresDataContext(builder);
 ```
 
 The context is created from the builder alone: its own connection comes from the default topology, and
-passing a connection string to the constructor as well is rejected. `UseSharding` installs a `ShardRouter`
-as the variant resolver and wraps the current metadata provider in a shard-aware decorator, so an existing
-`IEntityMetadataProvider` keeps working. Every statement routed to a bucket runs on that bucket's shard
-connection, which the context opens lazily, one per shard, from the topology — the default host is never
-part of that decision.
+passing a connection string to the constructor as well is rejected. Every statement routed to a bucket runs
+on that bucket's shard connection, which the context opens lazily, one per shard, from the topology — the
+default host is never part of that decision.
+
+`UseSharding` adds no second mechanism — it assembles sharding from the same three layers:
+
+- **the variant**: `ShardRouter` *becomes* the `IEntityVariantResolver`, and
+  `ShardEntityMetadataProvider` wraps the current `IEntityMetadataProvider`, so your own provider keeps
+  working and must still delegate the default variant;
+- **the routing**: the same topology is registered in the topology table
+  (`builder.AddTopology(topology)`) under the name `"sharding"`, and `ShardRouteResolver` is an ordinary
+  `IEntityRouteResolver` that claims the sharded types and any statement carrying a bucket variant;
+- **the sharding**: what a bucket is, where it lives physically and what the shard key hashes.
 
 ### Placement of a bucket
 
@@ -244,24 +260,26 @@ kept, so a bucket resolved here is exactly the bucket the statement would execut
 for an entity type that declares no shard key, and `Resolve` returns `MappingVariant.Default` for it. The
 rest of the contract — `GetShardKey`, `ShardIds`, `BucketCount` — is listed on `IShardRouter`.
 
+For a list of rows the context does the same work in bulk: `GroupByBucket(rows)` resolves every instance and
+returns one group per bucket, ordered by bucket number, each carrying `Bucket`, the addressing `Variant` and
+its `Rows`.
+
 A shard's connection string is topology data, not routing data: the context opens the shard's connection
 itself from the shard id, and only code that opens its own ADO.NET connection needs the topology.
 
 ### Per-bucket and per-shard work
 
 A write is routed from the instance, so a group of rows does not need its bucket computed by hand — it
-needs **one statement per bucket**, because a bucket is a physical table on a shard. A multi-row insert
-takes the sequence and writes it in one round trip; rows of different buckets in one insert are rejected
-before SQL, since one `INSERT` names one table:
+needs **one statement per bucket**, because a bucket is a physical table on a shard. `GroupByBucket` resolves
+every row with the context's own router and hands back one group per bucket. A multi-row insert takes the
+group's rows and writes them in one round trip; rows of different buckets in one insert are rejected before
+SQL, since one `INSERT` names one table:
 
 ```csharp
-var router = context.GetShardRouter();
-int BucketOf(Order order) => router.GetBucket(order);
-
-foreach (var bucket in orders.GroupBy(BucketOf))
+foreach (var entitiesPerBucket in context.GroupByBucket(orders))
 {
     context.CreateInsertBuilder<Order>()
-        .Values(bucket)              // IEnumerable<TEntity>: one multi-row INSERT per bucket
+        .Values(entitiesPerBucket.Rows)  // one multi-row INSERT per bucket
         .Insert();
 }
 ```
@@ -269,11 +287,11 @@ foreach (var bucket in orders.GroupBy(BucketOf))
 To run several statements on one bucket, use a batch: one session, one round trip, one variant.
 
 ```csharp
-foreach (var bucket in orders.GroupBy(BucketOf))
+foreach (var entitiesPerBucket in context.GroupByBucket(orders))
 {
     context.CreateBatchBuilder()
-        .Insert(context.CreateInsertBuilder<Order>().Values(bucket))
-        .Query(context.From<Order>().WithVariant(router.GetScope(bucket.Key)).Select(order => order.Id))
+        .Insert(context.CreateInsertBuilder<Order>().Values(entitiesPerBucket.Rows))
+        .Query(context.From<Order>().WithVariant(entitiesPerBucket.Variant).Select(order => order.Id))
         .ToList();                   // every step on that bucket's shard, one round trip
 }
 ```
@@ -297,9 +315,13 @@ decides the server. A pin is for the opposite case: state that must outlive one 
 - a shard you are about to load and want to keep warm.
 
 ```csharp
-foreach (var group in orders.GroupBy(order => router.GetShard(BucketOf(order))))
+var router = context.GetShardRouter();
+var shards = context.GroupByBucket(orders)
+    .GroupBy(entitiesPerBucket => router.GetShard(entitiesPerBucket.Bucket));
+
+foreach (var shard in shards)
 {
-    using var pin = context.PinHost("sharding", group.Key);   // for this topology a host id is a shard id
+    using var pin = context.PinHost("sharding", shard.Key);   // for this topology a host id is a shard id
     // every command of the topology runs on that shard until the block ends
 }
 ```
@@ -379,8 +401,11 @@ var vectors = await context.From<Order>()
 Sharding is one rule in the general routing model. `ShardTopology` implements `IHostTopology` (see
 [Routing data to topologies](34-routing-data-to-topologies.md)): the shard router claims the entity types
 that declare a shard key or carry a bucket variant, and the topology turns the bucket into the owning
-shard's connection string. The rest of the routing machinery — the single-topology rule for one
-statement, host pinning and transactions on a routed host — applies to sharded statements unchanged:
+shard's connection string. These are exactly the two contracts sharding is built on — the generic
+`IHostTopology` and [`MappingVariant`](33-runtime-mapping-variant.md). Sharding neither extends nor
+replaces them: it only decides who puts the bucket into the variant and what that bucket means physically.
+The rest of the routing machinery — the single-topology rule for one statement, host pinning and
+transactions on a routed host — applies to sharded statements unchanged:
 
 ```csharp
 // Keep a session on one shard, for example one you are about to load.

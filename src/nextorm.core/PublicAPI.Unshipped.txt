@@ -67,6 +67,11 @@ NextORM.Core.AttributeShardKeyProvider
 NextORM.Core.AttributeShardKeyProvider.AttributeShardKeyProvider() -> void
 NextORM.Core.AttributeShardKeyProvider.GetShardKey(System.Type! entityType) -> System.Collections.Generic.IReadOnlyList<System.Reflection.PropertyInfo!>!
 NextORM.Core.AttributeShardKeyProvider.IsSharded(System.Type! entityType) -> bool
+NextORM.Core.BucketGroup<TEntity>
+NextORM.Core.BucketGroup<TEntity>.Bucket.get -> int
+NextORM.Core.BucketGroup<TEntity>.BucketGroup(int bucket, NextORM.Core.MappingVariant variant, System.Collections.Generic.IReadOnlyList<TEntity>! rows) -> void
+NextORM.Core.BucketGroup<TEntity>.Rows.get -> System.Collections.Generic.IReadOnlyList<TEntity>!
+NextORM.Core.BucketGroup<TEntity>.Variant.get -> NextORM.Core.MappingVariant
 NextORM.Core.ConsistentHashRing
 NextORM.Core.ConsistentHashRing.AddShard(string! shardId) -> void
 NextORM.Core.ConsistentHashRing.GetBucket(System.ReadOnlySpan<byte> key) -> int
@@ -95,6 +100,7 @@ NextORM.Core.IShardTopology.Version.get -> int
 NextORM.Core.ShardDataContextBuilderExtensions
 NextORM.Core.ShardDataContextExtensions
 static NextORM.Core.ShardDataContextExtensions.GetShardRouter(this NextORM.Core.IDataContext! context) -> NextORM.Core.IShardRouter!
+static NextORM.Core.ShardDataContextExtensions.GroupByBucket<TEntity>(this NextORM.Core.IDataContext! context, System.Collections.Generic.IEnumerable<TEntity>! entities) -> System.Collections.Generic.IReadOnlyList<NextORM.Core.BucketGroup<TEntity>!>!
 static NextORM.Core.ShardDataContextExtensions.TryGetShardRouter(this NextORM.Core.IDataContext! context, out NextORM.Core.IShardRouter? router) -> bool
 static NextORM.Core.ShardDataContextBuilderExtensions.UseSharding(this NextORM.Core.DataContextBuilder! builder, NextORM.Core.IShardTopology! topology, NextORM.Core.IShardKeyProvider? keyProvider = null) -> NextORM.Core.DataContextBuilder!
 NextORM.Core.ShardEntityMetadataProvider

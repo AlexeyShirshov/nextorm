@@ -269,10 +269,15 @@ scope.
   `IShardRouter.GetBucket(entityType, entity | keyValues)`/`GetScope(bucket)` как члены контракта и
   `ShardRouterExtensions.GetBucket<TEntity>` — бакет и его область без запроса и без хранения топологии
   (`tests/nextorm.core.tests/Sharding/ShardRouterTests.cs`);
+- группировка строк по бакетам: `ShardDataContextExtensions.GroupByBucket<TEntity>(IDataContext,
+  IEnumerable<TEntity>)` → `IReadOnlyList<BucketGroup<TEntity>>` (`Bucket`, `Variant`, `Rows`), порядок по
+  номеру бакета, роутер берётся у самого контекста; пустой вход — пустой список, `null`-строка —
+  `ArgumentException`, нешардированный тип или контекст — `InvalidOperationException` (#395,
+  `tests/nextorm.core.tests/Sharding/ShardRoutingTests.cs`);
 - публичный гайд `docs/guide/34-routing-data-to-topologies.md` (EN + RU), раздел «Sharding as data
   routing» в гайде 35, «One batch, one topology» в гайде 34, «The bucket of a row» в гайде 35 (порядок и
   типы значений `WithShardKey`, `context.GetShardRouter()`/`GetBucket`/`Resolve`/`ResolveShard`/`GetShard`,
-  группировка по бакетам и шардам), записи в toc;
+  `context.GroupByBucket`, группировка по бакетам и шардам), записи в toc;
   `tests/nextorm.core.tests/Routing/BatchRoutingTests.cs`.
 
 Осталось (не входит в инкремент 2):
