@@ -1,0 +1,1465 @@
+[
+  {
+    "path": "CONTRIBUTING.md",
+    "sha256": "21aa1dac63024ccddf345ea01b836aa0da13869437b4028e56b20d4c310adb2a",
+    "lines": 93,
+    "section": "root",
+    "language": "en"
+  },
+  {
+    "path": "docs/advanced/api-reference.md",
+    "sha256": "e976a1b17a3bf704ec7391f617d1725b0dbd18eb7fcd073764837a40c464f934",
+    "lines": 328,
+    "section": "docs/advanced",
+    "language": "en"
+  },
+  {
+    "path": "docs/advanced/extensibility.md",
+    "sha256": "759ae3f1bece8beca8926417a9e15c748b25def7041330286ba06b03fa9375a3",
+    "lines": 425,
+    "section": "docs/advanced",
+    "language": "en"
+  },
+  {
+    "path": "docs/advanced/extensions-package.md",
+    "sha256": "506cdb476de8056c7c8f7569329000aaa33474cb00487a0dc64bb3f802fb36b6",
+    "lines": 269,
+    "section": "docs/advanced",
+    "language": "en"
+  },
+  {
+    "path": "docs/advanced/integration-efcore.md",
+    "sha256": "d11404346c7cff9e725945871e2a7efcec139c9e7d85b0147d765dc30ccfac8c",
+    "lines": 409,
+    "section": "docs/advanced",
+    "language": "en"
+  },
+  {
+    "path": "docs/advanced/limitations.md",
+    "sha256": "7357d2e6f1ff04852d1c80c356641164ab249b87ebf3e9d2d5e6d86aa31122c8",
+    "lines": 132,
+    "section": "docs/advanced",
+    "language": "en"
+  },
+  {
+    "path": "docs/advanced/query-filters.md",
+    "sha256": "b39b5d7d541a6e03418116d34d3779b7e0985515c07727e7259dc2fd61ce8b5c",
+    "lines": 576,
+    "section": "docs/advanced",
+    "language": "en"
+  },
+  {
+    "path": "docs/advanced/select-where-extrema-native.md",
+    "sha256": "f83e288ee35f60116da38386598d81903c9eb67bdcf7dc3ba9ffc626028d7d86",
+    "lines": 127,
+    "section": "docs/advanced",
+    "language": "en"
+  },
+  {
+    "path": "docs/comparisons/benchmarks.md",
+    "sha256": "9b03f29eb2c7a1ca876407cab9c1fabf6d597c004b30df9a22c60ba0f1c7eff1",
+    "lines": 335,
+    "section": "docs/comparisons",
+    "language": "en"
+  },
+  {
+    "path": "docs/comparisons/capabilities.md",
+    "sha256": "3ef4ff6ec809694113a4b37b515c5d326874f301fe8a6539a15adeee7337d6b5",
+    "lines": 199,
+    "section": "docs/comparisons",
+    "language": "en"
+  },
+  {
+    "path": "docs/comparisons/feature-benchmarks.md",
+    "sha256": "a3e680af5c109853ab0af192d590f978345ddf769d1cbcac4bf788b3850bf3ed",
+    "lines": 176,
+    "section": "docs/comparisons",
+    "language": "en"
+  },
+  {
+    "path": "docs/comparisons/index.md",
+    "sha256": "12ff402b061507a20e8e4db170b6831b6769b93ad058dc322b2756202393d70f",
+    "lines": 130,
+    "section": "docs/comparisons",
+    "language": "en"
+  },
+  {
+    "path": "docs/comparisons/provider-features.md",
+    "sha256": "9fd0ed83c3b62968ee4aadce15c1445773f69f764a4900c1182f8e1fd48d71f9",
+    "lines": 271,
+    "section": "docs/comparisons",
+    "language": "en"
+  },
+  {
+    "path": "docs/connecting-providers/clickhouse.md",
+    "sha256": "b30fd557db834ae5a4c0b1e5f6bce31983145ef3bb7656b9b64a162dbf27fa99",
+    "lines": 409,
+    "section": "docs/connecting-providers",
+    "language": "en"
+  },
+  {
+    "path": "docs/connecting-providers/in-memory.md",
+    "sha256": "62af30cbb335ebebfe5d6d02b763e1b364e6f6c15d98d8e216c3a89383a6e4dd",
+    "lines": 181,
+    "section": "docs/connecting-providers",
+    "language": "en"
+  },
+  {
+    "path": "docs/connecting-providers/mariadb.md",
+    "sha256": "c3f3e79105b1afec783481022341078da7464ee536d4ca75508056a48010310e",
+    "lines": 173,
+    "section": "docs/connecting-providers",
+    "language": "en"
+  },
+  {
+    "path": "docs/connecting-providers/mysql.md",
+    "sha256": "57aa11dd5a1351272a91caf3a7514f937e32be00024fffd009acd4bb5697c0a6",
+    "lines": 193,
+    "section": "docs/connecting-providers",
+    "language": "en"
+  },
+  {
+    "path": "docs/connecting-providers/overview.md",
+    "sha256": "4a00815417a0a3745af96c6cfeba86fd5a8c5a2ae4718d5c30d055c827330485",
+    "lines": 251,
+    "section": "docs/connecting-providers",
+    "language": "en"
+  },
+  {
+    "path": "docs/connecting-providers/postgres.md",
+    "sha256": "e97bd216d77dac7fb81efb517e59a8ca5f2e2f3f46d6621c9ee103293e03d2e9",
+    "lines": 511,
+    "section": "docs/connecting-providers",
+    "language": "en"
+  },
+  {
+    "path": "docs/connecting-providers/sqlite.md",
+    "sha256": "a122c12e8a76028812193ea83439b99ae88ed6937e9d65aa78bdf839f61303b0",
+    "lines": 359,
+    "section": "docs/connecting-providers",
+    "language": "en"
+  },
+  {
+    "path": "docs/connecting-providers/sqlserver.md",
+    "sha256": "78643c1a9abb9ab2c050011b4a2497508329e9a6f025f23d7d168d5e4e0c97a8",
+    "lines": 510,
+    "section": "docs/connecting-providers",
+    "language": "en"
+  },
+  {
+    "path": "docs/engine/01-query-pipeline.md",
+    "sha256": "8825485999cbbc02e11e4f7d9ced01d142b84a1922a5fbaa4a972432bb35be04",
+    "lines": 37,
+    "section": "docs/engine",
+    "language": "en"
+  },
+  {
+    "path": "docs/engine/02-execution-and-rows.md",
+    "sha256": "f98656ab6af9f49c4a427e409dc685a8ebf567d307fca14f655e2216132876f1",
+    "lines": 43,
+    "section": "docs/engine",
+    "language": "en"
+  },
+  {
+    "path": "docs/engine/03-plan-cache-and-reuse.md",
+    "sha256": "d087e99ce3757da55f025587b8c1826e986f2d99a5b4d8e67a9bc6d465c89096",
+    "lines": 324,
+    "section": "docs/engine",
+    "language": "en"
+  },
+  {
+    "path": "docs/engine/index.md",
+    "sha256": "6217ca4a8e2c08889a49215319e4be9d33378af950f2da55f9e7ee5b9d7a65eb",
+    "lines": 70,
+    "section": "docs/engine",
+    "language": "en"
+  },
+  {
+    "path": "docs/getting-started/01-installation.md",
+    "sha256": "36d34311c398dc29ce44990ef1fd1f57a795b278661d8f0372c346fbb5890eac",
+    "lines": 116,
+    "section": "docs/getting-started",
+    "language": "en"
+  },
+  {
+    "path": "docs/getting-started/02-quickstart.md",
+    "sha256": "823b2d56155778f5f93d801d94208e5a1a34f8dc63114ec5779abebe0d15a045",
+    "lines": 123,
+    "section": "docs/getting-started",
+    "language": "en"
+  },
+  {
+    "path": "docs/getting-started/03-entities-and-metadata.md",
+    "sha256": "4c112c28dee3579e1483f301fd5b473cce92922411e93c8bf22db895720d5292",
+    "lines": 401,
+    "section": "docs/getting-started",
+    "language": "en"
+  },
+  {
+    "path": "docs/getting-started/04-dependency-injection.md",
+    "sha256": "80ecee3eed41df36b2f5bd4c2d42ac4eaa255d059b08d5a060c9bbfa5508609f",
+    "lines": 181,
+    "section": "docs/getting-started",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/01-query-sources.md",
+    "sha256": "79d5f9808ed2ba88d4fbf707b68a45be4cbf39a9274ba922a86b44709c73fe40",
+    "lines": 225,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/02-projections.md",
+    "sha256": "53c25e369cd0291fd855e5cc60d8d4f8439e80a89b43e850cc7639e421bbb59f",
+    "lines": 490,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/03-filtering-where.md",
+    "sha256": "40d3c34d0f8fd7887d2032cbddf76855beaf2236194b938f328e6e2400408295",
+    "lines": 654,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/04-joins.md",
+    "sha256": "09dcf61e97a69b9cea4e8a94a7fdd8059dfec002a6d32b0402658de03b277aef",
+    "lines": 1194,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/05-grouping-and-aggregates.md",
+    "sha256": "60844f6524722c28d7497989aa3df21ba4efa4f6ed35a9bf764b836cf51f4a3a",
+    "lines": 995,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/06-sorting-and-paging.md",
+    "sha256": "57343a6d648662fe9ebe026b2f9ff8dcf20b9a8c7b10fa0ccd55a3c06291bf74",
+    "lines": 501,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/07-subqueries.md",
+    "sha256": "a8f70655486bc37e22d8eb439510c1985a1ee4388b3575f02886e9d63a0e3e85",
+    "lines": 480,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/08-set-operations.md",
+    "sha256": "189eaa33b46b8b0323115f5eb16b3db2ac1901998689f4dd6df0bdafc5989d1f",
+    "lines": 212,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/09-distinct.md",
+    "sha256": "72006b6e5e60e38d32ab030e931bc5929534bf6fc930616e32bd655dfbb4d720",
+    "lines": 219,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/10-cte.md",
+    "sha256": "52bdb7b0b835833a90c12e59b642749fa6ae006cb21b209e76b897458a072f0f",
+    "lines": 794,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/11-window-functions.md",
+    "sha256": "b5ab6fc9a7a7c052b3220039f4f175efe024812c5b3f8349e00eaeaefeef3ee0",
+    "lines": 400,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/12-user-defined-functions.md",
+    "sha256": "c06001fa9925b465818463eda3e11ba571943403f6ec4e8c84f9921753b68c86",
+    "lines": 242,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/13-table-valued-functions.md",
+    "sha256": "dc9fc6eda17c9b27ef1da598502a1f61caa336d403cf8e12fc59be7451bf2d15",
+    "lines": 731,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/13-tvf-result-schemas.md",
+    "sha256": "ba462cd04e661100b3d40372a25b0975fde91158e3426232da23c11a889cbcc4",
+    "lines": 129,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/14-raw-sql.md",
+    "sha256": "8169f0355e799febac934019fb5a9eb415b705af20b5c7e46edf1cb3a8e4f1a6",
+    "lines": 803,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/15-query-hints.md",
+    "sha256": "a084463ebca7fa3cfb4d045f2789f5eca87fe89d5ffbb17fcb2de4fe534d9cbc",
+    "lines": 371,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/16-json.md",
+    "sha256": "0439dc997d4d0fa5d0828e909236b1556414f7791213e51eb56c76ff5f664c8e",
+    "lines": 554,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/17-insert-statement.md",
+    "sha256": "14d4fc7bb64a1f60c126317239ff1dfd4b10176aaa3190c4a99ca6db3c64b6ca",
+    "lines": 778,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/18-delete-statement.md",
+    "sha256": "15ceef2b0bcec28a3b6f9ad5d2cf1a848a05e4bc87d28e3577b710f696b91f3a",
+    "lines": 242,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/19-update-statement.md",
+    "sha256": "74129405b62512bcfc46940f4d7493ec6e4751800659ef0608c5d3bfc2ba8de0",
+    "lines": 321,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/20-create-table-as.md",
+    "sha256": "232b3772950303045fd9eaebca46e8559c71a7b1479be7c487ed0f954fc9c59c",
+    "lines": 218,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/21-merge-statement.md",
+    "sha256": "35ffa75b2b35de6aec5bd6aec217fb613350f57c166f5bcced2d6c955f4db192",
+    "lines": 339,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/22-bulk-insert.md",
+    "sha256": "12ccfb89440bba2f9082fa852f6a3e31ad0f35a93e2703304efd4bd5311e22e5",
+    "lines": 540,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/23-transactions.md",
+    "sha256": "8bcd07325d3ab7107d11d4fc8fd179cba97cae67356de017f11c20720417f03d",
+    "lines": 183,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/24-duration-columns.md",
+    "sha256": "966baed91733792699b78b28e3bbd26c237631dee3de2a361203b6d83dc2cd2a",
+    "lines": 106,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/25-sql-batch.md",
+    "sha256": "0d2f51ddcd96e38a6bade3fab704af721f9ae6608e7aa0ca28b1189acb4aaaf5",
+    "lines": 306,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/26-optimistic-concurrency.md",
+    "sha256": "f4be4cde5074ee7ec46810848141d68f27865990e2f2eda2d555f1c147b97072",
+    "lines": 323,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/27-range-columns.md",
+    "sha256": "164678f8654c57eee27cf5e86ebce4e49c54f67cb85bfd1424062cca8e99371d",
+    "lines": 149,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/28-large-objects.md",
+    "sha256": "681ddeb5fb5d402937d05f18f5e66f337541bc5596e649b57856a5dd83c2fce8",
+    "lines": 227,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/29-dynamic-columns.md",
+    "sha256": "f18c66951385006ab52d82ccb40b6468fe4c6cecc57d96d580492317f707260a",
+    "lines": 191,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/30-streaming-data.md",
+    "sha256": "3118538b90c108aedb94867c4fc3a799dc49af16be23a0b52fca621f4d7d80d4",
+    "lines": 509,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/31-provider-specific-features.md",
+    "sha256": "edc8311d9215034bd014b7a24b645ac220fef3ebe8d716db271c06cee627b338",
+    "lines": 188,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/32-inheritance-and-derived-entities.md",
+    "sha256": "31658e6fc973b5be9edfad58d7083a963d5dd74c4e2ffce7a30f7697b6e304da",
+    "lines": 394,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/33-runtime-mapping-variant.md",
+    "sha256": "5e5b0950b4814bfe5f4dbb89d17a11fb85415f1486813f04c084b6d4b0ab19e6",
+    "lines": 194,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/34-routing-data-to-topologies.md",
+    "sha256": "2eca61434978b6cb47f428f7e5f102f40fc1a5138de3c9b094b9b277d3853065",
+    "lines": 248,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/35-sharding-and-horizontal-partitioning.md",
+    "sha256": "cc416614f2806bab1b5958c6898f7138c88c7f9b294b83765bcaf86e5e6df79f",
+    "lines": 435,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/36-ai-and-vector-search.md",
+    "sha256": "169651b8b938cb49e01bfd766768a78fec4d7927c7aac8aa3b394125d8dce914",
+    "lines": 218,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/provider-specific-sql/clickhouse.md",
+    "sha256": "021fba75061bc3c7049f1e5cbc7137f86217617f6b61183aa1a21da9d29d45ac",
+    "lines": 517,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/provider-specific-sql/mysql.md",
+    "sha256": "5cc947c606d21af8b5a23a3b7ca12bb9135279ea3f1106f61c429057b32b5db8",
+    "lines": 250,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/provider-specific-sql/overview.md",
+    "sha256": "44ede38b531e66d36fc1659bd0fd72bb52318a5e72b224dc5f19c4defc2f0dd1",
+    "lines": 86,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/provider-specific-sql/postgresql.md",
+    "sha256": "4b65c1fa974457bdb3c221e140285bcaeb1cf89a0882bc87f039c34fe3517a8c",
+    "lines": 614,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/provider-specific-sql/sqlite.md",
+    "sha256": "594ac36fa6050325d6b099325ce2fba3f0faab0a4e1f9631f3edbec2218ab7c4",
+    "lines": 382,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/guide/provider-specific-sql/sqlserver.md",
+    "sha256": "4dc6b45397b216747fb6696c5904cae4c150810cedde3daa844512a707c01f9a",
+    "lines": 632,
+    "section": "docs/guide",
+    "language": "en"
+  },
+  {
+    "path": "docs/index.md",
+    "sha256": "e941c5c7ea3058e59fd8e9863fb87aa0d9e565b78995edb739e1df20ad744d1f",
+    "lines": 519,
+    "section": "docs/index.md",
+    "language": "en"
+  },
+  {
+    "path": "docs/infrastructure/01-connections.md",
+    "sha256": "7a8e239d0e69e5d2be70d8f401a085a07d4520c1d7ac983d34e74c92cccb872b",
+    "lines": 191,
+    "section": "docs/infrastructure",
+    "language": "en"
+  },
+  {
+    "path": "docs/infrastructure/02-interceptors.md",
+    "sha256": "7e23ac7a1b770a5ed1044009b6456f0777df250f50f5dca540074bc2bb3f1a86",
+    "lines": 144,
+    "section": "docs/infrastructure",
+    "language": "en"
+  },
+  {
+    "path": "docs/infrastructure/03-value-converters.md",
+    "sha256": "f255997141dc403801d671d7938c43e33a78e8d0a300f57b16321c24f50c13fd",
+    "lines": 400,
+    "section": "docs/infrastructure",
+    "language": "en"
+  },
+  {
+    "path": "docs/infrastructure/04-logging.md",
+    "sha256": "e35ed72f49f54dd97a7e7d0f911b747291dc0c690fdd2636ae1e72c158007131",
+    "lines": 75,
+    "section": "docs/infrastructure",
+    "language": "en"
+  },
+  {
+    "path": "docs/infrastructure/05-nativeaot.md",
+    "sha256": "acf82db40ef13fe7d48eb6db84666dafcec2c4d53142a5309893d463d924307c",
+    "lines": 121,
+    "section": "docs/infrastructure",
+    "language": "en"
+  },
+  {
+    "path": "docs/relationships/collection-projection.md",
+    "sha256": "1cbb61dc211dea38c87ae8cd7247102522578cf18ae2c6564dce471159253f19",
+    "lines": 436,
+    "section": "docs/relationships",
+    "language": "en"
+  },
+  {
+    "path": "docs/relationships/eager-loading-per-parent-paging.md",
+    "sha256": "eda6d6220ea4490ee8c08401f1658df6addd42d446d26e5fd71d6da0ec62c59d",
+    "lines": 177,
+    "section": "docs/relationships",
+    "language": "en"
+  },
+  {
+    "path": "docs/relationships/eager-loading.md",
+    "sha256": "8105ead6acb0b5bd5c94bf674b5dcac6692a41c6e72d77bc5099220b900bbd7c",
+    "lines": 383,
+    "section": "docs/relationships",
+    "language": "en"
+  },
+  {
+    "path": "docs/relationships/implicit-navigation.md",
+    "sha256": "7961b499531b3b1042f979c35ec38c10c013a8f723f04fe2bd726e451fb805e7",
+    "lines": 396,
+    "section": "docs/relationships",
+    "language": "en"
+  },
+  {
+    "path": "docs/relationships/relationships.md",
+    "sha256": "5a045b442cefd7c9e97ddc98bb72baa5ec1680ffad75aa1b61cfca5773049e7d",
+    "lines": 555,
+    "section": "docs/relationships",
+    "language": "en"
+  },
+  {
+    "path": "docs/ru/advanced/api-reference.md",
+    "sha256": "de19e670d292b77d56f7ef8b97bbd6e1ee3cf271b68d8a97d4f936330ed18d5d",
+    "lines": 326,
+    "section": "docs/ru/advanced",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/advanced/extensibility.md",
+    "sha256": "6c9d1a7f3d2969ccd53611720912c55a9038053d138a4e6d2f513f17508713cd",
+    "lines": 425,
+    "section": "docs/ru/advanced",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/advanced/extensions-package.md",
+    "sha256": "c37fa846ed7ed8d4d4c3155763dbb9caa2ca5f27771791cf0ca0e8a484378194",
+    "lines": 270,
+    "section": "docs/ru/advanced",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/advanced/integration-efcore.md",
+    "sha256": "a045f2c7eb93e45ce94d41c31f563638b7deab71b26d1da6b654cca0b5511793",
+    "lines": 409,
+    "section": "docs/ru/advanced",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/advanced/limitations.md",
+    "sha256": "9d10c64862770b5f0e1c2fdff9b3776b67bed3cdc5bc1434313fba09802fe72f",
+    "lines": 132,
+    "section": "docs/ru/advanced",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/advanced/query-filters.md",
+    "sha256": "b16132b2c785c356e4ec583d11da2e86d3b4f4d838265f4b931f7d09da217596",
+    "lines": 576,
+    "section": "docs/ru/advanced",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/advanced/select-where-extrema-native.md",
+    "sha256": "7e359a76cf117a451c869dfde82f497087336c5dd26d7bcdb0c18c83efdbeeb0",
+    "lines": 127,
+    "section": "docs/ru/advanced",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/comparisons/benchmarks.md",
+    "sha256": "0da84858e9c99e583ca9fcb716c09cf1e67b417e2fa17c0ccc2a2cfecedf7b22",
+    "lines": 338,
+    "section": "docs/ru/comparisons",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/comparisons/capabilities.md",
+    "sha256": "6b42f02186015695efefdd217c1d5ccfdfeb682ee93169690d119407bf4f4f5b",
+    "lines": 204,
+    "section": "docs/ru/comparisons",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/comparisons/feature-benchmarks.md",
+    "sha256": "64f185be8cbb640746f66537886e0fa6e3fa45064baa378c53367260208acbd7",
+    "lines": 169,
+    "section": "docs/ru/comparisons",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/comparisons/index.md",
+    "sha256": "88b95f9165f667858de2a15622d267362a76270d73f55246d1bc6b8c2be7f66f",
+    "lines": 131,
+    "section": "docs/ru/comparisons",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/comparisons/provider-features.md",
+    "sha256": "67827239374fa4b4046b72639ac4757bb01deeeb1c7f9af4259a04670b7cbd5c",
+    "lines": 271,
+    "section": "docs/ru/comparisons",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/connecting-providers/clickhouse.md",
+    "sha256": "91bb2ca284473ad02471dbc701c3b4cb03452cf786ca6d5ff2567ef3e6b42781",
+    "lines": 414,
+    "section": "docs/ru/connecting-providers",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/connecting-providers/in-memory.md",
+    "sha256": "d238442413c8c8d001d5b340383e05818fad496f7fc4819ab5cde931c9762e41",
+    "lines": 180,
+    "section": "docs/ru/connecting-providers",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/connecting-providers/mariadb.md",
+    "sha256": "7a05372028faf0c813fe11cf731fa3170acf07ac4b2a69bd7309782ea8e6e785",
+    "lines": 174,
+    "section": "docs/ru/connecting-providers",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/connecting-providers/mysql.md",
+    "sha256": "8d6aa26f8b6954b6cda96adcccc6fdd8d0ec7afab1751e435b689d1f6cd7fca1",
+    "lines": 196,
+    "section": "docs/ru/connecting-providers",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/connecting-providers/overview.md",
+    "sha256": "ce65c5a54735fca61d45aef556fe39fdffdf6b7d445ccac39509cf0c8923abf8",
+    "lines": 251,
+    "section": "docs/ru/connecting-providers",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/connecting-providers/postgres.md",
+    "sha256": "465816268aebc39fa4edc21479e0af91921cd58dbf63bf1a68153028fb4e09a6",
+    "lines": 518,
+    "section": "docs/ru/connecting-providers",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/connecting-providers/sqlite.md",
+    "sha256": "e4581f8c814695117ba61218e978136850a783c1efff39981e8d52aacf048395",
+    "lines": 363,
+    "section": "docs/ru/connecting-providers",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/connecting-providers/sqlserver.md",
+    "sha256": "e3941b92ee8f27041cb1c0a9aedbc3ef163da963ece18a9fc2d2d1f5ebef217c",
+    "lines": 520,
+    "section": "docs/ru/connecting-providers",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/engine/01-query-pipeline.md",
+    "sha256": "f242028000ec200a0ba6dd8b28cd921cf268660d0a1f3e2308663a821ce065d6",
+    "lines": 37,
+    "section": "docs/ru/engine",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/engine/02-execution-and-rows.md",
+    "sha256": "fb1006556819f0c019f18b35ba36221a113b0e3d0b285f588cd343bf3e7cbca3",
+    "lines": 43,
+    "section": "docs/ru/engine",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/engine/03-plan-cache-and-reuse.md",
+    "sha256": "da2dfca00dcb910b814e5be4cdedb25cc343105681e408c188cf8c3aaed1146b",
+    "lines": 324,
+    "section": "docs/ru/engine",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/engine/index.md",
+    "sha256": "005fcf34b3221d066ea2375bf7729d1d18152101d2e2ead63205ad4daaf9a31a",
+    "lines": 70,
+    "section": "docs/ru/engine",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/getting-started/01-installation.md",
+    "sha256": "1c2856cbfcb64f669350e364f5d1927e6c343a1eb051fe1350c50b80cbbcddb4",
+    "lines": 114,
+    "section": "docs/ru/getting-started",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/getting-started/02-quickstart.md",
+    "sha256": "3951d2e991df1dd328d5daa1c801c4c963618de616a51ece8709dd868379518c",
+    "lines": 119,
+    "section": "docs/ru/getting-started",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/getting-started/03-entities-and-metadata.md",
+    "sha256": "900a66e932b7fa2aabb9de5cb7c4111ccdf2202cc7e6262f13f02ef1bed91054",
+    "lines": 382,
+    "section": "docs/ru/getting-started",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/getting-started/04-dependency-injection.md",
+    "sha256": "344c790f990e3e8c2197f8da752528794e0e631f808c394a002d563e9de506e6",
+    "lines": 172,
+    "section": "docs/ru/getting-started",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/01-query-sources.md",
+    "sha256": "dbefc412e45a9388bb2d8174638520b8e9d9eef9d848ad889df2d0938f8f0e35",
+    "lines": 226,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/02-projections.md",
+    "sha256": "3fd79b312700fd245028405d522fe066533c8685cf74b8d9871f03fa5e632595",
+    "lines": 493,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/03-filtering-where.md",
+    "sha256": "fd61d701ece0a78cf55873f5e688ab82c17b79088abff7faa5a485c9915baf48",
+    "lines": 661,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/04-joins.md",
+    "sha256": "afb0ae5dce209abdc9e264ce8865baf3189286a8fdec485cd71cc80b2e823ae6",
+    "lines": 1218,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/05-grouping-and-aggregates.md",
+    "sha256": "cfca253b9d6a00f24cf29f44cb6764af0b0bd7c2a2db8ac54220c92da6f26b86",
+    "lines": 1003,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/06-sorting-and-paging.md",
+    "sha256": "7b8e26fd7385c791f5f47faf4be04213dc56696a3c0cb1691470399ee0a5e67e",
+    "lines": 504,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/07-subqueries.md",
+    "sha256": "4f43fadf3990d725c75cc0d964beb2b217ec6a9ae2b3ee4fbda1fed79bcb9e0c",
+    "lines": 490,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/08-set-operations.md",
+    "sha256": "502272e739efcec1f472babb3b228e4f1b0f4922a9c11b6644a9c98131f48516",
+    "lines": 215,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/09-distinct.md",
+    "sha256": "328bd9209b9a229218fba6e415e424979c9b6db2241b6bd35c88b9c764a6aa0c",
+    "lines": 220,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/10-cte.md",
+    "sha256": "cd46cc5fcf17b06951832f2d2f7743deea9ae66fbc438a0d18ad64cdb5bae39f",
+    "lines": 801,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/11-window-functions.md",
+    "sha256": "246372b246ce7f994ff9a25b929c53621e6f4dcf0cc47c3d12d39eaf93f3d951",
+    "lines": 404,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/12-user-defined-functions.md",
+    "sha256": "5b2c42136964aef967143505b595258ab87ad63610909bb930bba3ebc24d05fe",
+    "lines": 242,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/13-table-valued-functions.md",
+    "sha256": "9c0b02dc89aa350b12ab8a8426b50a92419b04b6b814103914fa6e68db615652",
+    "lines": 736,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/13-tvf-result-schemas.md",
+    "sha256": "95b535f358381ea0fd80a9941a4fe066e6c9ba8abaefafcbc9a7107c2a792e73",
+    "lines": 130,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/14-raw-sql.md",
+    "sha256": "d654f8224787d3aa696e62737d63cd0fd94853732861907015334785fd748d6b",
+    "lines": 811,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/15-query-hints.md",
+    "sha256": "13fefdaa66e433bd858a3c8a940463ac6de5229c318040a7e71bb73ff633f688",
+    "lines": 378,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/16-json.md",
+    "sha256": "5b88a903d99eafb56a5a07958e90f88b015b44b63e3a93a755d62d477917bf5e",
+    "lines": 558,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/17-insert-statement.md",
+    "sha256": "2152d48b4839d405f135bc149b8c3036b72b28437feca2adcfdd35ca9276c343",
+    "lines": 784,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/18-delete-statement.md",
+    "sha256": "f407025dc260e4c91014d09cfb47d3dfd08b9e49850342556562d0f3008b46a1",
+    "lines": 237,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/19-update-statement.md",
+    "sha256": "ca77a55c48e80524e654c8cd7931e3181346b319bdb17573281f1b949df0db85",
+    "lines": 323,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/20-create-table-as.md",
+    "sha256": "3fbf76e2d9da151943819da5cc5c823871f855eb44adb937e1d1239445326e90",
+    "lines": 237,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/21-merge-statement.md",
+    "sha256": "5e06d6643d72659efd4222d75956d8cc8ff213b0a6289b9b244ab49fe3926cc0",
+    "lines": 340,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/22-bulk-insert.md",
+    "sha256": "f57b69c6f322bfddfce8534126cea5ffcd53720ef502be8add9f10ef0166c0aa",
+    "lines": 546,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/23-transactions.md",
+    "sha256": "ff4505ed3858123f376f0b9683b9310e0b28c06e18fcbe03c22f790ae4a3237e",
+    "lines": 184,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/24-duration-columns.md",
+    "sha256": "57a2f9b8b9bbb18ecf716e2beea4be3b610383c1abb42bdd76473a5c1a8e2bbd",
+    "lines": 106,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/25-sql-batch.md",
+    "sha256": "210738ecaf521ca5a717c2544327fc11c6622a2d3d64ff3b07f934195afd705f",
+    "lines": 306,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/26-optimistic-concurrency.md",
+    "sha256": "766f182811b50de91ae0b0aa1da3a87c3f9a612f417b7ee240117a3b6acf11ed",
+    "lines": 327,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/27-range-columns.md",
+    "sha256": "d0a87b33211367e6c843b0f7e1a5c1746dfcda0808bf1583df9d4a46ac399f1c",
+    "lines": 149,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/28-large-objects.md",
+    "sha256": "d01e2d744cf75d0fbf254855a6b37fb03b71d70117588fc92290f8417d3fdad3",
+    "lines": 224,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/29-dynamic-columns.md",
+    "sha256": "bdcce7ed3aad9a57e91feab413a2b9a27b50faef31ef729f23db0938632bbe90",
+    "lines": 195,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/30-streaming-data.md",
+    "sha256": "20074b08ba74b815160970c461cabbfdf6a424e9ae5fb538c9493031a50b07a7",
+    "lines": 511,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/31-provider-specific-features.md",
+    "sha256": "10ba9b611cff6149441f0d584b2e07d7fcebc287ba492132159fcd305539f57e",
+    "lines": 194,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/32-inheritance-and-derived-entities.md",
+    "sha256": "6a048a82971834164a68474825ac6fe7b53e42d0a87382ca9d92f88e9072b757",
+    "lines": 395,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/33-runtime-mapping-variant.md",
+    "sha256": "cf2326bb93aafbad36d74470b9b2c96c501b98490933b9d98dda6ad6393e9f92",
+    "lines": 196,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/34-routing-data-to-topologies.md",
+    "sha256": "8e49e7f82c6f4a63c809b397a1fd5f10bb52dca59f026e1eb01cb2b672a9e68a",
+    "lines": 256,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/35-sharding-and-horizontal-partitioning.md",
+    "sha256": "4fa65fff0b9281d21bfc7e572e9360e04b3473e4022774dd641cae83ade648e0",
+    "lines": 442,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/36-ai-and-vector-search.md",
+    "sha256": "cdb71fa4aeda318a759a56b40fdb4ce088881e6d9f3a8f97a080fe3a41c321c7",
+    "lines": 224,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/provider-specific-sql/clickhouse.md",
+    "sha256": "68665b4fe607824665a1cd28457096820812d25036e05f436bb1871bdd275355",
+    "lines": 525,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/provider-specific-sql/mysql.md",
+    "sha256": "003ce393a1e192846033d4a7fc0d4cbb2277b8f66c5ec0d1b750d6aacf51ba8a",
+    "lines": 249,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/provider-specific-sql/overview.md",
+    "sha256": "e9807af4b692c1e81fde7b6cd9cf7a89b4b27640d8a7ac4515d73903205412e3",
+    "lines": 88,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/provider-specific-sql/postgresql.md",
+    "sha256": "e27d8ee8c39229de702748ea833da513753d35b808bc8fa414f99439c5c52a9a",
+    "lines": 623,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/provider-specific-sql/sqlite.md",
+    "sha256": "79cf36f2b5f8804799b67699e599e6caec46d807645b60fc2f0c6c2dac0d7883",
+    "lines": 384,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/guide/provider-specific-sql/sqlserver.md",
+    "sha256": "fe87006379fdd9f96e92fa61986dd0353c1a651ab6916291b34409d8d55f6942",
+    "lines": 643,
+    "section": "docs/ru/guide",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/index.md",
+    "sha256": "f209d402d275b9a83e573ff633b4afdf8aca273d10629ed347d964bfa281bc52",
+    "lines": 120,
+    "section": "docs/ru/index.md",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/infrastructure/01-connections.md",
+    "sha256": "ead6ae41409fb078239b8931177ed9901efcab244dfd8d7e5f7c6ac6f26d351a",
+    "lines": 191,
+    "section": "docs/ru/infrastructure",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/infrastructure/02-interceptors.md",
+    "sha256": "8b740267b064372ce5f6e770bc34674aa982fcc27f1852f223fc7e0b9c109a5f",
+    "lines": 144,
+    "section": "docs/ru/infrastructure",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/infrastructure/03-value-converters.md",
+    "sha256": "05e1e8c5dc6011a1355de6778598c291171e14efc80400b8fb9fa4736e54f94a",
+    "lines": 403,
+    "section": "docs/ru/infrastructure",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/infrastructure/04-logging.md",
+    "sha256": "a9ff913e49a762d0c7a79cdb1e4f3a2f1c7162bda9cffa11c73889483b0affbb",
+    "lines": 75,
+    "section": "docs/ru/infrastructure",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/infrastructure/05-nativeaot.md",
+    "sha256": "b175d21963f62549d29c1126d08cf4db4ac9d57b3bbaa5f25ad84858450bb8c5",
+    "lines": 123,
+    "section": "docs/ru/infrastructure",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/motivation.md",
+    "sha256": "a9557e5e11d7d73662ef7b81ab1e51bf2597546ec2593be4f67b3dfacdffb1ca",
+    "lines": 20,
+    "section": "docs/ru/motivation.md",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/overview.md",
+    "sha256": "61f73164b78c67aeb8416b0fac0a07ca41ef97993aece0a47423779537e8b9ce",
+    "lines": 8,
+    "section": "docs/ru/overview.md",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/relationships/collection-projection.md",
+    "sha256": "25b3fb03ab4693690c4f15f2f88940f0967f5da0562af0600493cc0e024bd3f2",
+    "lines": 446,
+    "section": "docs/ru/relationships",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/relationships/eager-loading-per-parent-paging.md",
+    "sha256": "559b3562603c055e9dc226a731ea6878c93dd8f543bb1205571b2a9e511d7d49",
+    "lines": 179,
+    "section": "docs/ru/relationships",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/relationships/eager-loading.md",
+    "sha256": "dd54c3fc51920ad7146d81477203cbcb4f6667391c8ed2ee0734d2160513a513",
+    "lines": 384,
+    "section": "docs/ru/relationships",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/relationships/implicit-navigation.md",
+    "sha256": "8d072a15dc5361fbeb324f22a5ec2a15623b3c40a788271b3a13e0adcb0e4a91",
+    "lines": 405,
+    "section": "docs/ru/relationships",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/relationships/relationships.md",
+    "sha256": "3cd82d9400db5bbca9fd727b2bdb90a10bb1eb09c9a1c37369285f91e58ab10f",
+    "lines": 555,
+    "section": "docs/ru/relationships",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/scalar-functions/01-string-functions.md",
+    "sha256": "b01b16589b9bb14375f46ae2db21c973078dd3471f7ac3a80f245734c9607248",
+    "lines": 660,
+    "section": "docs/ru/scalar-functions",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/scalar-functions/02-math-functions.md",
+    "sha256": "2e9fc8231aa5510cf085faf3d9f8998c9b3aef14fe122f1ebb167cf0ac5289a5",
+    "lines": 289,
+    "section": "docs/ru/scalar-functions",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/scalar-functions/03-date-and-time.md",
+    "sha256": "40382735357e350a2d8fe9ea9309a07a747144f57360c7e0823ed967da8eb873",
+    "lines": 482,
+    "section": "docs/ru/scalar-functions",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/scalar-functions/04-conditionals-and-conversion.md",
+    "sha256": "4e504f1d538e924e2a5888b9176a6f280253ad3186af1d1d2b6f6cde841e7574",
+    "lines": 298,
+    "section": "docs/ru/scalar-functions",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/scalar-functions/05-aggregates.md",
+    "sha256": "5efbe080d081f55da0862b53f45bb75b23dba334dd655d8926bc8d6d84e5dcb5",
+    "lines": 417,
+    "section": "docs/ru/scalar-functions",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/scalar-functions/06-arrays.md",
+    "sha256": "1418f1b2b7f515673cc6b4900c545c125e12a55c3e85742e7488d953a83b5fd6",
+    "lines": 456,
+    "section": "docs/ru/scalar-functions",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/scalar-functions/07-json-and-xml.md",
+    "sha256": "51325958fa467b40eb6a4c9cc0cf8985c12620c531ad7044ead067d7f83eeb50",
+    "lines": 345,
+    "section": "docs/ru/scalar-functions",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/scalar-functions/08-reference.md",
+    "sha256": "84e721a1611a0b568e80af6396d6ffdac14e91126f6b3f1dfd23e7dcb6dcbc28",
+    "lines": 534,
+    "section": "docs/ru/scalar-functions",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/scalar-functions/09-system-functions.md",
+    "sha256": "ad7c4b5c797162e7a082839042cc10b60a2fd884a617a55a545329cf222f981c",
+    "lines": 425,
+    "section": "docs/ru/scalar-functions",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/scalar-functions/10-sequences.md",
+    "sha256": "681b7c64aaba47029e88a3445da3d861daa9184e71422f5fcbf82216691f7243",
+    "lines": 122,
+    "section": "docs/ru/scalar-functions",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/scalar-functions/index.md",
+    "sha256": "c0b438f8976a972e60f894820c2e15041867bc12599e354f3f865a2f4cd01529",
+    "lines": 60,
+    "section": "docs/ru/scalar-functions",
+    "language": "ru"
+  },
+  {
+    "path": "docs/ru/string-format-invariant-provider.md",
+    "sha256": "a4f28c999d3b54e3dfa1bac10163aaa64678a9a1f35a6f2c085d4e4e2da514d6",
+    "lines": 79,
+    "section": "docs/ru/string-format-invariant-provider.md",
+    "language": "ru"
+  },
+  {
+    "path": "docs/scalar-functions/01-string-functions.md",
+    "sha256": "1cac6b44c1a5d5f0edf2a90e359008cba4904131ac72bcb12b75b4d6f10d7eae",
+    "lines": 651,
+    "section": "docs/scalar-functions",
+    "language": "en"
+  },
+  {
+    "path": "docs/scalar-functions/02-math-functions.md",
+    "sha256": "739cd53b2fa0f16f9eca244dd0e1d8962f47964f9974563227f27433f98223e8",
+    "lines": 289,
+    "section": "docs/scalar-functions",
+    "language": "en"
+  },
+  {
+    "path": "docs/scalar-functions/03-date-and-time.md",
+    "sha256": "07b2b2490b7afbb9a7fd83d4d64d26f1a9cbb87448214b0a9f57c1ec2907ce7e",
+    "lines": 474,
+    "section": "docs/scalar-functions",
+    "language": "en"
+  },
+  {
+    "path": "docs/scalar-functions/04-conditionals-and-conversion.md",
+    "sha256": "a422d7c65f7e175714b7d7b5d866858c28873627fbbe92fc537308bd045241bb",
+    "lines": 292,
+    "section": "docs/scalar-functions",
+    "language": "en"
+  },
+  {
+    "path": "docs/scalar-functions/05-aggregates.md",
+    "sha256": "dc4ccda4dff529f2ca82e3fce02d0e04acef054bee44189dbcaafdb09d89b49f",
+    "lines": 416,
+    "section": "docs/scalar-functions",
+    "language": "en"
+  },
+  {
+    "path": "docs/scalar-functions/06-arrays.md",
+    "sha256": "a7ab7b43a0995379f996044dde82e97a87043ca06a6b3d3f1c6178e93c7b6d6c",
+    "lines": 450,
+    "section": "docs/scalar-functions",
+    "language": "en"
+  },
+  {
+    "path": "docs/scalar-functions/07-json-and-xml.md",
+    "sha256": "728be46fddb9af95bb28dd9876cb22d772aa591da8676bdfa88b8b1f9bc7f706",
+    "lines": 346,
+    "section": "docs/scalar-functions",
+    "language": "en"
+  },
+  {
+    "path": "docs/scalar-functions/08-reference.md",
+    "sha256": "b0e8041d10111de1e52f42e1f46268ecd61d4a915023541d86512796c96de3e9",
+    "lines": 527,
+    "section": "docs/scalar-functions",
+    "language": "en"
+  },
+  {
+    "path": "docs/scalar-functions/09-system-functions.md",
+    "sha256": "ad13b20f4f8f2b5b2292b26298ae39422878aa153cbe0ee6886d37517901b1f3",
+    "lines": 420,
+    "section": "docs/scalar-functions",
+    "language": "en"
+  },
+  {
+    "path": "docs/scalar-functions/10-sequences.md",
+    "sha256": "1335980794f351b971ff06d26d5c446d9fa9be3ef8d54238b2c08b9cbfdfa9ea",
+    "lines": 120,
+    "section": "docs/scalar-functions",
+    "language": "en"
+  },
+  {
+    "path": "docs/scalar-functions/index.md",
+    "sha256": "24f2f32a811fefba1435adf1787e32d8dbfd29ce0492bef31e33eaef1083a388",
+    "lines": 56,
+    "section": "docs/scalar-functions",
+    "language": "en"
+  },
+  {
+    "path": "docs/string-format-invariant-provider.md",
+    "sha256": "a6cf748604337154fd58daf8acf64e0af47c28be2296592cdfa5fc9c8c27fbce",
+    "lines": 79,
+    "section": "docs/string-format-invariant-provider.md",
+    "language": "en"
+  },
+  {
+    "path": "examples/nextorm.aotexamples.clickhouse.analytics/README.md",
+    "sha256": "fd8bd8f6858415205a0ad96829e34b0e7f622c91354bab052de7dafb4a5ee84f",
+    "lines": 63,
+    "section": "examples/nextorm.aotexamples.clickhouse.analytics",
+    "language": "en"
+  },
+  {
+    "path": "examples/nextorm.aotexamples.mssql.adventureworks/README.md",
+    "sha256": "0d2fced8efdbae0fa791a59464e9dd0a1363321a357a4b85a760c8cb3997de5b",
+    "lines": 61,
+    "section": "examples/nextorm.aotexamples.mssql.adventureworks",
+    "language": "en"
+  },
+  {
+    "path": "examples/nextorm.aotexamples.postgres.aviasales/README.md",
+    "sha256": "8e43a1bc80654c19720d50db9de7d7f098229aac302afe9846087be16669457c",
+    "lines": 55,
+    "section": "examples/nextorm.aotexamples.postgres.aviasales",
+    "language": "en"
+  },
+  {
+    "path": "examples/nextorm.examples.clickhouse.analytics/README.md",
+    "sha256": "e619b7f5646a2048b6d81087b8eac4b0d79321c146916cc2471921c7b76b5ce0",
+    "lines": 150,
+    "section": "examples/nextorm.examples.clickhouse.analytics",
+    "language": "en"
+  },
+  {
+    "path": "examples/nextorm.examples.mssql.adventureworks/README.md",
+    "sha256": "f3a8191bfd2d2e8a37ad8514081be132d325476e879c26644e7719840533c03b",
+    "lines": 163,
+    "section": "examples/nextorm.examples.mssql.adventureworks",
+    "language": "en"
+  },
+  {
+    "path": "examples/nextorm.examples.oc-report/README.md",
+    "sha256": "4532994ad37c066a6f6e9c9fc987485bdc92e3d4f9a2c581d88e794fd05bfc8a",
+    "lines": 79,
+    "section": "examples/nextorm.examples.oc-report",
+    "language": "en"
+  },
+  {
+    "path": "examples/nextorm.examples.postgres.aviasales/README.md",
+    "sha256": "8468b38316444bfaa73e7a4886afc649f8793ebf0975feae6165b3458426d95d",
+    "lines": 150,
+    "section": "examples/nextorm.examples.postgres.aviasales",
+    "language": "en"
+  },
+  {
+    "path": "examples/README.md",
+    "sha256": "0253ad4064cb49ee9aa23fe1b26e0f1dc4ac3b41a461830bdb50627d10d6b7a3",
+    "lines": 167,
+    "section": "examples/README.md",
+    "language": "en"
+  },
+  {
+    "path": "examples/VERIFICATION.md",
+    "sha256": "139d51f3bcddd913b961483e20cde17b0436869f63e67939b0f565953eded1ac",
+    "lines": 440,
+    "section": "examples/VERIFICATION.md",
+    "language": "en"
+  },
+  {
+    "path": "readme.md",
+    "sha256": "dedcd0485899f4ac65893273f261d45bd1a2df1d847b3eb1b45923fcc683ce38",
+    "lines": 214,
+    "section": "root",
+    "language": "en"
+  },
+  {
+    "path": "src/nextorm.clickhouse/readme.md",
+    "sha256": "0b4245737c4716762e18478ab7b30793a5dac2c56dc1c2c02fd64c394191e8e2",
+    "lines": 81,
+    "section": "src/nextorm.clickhouse",
+    "language": "en"
+  },
+  {
+    "path": "src/nextorm.entityframeworkcore/readme.md",
+    "sha256": "d4b0b0d88a2a85a054dc985c135c9598be7122fdd0a53575291e6b4f64f6522e",
+    "lines": 76,
+    "section": "src/nextorm.entityframeworkcore",
+    "language": "en"
+  },
+  {
+    "path": "src/nextorm.extensions/readme.md",
+    "sha256": "19bba60171bb6ad8b884028e43702b139699e51428ad5a51c6e57702978441b5",
+    "lines": 33,
+    "section": "src/nextorm.extensions",
+    "language": "en"
+  },
+  {
+    "path": "src/nextorm.mariadb/readme.md",
+    "sha256": "0d9f65c9180884710f7c36b8f5578f41d9759d3b175e6d9bc3bdbf582583e3b5",
+    "lines": 80,
+    "section": "src/nextorm.mariadb",
+    "language": "en"
+  },
+  {
+    "path": "src/nextorm.mysql/readme.md",
+    "sha256": "7fc325b8a6625911855800afd897c32fe98d1d5263a3cbc3431aa2159fec94c2",
+    "lines": 80,
+    "section": "src/nextorm.mysql",
+    "language": "en"
+  },
+  {
+    "path": "src/nextorm.postgres/readme.md",
+    "sha256": "bcb0a6465b744e51348b1e32066b11941ee5ce2b645e3674b18bd979bc47e7bc",
+    "lines": 80,
+    "section": "src/nextorm.postgres",
+    "language": "en"
+  },
+  {
+    "path": "src/nextorm.sqlite/readme.md",
+    "sha256": "c24c2eb358878ba25758ed3c1420220153c36aa0d9d7e7a7ea9fdc6f2cda84b6",
+    "lines": 78,
+    "section": "src/nextorm.sqlite",
+    "language": "en"
+  },
+  {
+    "path": "src/nextorm.sqlserver/readme.md",
+    "sha256": "9132ba71e1b6a1a9148789488c9228208a674c8e9e8d1808ccdd35abe3c49587",
+    "lines": 80,
+    "section": "src/nextorm.sqlserver",
+    "language": "en"
+  }
+]

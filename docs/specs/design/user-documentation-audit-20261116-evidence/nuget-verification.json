@@ -1,0 +1,31 @@
+{
+  "checkedOn": "2026-11-16",
+  "method": "Read-only HTTPS requests to official NuGet flat-container indexes and registration/catalog metadata; no installation.",
+  "stableVersionsObserved": {
+    "nextorm": ["1.0.9"],
+    "nextorm.sqlite": ["1.0.9"],
+    "nextorm.sqlserver": ["1.0.9"],
+    "nextorm.postgres": ["1.0.9"],
+    "nextorm.mysql": ["1.0.9"],
+    "nextorm.mariadb": ["1.0.9"],
+    "nextorm.clickhouse": ["1.0.9"],
+    "nextorm.entityframeworkcore": ["1.0.9"],
+    "nextorm.extensions": ["1.0.9"]
+  },
+  "indexUrlTemplate": "https://api.nuget.org/v3-flatcontainer/{package}/index.json",
+  "dependencyGroupTargetFrameworksObserved": {
+    "nextorm/1.0.9": ["net10.0", "net11.0"],
+    "nextorm.sqlite/1.0.9": ["net10.0", "net11.0"],
+    "nextorm.entityframeworkcore/1.0.9": ["net10.0", "net11.0"]
+  },
+  "catalogSources": [
+    "https://api.nuget.org/v3/catalog0/data/2026.11.11.15.33.00/nextorm.1.0.9.json",
+    "https://api.nuget.org/v3/catalog0/data/2026.11.11.15.28.58/nextorm.sqlite.1.0.9.json",
+    "https://api.nuget.org/v3/catalog0/data/2026.11.11.15.26.00/nextorm.entityframeworkcore.1.0.9.json"
+  ],
+  "limits": [
+    "No NuGet archive inspected.",
+    "No package installed.",
+    "No documentation example compiled or executed."
+  ]
+}
