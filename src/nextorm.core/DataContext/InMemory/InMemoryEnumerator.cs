@@ -29,6 +29,8 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
     private IEnumerator<TEntity>? _enumerator;
     private int _idx;
     private TEntity _current = default!;
+    private TResult _mappedCurrent = default!;
+    private bool _hasMappedCurrent;
     private HashSet<TResult>? _seen;
 
     /// <summary>
@@ -73,6 +75,7 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
     /// <param name="params">Positional parameter values consumed by a parameterised predicate, if any.</param>
     public void Init(IEnumerable<TEntity> data, object[]? @params)
     {
+        ClearMappedCurrent();
         _idx = -1;
         _seen?.Clear();
         switch (data)
@@ -113,7 +116,19 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
     public TResult Current
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _map is null ? (TResult)(object)_current! : _map(_current!);
+        get
+        {
+            if (_map is null)
+                return (TResult)(object)_current!;
+
+            if (!_hasMappedCurrent)
+            {
+                _mappedCurrent = _map(_current!);
+                _hasMappedCurrent = true;
+            }
+
+            return _mappedCurrent;
+        }
     }
 
     object? IEnumerator.Current => Current;
@@ -138,7 +153,10 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
     public ValueTask<bool> MoveNextAsync()
     {
         if (_cancellationToken.IsCancellationRequested)
+        {
+            ClearMappedCurrent();
             return ValueTask.FromResult(false);
+        }
 
         // In-memory data is synchronous (async sources go through InMemoryEnumeratorAdapter).
         return ValueTask.FromResult(MoveNext());
@@ -152,7 +170,12 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
     public bool MoveNext()
     {
         if (_seen is null)
-            return MoveNextCore();
+        {
+            var moved = MoveNextCore();
+            if (!moved)
+                ClearMappedCurrent();
+            return moved;
+        }
 
         // DISTINCT is applied after the WHERE condition and the projection, matching SQL: the
         // predicate is evaluated by MoveNextCore, the projected value is produced by Current.
@@ -162,7 +185,18 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
                 return true;
         }
 
+        ClearMappedCurrent();
         return false;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ClearMappedCurrent()
+    {
+        if (_map is null)
+            return;
+
+        _mappedCurrent = default!;
+        _hasMappedCurrent = false;
     }
 
     private bool MoveNextCore()
@@ -177,6 +211,7 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
             {
                 if (++i >= list.Count) return false;
                 _idx = i;
+                ClearMappedCurrent();
                 _current = list[i];
                 return true;
             }
@@ -184,6 +219,7 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
             while (++i < list.Count)
             {
                 var entity = list[i];
+                ClearMappedCurrent();
                 if (condition(entity))
                 {
                     _idx = i;
@@ -206,6 +242,7 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
             {
                 if (++i >= array.Length) return false;
                 _idx = i;
+                ClearMappedCurrent();
                 _current = array[i];
                 return true;
             }
@@ -213,6 +250,7 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
             while (++i < array.Length)
             {
                 var entity = array[i];
+                ClearMappedCurrent();
                 if (condition(entity))
                 {
                     _idx = i;
@@ -232,6 +270,7 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
             if (_conditionRaw is null)
             {
                 if (!enumerator.MoveNext()) return false;
+                ClearMappedCurrent();
                 _current = enumerator.Current;
                 return true;
             }
@@ -240,6 +279,7 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
             var rawParams = _conditionRawParams;
             while (enumerator.MoveNext())
             {
+                ClearMappedCurrent();
                 var entity = enumerator.Current;
                 if (raw(entity, rawParams))
                 {
@@ -254,6 +294,7 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
         var typedCondition = _condition;
         while (enumerator.MoveNext())
         {
+            ClearMappedCurrent();
             var entity = enumerator.Current;
             if (typedCondition(entity))
             {
@@ -280,6 +321,7 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
     /// </summary>
     public void Dispose()
     {
+        ClearMappedCurrent();
         // The fallback enumerator (created for arbitrary IEnumerable<TEntity> sources) is
         // IDisposable; without this it would leak for iterator/streaming sources.
         _enumerator?.Dispose();
