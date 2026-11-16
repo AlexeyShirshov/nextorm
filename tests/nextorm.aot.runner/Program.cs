@@ -267,6 +267,42 @@ static void RunComponentSlices(string databasePath)
 
     try
     {
+        // A many-to-many single-query load flattens the parent, the junction and the child into the same
+        // run-time-closed projection row type, so it has to be rejected by the same guard before SQL. A
+        // silent success would mean the mapper reached a row type the native image does not carry.
+        var rejected = false;
+        try
+        {
+            using var junctionContext = new SqliteDataContext(
+                $"Data Source='{databasePath}';Default Timeout=30",
+                new DataContextBuilder().UseEagerLoadMode(EagerLoadMode.SingleQuery));
+            junctionContext.From<AotJunctionTag>();
+            junctionContext.From<AotJunctionLink>();
+            junctionContext.From<AotJunctionParent>(builder => builder
+                .HasManyThrough<AotJunctionTag, AotJunctionLink, int, int>(
+                    parent => parent.Tags, parent => parent.Id, link => link.ParentId, tag => tag.Id, link => link.ChildId));
+            junctionContext.From<AotJunctionParent>().LoadWith(parent => parent.Tags).ToList();
+        }
+        catch (NotSupportedException ex) when (ex.Message.Contains("Many-to-many eager loading", StringComparison.Ordinal))
+        {
+            rejected = true;
+        }
+
+        Console.WriteLine(rejected
+            ? "component-slice=join-into-many-to-many\tstatus=pass\trejected=NotSupportedException"
+            : "component-slice=join-into-many-to-many\tstatus=fail\texception=NoRejection\tmessage=the many-to-many single-query loader did not reject the native row shape");
+    }
+    catch (Exception ex)
+    {
+        var inner = ex.InnerException;
+        var innerText = inner is null
+            ? string.Empty
+            : $" inner={inner.GetType().FullName}: {inner.Message}";
+        Console.WriteLine($"component-slice=join-into-many-to-many\tstatus=fail\texception={Escape(ex.GetType().FullName ?? ex.GetType().Name)}\tmessage={Escape(ex.Message + innerText)}");
+    }
+
+    try
+    {
         using var csvOutput = new MemoryStream();
         context.From<SimpleEntity>().WriteCsv(csvOutput, new CsvStreamOptions());
         Console.WriteLine($"component-slice=CsvStreamOptions\tstatus=pass\tbytes={csvOutput.Length}");

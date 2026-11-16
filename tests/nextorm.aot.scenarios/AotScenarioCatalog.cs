@@ -8,12 +8,13 @@ namespace NextORM.AotScenarios;
 /// instrument and the JIT control execute this same list, so a capability cannot be marked proven by a
 /// shape the other arm does not run.
 /// </summary>
-public static class AotScenarioCatalog
+public static partial class AotScenarioCatalog
 {
     /// <summary>
     /// Shapes executable against the SQLite integration seed (`simple_entity`, `complex_entity`, `person`,
-    /// `orders`). Read-only: the JIT control and the native binary run against the same database, so a
-    /// shape that mutated it would make the second arm disagree with the first.
+    /// `orders`, `insert_entity`). Read-only, or idempotent: the JIT control and the native binary run
+    /// against the same database, so a write shape scopes its rows with a fixed marker and removes them at
+    /// both ends, and never prints a generated key.
     /// </summary>
     public static IReadOnlyList<AotScenario> Sqlite { get; } =
     [
@@ -27,7 +28,12 @@ public static class AotScenarioCatalog
         new("prepared-reuse", PreparedReuse),
         new("window-function", WindowFunction),
         new("value-converters", ValueConverters),
-        new("relationship-load-with", RelationshipLoadWith)
+        new("relationship-load-with", RelationshipLoadWith),
+        new("row-streaming", RowStreaming),
+        new("raw-sql-mapping", RawRowMapping),
+        new("dml-builders", DmlBuilders),
+        new("bulk-insert", BulkInsert),
+        new("many-to-many-load-with", ManyToManyLoadWith)
     ];
 
     private static object? Paging(IDataContext context)

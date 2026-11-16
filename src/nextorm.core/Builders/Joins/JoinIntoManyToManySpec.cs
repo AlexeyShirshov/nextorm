@@ -144,6 +144,15 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
         JoinType joinType,
         bool isSql)
     {
+        // A single-query many-to-many row needs a link type closed over the junction key types at run time
+        // (and, for a composite junction, a carrier emitted with Reflection.Emit). A native image supports
+        // neither, so the declaration is rejected here - deterministically, before any SQL - instead of
+        // failing inside the generic close or the emitter. The split loader loads the junction as an
+        // ordinary typed entity and stays available.
+        if (!RuntimeFeature.IsDynamicCodeSupported)
+            throw new NotSupportedException(
+                "Many-to-many eager loading in one query builds its link row type over the junction key types at run time, which a native image cannot provide. Use the split loader (LoadWith without EagerLoadMode.SingleQuery, the default).");
+
         Child = child;
         _predicate = predicate;
         Relationship = relationship;

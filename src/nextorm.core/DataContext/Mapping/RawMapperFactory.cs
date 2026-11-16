@@ -45,7 +45,8 @@ internal static class RawMapperFactory
 {
     private static readonly MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
     private static readonly MethodInfo GetValueMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetValue))!;
-    private static readonly MethodInfo ConvertMI = typeof(RawValueConverter).GetMethod(nameof(RawValueConverter.Convert))!;
+    private static readonly MethodInfo ConvertToMI = typeof(RawValueConverter)
+        .GetMethod(nameof(RawValueConverter.ConvertTo), BindingFlags.NonPublic | BindingFlags.Static)!;
     private static readonly MethodInfo ConvertFieldMI = typeof(RawRowValue).GetMethod(nameof(RawRowValue.ConvertField))!;
     private static readonly MethodInfo ValidateRecordMI = typeof(RawRowValue).GetMethod(nameof(RawRowValue.ValidateRecord))!;
     private static readonly MethodInfo ReadNamedCompositeMI = typeof(RawRowValue).GetMethod(nameof(RawRowValue.ReadNamedComposite))!;
@@ -500,7 +501,16 @@ internal static class RawMapperFactory
     {
         var index = Expression.Constant(column.Index);
         var isDbNull = Expression.Call(record, IsDBNullMI, index);
-        var value = Expression.Call(ConvertMI.MakeGenericMethod(column.PropertyType), Expression.Call(record, GetValueMI, index));
+        // The target type is chosen by the column, which is only known at run time, so the conversion must
+        // not close a generic method here: it is passed to the non-generic entry point as data and the
+        // boxed result is unboxed into the column type. This keeps the scalar raw path free of run-time
+        // generic instantiation, which a native image cannot provide.
+        var value = Expression.Convert(
+            Expression.Call(
+                ConvertToMI,
+                Expression.Call(record, GetValueMI, index),
+                Expression.Constant(column.PropertyType)),
+            column.PropertyType);
 
         return column.PropertyType.IsValueType
             ? Expression.Condition(isDbNull, Expression.Default(column.PropertyType), value)
@@ -723,7 +733,15 @@ internal static class RawValueConverter
         return (T)ConvertTo(value, target)!;
     }
 
-    private static object? ConvertTo(object? value, Type target)
+    /// <summary>
+    /// Converts the boxed provider value to <paramref name="target"/>. This is the non-generic entry point
+    /// the raw mapper calls: the column's type is known only at run time, so the conversion must not be
+    /// closed over it as a generic argument (a native image carries no such instantiation).
+    /// </summary>
+    /// <param name="value">The boxed provider value.</param>
+    /// <param name="target">The requested scalar type.</param>
+    /// <returns>The converted value, boxed.</returns>
+    internal static object? ConvertTo(object? value, Type target)
     {
         if (value is null)
             return null;

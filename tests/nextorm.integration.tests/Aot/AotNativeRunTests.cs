@@ -160,6 +160,10 @@ public sealed class AotNativeRunTests
         // has to report the deterministic rejection, so a regression to "Cannot get ctor" fails here.
         componentReports.Should().ContainKey("join-into-single-query");
         componentReports["join-into-single-query"].GetValueOrDefault("status").Should().Be("pass");
+        // The many-to-many row shape is closed over three types at run time, so it must be rejected by the
+        // same guard; a regression that lets it reach the mapper would fail here.
+        componentReports.Should().ContainKey("join-into-many-to-many");
+        componentReports["join-into-many-to-many"].GetValueOrDefault("status").Should().Be("pass");
         reportedConnection.Should().Be($"connection={databasePath}", "the child must report the parent's database path");
         File.Exists(childDatabasePath).Should().BeFalse("the child must not derive its own process-specific database");
     }

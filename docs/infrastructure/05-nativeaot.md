@@ -34,8 +34,11 @@ Providers: **SQLite, PostgreSQL, SQL Server, MySQL, MariaDB, ClickHouse**.
 Query surface: typed and anonymous projections, whole-entity materialization, filters, ordering, paging, aggregates,
 `GROUP BY`/`HAVING`, joins, CTEs, window functions (where the provider supports them), SQLite JSON
 functions, ClickHouse arrays, `SelectGroup`/`SelectGroupHaving`, `SelectWhereMin`/`SelectWhereMax`,
-prepared-command reuse, correlated subqueries, value converters, JSON columns (see below) and eager
-loading of a declared `[Relationship]` collection through the split loader (`LoadWith`).
+prepared-command reuse, correlated subqueries, value converters, JSON columns (see below), eager
+loading of a declared `[Relationship]` collection through the split loader (`LoadWith`), the
+insert/update/delete builders, bulk insert, raw-SQL row mapping (`ExecuteRaw`, scalar and mapped-entity
+results) and the streaming terminals — `WriteCsv`, `WriteJson` and the asynchronous row sequence
+(`ToAsyncEnumerable`).
 
 Every supported scenario runs natively and under JIT and is compared row by row: row counts and
 values must match. That comparison runs automatically on every change, so "works natively" is a
@@ -61,11 +64,14 @@ context declares is serialized with the default options.
 
 ## Limitations
 
-- The EF Core bridge (`nextorm.entityframeworkcore`), bulk insert, raw SQL row mapping and the DML
-  builders are not part of the native build yet — keep those scenarios on the regular JIT runtime.
+- The EF Core bridge (`nextorm.entityframeworkcore`) is not part of the native build yet — keep that
+  scenario on the regular JIT runtime.
 - Single-query eager loading — `JoinInto`, or `LoadWith(..., EagerLoadMode.SingleQuery)` — closes its
-  row type over the parent and child types at run time, which a native image cannot materialize. It is
-  rejected before any SQL runs; the split loader (`LoadWith` default) covers the same navigations.
+  row type over the parent and child types at run time, which a native image cannot materialize. A
+  many-to-many navigation cannot be loaded in one query for the same reason: its link row type is
+  closed over the junction key types, and a composite junction also emits a carrier with
+  `Reflection.Emit`. Both shapes are rejected before any SQL runs; the split loader (`LoadWith` default)
+  covers the same navigations, many-to-many included.
 - A query outside the surface above can fail on first execution. Run your own query set against the
   native build before shipping: the analyzers do not see through the dynamic query pipeline, so the
   native run is the check.
