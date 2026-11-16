@@ -56,6 +56,38 @@ System.Console.WriteLine($"{vector.Dimensions}; {parsed.Dimensions}");
 должен совпадать с типом сопоставленного столбца-вектора, а его размерность — с размерностью столбца;
 несовпадение со значениями в базе может отклонить сам сервер.
 
+### Равенство и хеширование векторов
+
+`Vector` использует точное сравнение значений: векторы равны, если у них одинаковая размерность,
+а каждая координата имеет то же значение `float` и находится на том же месте. Сравнение не использует
+допуск или метрику сходства; `+0f` и `-0f` считаются равными. Для вычисления расстояния или сходства
+используйте `VectorSearch` или `SqlFunctions.VectorDistance`.
+
+Это меняет прежнее поведение сравнения по ссылке: независимо созданные векторы с одинаковыми
+координатами теперь равны. Это значение используют `==`, `Equals`, `HashSet<Vector>`,
+`Dictionary<Vector, TValue>` и LINQ `Distinct()`. Если нужно проверить, ссылаются ли две переменные на
+один объект, используйте `object.ReferenceEquals(first, second)`. `GetHashCode()` предназначен для хешируемых
+коллекций; его результат действует только в процессе и не является сохраняемым идентификатором или
+мерой сходства.
+
+Например, конструктор и парсер создают одну запись множества для одинаковых координат:
+
+```csharp
+using System.Collections.Generic;
+using NextORM.Core;
+
+var first = new Vector(new[] { 0.12f, -0.34f });
+var second = Vector.Parse("[0.12,-0.34]");
+var uniqueVectors = new HashSet<Vector> { first, second };
+System.Console.WriteLine(uniqueVectors.Count);
+```
+
+Ожидаемый вывод:
+
+```text
+1
+```
+
 `EntityBuilder<TEntity>.VectorSearch<TVector>` принимает `vectorSelector`, `queryVector`, `metric` и
 положительный `topK`; необязательный `mode` по умолчанию равен `VectorSearchMode.Exact`. Тип `TVector`
 ограничен интерфейсом `IVectorValue`, результат имеет тип

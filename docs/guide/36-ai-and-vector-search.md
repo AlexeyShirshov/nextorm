@@ -53,6 +53,37 @@ An empty vector can be constructed or parsed, but it cannot be used as a search 
 requires at least one dimension. The query vector must also match the mapped vector column's type and
 dimension; the database may reject a mismatch with its stored vectors.
 
+### Vector equality and hashing
+
+`Vector` uses exact value equality: two vectors are equal when they have the same dimension and each
+coordinate has the same `float` value in the same order. The comparison uses no tolerance or similarity
+metric; `+0f` and `-0f` compare equal. Use `VectorSearch` or `SqlFunctions.VectorDistance` when you need
+similarity or distance instead.
+
+This changes the previous reference-equality behavior: independently created vectors with identical
+coordinates now compare equal. `==`, `Equals`, `HashSet<Vector>`, `Dictionary<Vector, TValue>`, and LINQ
+`Distinct()` use this value equality. Use `object.ReferenceEquals(first, second)` when you need to check whether
+two references point to the same object. `GetHashCode()` supports hash-based collections; its result is
+process-local and isn't a persisted identifier or a measure of similarity.
+
+For example, the constructor and parser produce one set entry for equal coordinates:
+
+```csharp
+using System.Collections.Generic;
+using NextORM.Core;
+
+var first = new Vector(new[] { 0.12f, -0.34f });
+var second = Vector.Parse("[0.12,-0.34]");
+var uniqueVectors = new HashSet<Vector> { first, second };
+System.Console.WriteLine(uniqueVectors.Count);
+```
+
+Expected output:
+
+```text
+1
+```
+
 `EntityBuilder<TEntity>.VectorSearch<TVector>` accepts `vectorSelector`, `queryVector`, `metric`, and a
 positive `topK`; the optional `mode` defaults to `VectorSearchMode.Exact`. It constrains `TVector` to
 `IVectorValue` and returns a `QueryCommand<VectorSearchResult<TEntity>>`. Each result has the matched

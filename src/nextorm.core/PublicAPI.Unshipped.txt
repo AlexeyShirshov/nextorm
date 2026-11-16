@@ -200,6 +200,11 @@ NextORM.Core.Vector.Vector(System.Collections.Generic.IEnumerable<float>! coordi
 NextORM.Core.Vector.Dimensions.get -> int
 NextORM.Core.Vector.this[int index].get -> float
 NextORM.Core.Vector.ToArray() -> float[]!
+NextORM.Core.Vector.Equals(NextORM.Core.Vector? other) -> bool
+override NextORM.Core.Vector.Equals(object? obj) -> bool
+override NextORM.Core.Vector.GetHashCode() -> int
+static NextORM.Core.Vector.operator ==(NextORM.Core.Vector? left, NextORM.Core.Vector? right) -> bool
+static NextORM.Core.Vector.operator !=(NextORM.Core.Vector? left, NextORM.Core.Vector? right) -> bool
 override NextORM.Core.Vector.ToString() -> string!
 static NextORM.Core.Vector.Parse(string! text) -> NextORM.Core.Vector!
 NextORM.Core.VectorDistanceMetric
