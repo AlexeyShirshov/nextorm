@@ -156,6 +156,10 @@ public sealed class AotNativeRunTests
         componentReports["CsvStreamOptions"].GetValueOrDefault("status").Should().Be("pass");
         componentReports.Should().ContainKey("JsonShapePlan");
         componentReports["JsonShapePlan"].GetValueOrDefault("status").Should().Be("pass");
+        // Single-query eager loading cannot materialize its run-time-closed projection natively; the child
+        // has to report the deterministic rejection, so a regression to "Cannot get ctor" fails here.
+        componentReports.Should().ContainKey("join-into-single-query");
+        componentReports["join-into-single-query"].GetValueOrDefault("status").Should().Be("pass");
         reportedConnection.Should().Be($"connection={databasePath}", "the child must report the parent's database path");
         File.Exists(childDatabasePath).Should().BeFalse("the child must not derive its own process-specific database");
     }

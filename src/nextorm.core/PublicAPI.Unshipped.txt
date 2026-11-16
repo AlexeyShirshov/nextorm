@@ -369,3 +369,19 @@ NextORM.Core.EntityPropertyDescriptor.Converter.get -> NextORM.Core.IPropertyVal
 NextORM.Core.EntityPropertyDescriptor.Converter.init -> void
 NextORM.Core.JsonColumnConverters
 static NextORM.Core.JsonColumnConverters.Create<TModel>(NextORM.Core.JsonColumnStorage storage = NextORM.Core.JsonColumnStorage.Auto, System.Text.Json.JsonSerializerOptions? options = null) -> NextORM.Core.IPropertyValueConverter!
+NextORM.Core.EntityMetadataDescriptor.Relationships.get -> System.Collections.Generic.IReadOnlyList<NextORM.Core.EntityRelationshipDescriptor!>!
+NextORM.Core.EntityMetadataDescriptor.Relationships.init -> void
+NextORM.Core.EntityRelationshipDescriptor
+NextORM.Core.EntityRelationshipDescriptor.DeclaringType.get -> System.Type!
+NextORM.Core.EntityRelationshipDescriptor.DeclaringType.init -> void
+NextORM.Core.EntityRelationshipDescriptor.EntityRelationshipDescriptor() -> void
+NextORM.Core.EntityRelationshipDescriptor.ForeignKeys.get -> System.Collections.Generic.IReadOnlyList<System.Reflection.PropertyInfo!>!
+NextORM.Core.EntityRelationshipDescriptor.ForeignKeys.init -> void
+NextORM.Core.EntityRelationshipDescriptor.IsCollection.get -> bool
+NextORM.Core.EntityRelationshipDescriptor.IsCollection.init -> void
+NextORM.Core.EntityRelationshipDescriptor.Navigation.get -> System.Reflection.PropertyInfo!
+NextORM.Core.EntityRelationshipDescriptor.Navigation.init -> void
+NextORM.Core.EntityRelationshipDescriptor.PrincipalKeys.get -> System.Collections.Generic.IReadOnlyList<System.Reflection.PropertyInfo!>?
+NextORM.Core.EntityRelationshipDescriptor.PrincipalKeys.init -> void
+NextORM.Core.EntityRelationshipDescriptor.RelatedType.get -> System.Type!
+NextORM.Core.EntityRelationshipDescriptor.RelatedType.init -> void

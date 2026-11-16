@@ -44,6 +44,7 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
     private const string DurationAttribute = CoreNamespace + ".DurationAttribute";
     private const string RangeColumnsAttribute = CoreNamespace + ".RangeColumnsAttribute";
     private const string QueryFilterAttribute = CoreNamespace + ".QueryFilterAttribute";
+    private const string RelationshipAttribute = CoreNamespace + ".RelationshipAttribute";
     private const string ValueConverterAttribute = CoreNamespace + ".ValueConverterAttribute";
     private const string JsonColumnAttribute = CoreNamespace + ".JsonColumnAttribute";
     private const string ConverterInterface = CoreNamespace + ".IPropertyValueConverter";
@@ -90,12 +91,46 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
         // One annotated type handle per entity: the annotation is what lets the generated code resolve a
         // property by name without a trim warning, and it also tells the trimmer to keep the members. The
         // constructors are part of it because materializing the entity instantiates it.
+        var handles = new Dictionary<string, string>(StringComparer.Ordinal);
         for (var i = 0; i < covered.Count; i++)
         {
+            handles["global::" + covered[i].FullName] = "Entity" + i;
             source.Append("    [global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicProperties | global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicConstructors)]")
                 .AppendLine();
             source.Append("    private static readonly global::System.Type Entity").Append(i)
                 .Append(" = typeof(global::").Append(covered[i].FullName).AppendLine(");");
+            source.AppendLine();
+        }
+
+        // A relationship names a related entity that is not necessarily an entity this generator covers
+        // (a plain type the application never maps as a table), so those types get a handle of their own:
+        // the key members are read from them and have to survive trimming.
+        var relationIndex = 0;
+        foreach (var relationship in covered.SelectMany(static entity => entity.Relationships))
+        {
+            foreach (var owner in new[] { relationship.RelatedType, relationship.ForeignKeyOwner, relationship.PrincipalKeyOwner })
+            {
+                if (owner is null || handles.ContainsKey(owner))
+                    continue;
+
+                var handle = "Relation" + relationIndex++;
+                handles[owner] = handle;
+                source.Append("    [global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicProperties)]")
+                    .AppendLine();
+                source.Append("    private static readonly global::System.Type ").Append(handle)
+                    .Append(" = typeof(").Append(owner).AppendLine(");");
+                source.AppendLine();
+            }
+        }
+
+        if (covered.Any(static entity => entity.Relationships.Count > 0))
+        {
+            // The navigation and key members are resolved by name, exactly as the reflective build resolves
+            // them; the annotation on the handle is what makes that lookup trim-safe.
+            source.AppendLine("    private static global::System.Reflection.PropertyInfo Member(");
+            source.AppendLine("        [global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicProperties)] global::System.Type owner,");
+            source.AppendLine("        string name)");
+            source.AppendLine("        => owner.GetProperty(name, global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.FlattenHierarchy)!;");
             source.AppendLine();
         }
 
@@ -104,14 +139,14 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
         source.AppendLine("    {");
 
         for (var i = 0; i < covered.Count; i++)
-            EmitEntity(source, covered[i], i);
+            EmitEntity(source, covered[i], i, handles);
 
         source.AppendLine("    }");
         source.AppendLine("}");
         context.AddSource("__NextOrmEntityMetadata.g.cs", source.ToString());
     }
 
-    private static void EmitEntity(StringBuilder source, CoveredEntity entity, int index)
+    private static void EmitEntity(StringBuilder source, CoveredEntity entity, int index, Dictionary<string, string> handles)
     {
         source.Append("        global::NextORM.Core.GeneratedEntityMetadata.Register(typeof(global::")
             .Append(entity.FullName).Append("), static () =>").AppendLine();
@@ -180,6 +215,36 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
                 {
                     source.Append("                        ").Append(filter.IsLambda ? "Lambda" : "Func")
                         .Append(" = ").Append(filter.MemberReference).AppendLine(",");
+                }
+
+                source.AppendLine("                    },");
+            }
+
+            source.AppendLine("                },");
+        }
+
+        if (entity.Relationships.Count > 0)
+        {
+            source.AppendLine("                Relationships = new global::NextORM.Core.EntityRelationshipDescriptor[]");
+            source.AppendLine("                {");
+            foreach (var relationship in entity.Relationships)
+            {
+                source.AppendLine("                    new global::NextORM.Core.EntityRelationshipDescriptor");
+                source.AppendLine("                    {");
+                source.Append("                        DeclaringType = Entity").Append(index).AppendLine(",");
+                source.Append("                        Navigation = Member(Entity").Append(index).Append(", ")
+                    .Append(Literal(relationship.NavigationName)).AppendLine("),");
+                source.Append("                        RelatedType = ").Append(handles[relationship.RelatedType]).AppendLine(",");
+                if (relationship.IsCollection)
+                    source.AppendLine("                        IsCollection = true,");
+                source.Append("                        ForeignKeys = new global::System.Reflection.PropertyInfo[] { ")
+                    .Append(string.Join(", ", relationship.ForeignKeyNames.Select(name => "Member(" + handles[relationship.ForeignKeyOwner] + ", " + Literal(name) + ")")))
+                    .AppendLine(" },");
+                if (relationship.PrincipalKeyOwner is { } principalOwner && relationship.PrincipalKeyNames is { } principalNames)
+                {
+                    source.Append("                        PrincipalKeys = new global::System.Reflection.PropertyInfo[] { ")
+                        .Append(string.Join(", ", principalNames.Select(name => "Member(" + handles[principalOwner] + ", " + Literal(name) + ")")))
+                        .AppendLine(" },");
                 }
 
                 source.AppendLine("                    },");
@@ -365,6 +430,7 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
         }
 
         var properties = new List<CoveredProperty>();
+        var relationships = new List<CoveredRelationship>();
         foreach (var member in symbol.GetMembers())
         {
             if (member is not IPropertySymbol property)
@@ -378,9 +444,20 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
             if (attributes is null)
                 return null;
 
-            // GetProperties(Public | Instance) returns only writable properties, so a get-only navigation is
-            // not a column - but the attributes on it still shape the mapping: a relationship declared there
-            // is metadata this description does not carry, so the type keeps the reflective path.
+            // A navigation is never a column - the reflective build excludes it from the column map before
+            // it reads any other attribute, and so does this description. Only the property's own
+            // declaration counts: unlike the column attributes, the reflective relationship scan has no
+            // interface fallback.
+            if (property.GetAttributes().FirstOrDefault(attribute => AttributeName(attribute) == RelationshipAttribute) is { } relationshipAttribute)
+            {
+                if (DescribeRelationship(symbol, property, relationshipAttribute) is not { } relationship)
+                    return null;
+                relationships.Add(relationship);
+                continue;
+            }
+
+            // GetProperties(Public | Instance) returns only writable properties, so a get-only property is
+            // not a column - but the attributes on it still shape the mapping.
             if (property.SetMethod is null)
             {
                 if (attributes.Any(attribute => IsUnreproducible(AttributeName(attribute))))
@@ -423,7 +500,7 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
             return null;
 
         var fullName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty);
-        return new CoveredEntity(fullName, tableName ?? symbol.Name, tableNameAuto, Schema: null, symbol.Name, properties, filters);
+        return new CoveredEntity(fullName, tableName ?? symbol.Name, tableNameAuto, Schema: null, symbol.Name, properties, filters, relationships);
     }
 
     /// <summary>
@@ -695,6 +772,187 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
         => type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
     /// <summary>
+    /// Describes one <c>[Relationship]</c> declaration, or returns <see langword="null"/> when the
+    /// declaration is one the reflective build refuses or resolves in a way this generator does not
+    /// reproduce. A refusal must stay a refusal: a generated mapping that accepted the declaration would
+    /// turn a deterministic exception into a working query.
+    /// </summary>
+    private static CoveredRelationship? DescribeRelationship(
+        INamedTypeSymbol declaringType,
+        IPropertySymbol navigation,
+        AttributeData attribute)
+    {
+        var foreignKey = NamedString(attribute, "ForeignKey");
+        var foreignKeys = StringArray(attribute, "ForeignKeys");
+        var principalKeys = StringArray(attribute, "PrincipalKeys");
+
+        // Exactly one of the two foreign-key forms, and no empty key array (an empty array is a refusal,
+        // an omitted one means the default key).
+        if (!string.IsNullOrWhiteSpace(foreignKey) == (foreignKeys is not null))
+            return null;
+        if (foreignKeys is { Length: 0 } || principalKeys is { Length: 0 })
+            return null;
+
+        var classification = ClassifyNavigation(navigation.Type, out var elementType);
+        if (classification == NavigationShape.Ambiguous)
+            return null;
+
+        var isCollection = classification == NavigationShape.Collection;
+        var relatedType = isCollection ? elementType : navigation.Type;
+        // A reference navigation must be a class: the reflective build refuses a string or a value type,
+        // and a collection of a value type has no members to key on.
+        if (!isCollection && (relatedType.SpecialType == SpecialType.System_String || relatedType.IsValueType))
+            return null;
+        if (relatedType is not INamedTypeSymbol relatedNamed || !IsAccessibleInsideAssembly(relatedNamed))
+            return null;
+
+        var foreignKeyOwner = isCollection ? relatedType : declaringType;
+        var principalKeyOwner = isCollection ? declaringType : relatedType;
+
+        if (ResolveMemberNames(foreignKeyOwner, foreignKeys ?? new[] { foreignKey! }) is not { } resolvedForeignKeys)
+            return null;
+
+        IReadOnlyList<string>? resolvedPrincipalKeys = null;
+        if (principalKeys is not null)
+        {
+            if (ResolveMemberNames(principalKeyOwner, principalKeys) is not { } principal)
+                return null;
+            if (principal.Count != resolvedForeignKeys.Count)
+                return null;
+            resolvedPrincipalKeys = principal;
+        }
+
+        return new CoveredRelationship(
+            NavigationName: navigation.Name,
+            IsCollection: isCollection,
+            RelatedType: FullyQualified(relatedNamed),
+            ForeignKeyOwner: FullyQualified(foreignKeyOwner),
+            ForeignKeyNames: resolvedForeignKeys,
+            PrincipalKeyOwner: resolvedPrincipalKeys is null ? null : FullyQualified(principalKeyOwner),
+            PrincipalKeyNames: resolvedPrincipalKeys);
+    }
+
+    private enum NavigationShape
+    {
+        NotCollection,
+        Collection,
+        Ambiguous,
+    }
+
+    /// <summary>
+    /// Classifies a navigation type the way the reflective <c>TryGetCollectionElementType</c> does: a
+    /// non-string type that implements <c>IEnumerable&lt;T&gt;</c> is a collection of <c>T</c>. Several
+    /// different element types leave the winner to the reflection order, so that shape is ambiguous.
+    /// </summary>
+    private static NavigationShape ClassifyNavigation(ITypeSymbol type, out ITypeSymbol elementType)
+    {
+        elementType = null!;
+        if (type.SpecialType == SpecialType.System_String)
+            return NavigationShape.NotCollection;
+
+        if (type is IArrayTypeSymbol array)
+        {
+            elementType = array.ElementType;
+            return NavigationShape.Collection;
+        }
+
+        var candidates = new List<ITypeSymbol>();
+        if (EnumerableElement(type) is { } direct)
+            candidates.Add(direct);
+        if (type is INamedTypeSymbol named)
+        {
+            foreach (var implemented in named.AllInterfaces)
+            {
+                if (EnumerableElement(implemented) is { } element && !candidates.Any(existing => SymbolEqualityComparer.Default.Equals(existing, element)))
+                    candidates.Add(element);
+            }
+        }
+
+        if (candidates.Count == 0)
+            return NavigationShape.NotCollection;
+        if (candidates.Count > 1)
+            return NavigationShape.Ambiguous;
+
+        elementType = candidates[0];
+        return NavigationShape.Collection;
+    }
+
+    private static ITypeSymbol? EnumerableElement(ITypeSymbol type)
+        => type is INamedTypeSymbol { Name: "IEnumerable", Arity: 1 } enumerable
+            && enumerable.ContainingNamespace?.ToDisplayString() == "System.Collections.Generic"
+            ? enumerable.TypeArguments[0]
+            : null;
+
+    /// <summary>
+    /// Resolves the declared key members on their owner type, or returns <see langword="null"/> when a
+    /// name is empty, repeats, or names no public instance property (which the reflective build refuses).
+    /// </summary>
+    private static IReadOnlyList<string>? ResolveMemberNames(ITypeSymbol owner, IReadOnlyList<string> names)
+    {
+        var resolved = new List<string>(names.Count);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var name in names)
+        {
+            if (string.IsNullOrWhiteSpace(name) || !seen.Add(name))
+                return null;
+            if (FindPublicInstanceProperty(owner, name) is null)
+                return null;
+            resolved.Add(name);
+        }
+
+        return resolved;
+    }
+
+    /// <summary>
+    /// The public instance property a name refers to, searched down the base-type chain the way
+    /// <c>Type.GetProperty(..., FlattenHierarchy)</c> does. Inherited interface members are not searched:
+    /// not finding the member only means the type keeps the reflective path.
+    /// </summary>
+    private static IPropertySymbol? FindPublicInstanceProperty(ITypeSymbol type, string name)
+    {
+        for (var current = type; current is not null && current.SpecialType != SpecialType.System_Object; current = current.BaseType)
+        {
+            foreach (var member in current.GetMembers(name))
+            {
+                if (member is IPropertySymbol property
+                    && !property.IsStatic
+                    && !property.IsIndexer
+                    && property.DeclaredAccessibility == Accessibility.Public)
+                    return property;
+            }
+        }
+
+        return null;
+    }
+
+    private static string[]? StringArray(AttributeData attribute, string name)
+    {
+        foreach (var argument in attribute.NamedArguments)
+        {
+            if (argument.Key != name || argument.Value.IsNull)
+                continue;
+            if (argument.Value.Kind != TypedConstantKind.Array)
+                return null;
+
+            var values = argument.Value.Values;
+            var result = new string[values.Length];
+            for (var i = 0; i < values.Length; i++)
+            {
+                if (values[i].Value is not string value)
+                    return null;
+                result[i] = value;
+            }
+
+            return result;
+        }
+
+        return null;
+    }
+
+    private static string FullyQualified(ITypeSymbol type)
+        => type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+    /// <summary>
     /// Whether an attribute makes the mapping unreproducible. Every <c>NextORM.Core</c> mapping attribute
     /// other than <see cref="SqlTableAttribute"/> is excluded: relationships, query filters, value and JSON
     /// converters, range pairs, durations, collations, decimal precision, dynamic-columns stores and shard
@@ -860,7 +1118,22 @@ internal sealed class EntityMetadataGenerator : IIncrementalGenerator
         string? Schema,
         string TypeName,
         List<CoveredProperty> Properties,
-        List<CoveredFilter> Filters);
+        List<CoveredFilter> Filters,
+        List<CoveredRelationship> Relationships);
+
+    /// <summary>
+    /// One <c>[Relationship]</c> declaration. The key components are kept by name and owner type, so the
+    /// generated code resolves them the way the reflective build does; the dependent/principal side is
+    /// derived from <paramref name="IsCollection"/> when the mapping is built.
+    /// </summary>
+    private sealed record CoveredRelationship(
+        string NavigationName,
+        bool IsCollection,
+        string RelatedType,
+        string ForeignKeyOwner,
+        IReadOnlyList<string> ForeignKeyNames,
+        string? PrincipalKeyOwner,
+        IReadOnlyList<string>? PrincipalKeyNames);
 
     /// <summary>
     /// One <c>[QueryFilter]</c> declaration. <paramref name="MemberReference"/> is the generated

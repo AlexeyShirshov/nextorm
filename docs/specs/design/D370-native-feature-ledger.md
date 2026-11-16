@@ -20,7 +20,7 @@ paging through `Paging` is not implied by an aggregate query.
 
 | Provider | Instrument | Native | JIT comparison |
 |---|---|---|---|
-| SQLite | `tests/nextorm.aot.runner`, 31 scenarios (21 harness + 10 shared-catalog shapes) | 31/31 | equal per scenario |
+| SQLite | `tests/nextorm.aot.runner`, 32 scenarios (21 harness + 11 shared-catalog shapes) | 32/32 | equal per scenario |
 | PostgreSQL | `examples/nextorm.aotexamples.postgres.aviasales`, 10 queries | 10/10 | 10/10 identical |
 | SQL Server | `examples/nextorm.aotexamples.mssql.adventureworks`, 11 queries | 11/11 | 11/11 identical |
 | MySQL | `tests/nextorm.aot.sqlprobe --provider mysql`, 7 shapes | 7/7 | 7/7 identical |
@@ -29,7 +29,7 @@ paging through `Paging` is not implied by an aggregate query.
 
 The shared catalog (`tests/nextorm.aot.scenarios`) holds the shapes that every instrument and the JIT
 control execute from one declaration, so a native arm and its control cannot drift. It currently carries
-the ten SQLite shapes above; the provider instruments keep their own dataset-specific queries because
+the eleven SQLite shapes above; the provider instruments keep their own dataset-specific queries because
 their schemas differ.
 
 The MySQL/MariaDB probe's seven shapes are: `customer-filter` (typed scalar projection, constant
@@ -65,7 +65,8 @@ predicate, `OrderBy`), `orders-page` (`Paging`), `aggregate` (`GroupBy` + `count
 | Tuple-typed **result column** | U | U | U | U | U | **F** |
 | Decimal binary/comparison operators in rewriting | P | P | P | D | D | U |
 | Prepared command reuse / plan cache | P | U | U | P | P | U |
-| Eager loading (eager-load binding, per-parent paging) | U | U | U | U | U | U |
+| Eager loading of a declared relationship (split loader) | P | U | U | U | U | U |
+| Single-query eager loading (`JoinInto` row projection) | F | U | U | U | U | U |
 | Composite junction (many-to-many `JoinInto`) | U | U | U | U | U | U |
 | Value converters (`[JsonColumn]`, custom converter) | P | U | U | U | U | U |
 | CSV streaming (`WriteCsv`) | U | U | U | U | U | U |
@@ -75,17 +76,17 @@ predicate, `OrderBy`), `orders-page` (`Paging`), `aggregate` (`GroupBy` + `count
 | Raw SQL row mapping (`ExecuteRaw`) | U | U | U | U | U | U |
 | DML builders (insert/update/delete) | U | U | U | U | U | U |
 
-Cell totals: **86 `supported-proven`, 2 `supported-by-design`, 1 `fail-closed`, 103 `not-covered`**
-(192 cells across 32 capabilities and six providers; counted mechanically across the matrix rows).
+Cell totals: **87 `supported-proven`, 2 `supported-by-design`, 2 `fail-closed`, 107 `not-covered`**
+(198 cells across 33 capabilities and six providers; counted mechanically across the matrix rows).
 
 What each `P` rests on:
 
-- SQLite: the thirty-one-scenario native harness — typed/anonymous projection, captured parameter,
+- SQLite: the thirty-two-scenario native harness — typed/anonymous projection, captured parameter,
   ordering, `count`/`sum`, `GroupBy`+`HAVING`, `SelectGroup`, `SelectGroupHaving`, SQLite JSON functions,
   decimal operators, correlated subqueries, generated row materializers and the streaming writers, plus
-  the ten shared-catalog shapes (`tests/nextorm.aot.scenarios`): paging, `count_distinct`, `avg`, `min`,
-  `max`, join, CTE, two executions of one prepared command, a window aggregate and the `value-converters`
-  shape. The window cell rests on `OVER ()`; nextorm has no frame-specifier API (`ROWS BETWEEN`), so
+  the eleven shared-catalog shapes (`tests/nextorm.aot.scenarios`): paging, `count_distinct`, `avg`, `min`,
+  `max`, join, CTE, two executions of one prepared command, a window aggregate, the `value-converters`
+  shape and `relationship-load-with`. The window cell rests on `OVER ()`; nextorm has no frame-specifier API (`ROWS BETWEEN`), so
   `OVER` is the whole surface the cell can name.
 - SQLite, **JSON columns** and **value converters**: the `value-converters` catalog shape writes a
   `[JsonColumn(Storage = Text)]` property and a `[ValueConverter]` property through `Update` and reads
@@ -95,6 +96,13 @@ What each `P` rests on:
   `Activator`; the JSON contract metadata comes from a source-generated `JsonSerializerContext` that the
   generator finds in the same assembly and passes to the converter, which is what a trimmed application
   needs.
+- SQLite, **eager loading of a declared relationship**: the `relationship-load-with` catalog shape loads
+  `[Relationship(ForeignKey = ...)] ICollection<Order>` off three customers with `LoadWith`, and the
+  navigation, its keys and both mappings come from the compile-time entity description: the generator now
+  reproduces the `[Relationship]` declaration (collection vs reference navigation, ordered foreign and
+  principal components, the dependent/principal side) instead of leaving the type on the reflective path.
+  Native output `10:Buyer[1];20:Approver[2];30:Unlinked[]` equals the JIT control, so the one-to-many
+  shape, the empty-parent case and the split loader all run natively.
 - PostgreSQL: the ten-query probe — projection, ordering, paging, `count`/`count_distinct`/`sum`/`avg`,
   `GroupBy`, `SelectGroup`, join, CTE, windows, decimal operators.
 - SQL Server: the eleven-query probe — projection, ordering, paging,
@@ -120,10 +128,11 @@ the aggregate, not `Expression.MakeBinary`; the cell is deliberately not `P`.
 |---|---|---|---|
 | ClickHouse | `Tuple<...>` result column of element types other than the driver's registration sample | `NotSupportedException` at preparation naming `ClickHouse.Driver` `TupleType.Read`/`Activator.CreateInstance` and the remediation (`tupleElement(...)` columns or `toString(...)` + client parse) | native `Retention` run, `.pdca/370/rv1/attempts/s5-probe-clickhouse-retention-failclosed.log` |
 | All providers | `TimeOnly` projection without a converter | `NotSupportedException` at preparation (provider-specific text) | JIT suite; deterministic preparation-time rejection (not native-proven, listed for completeness only) |
+| All providers, native image | Single-query eager loading (`JoinInto`, or `LoadWith` with `EagerLoadMode.SingleQuery`) | `NotSupportedException` at declaration naming the run-time-closed `Projection<…>` row type and pointing at the split loader | native `join-into-single-query` component slice in `native-run.log` (the child reports the rejection, the harness asserts it) |
 | PostgreSQL / SQL Server | `System.Tuple` with more than seven elements in a raw ROW | `NotSupportedException` | JIT suite (`RawMapperFactory` guard) |
 
-Only the ClickHouse row is native-proven; the other two are JIT-only and are not counted as native
-fail-closed evidence.
+The ClickHouse row, the tuple-column row and the single-query eager-load row are native-proven; the other
+two are JIT-only and are not counted as native fail-closed evidence.
 
 ## What this ledger does not claim
 

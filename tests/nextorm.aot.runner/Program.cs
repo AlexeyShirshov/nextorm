@@ -240,6 +240,33 @@ static void RunComponentSlices(string databasePath)
 
     try
     {
+        // Single-query eager loading closes its row type over the parent and child types at run time, which a
+        // native image cannot materialize: the loader has to reject the shape before SQL, not fail inside the
+        // mapper. A silent success here would mean the mapper reached a type the image does not carry.
+        var rejected = false;
+        try
+        {
+            context.From<AotRelCustomer>()
+                .OrderBy(customer => customer.Id)
+                .JoinInto(context.From<AotRelOrder>(), (customer, order) => customer.Id == order.BuyerId, customer => customer.Orders)
+                .ToList();
+        }
+        catch (NotSupportedException ex) when (ex.Message.Contains("Single-query eager loading", StringComparison.Ordinal))
+        {
+            rejected = true;
+        }
+
+        Console.WriteLine(rejected
+            ? "component-slice=join-into-single-query\tstatus=pass\trejected=NotSupportedException"
+            : "component-slice=join-into-single-query\tstatus=fail\texception=NoRejection\tmessage=the single-query eager loader did not reject the native row shape");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"component-slice=join-into-single-query\tstatus=fail\texception={Escape(ex.GetType().FullName ?? ex.GetType().Name)}\tmessage={Escape(ex.Message)}");
+    }
+
+    try
+    {
         using var csvOutput = new MemoryStream();
         context.From<SimpleEntity>().WriteCsv(csvOutput, new CsvStreamOptions());
         Console.WriteLine($"component-slice=CsvStreamOptions\tstatus=pass\tbytes={csvOutput.Length}");

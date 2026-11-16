@@ -79,6 +79,13 @@ public sealed class EntityMetadataDescriptor
     public IReadOnlyList<EntityFilterDescriptor> Filters { get; init; } = Array.Empty<EntityFilterDescriptor>();
 
     /// <summary>
+    /// The navigation relationships the entity declares with <see cref="RelationshipAttribute"/>, in
+    /// declaration order. A navigation property is never a column: it is exposed through
+    /// <see cref="IEntityMetadata.Relationships"/> and excluded from <see cref="Properties"/>.
+    /// </summary>
+    public IReadOnlyList<EntityRelationshipDescriptor> Relationships { get; init; } = Array.Empty<EntityRelationshipDescriptor>();
+
+    /// <summary>
     /// Builds the mapping. The declaration order is kept as-is: the generator emits the properties in the
     /// order the compiler emits them, which is the order a reflective enumeration returns, so a generated
     /// mapping and the reflection fallback produce the same column order (and therefore the same SQL).
@@ -120,7 +127,33 @@ public sealed class EntityMetadataDescriptor
 
         InferKeyIfMissing(properties, TypeName);
 
-        return new EntityMetadata(TableName, properties, IsTableNameAuto, dynamicColumnsStore: null, filters: BuildFilters(), relationships: null, schema: Schema);
+        return new EntityMetadata(TableName, properties, IsTableNameAuto, dynamicColumnsStore: null, filters: BuildFilters(), relationships: BuildRelationships(), schema: Schema);
+    }
+
+    // The declaration rules of the reflective build: a collection navigation is one-to-many with the
+    // related type as the dependent side, a reference navigation is many-to-one with the declaring type as
+    // the dependent side. The key components stay as declared; the resolver pairs and validates them when
+    // the relationship is first read, exactly as it does for a reflective declaration.
+    private IReadOnlyList<IRelationshipMetadata> BuildRelationships()
+    {
+        var relationships = new List<IRelationshipMetadata>(Relationships.Count);
+        for (var i = 0; i < Relationships.Count; i++)
+        {
+            var relationship = Relationships[i];
+            var isCollection = relationship.IsCollection;
+            relationships.Add(new RelationshipMetadata(
+                isCollection ? RelationshipKind.OneToMany : RelationshipKind.ManyToOne,
+                relationship.DeclaringType,
+                relationship.RelatedType,
+                relationship.Navigation,
+                isCollection,
+                relationship.ForeignKeys,
+                relationship.PrincipalKeys,
+                isCollection ? relationship.RelatedType : relationship.DeclaringType,
+                isCollection ? relationship.DeclaringType : relationship.RelatedType));
+        }
+
+        return relationships;
     }
 
     // The key rules of the reflective build: an anonymous declaration is additive, a named one replaces
@@ -199,6 +232,38 @@ public sealed class EntityFilterDescriptor
 
     /// <summary>The builder-function form of the filter, or <see langword="null"/> when the declaration carries a predicate instead.</summary>
     public Delegate? Func { get; init; }
+}
+
+/// <summary>
+/// One navigation relationship in a compile-time <see cref="EntityMetadataDescriptor"/>: the data a
+/// <see cref="RelationshipAttribute"/> declares, with the members already resolved by generated code
+/// instead of a reflective member lookup.
+/// </summary>
+public sealed class EntityRelationshipDescriptor
+{
+    /// <summary>The entity type that declares <see cref="Navigation"/>.</summary>
+    public required Type DeclaringType { get; init; }
+
+    /// <summary>The navigation property.</summary>
+    public required PropertyInfo Navigation { get; init; }
+
+    /// <summary>
+    /// The related entity type: the collection element type for a collection navigation, the property
+    /// type for a reference navigation.
+    /// </summary>
+    public required Type RelatedType { get; init; }
+
+    /// <summary>Whether the navigation is a collection (a one-to-many relationship).</summary>
+    public bool IsCollection { get; init; }
+
+    /// <summary>The ordered foreign-key members on the dependent side.</summary>
+    public IReadOnlyList<PropertyInfo> ForeignKeys { get; init; } = Array.Empty<PropertyInfo>();
+
+    /// <summary>
+    /// The ordered principal-key members, or <see langword="null"/> to use the full key of the principal
+    /// entity in entity-metadata order.
+    /// </summary>
+    public IReadOnlyList<PropertyInfo>? PrincipalKeys { get; init; }
 }
 
 /// <summary>

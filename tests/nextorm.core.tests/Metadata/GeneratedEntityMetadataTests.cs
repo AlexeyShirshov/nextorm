@@ -56,6 +56,21 @@ public sealed class GeneratedEntityMetadataTests
         => AssertSameMetadata<GenInterfaceOnlyEntity>();
 
     [Fact]
+    public void GeneratedDescription_ShouldMatchReflectiveAutoBuild_ForACollectionNavigation()
+        => AssertSameMetadata<GenRelationshipParent>();
+
+    [Fact]
+    public void GeneratedDescription_ShouldMatchReflectiveAutoBuild_ForAReferenceNavigation()
+    {
+        AssertSameMetadata<GenRelationshipChildMapped>();
+        AssertSameMetadata<GenRelationshipParentMapped>();
+    }
+
+    [Fact]
+    public void GeneratedDescription_ShouldMatchReflectiveAutoBuild_ForCompositeRelationshipKeys()
+        => AssertSameMetadata<GenCompositeParent>();
+
+    [Fact]
     public void GeneratedConverter_ShouldBeConstructedFromGeneratedCode()
     {
         GeneratedEntityMetadata.TryGet(typeof(GenConverted), out var factory).Should().BeTrue();
@@ -115,9 +130,52 @@ public sealed class GeneratedEntityMetadataTests
             "a settable class with no mapping attribute is not necessarily an entity");
 
     [Fact]
-    public void TypeWithARelationshipOnAGetOnlyNavigation_ShouldKeepTheReflectivePath()
-        => GeneratedEntityMetadata.TryGet(typeof(GenRelationshipParent), out _).Should().BeFalse(
-            "a relationship is metadata the generated description does not carry, and a get-only navigation is not a column");
+    public void TypeWithARefusedRelationshipForm_ShouldKeepTheReflectivePath()
+    {
+        // Each of these declarations is a deterministic NotSupportedException in the reflective build. A
+        // generated description that accepted one would turn the refusal into a working query, so the type
+        // stays on the path that refuses it.
+        foreach (var type in new[]
+        {
+            typeof(GenRelationshipMissingForm),
+            typeof(GenRelationshipBothForms),
+            typeof(GenRelationshipEmptyForeignKeys),
+            typeof(GenRelationshipEmptyPrincipalKeys),
+            typeof(GenRelationshipUnknownMember),
+            typeof(GenRelationshipArityMismatch),
+        })
+        {
+            GeneratedEntityMetadata.TryGet(type, out _).Should().BeFalse($"{type.Name} must keep the refusal path");
+        }
+
+        FluentActions.Invoking(() => new EntityMetadataBuilder<GenRelationshipMissingForm>().AutoBuild())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*GenRelationshipMissingForm.Children*must name the foreign-key property*");
+    }
+
+    [Fact]
+    public void GeneratedRelationships_ShouldCarryTheDeclaredKeys()
+    {
+        GeneratedEntityMetadata.TryGet(typeof(GenRelationshipParentMapped), out var factory).Should().BeTrue();
+        GeneratedEntityMetadata.TryGet(typeof(GenRelationshipChildMapped), out var childFactory).Should().BeTrue();
+
+        var parent = factory().Relationships.Single();
+        var child = childFactory().Relationships.Single();
+
+        parent.Navigation!.Name.Should().Be(nameof(GenRelationshipParentMapped.Children));
+        parent.IsCollection.Should().BeTrue();
+        parent.RelatedType.Should().Be(typeof(GenRelationshipChildMapped));
+        parent.ForeignKey.Select(property => property.PropertyInfo.Name).Should().Equal(nameof(GenRelationshipChildMapped.ParentId));
+        parent.PrincipalKey.Select(property => property.PropertyInfo.Name).Should().Equal(nameof(GenRelationshipParentMapped.Id));
+
+        child.Navigation!.Name.Should().Be(nameof(GenRelationshipChildMapped.Parent));
+        child.IsCollection.Should().BeFalse();
+        child.RelatedType.Should().Be(typeof(GenRelationshipParentMapped));
+        child.ForeignKey.Select(property => property.PropertyInfo.Name).Should().Equal(nameof(GenRelationshipChildMapped.ParentId));
+        child.PrincipalKey.Select(property => property.PropertyInfo.Name).Should().Equal(nameof(GenRelationshipParentMapped.Id));
+        child.Kind.Should().Be(RelationshipKind.ManyToOne, "a reference navigation is the dependent side");
+        parent.Kind.Should().Be(RelationshipKind.OneToMany);
+    }
 
     [Fact]
     public void TypeWithAnUnmodelledAttribute_ShouldKeepTheReflectivePath()
@@ -175,6 +233,29 @@ public sealed class GeneratedEntityMetadataTests
             (actual.Converter is null).Should().Be(expected.Converter is null, $"column #{i} must declare the same converter");
             actual.Converter?.GetType().Should().Be(expected.Converter?.GetType());
             actual.Converter?.ProviderType.Should().Be(expected.Converter?.ProviderType);
+        }
+
+        generated.Relationships.Should().HaveCount(reflected.Relationships.Count);
+        for (var i = 0; i < reflected.Relationships.Count; i++)
+        {
+            var expectedRelationship = reflected.Relationships[i];
+            var actualRelationship = generated.Relationships[i];
+
+            actualRelationship.Kind.Should().Be(expectedRelationship.Kind, $"relationship #{i} must keep the reflective kind");
+            actualRelationship.DeclaringType.Should().Be(expectedRelationship.DeclaringType);
+            actualRelationship.RelatedType.Should().Be(expectedRelationship.RelatedType);
+            actualRelationship.Navigation!.Name.Should().Be(expectedRelationship.Navigation!.Name);
+            actualRelationship.IsCollection.Should().Be(expectedRelationship.IsCollection);
+
+            // The declared components, before the resolver validates them against the participating
+            // mappings: the generated description must keep the same members in the same order.
+            var expectedDeclared = (RelationshipMetadata)expectedRelationship;
+            var actualDeclared = (RelationshipMetadata)actualRelationship;
+            actualDeclared.ForeignKeyProperties!.Select(property => property.Name)
+                .Should().Equal(expectedDeclared.ForeignKeyProperties!.Select(property => property.Name), $"relationship #{i} must declare the same foreign key");
+            (actualDeclared.PrincipalKeyProperties is null).Should().Be(expectedDeclared.PrincipalKeyProperties is null);
+            actualDeclared.PrincipalKeyProperties?.Select(property => property.Name)
+                .Should().Equal(expectedDeclared.PrincipalKeyProperties?.Select(property => property.Name));
         }
 
         generated.Filters.Should().HaveCount(reflected.Filters.Count);
@@ -332,6 +413,11 @@ public sealed class GenInterfaceOnlyEntity : IGenInterfaceOnly
     public string? Name { get; set; }
 }
 
+/// <summary>
+/// The dependent side of the collection navigation below. It declares no mapping attribute of its own, so
+/// the generator does not describe it as an entity - it only reads its foreign-key member - which is the
+/// case that proves a relationship can point outside the covered set.
+/// </summary>
 public sealed class GenRelationshipChild
 {
     [Key]
@@ -348,6 +434,122 @@ public sealed class GenRelationshipParent
 
     [Relationship(ForeignKey = nameof(GenRelationshipChild.ParentId))]
     public ICollection<GenRelationshipChild> Children { get; } = new List<GenRelationshipChild>();
+}
+
+[SqlTable("gen_relationship_parent")]
+public sealed class GenRelationshipParentMapped
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Relationship(ForeignKey = nameof(GenRelationshipChildMapped.ParentId))]
+    public ICollection<GenRelationshipChildMapped> Children { get; } = new List<GenRelationshipChildMapped>();
+}
+
+[SqlTable("gen_relationship_child")]
+public sealed class GenRelationshipChildMapped
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+
+    [Relationship(ForeignKey = nameof(ParentId))]
+    public GenRelationshipParentMapped? Parent { get; set; }
+}
+
+public sealed class GenCompositeChild
+{
+    public int ParentA { get; set; }
+
+    public int ParentB { get; set; }
+}
+
+[SqlTable("gen_composite_parent")]
+public sealed class GenCompositeParent
+{
+    [Key]
+    [Column("a")]
+    public int A { get; set; }
+
+    [Key]
+    [Column("b")]
+    public int B { get; set; }
+
+    [Relationship(
+        ForeignKeys = new[] { nameof(GenCompositeChild.ParentA), nameof(GenCompositeChild.ParentB) },
+        PrincipalKeys = new[] { nameof(A), nameof(B) })]
+    public ICollection<GenCompositeChild> Children { get; } = new List<GenCompositeChild>();
+}
+
+// The refusal shapes: every one of them is a deterministic NotSupportedException in the reflective build,
+// so the generator must leave the type on the path that throws instead of describing it.
+[SqlTable("gen_relationship_missing_form")]
+public sealed class GenRelationshipMissingForm
+{
+    [Key]
+    public int Id { get; set; }
+
+    [Relationship]
+    public ICollection<GenRelationshipChild> Children { get; } = new List<GenRelationshipChild>();
+}
+
+[SqlTable("gen_relationship_both_forms")]
+public sealed class GenRelationshipBothForms
+{
+    [Key]
+    public int Id { get; set; }
+
+    [Relationship(ForeignKey = nameof(GenRelationshipChild.ParentId), ForeignKeys = new[] { nameof(GenRelationshipChild.ParentId) })]
+    public ICollection<GenRelationshipChild> Children { get; } = new List<GenRelationshipChild>();
+}
+
+[SqlTable("gen_relationship_empty_foreign_keys")]
+public sealed class GenRelationshipEmptyForeignKeys
+{
+    [Key]
+    public int Id { get; set; }
+
+    [Relationship(ForeignKeys = new string[0])]
+    public ICollection<GenRelationshipChild> Children { get; } = new List<GenRelationshipChild>();
+}
+
+[SqlTable("gen_relationship_empty_principal_keys")]
+public sealed class GenRelationshipEmptyPrincipalKeys
+{
+    [Key]
+    public int Id { get; set; }
+
+    [Relationship(ForeignKey = nameof(GenRelationshipChild.ParentId), PrincipalKeys = new string[0])]
+    public ICollection<GenRelationshipChild> Children { get; } = new List<GenRelationshipChild>();
+}
+
+[SqlTable("gen_relationship_unknown_member")]
+public sealed class GenRelationshipUnknownMember
+{
+    [Key]
+    public int Id { get; set; }
+
+    [Relationship(ForeignKey = "MissingMember")]
+    public ICollection<GenRelationshipChild> Children { get; } = new List<GenRelationshipChild>();
+}
+
+[SqlTable("gen_relationship_arity")]
+public sealed class GenRelationshipArityMismatch
+{
+    [Key]
+    [Column("a")]
+    public int A { get; set; }
+
+    [Key]
+    [Column("b")]
+    public int B { get; set; }
+
+    [Relationship(ForeignKeys = new[] { nameof(GenCompositeChild.ParentA), nameof(GenCompositeChild.ParentB) }, PrincipalKeys = new[] { nameof(A) })]
+    public ICollection<GenCompositeChild> Children { get; } = new List<GenCompositeChild>();
 }
 
 [SqlTable("gen_not_mapped")]

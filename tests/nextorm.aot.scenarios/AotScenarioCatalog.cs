@@ -26,7 +26,8 @@ public static class AotScenarioCatalog
         new("cte", Cte),
         new("prepared-reuse", PreparedReuse),
         new("window-function", WindowFunction),
-        new("value-converters", ValueConverters)
+        new("value-converters", ValueConverters),
+        new("relationship-load-with", RelationshipLoadWith)
     ];
 
     private static object? Paging(IDataContext context)
@@ -103,6 +104,18 @@ public static class AotScenarioCatalog
         var rows = context.From<AotConverterEntity>().OrderBy(x => x.Id).ToList();
         return string.Join(";", rows.Select(row =>
             $"{row.Id}:{row.Amount.ToString(CultureInfo.InvariantCulture)}:{row.Payload?.Name ?? "null"}/{row.Payload?.Value.ToString(CultureInfo.InvariantCulture) ?? "null"}"));
+    }
+
+    private static object? RelationshipLoadWith(IDataContext context)
+    {
+        // The navigation, its keys and the child mapping all come from the entity metadata: the shape runs
+        // only if the compile-time description carries the [Relationship] declaration.
+        var customers = context.From<AotRelCustomer>()
+            .OrderBy(customer => customer.Id)
+            .LoadWith(customer => customer.Orders)
+            .ToList();
+        return string.Join(";", customers.Select(customer =>
+            $"{customer.Id}:{customer.Name ?? "null"}[{string.Join(",", customer.Orders.OrderBy(order => order.Id).Select(order => order.Id))}]"));
     }
 
     private static object? Cte(IDataContext context)

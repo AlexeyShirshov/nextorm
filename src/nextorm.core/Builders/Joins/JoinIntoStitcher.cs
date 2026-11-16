@@ -41,6 +41,8 @@ internal static class JoinIntoProjectionFactory
             throw new NotSupportedException(
                 $"JoinInto supports at most {MaxArity - 1} child collections in one query, but {childCount} were declared.");
 
+        EnsureProjectionMetadataIsSupported(arity);
+
         var open = typeof(Projection<,>).Assembly.GetType($"NextORM.Core.Projection`{arity}")
             ?? throw new InvalidOperationException($"Cannot create projection type of arity {arity}.");
 
@@ -55,6 +57,25 @@ internal static class JoinIntoProjectionFactory
         }
 
         return open.MakeGenericType(arguments);
+    }
+
+    /// <summary>
+    /// Rejects the single-query row shape on a native image before any SQL runs. The pair command closes
+    /// <c>Projection&lt;…&gt;</c> over the parent and the child types at run time, so no static reference to that
+    /// instantiation exists and the native image keeps no reflection metadata for it: the row mapper could
+    /// not instantiate it. Split eager loading (<c>LoadWith</c> without <c>EagerLoadMode.SingleQuery</c>, the
+    /// default) materializes the parent and child types themselves and stays available.
+    /// </summary>
+    /// <param name="arity">The projection arity the declaration requires.</param>
+    /// <exception cref="NotSupportedException">The runtime executes native code and cannot build the row type.</exception>
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    private static void EnsureProjectionMetadataIsSupported(int arity)
+    {
+        if (System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
+            return;
+
+        throw new NotSupportedException(
+            $"Single-query eager loading closes the {arity}-item Projection row type over the parent and child types at run time, and a native image keeps no reflection metadata for a type nothing references statically. Use the split loader (JoinInto without EagerLoadMode.SingleQuery, or LoadWith, which defaults to it).");
     }
 }
 
