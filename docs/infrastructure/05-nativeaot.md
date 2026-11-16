@@ -42,7 +42,10 @@ results) and the streaming terminals — `WriteCsv`, `WriteJson` and the asynchr
 
 Every supported scenario runs natively and under JIT and is compared row by row: row counts and
 values must match. That comparison runs automatically on every change, so "works natively" is a
-standing build condition, not a one-off check.
+standing build condition, not a one-off check. Each of the six providers is verified with its own
+published native binary against a live server: the projection, filtering, grouping, aggregate,
+`HAVING`/`SelectGroupHaving`, join, CTE, window, prepared-command, converter, eager-loading, write and
+streaming shapes are all exercised that way, so no provider relies on another provider's run.
 
 ## JSON columns
 
