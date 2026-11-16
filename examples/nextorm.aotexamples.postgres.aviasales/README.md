@@ -27,7 +27,9 @@ AVIASALES_CONNECTION="Host=…;Database=demo" \
 ```
 
 `--only Name1,Name2` runs a subset (the names are the method names of `Queries.cs`). Without a
-connection string the process prints usage and exits with code 2 — it never starts a container.
+connection string the process prints usage and exits with code 2 — it never starts a container. Every
+command gets a 600-second timeout: the aggregations scan the whole demo dataset and do not fit the
+30-second provider default on a cold server.
 
 Every query prints its row count and a **digest** of the formatted rows, so a JIT run and a native run
 can be compared line by line: the same input must produce the same counts and the same digests.
@@ -45,6 +47,9 @@ dotnet publish examples/nextorm.aotexamples.postgres.aviasales -c Release -r lin
 global here), not nextorm configuration. The standard NativeAOT prerequisites apply (`clang`,
 `zlib1g-dev`, the RID-specific native toolchain).
 
-Support for the PostgreSQL provider under NativeAOT is **not** claimed by
-[`docs/infrastructure/05-nativeaot.md`](../../docs/infrastructure/05-nativeaot.md) yet (SQLite is the
-verified provider); this project is the reproducer that measures what works.
+Native support for the PostgreSQL provider is **measured, not guaranteed**, by this probe: the
+[current matrix](../../docs/infrastructure/05-nativeaot.md) lists what runs natively and what does not.
+The project pins the latest **published** `nextorm` packages (`NextOrmVersion` in
+[`Directory.Packages.props`](../Directory.Packages.props)), so a run reproduces the **released**
+surface; the guide's current numbers are for the development build of the next release. Released
+results are tracked in [`VERIFICATION.md`](../VERIFICATION.md).

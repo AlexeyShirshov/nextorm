@@ -1,68 +1,85 @@
 # Runtime mapping variant
 
-One entity class can address more than one physical place: a database per tenant, a `{tenant}_orders`
-table next to `orders` on one server, a tenant-specific schema. A *mapping variant* is the runtime decision
-behind that: a key that the mapping layer turns into a table name, a schema, column names and a parameter
-prefix.
+One entity class can address more than one physical place, and which one it addresses is a decision of the
+running application, not of the class: a database per tenant, an `orders` table per tenant inside one
+database (`orders_acme`, `orders_beta`), a schema per tenant. The table name, the schema and even the column
+names depend on *who is asking*.
 
-## Two contracts
+The usual alternatives are worse. A generated class per tenant multiplies the model and the migrations;
+setting the name on every call scatters one decision across the code and breaks as soon as a join mixes two
+sources; a global rename cannot serve two tenants from one process. NextORM keeps one mapped class and
+makes the naming layer a **runtime lookup**, so the same `Order` renders `orders_acme` for one caller and
+`orders_beta` for another on the same connection.
 
-| Contract | Answers |
+That lookup is the *mapping variant*: a key that the mapping layer turns into a table name, a schema,
+column names and a parameter prefix.
+
+## Terms
+
+| Term | Meaning |
 | --- | --- |
-| [`IEntityVariantResolver`](xref:NextORM.Core.IEntityVariantResolver) | Which variant applies to this entity, instance or set of key values |
-| [`IEntityMetadataProvider`](xref:NextORM.Core.IEntityMetadataProvider) | What a variant maps to: entity metadata (table, schema, properties) and column names |
+| [`MappingVariant`](xref:NextORM.Core.MappingVariant) | A `readonly record struct` around a nullable `string` key. It is the value passed around, stored and compared. |
+| Key | Whatever the application puts inside a variant. Here a tenant slug (`acme`), in [sharding](35-sharding-and-horizontal-partitioning.md) a bucket number. The library never interprets it. |
+| Default variant | `MappingVariant.Default` — the empty key, i.e. the ordinary mapping: SQL text and parameter names stay exactly what they were before variants existed. |
+| [`IEntityVariantResolver`](xref:NextORM.Core.IEntityVariantResolver) | Answers *which* variant applies to an entity type, to an instance, or to a set of key values. |
+| [`IEntityMetadataProvider`](xref:NextORM.Core.IEntityMetadataProvider) | Answers *what* a variant maps to: entity metadata (table, schema, properties) and column names. |
 
-A variant is [`MappingVariant`](xref:NextORM.Core.MappingVariant) — a `readonly record struct` around a
-nullable `string` key. `MappingVariant.Default` (an empty key) is the ordinary mapping: SQL text and
-parameter names stay exactly what they were before variants existed.
+## How it works
 
-The default implementations are [`DefaultEntityVariantResolver`](xref:NextORM.Core.DefaultEntityVariantResolver)
-(always returns `Default`) and [`DefaultEntityMetadataProvider`](xref:NextORM.Core.DefaultEntityMetadataProvider)
-(the reflection mapping). Register replacements on the builder:
+The engine asks two questions, one per seam:
+
+1. **Which variant?** The builders consult `IEntityVariantResolver` — `Resolve(Type)` for a read, an
+   insert, an update/delete by predicate or a truncate, `Resolve(Type, object)` for a command whose target
+   is an entity instance, `Resolve(Type, IReadOnlyList<object?>)` for explicit key values. Returning
+   `MappingVariant.Default` keeps the ordinary mapping, which is what
+   [`DefaultEntityVariantResolver`](xref:NextORM.Core.DefaultEntityVariantResolver) does for everything.
+2. **What does the variant map to?** `IEntityMetadataProvider.GetMetadata(entityType, variant)` returns the
+   table and schema for that variant, and `GetColumnName(property, variant, convention)` the column name.
+   [`DefaultEntityMetadataProvider`](xref:NextORM.Core.DefaultEntityMetadataProvider) is the reflection
+   mapping and ignores the variant, so names only change once a provider derives them from the key.
+
+Both defaults are installed unless replaced on the builder:
 
 ```csharp
 var builder = new DataContextBuilder()
-    .UseVariantResolver(new TenantVariantResolver())
-    .UseEntityMetadataProvider(new TenantMetadataProvider());
-
-using var context = new PostgresDataContext(connectionString, builder);
+    .UseVariantResolver(resolver)               // IEntityVariantResolver
+    .UseEntityMetadataProvider(provider);       // IEntityMetadataProvider
 ```
 
-## Explicit variant on one command
+A command can also take the variant directly with `WithVariant(...)` on the query and merge builders; that
+wins over the resolver for that command only and never changes the context's default mapping. `WithVariant`
+is not available on insert, update, delete or truncate — those take the resolver's answer.
 
-`WithVariant` is available on the query builders (including a joined builder) and on `MergeBuilder<T>`:
+Everything derived from a variant is keyed by it, which is what makes two variants coexist in one context:
+metadata is cached per `(entity type, variant)`, plans are cached per variant, generated parameter names get
+the variant prefix (`MappingVariant.ParameterPrefix`), and DML renders the variant's target and columns.
 
-```csharp
-var variant = new MappingVariant("acme");
+## What a variant isolates
 
-var orders = context.From<Order>()
-    .WithVariant(variant)
-    .Where(order => order.Total > 100m)
-    .ToList();
+- **Metadata** is cached per `(entity type, variant)`, so two variants never share a table, schema or column
+  list. The default provider owns that cache; a custom provider keeps its own state and must isolate it the
+  same way.
+- **Plans** are keyed by the variant as well: the same query text is reused for the same variant and never
+  reused across variants, including through the value-free plan-reuse shortcuts.
+- **Parameter names** get the variant prefix (`MappingVariant.ParameterPrefix`, for example `acme_`), so two
+  variants in one batch cannot collide: `... where total > $acme_minimum`.
+- **DML** renders the variant's target and columns: insert, update, delete and truncate all resolve their
+  variant before the statement is built.
+- **The connection is not part of a mapping variant.** A variant maps names on the context's own connection;
+  reaching another server is a separate layer.
 
-context.CreateMergeBuilder<Order>()
-    .Using(order)
-    .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
-    .WithVariant(variant)
-    .Merge();
-```
+## A tenant variant
 
-The variant applies to that command only; it never changes the context's default mapping. A variant on a
-join, a subquery or a CTE belongs to that source, so one statement may render `acme_orders` for the outer
-query and `beta_orders` for a `beta`-scoped subquery.
+The rest of the page is one example: the entity `Order` is mapped to the table `orders` without a schema,
+and the key is a tenant slug, so `acme` renders `orders_acme` / `total_acme`, `beta` renders `orders_beta` /
+`total_beta`, and the default variant renders `orders` / `total`.
 
-## Resolving the variant automatically
-
-Most applications do not want to pass a variant to every call. `IEntityVariantResolver` is consulted by
-the builders:
-
-- `Resolve(Type)` — a read (`From<T>()`), an insert, a delete/update by predicate, a truncate;
-- `Resolve(Type, object)` — an update, delete or merge whose target is an entity instance;
-- `Resolve(Type, IReadOnlyList<object?>)` — explicit key values.
+**1. Resolve the key.**
 
 ```csharp
 public sealed class TenantVariantResolver : IEntityVariantResolver
 {
+    // The key is the tenant slug, "acme" here; the ambient tenant decides it for every call.
     public MappingVariant Resolve(Type entityType)
         => new(AmbientTenant.Current
             ?? throw new InvalidOperationException("A tenant must be set before querying tenant-mapped entities."));
@@ -73,13 +90,7 @@ public sealed class TenantVariantResolver : IEntityVariantResolver
 }
 ```
 
-An explicit `WithVariant(...)` on a query or merge builder wins over the resolver. Returning
-`MappingVariant.Default` keeps the ordinary mapping, which is what the default resolver does.
-
-## Mapping a variant onto physical names
-
-The provider reads the base mapping and derives the variant's one. Deriving from the default metadata keeps
-every property mapping intact:
+**2. Map the key onto physical names.**
 
 ```csharp
 public sealed class TenantMetadataProvider : IEntityMetadataProvider
@@ -102,6 +113,7 @@ public sealed class TenantMetadataProvider : IEntityMetadataProvider
             : $"{variant.Key}_{_inner.GetColumnName(property, MappingVariant.Default, convention)}";
 }
 
+// IEntityMetadata with the tenant suffix: table "orders" -> "orders_acme"; properties are reused as is.
 internal sealed class TenantMetadata(IEntityMetadata inner, string tenant) : IEntityMetadata
 {
     public IReadOnlyList<IPropertyMetadata> Properties => inner.Properties;
@@ -111,8 +123,18 @@ internal sealed class TenantMetadata(IEntityMetadata inner, string tenant) : IEn
 }
 ```
 
-This mapping produces `orders_acme` and `total_acme` for the `acme` variant, and the untouched `orders` /
-`total` for the default one.
+**3. Wire both into the context.**
+
+```csharp
+var builder = new DataContextBuilder()
+    .UseVariantResolver(new TenantVariantResolver())
+    .UseEntityMetadataProvider(new TenantMetadataProvider());
+
+using var context = new PostgresDataContext(connectionString, builder);   // the provider's connection string
+```
+
+From here `context.From<Order>()` reads `orders_acme` while `AmbientTenant.Current` is `"acme"`, and
+`orders_beta` while it is `"beta"`.
 
 Points worth keeping:
 
@@ -127,19 +149,38 @@ Points worth keeping:
 - **The provider is trusted code.** The key is not escaped; quoting does not make an arbitrary key safe.
   Validate the key (for example `^[a-z0-9_]{1,32}$`) or map it to an allow-listed physical name.
 
-## What a variant isolates
+## An explicit variant on one command
 
-- **Metadata** is cached per `(entity type, variant)`, so two variants never share a table, schema or column
-  list. The default provider owns that cache; a custom provider keeps its own state and must isolate it the
-  same way.
-- **Plans** are keyed by the variant as well: the same query text is reused for the same variant and never
-  reused across variants, including through the value-free plan-reuse shortcuts.
-- **Parameter names** get the variant prefix (`MappingVariant.ParameterPrefix`, for example `acme_`), so two
-  variants in one batch cannot collide: `... where total > $acme_minimum`.
-- **DML** renders the variant's target and columns: insert, update, delete and truncate all resolve their
-  variant before the statement is built.
-- **The connection is not part of a mapping variant.** A variant maps names on the context's own connection;
-  reaching another server is a separate layer.
+The resolver is not the only source of the key: `WithVariant` takes the same key by hand, for one command:
+
+```csharp
+var variant = new MappingVariant("acme");      // the tenant slug — the same key as above
+
+var orders = context.From<Order>()
+    .WithVariant(variant)                      // reads orders_acme
+    .Where(order => order.Total > 100m)
+    .ToList();
+
+var incoming = new Order { Id = 1, Tenant = "acme", Total = 250m };
+
+context.CreateMergeBuilder<Order>()
+    .Using(incoming)                           // writes orders_acme
+    .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
+    // Optional when the ambient tenant already selects "acme": the resolver returns the same variant.
+    // `Tenant` is only written into the row; it does not select the table (see the note below).
+    .WithVariant(variant)
+    .Merge();
+```
+
+The variant applies to that command only; it never changes the context's default mapping. A variant on a
+join, a subquery or a CTE belongs to that source, so one statement may render `orders_acme` for the outer
+query and `orders_beta` for a `beta`-scoped subquery.
+
+The explicit call repeats the key the resolver would answer at builder creation, which is why it can be
+dropped when the ambient tenant already selects the right table — and why it has to be passed when it does
+not. Note that `incoming.Tenant` plays no part in that decision: the builder resolves the variant from the
+entity **type** (`CreateMergeBuilder` calls `Resolve(typeof(TEntity))` once), never from the source values.
+Only sharded entities route by instance, and a sharded merge still demands an explicit variant.
 
 ## Limitations
 

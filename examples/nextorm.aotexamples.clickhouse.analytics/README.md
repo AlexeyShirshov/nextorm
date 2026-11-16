@@ -17,7 +17,8 @@ what ships on nuget.org.
 
 ## Running
 
-Point it at a ClickHouse server that already holds `datasets.hits_v1`:
+Point it at a ClickHouse server that already holds `datasets.hits_v1`, using the **HTTP port**
+(`8123`):
 
 ```bash
 dotnet run --project examples/nextorm.aotexamples.clickhouse.analytics -c Release -- \
@@ -28,11 +29,18 @@ CLICKHOUSE_ANALYTICS_CONNECTION="Host=…;Port=8123" \
   dotnet run --project examples/nextorm.aotexamples.clickhouse.analytics -c Release
 ```
 
+The HTTP transport is what these connection strings use; the native protocol port (`9000`) is rejected
+with `Port 9000 is for clickhouse-client program / You must use port 8123 for HTTP`. Every command gets
+a 600-second timeout, because the analytics queries aggregate over all 8.8 M hits.
+
 `--only Name1,Name2` runs a subset (the names are the method names of `Queries.cs`). Without a
 connection string the process prints usage and exits with code 2 — it never starts a container.
 
 Every query prints its row count and a **digest** of the formatted rows, so a JIT run and a native run
-can be compared line by line: the same input must produce the same counts and the same digests.
+can be compared line by line: the same input must produce the same counts and the same digests. The
+digest is order-sensitive, and ClickHouse guarantees no order for an unordered `GROUP BY`, so compare
+`Sessions` — and any other aggregate without an `ORDER BY` — as a sorted row set instead of by digest
+alone.
 
 ## NativeAOT
 
@@ -47,6 +55,9 @@ dotnet publish examples/nextorm.aotexamples.clickhouse.analytics -c Release -r l
 global here), not nextorm configuration. The standard NativeAOT prerequisites apply (`clang`,
 `zlib1g-dev`, the RID-specific native toolchain).
 
-Support for the ClickHouse provider under NativeAOT is **not** claimed by
-[`docs/infrastructure/05-nativeaot.md`](../../docs/infrastructure/05-nativeaot.md) yet (SQLite is the
-verified provider); this project is the reproducer that measures what works.
+Native support for the ClickHouse provider is **measured, not guaranteed**, by this probe: the
+[current matrix](../../docs/infrastructure/05-nativeaot.md) lists what runs natively and what does not.
+The project pins the latest **published** `nextorm` packages (`NextOrmVersion` in
+[`Directory.Packages.props`](../Directory.Packages.props)), so a run reproduces the **released**
+surface; the guide's current numbers are for the development build of the next release. Released
+results are tracked in [`VERIFICATION.md`](../VERIFICATION.md).

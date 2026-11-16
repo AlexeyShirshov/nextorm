@@ -17,6 +17,15 @@
       "/tmp/nextorm*/**": "allow"
     }
   },
+  "policies": [
+    { "action": "tool.use", "resource": "shell:dotnet docfx*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:dotnet tool run docfx*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:timeout * dotnet docfx*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:env * dotnet docfx*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:bash -c *dotnet docfx*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:sh -c *dotnet docfx*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:*docfx.dll*", "effect": "deny" }
+  ],
   "agent": {
     "nextorm-brains": { "model": "openai/gpt-6.1-sol", "variant": "high" },
     "nextorm-scout": { "model": "deepseek/deepseek-flash" },

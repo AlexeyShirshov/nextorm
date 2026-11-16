@@ -18,16 +18,21 @@ nothing here needs the source projects — the comparison example's note about a
 
 ## Running
 
-Point it at a SQL Server that already holds the AdventureWorks 2022 database:
+Point it at a SQL Server that already holds the AdventureWorks 2022 database. The database name is the
+one the comparison example restores, `AdventureWorks` (the `.bak` file is called
+`AdventureWorks2022.bak`; the catalog is not):
 
 ```bash
 dotnet run --project examples/nextorm.aotexamples.mssql.adventureworks -c Release -- \
-  --connection "Server=127.0.0.1,1433;Database=AdventureWorks2022;User Id=sa;Password=…;TrustServerCertificate=True"
+  --connection "Server=127.0.0.1,1433;Database=AdventureWorks;User Id=sa;Password=…;TrustServerCertificate=True"
 
 # or through the environment
-ADVENTUREWORKS_CONNECTION="Server=…;Database=AdventureWorks2022" \
+ADVENTUREWORKS_CONNECTION="Server=…;Database=AdventureWorks" \
   dotnet run --project examples/nextorm.aotexamples.mssql.adventureworks -c Release
 ```
+
+Every command gets a 600-second timeout; the aggregations scan millions of rows and do not fit the
+30-second provider default on a cold server.
 
 `--only Name1,Name2` runs a subset (the names are the method names of `Queries.cs`). Without a
 connection string the process prints usage and exits with code 2 — it never starts a container.
@@ -40,7 +45,7 @@ can be compared line by line: the same input must produce the same counts and th
 ```bash
 dotnet publish examples/nextorm.aotexamples.mssql.adventureworks -c Release -r linux-x64
 ./examples/nextorm.aotexamples.mssql.adventureworks/bin/linux/Release/net11.0/linux-x64/publish/nextorm.aotexamples.mssql.adventureworks \
-  --connection "Server=…;Database=AdventureWorks2022"
+  --connection "Server=…;Database=AdventureWorks"
 ```
 
 `PublishAot=true` lives in the csproj, so a plain `dotnet publish` is the whole command; the
@@ -48,6 +53,9 @@ dotnet publish examples/nextorm.aotexamples.mssql.adventureworks -c Release -r l
 global here), not nextorm configuration. The standard NativeAOT prerequisites apply (`clang`,
 `zlib1g-dev`, the RID-specific native toolchain).
 
-Support for the SQL Server provider under NativeAOT is **not** claimed by
-[`docs/infrastructure/05-nativeaot.md`](../../docs/infrastructure/05-nativeaot.md) yet (SQLite is the
-verified provider); this project is the reproducer that measures what works.
+Native support for the SQL Server provider is **measured, not guaranteed**, by this probe: the
+[current matrix](../../docs/infrastructure/05-nativeaot.md) lists what runs natively and what does not.
+The project pins the latest **published** `nextorm` packages (`NextOrmVersion` in
+[`Directory.Packages.props`](../Directory.Packages.props)), so a run reproduces the **released**
+surface; the guide's current numbers are for the development build of the next release. Released
+results are tracked in [`VERIFICATION.md`](../VERIFICATION.md).

@@ -124,3 +124,27 @@
 - Effect: one extra evidence round and an explicit correction in the next dispatch.
 - Evidence: `.pdca/status/T370.md` §Step S11 `CHECK record … attempt 2`; the scoped scan in `.pdca/370/rv1/candidate/s11/marker-path-scan.txt`.
 - Prevention: state the scope of every absence claim as the path it was verified on, and list the excluded sites with their line numbers in the same sentence.
+
+## T370-S13-PLAN-CONTRACT-ASSUMPTION (S13, 2026-11-14)
+
+**Symptom.** The S13 plan promised full Stream A closure in one step by replacing `ProjectionEntityItem.EntityType` / `QueryCommand.ResultType` with "already introduced in S1–S12" typed descriptors (`EntityDescriptor`, `TypeToken`). Preflight found neither type, found that `EntityMetadata` carries no constructor contract, and found that `QueryCommand.ResultType` does reach `RowMapperFactory.GetOrBuildBoxed` → `BuildBoxed` → `RowMaterializerBuilder.Build(Type, …)`.
+
+**Root cause.** The plan treated an unverified architectural assumption as an established capability. Its own gaps table claimed the descriptor/`TypeToken` mechanism was "already proved in S1–S12" without an evidence pointer, and its confidence section listed only the residual-row classification as an assumption.
+
+**Effect on attempts/cycles.** Attempt n=1 produced no candidate: no product edit, no design record, no build/publish/registry/test evidence. S13 closed via DO → ACT, outcome incomplete; S13-AC1 unmet, S13-AC2/AC4 unverified, S13-AC3 unmet. One campaign step (N=13) spent without an increment.
+
+**Evidence.** `.pdca/370/rv1/attempts/s13-preflight.txt:11-20`; `.pdca/status/T370.md` §Step S13 (`#### PLAN record`, `#### DO result`, `#### ACT record`); driver confirmation that `ConstructorInfoResolver` has six call sites, all in `RowMaterializerBuilder` (`:188,207,312,334,400,488`), and that `EntityMetadata` exposes table/schema/properties/filters/relationships only.
+
+**Prevention.** A plan that leans on an existing contract names it and its evidence pointer (`file:line` or roslyn `members`/`refs` output) in the same gap row; without that pointer the dependency is an open assumption and cannot justify a "close in one step" boundary. Where the contract is missing and the original task requires prior design approval, the plan's boundary is the design record plus approval, not the implementation.
+
+## T370-S14-INCREMENTAL-PUBLISH-VANISHES (S14, 2026-11-14)
+
+**Symptom.** The campaign's canonical instrument, `dotnet publish tests/nextorm.aot.runner -c Release -r linux-x64`, run on an up-to-date tree, completed with `rc=0` in 3 seconds, wrote a 950-byte log and yielded **0 registry rows**. The same command after a forced rebuild (`dotnet clean tests/nextorm.aot.runner -c Release -r linux-x64`, then publish) took 107 seconds, wrote 122,445 bytes and reproduced the S14 baseline exactly: 211 raw / 205 unique, registry sha256 `104509fb7a7615158f8d1fa6fd910ac3d2d3509358003d7b0a53df75d4660bc0`, identical to the frozen `registry-s14-baseline.tsv`.
+
+**Root cause.** The registry-extraction contract (`.pdca/370/rv1/registry-contract.md`) defines how to read a publish log but never defined the precondition for the log to contain diagnostics. `dotnet publish` skips the compile and link targets when the publish output is current, and the trim/AOT analyzers only execute inside those targets. A skipped target emits no warning and no error, so the run is green and empty at the same time; nothing in the campaign's measurement recipe distinguishes "no diagnostics" from "no analysis".
+
+**Effect on attempts/cycles.** No effect on the S14 baseline, which was measured on a fresh post-#65 tree. The hazard is a false `−205`: the first CHECK evidence round reproduced the empty run (`registry_raw=0`), and had that registry been compared to the 205-row baseline, the `Δ ≤ −1` gate of every later step would pass with no change at all while a real regression — rows added — stayed invisible. The failure is silent in the safe direction (it reports improvement) and therefore survives review.
+
+**Evidence.** `.pdca/370/rv1/evidence-s14/publish-replay.meta.txt` (`rc: 0`, `duration_s: 3`, `log_bytes: 950`, `registry_raw=0 registry_unique=0`), `publish-replay.log`; `.pdca/370/rv1/evidence-s14/publish-forced.meta.txt` (`clean_rc: 0`, `publish_rc: 0`, `duration_s: 107`, `log_bytes: 122445`, `registry_raw=211 registry_unique=205`, `registry_identical_to_baseline: YES`), `publish-forced.log`, `registry-s14-forced.tsv`; contract `.pdca/370/rv1/registry-contract.md`.
+
+**Prevention.** The instrument is the tuple **forced rebuild → publish → extraction → baseline hash comparison**, not the publish alone. Every measurement record states the rebuild step, the log size, the raw/unique counts and the registry sha256; a registry with 0 rows, or one whose hash differs from the baseline while `src/**`/`tests/**` are unchanged, is a failed measurement and not a result. Step plans and CHECK briefs spell out the forced rebuild in the command.

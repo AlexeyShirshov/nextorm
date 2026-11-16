@@ -11,6 +11,9 @@ using NextORM.SqlServer;
 // and run natively. Each query prints its row count and a digest of the formatted rows, which makes
 // a JIT run and a native run directly comparable.
 
+// Seconds per command; the demo dataset is small enough that a healthy server answers well inside it.
+const int CommandTimeoutSeconds = 600;
+
 CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
 CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
 
@@ -27,7 +30,10 @@ if (connectionString is null)
 
 Console.WriteLine("[aot-mssql] using the provided connection string");
 
-await using var ctx = new SqlServerDataContext(connectionString, new DataContextBuilder());
+// The AdventureWorks aggregations scan millions of rows and can pass the 30-second provider default on
+// a cold server; the timeout is set on the context so a bare connection string is enough to run it.
+await using var ctx = new SqlServerDataContext(
+    connectionString, new DataContextBuilder().UseCommandTimeout(CommandTimeoutSeconds));
 
 var queries = new (string Name, Func<CancellationToken, Task<object>> Run)[]
 {
