@@ -1089,6 +1089,7 @@ internal sealed class MetadataEagerLoadSpec<TEntity, TChild> : IEagerLoadSpec<TE
             OriginalJoinCondition = source.OriginalJoinCondition,
             IsJoinInto = source.IsJoinInto,
             JoinIntoIdentity = source.JoinIntoIdentity,
+            JoinIntoLinkKeyColumns = source.JoinIntoLinkKeyColumns,
             SuppressCartesianWarning = source.SuppressCartesianWarning,
             EagerParentItemNumber = source.EagerParentItemNumber,
             FilterScope = childScope is { IsEmpty: false } scope ? scope : source.FilterScope,

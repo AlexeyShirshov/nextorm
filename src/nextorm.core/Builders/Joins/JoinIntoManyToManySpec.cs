@@ -79,6 +79,23 @@ internal interface IJoinIntoManyToManySpec
 }
 
 /// <summary>
+/// The concrete key mapping behind one object-typed synthetic link member.
+/// </summary>
+/// <param name="LinkMember">The member exposed by the synthetic link carrier.</param>
+/// <param name="ReaderType">The source foreign-key CLR type used by the typed row reader.</param>
+/// <param name="ProviderType">The provider-side CLR type, when the source key has a converter.</param>
+/// <param name="Converter">The source foreign-key value converter, if any.</param>
+/// <param name="DurationUnit">The source duration storage unit, if applicable.</param>
+/// <param name="DurationPrecision">The source duration precision, if applicable.</param>
+internal readonly record struct JoinIntoLinkKeyColumn(
+    PropertyInfo LinkMember,
+    Type ReaderType,
+    Type? ProviderType,
+    IPropertyValueConverter? Converter,
+    DurationUnit? DurationUnit,
+    int DurationPrecision);
+
+/// <summary>
 /// One denormalized many-to-many row: the parent, the path-dependent link item (the derived
 /// <see cref="JoinIntoLink{TParentKey,TChildKey}"/> on SQL, the junction entity in memory) and the
 /// joined child. Kept as a private-shaped type so the common <c>IJoinIntoSpec</c> row contract stays
@@ -144,15 +161,6 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
         JoinType joinType,
         bool isSql)
     {
-        // A single-query many-to-many row needs a link type closed over the junction key types at run time
-        // (and, for a composite junction, a carrier emitted with Reflection.Emit). A native image supports
-        // neither, so the declaration is rejected here - deterministically, before any SQL - instead of
-        // failing inside the generic close or the emitter. The split loader loads the junction as an
-        // ordinary typed entity and stays available.
-        if (!RuntimeFeature.IsDynamicCodeSupported)
-            throw new NotSupportedException(
-                "Many-to-many eager loading in one query builds its link row type over the junction key types at run time, which a native image cannot provide. Use the split loader (LoadWith without EagerLoadMode.SingleQuery, the default).");
-
         Child = child;
         _predicate = predicate;
         Relationship = relationship;
@@ -227,6 +235,25 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
             }
         }
 
+        if (isSql)
+        {
+            var linkKeyColumns = new List<JoinIntoLinkKeyColumn>(
+                junction.JunctionParentForeignKey.Count + junction.JunctionChildForeignKey.Count);
+            for (var i = 0; i < junction.JunctionParentForeignKey.Count; i++)
+                linkKeyColumns.Add(CreateLinkKeyColumn(
+                    LinkParentKeyProperties[i],
+                    junction.JunctionParentForeignKey[i]));
+            for (var i = 0; i < junction.JunctionChildForeignKey.Count; i++)
+                linkKeyColumns.Add(CreateLinkKeyColumn(
+                    LinkChildKeyProperties[i],
+                    junction.JunctionChildForeignKey[i]));
+            LinkKeyColumns = linkKeyColumns;
+        }
+        else
+        {
+            LinkKeyColumns = [];
+        }
+
         // The join component correspondence is resolved from the junction metadata's own declared
         // key↔foreign-key pairing (junction.ParentKey[i] ↔ junction.JunctionParentForeignKey[i] and the
         // child analog), never from a blind index over two independently-ordered lists. A declaration
@@ -297,6 +324,12 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
     /// junction carries one (<c>ChildKey</c>); a composite junction carries one per component.
     /// </summary>
     internal IReadOnlyList<PropertyInfo> LinkChildKeyProperties { get; }
+
+    /// <summary>
+    /// The original foreign-key reader mappings for the link's key members, or an empty list for the
+    /// in-memory junction-item path.
+    /// </summary>
+    internal IReadOnlyList<JoinIntoLinkKeyColumn> LinkKeyColumns { get; }
 
     /// <summary>
     /// The parent join component pairs, in declared component order: each relationship principal-key
@@ -437,6 +470,15 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
                 typeof(object)),
             parameter).Compile();
     }
+
+    private static JoinIntoLinkKeyColumn CreateLinkKeyColumn(PropertyInfo linkMember, IPropertyMetadata source)
+        => new(
+            linkMember,
+            source.PropertyInfo.PropertyType,
+            source.Converter?.ProviderType,
+            source.Converter,
+            source.DurationUnit,
+            source.DurationPrecision);
 
     /// <inheritdoc/>
     public PropertyInfo? CollectionProperty { get; }
@@ -625,15 +667,22 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
         for (var i = 0; i < spec.ParentJoinPairs.Count; i++)
         {
             var pair = spec.ParentJoinPairs[i];
+            Expression linkKey = Expression.Property(linkParameter, spec.LinkParentKeyProperties[i]);
+            if (linkKey.Type != pair.JunctionForeignKey.PropertyType)
+                linkKey = Expression.Convert(linkKey, pair.JunctionForeignKey.PropertyType);
             var equality = JoinIntoSpecHelpers.BuildKeyEquality(
                 Expression.Property(parentParameter, pair.Key),
-                Expression.Property(linkParameter, spec.LinkParentKeyProperties[i]),
+                linkKey,
                 pair.Key.PropertyType,
                 "JoinInto");
             parentEquality = parentEquality is null ? equality : Expression.AndAlso(parentEquality, equality);
         }
 
-        var linkCondition = Expression.Lambda(parentEquality!, parentParameter, linkParameter);
+        var linkCondition = BuildLinkCondition(
+            spec.LinkEntityType,
+            parentEquality!,
+            parentParameter,
+            linkParameter);
 
         // link-to-child: (p, c) => c.<child key> = <link>.ChildKey && <user predicate>
         //
@@ -651,13 +700,15 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
         for (var i = 0; i < spec.ChildJoinPairs.Count; i++)
         {
             var pair = spec.ChildJoinPairs[i];
-            var linkChildKeyValue = Expression.Property(linkItem, spec.LinkChildKeyProperties[i]);
+            Expression linkChildKeyValue = Expression.Property(linkItem, spec.LinkChildKeyProperties[i]);
+            if (linkChildKeyValue.Type != pair.JunctionForeignKey.PropertyType)
+                linkChildKeyValue = Expression.Convert(linkChildKeyValue, pair.JunctionForeignKey.PropertyType);
             var childKeyValue = Expression.Property(childParameter, pair.Key);
             var equality = JoinIntoSpecHelpers.BuildKeyEquality(childKeyValue, linkChildKeyValue, pair.Key.PropertyType, "JoinInto");
             childEquality = childEquality is null ? equality : Expression.AndAlso(childEquality, equality);
         }
 
-        var childCondition = Expression.Lambda(
+        var childCondition = Expression.Lambda<Func<TEntity, TChild, bool>>(
             Expression.AndAlso(childEquality!, predicate.Body),
             predicate.Parameters[0],
             childParameter);
@@ -670,6 +721,7 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
             From = dataContext.NeedMapping
                 ? JunctionLinkSourceFactory.BuildSource(dataContext, relationship)
                 : JunctionLinkSourceFactory.GetInMemorySource(relationship),
+            JoinIntoLinkKeyColumns = spec.LinkKeyColumns.Count == 0 ? null : spec.LinkKeyColumns,
             Strictness = options.Strictness ?? JoinStrictness.Default,
             IsGlobal = options.IsGlobal,
             JoinHint = options.JoinHint,
@@ -693,5 +745,29 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
             childJoin.SetFrom(childJoin.From.WithSourceLock(options.SourceLock));
 
         return (spec, linkJoin, childJoin);
+    }
+
+    private static LambdaExpression BuildLinkCondition(
+        Type linkType,
+        Expression body,
+        ParameterExpression parentParameter,
+        ParameterExpression linkParameter)
+    {
+        if (linkType == typeof(JoinIntoLink<object, object>))
+            return Expression.Lambda<Func<TEntity, JoinIntoLink<object, object>, bool>>(body, parentParameter, linkParameter);
+        if (linkType == typeof(CompositeJunctionLink3))
+            return Expression.Lambda<Func<TEntity, CompositeJunctionLink3, bool>>(body, parentParameter, linkParameter);
+        if (linkType == typeof(CompositeJunctionLink4))
+            return Expression.Lambda<Func<TEntity, CompositeJunctionLink4, bool>>(body, parentParameter, linkParameter);
+        if (linkType == typeof(CompositeJunctionLink5))
+            return Expression.Lambda<Func<TEntity, CompositeJunctionLink5, bool>>(body, parentParameter, linkParameter);
+        if (linkType == typeof(CompositeJunctionLink6))
+            return Expression.Lambda<Func<TEntity, CompositeJunctionLink6, bool>>(body, parentParameter, linkParameter);
+        if (linkType == typeof(CompositeJunctionLink7))
+            return Expression.Lambda<Func<TEntity, CompositeJunctionLink7, bool>>(body, parentParameter, linkParameter);
+        if (linkType == typeof(CompositeJunctionLink8))
+            return Expression.Lambda<Func<TEntity, CompositeJunctionLink8, bool>>(body, parentParameter, linkParameter);
+
+        return Expression.Lambda(body, parentParameter, linkParameter);
     }
 }

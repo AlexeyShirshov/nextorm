@@ -2719,6 +2719,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
             OriginalJoinCondition = source.OriginalJoinCondition,
             IsJoinInto = source.IsJoinInto,
             JoinIntoIdentity = source.JoinIntoIdentity,
+            JoinIntoLinkKeyColumns = source.JoinIntoLinkKeyColumns,
             SuppressCartesianWarning = source.SuppressCartesianWarning,
             FilterScope = childFilterScope,
         };

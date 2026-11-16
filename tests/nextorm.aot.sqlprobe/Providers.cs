@@ -98,6 +98,31 @@ internal abstract class ProbeProvider
         "insert into aot_child (id, parent_id, name) values (10, 1, 'a'), (11, 1, 'b')",
         "insert into aot_converter (id, amount) values (1, 'v=12.5'), (2, 'v=-3'), (3, 'v=0')",
     ];
+
+    /// <summary>
+    /// Scalar many-to-many graph: a repeated link, a dangling link, a second populated parent and an empty
+    /// parent. The repeated link remains a distinct relationship occurrence.
+    /// </summary>
+    private protected static IReadOnlyList<string> ScalarM2mSeed { get; } =
+    [
+        "insert into aot_m2m_parent (id, name) values (1, 'M1'), (2, 'M2'), (3, 'M3')",
+        "insert into aot_m2m_tag (id, name) values (10, 'T10'), (11, 'T11'), (12, 'T12')",
+        "insert into aot_m2m_link (id, parent_id, child_id) values " +
+        "(101, 1, 10), (102, 1, 10), (103, 1, 11), (104, 1, 999), (105, 2, 12)",
+    ];
+
+    /// <summary>
+    /// Composite many-to-many graph: both relationship keys have two components, parents and tags collide
+    /// on their first component, and one parent has no surviving link.
+    /// </summary>
+    private protected static IReadOnlyList<string> CompositeM2mSeed { get; } =
+    [
+        "insert into aot_composite_m2m_parent (id, tenant_id, link_id) values (1, 7, 1), (2, 7, 2), (3, 8, 1)",
+        "insert into aot_composite_m2m_tag (id, tenant_id, tag_id) values (10, 9, 10), (11, 9, 11), (12, 9, 12)",
+        "insert into aot_composite_m2m_link (id, parent_tenant_id, parent_link_id, tag_tenant_id, tag_id) values " +
+        "(101, 7, 1, 9, 10), (102, 7, 1, 9, 10), (103, 7, 1, 9, 11), " +
+        "(104, 7, 2, 9, 11), (105, 7, 1, 9, 999)",
+    ];
 }
 
 /// <summary>The MySQL provider.</summary>
@@ -116,6 +141,12 @@ internal sealed class MySqlProbe : ProbeProvider
     /// <inheritdoc/>
     public override IReadOnlyList<string> Schema { get; } =
     [
+        "drop table if exists aot_composite_m2m_link",
+        "drop table if exists aot_composite_m2m_tag",
+        "drop table if exists aot_composite_m2m_parent",
+        "drop table if exists aot_m2m_link",
+        "drop table if exists aot_m2m_tag",
+        "drop table if exists aot_m2m_parent",
         "drop table if exists aot_order",
         "drop table if exists aot_customer",
         "create table aot_customer (id int not null primary key, name varchar(64) not null, country varchar(2) not null)",
@@ -130,9 +161,17 @@ internal sealed class MySqlProbe : ProbeProvider
         "create table aot_child (id int not null primary key, parent_id int not null, name varchar(64) not null)",
         "drop table if exists aot_converter",
         "create table aot_converter (id int not null primary key, amount varchar(32) not null)",
+        "create table aot_m2m_parent (id int not null primary key, name varchar(64) not null)",
+        "create table aot_m2m_tag (id int not null primary key, name varchar(64) not null)",
+        "create table aot_m2m_link (id int not null primary key, parent_id int not null, child_id int not null)",
+        "create table aot_composite_m2m_parent (id int not null primary key, tenant_id int not null, link_id int not null)",
+        "create table aot_composite_m2m_tag (id int not null primary key, tenant_id int not null, tag_id int not null)",
+        "create table aot_composite_m2m_link (id int not null primary key, parent_tenant_id int not null, parent_link_id int not null, tag_tenant_id int not null, tag_id int not null)",
         JsonSeed,
         .. RelationshipSeed,
         .. SeedRows,
+        .. ScalarM2mSeed,
+        .. CompositeM2mSeed,
     ];
 }
 
@@ -169,6 +208,12 @@ internal sealed class PostgresProbe : ProbeProvider
     /// <inheritdoc/>
     public override IReadOnlyList<string> Schema { get; } =
     [
+        "drop table if exists aot_composite_m2m_link",
+        "drop table if exists aot_composite_m2m_tag",
+        "drop table if exists aot_composite_m2m_parent",
+        "drop table if exists aot_m2m_link",
+        "drop table if exists aot_m2m_tag",
+        "drop table if exists aot_m2m_parent",
         "drop table if exists aot_order",
         "drop table if exists aot_customer",
         "create table aot_customer (id integer not null primary key, name varchar(64) not null, country varchar(2) not null)",
@@ -183,9 +228,17 @@ internal sealed class PostgresProbe : ProbeProvider
         "create table aot_child (id integer not null primary key, parent_id integer not null, name varchar(64) not null)",
         "drop table if exists aot_converter",
         "create table aot_converter (id integer not null primary key, amount varchar(32) not null)",
+        "create table aot_m2m_parent (id integer not null primary key, name varchar(64) not null)",
+        "create table aot_m2m_tag (id integer not null primary key, name varchar(64) not null)",
+        "create table aot_m2m_link (id integer not null primary key, parent_id integer not null, child_id integer not null)",
+        "create table aot_composite_m2m_parent (id integer not null primary key, tenant_id integer not null, link_id integer not null)",
+        "create table aot_composite_m2m_tag (id integer not null primary key, tenant_id integer not null, tag_id integer not null)",
+        "create table aot_composite_m2m_link (id integer not null primary key, parent_tenant_id integer not null, parent_link_id integer not null, tag_tenant_id integer not null, tag_id integer not null)",
         JsonSeed,
         .. RelationshipSeed,
         .. SeedRows,
+        .. ScalarM2mSeed,
+        .. CompositeM2mSeed,
     ];
 }
 
@@ -205,6 +258,12 @@ internal sealed class SqlServerProbe : ProbeProvider
     /// <inheritdoc/>
     public override IReadOnlyList<string> Schema { get; } =
     [
+        "if object_id('aot_composite_m2m_link') is not null drop table aot_composite_m2m_link",
+        "if object_id('aot_composite_m2m_tag') is not null drop table aot_composite_m2m_tag",
+        "if object_id('aot_composite_m2m_parent') is not null drop table aot_composite_m2m_parent",
+        "if object_id('aot_m2m_link') is not null drop table aot_m2m_link",
+        "if object_id('aot_m2m_tag') is not null drop table aot_m2m_tag",
+        "if object_id('aot_m2m_parent') is not null drop table aot_m2m_parent",
         "if object_id('aot_order') is not null drop table aot_order",
         "if object_id('aot_customer') is not null drop table aot_customer",
         "create table aot_customer (id int not null primary key, name nvarchar(64) not null, country nvarchar(2) not null)",
@@ -219,9 +278,17 @@ internal sealed class SqlServerProbe : ProbeProvider
         "create table aot_child (id int not null primary key, parent_id int not null, name nvarchar(64) not null)",
         "if object_id('aot_converter') is not null drop table aot_converter",
         "create table aot_converter (id int not null primary key, amount nvarchar(32) not null)",
+        "create table aot_m2m_parent (id int not null primary key, name nvarchar(64) not null)",
+        "create table aot_m2m_tag (id int not null primary key, name nvarchar(64) not null)",
+        "create table aot_m2m_link (id int not null primary key, parent_id int not null, child_id int not null)",
+        "create table aot_composite_m2m_parent (id int not null primary key, tenant_id int not null, link_id int not null)",
+        "create table aot_composite_m2m_tag (id int not null primary key, tenant_id int not null, tag_id int not null)",
+        "create table aot_composite_m2m_link (id int not null primary key, parent_tenant_id int not null, parent_link_id int not null, tag_tenant_id int not null, tag_id int not null)",
         JsonSeed,
         .. RelationshipSeed,
         .. SeedRows,
+        .. ScalarM2mSeed,
+        .. CompositeM2mSeed,
     ];
 }
 
@@ -244,6 +311,12 @@ internal sealed class ClickHouseProbe : ProbeProvider
     /// <inheritdoc/>
     public override IReadOnlyList<string> Schema { get; } =
     [
+        "drop table if exists aot_composite_m2m_link",
+        "drop table if exists aot_composite_m2m_tag",
+        "drop table if exists aot_composite_m2m_parent",
+        "drop table if exists aot_m2m_link",
+        "drop table if exists aot_m2m_tag",
+        "drop table if exists aot_m2m_parent",
         "drop table if exists aot_order",
         "drop table if exists aot_customer",
         "create table aot_customer (id Int32, name String, country String) engine = MergeTree order by id",
@@ -258,8 +331,16 @@ internal sealed class ClickHouseProbe : ProbeProvider
         "create table aot_child (id Int32, parent_id Int32, name String) engine = MergeTree order by id",
         "drop table if exists aot_converter",
         "create table aot_converter (id Int32, amount String) engine = MergeTree order by id",
+        "create table aot_m2m_parent (id Int32, name String) engine = MergeTree order by id",
+        "create table aot_m2m_tag (id Int32, name String) engine = MergeTree order by id",
+        "create table aot_m2m_link (id Int32, parent_id Int32, child_id Int32) engine = MergeTree order by id",
+        "create table aot_composite_m2m_parent (id Int32, tenant_id Int32, link_id Int32) engine = MergeTree order by id",
+        "create table aot_composite_m2m_tag (id Int32, tenant_id Int32, tag_id Int32) engine = MergeTree order by id",
+        "create table aot_composite_m2m_link (id Int32, parent_tenant_id Int32, parent_link_id Int32, tag_tenant_id Int32, tag_id Int32) engine = MergeTree order by id",
         JsonSeed,
         .. RelationshipSeed,
         .. SeedRows,
+        .. ScalarM2mSeed,
+        .. CompositeM2mSeed,
     ];
 }

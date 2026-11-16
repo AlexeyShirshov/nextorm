@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Diagnostics;
 using System.Text;
 using System.Globalization;
+using Microsoft.Data.Sqlite;
 using NextORM.AotScenarios;
 using NextORM.Core;
 using NextORM.Extensions;
@@ -194,6 +195,47 @@ Run("correlated-outer-member", () =>
         .ToList();
     return string.Join(";", rows.OrderBy(row => row.Id).Select(row => $"{row.Id}:{row.N}"));
 });
+Run("join-into", () =>
+{
+    var counter = new AotQueryCounter();
+    context.AddInterceptor(counter);
+    var parents = context.From<AotRelCustomer>()
+        .OrderBy(customer => customer.Id)
+        .JoinInto(
+            context.From<AotRelOrder>(),
+            (customer, order) => customer.Id == order.BuyerId,
+            customer => customer.Orders)
+        .ToList();
+    return FormatRelCustomerGraph(parents, counter.CommandCount);
+});
+Run("load-with-single-query", () =>
+{
+    using var eagerContext = new SqliteDataContext(
+        $"Data Source='{args[0]}';Default Timeout=30",
+        new DataContextBuilder().UseEagerLoadMode(EagerLoadMode.SingleQuery));
+    var counter = new AotQueryCounter();
+    eagerContext.AddInterceptor(counter);
+    var parents = eagerContext.From<AotRelCustomer>()
+        .OrderBy(customer => customer.Id)
+        .LoadWith(customer => customer.Orders)
+        .ToList();
+    return FormatRelCustomerGraph(parents, counter.CommandCount);
+});
+Run("load-with-nested-single-query", () =>
+{
+    using var eagerContext = new SqliteDataContext(
+        $"Data Source='{args[0]}';Default Timeout=30",
+        new DataContextBuilder().UseEagerLoadMode(EagerLoadMode.SingleQuery));
+    var counter = new AotQueryCounter();
+    eagerContext.AddInterceptor(counter);
+    var parents = eagerContext.From<AotRelCustomer>()
+        .OrderBy(customer => customer.Id)
+        .LoadWith(
+            customer => customer.Orders,
+            childContext => childContext.From<AotRelOrder>().LoadWith(order => order.Approver))
+        .ToList();
+    return FormatNestedRelCustomerGraph(parents, counter.CommandCount);
+});
 Run("generated-row-materializer", () =>
 {
     // The [RowMaterializer] DTO is materialized by the source-generated provider registered by its module
@@ -238,68 +280,9 @@ static void RunComponentSlices(string databasePath)
         Console.WriteLine($"component-slice=nextorm.extensions\tstatus=fail\texception={Escape(ex.GetType().FullName ?? ex.GetType().Name)}\tmessage={Escape(ex.Message)}\tdetails={Escape(ex.ToString())}");
     }
 
-    try
-    {
-        // Single-query eager loading closes its row type over the parent and child types at run time, which a
-        // native image cannot materialize: the loader has to reject the shape before SQL, not fail inside the
-        // mapper. A silent success here would mean the mapper reached a type the image does not carry.
-        var rejected = false;
-        try
-        {
-            context.From<AotRelCustomer>()
-                .OrderBy(customer => customer.Id)
-                .JoinInto(context.From<AotRelOrder>(), (customer, order) => customer.Id == order.BuyerId, customer => customer.Orders)
-                .ToList();
-        }
-        catch (NotSupportedException ex) when (ex.Message.Contains("Single-query eager loading", StringComparison.Ordinal))
-        {
-            rejected = true;
-        }
-
-        Console.WriteLine(rejected
-            ? "component-slice=join-into-single-query\tstatus=pass\trejected=NotSupportedException"
-            : "component-slice=join-into-single-query\tstatus=fail\texception=NoRejection\tmessage=the single-query eager loader did not reject the native row shape");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"component-slice=join-into-single-query\tstatus=fail\texception={Escape(ex.GetType().FullName ?? ex.GetType().Name)}\tmessage={Escape(ex.Message)}");
-    }
-
-    try
-    {
-        // A many-to-many single-query load flattens the parent, the junction and the child into the same
-        // run-time-closed projection row type, so it has to be rejected by the same guard before SQL. A
-        // silent success would mean the mapper reached a row type the native image does not carry.
-        var rejected = false;
-        try
-        {
-            using var junctionContext = new SqliteDataContext(
-                $"Data Source='{databasePath}';Default Timeout=30",
-                new DataContextBuilder().UseEagerLoadMode(EagerLoadMode.SingleQuery));
-            junctionContext.From<AotJunctionTag>();
-            junctionContext.From<AotJunctionLink>();
-            junctionContext.From<AotJunctionParent>(builder => builder
-                .HasManyThrough<AotJunctionTag, AotJunctionLink, int, int>(
-                    parent => parent.Tags, parent => parent.Id, link => link.ParentId, tag => tag.Id, link => link.ChildId));
-            junctionContext.From<AotJunctionParent>().LoadWith(parent => parent.Tags).ToList();
-        }
-        catch (NotSupportedException ex) when (ex.Message.Contains("Many-to-many eager loading", StringComparison.Ordinal))
-        {
-            rejected = true;
-        }
-
-        Console.WriteLine(rejected
-            ? "component-slice=join-into-many-to-many\tstatus=pass\trejected=NotSupportedException"
-            : "component-slice=join-into-many-to-many\tstatus=fail\texception=NoRejection\tmessage=the many-to-many single-query loader did not reject the native row shape");
-    }
-    catch (Exception ex)
-    {
-        var inner = ex.InnerException;
-        var innerText = inner is null
-            ? string.Empty
-            : $" inner={inner.GetType().FullName}: {inner.Message}";
-        Console.WriteLine($"component-slice=join-into-many-to-many\tstatus=fail\texception={Escape(ex.GetType().FullName ?? ex.GetType().Name)}\tmessage={Escape(ex.Message + innerText)}");
-    }
+    RunManyToManySingleQuerySlice(databasePath);
+    RunCompositeManyToManySingleQuerySlice(databasePath);
+    RunJoinIntoKeyTypeMatrix(databasePath);
 
     try
     {
@@ -321,6 +304,338 @@ static void RunComponentSlices(string databasePath)
     {
         Console.WriteLine($"component-slice=JsonShapePlan\tstatus=fail\texception={Escape(ex.GetType().FullName ?? ex.GetType().Name)}\tmessage={Escape(ex.Message)}");
     }
+}
+
+static void RunManyToManySingleQuerySlice(string databasePath)
+{
+    const int parentId = 1_500_001_000;
+    const int emptyParentId = parentId + 1;
+    const int firstTagId = parentId + 300;
+    const int secondTagId = parentId + 301;
+    const int firstLinkId = parentId + 400;
+
+    using var context = new SqliteDataContext(
+        $"Data Source='{databasePath}';Default Timeout=30",
+        new DataContextBuilder().UseEagerLoadMode(EagerLoadMode.SingleQuery));
+    context.From<AotJunctionTag>();
+    context.From<AotJunctionLink>();
+    context.From<AotJunctionParent>(builder => builder
+        .HasManyThrough<AotJunctionTag, AotJunctionLink, int, int>(
+            parent => parent.Tags, parent => parent.Id, link => link.ParentId, tag => tag.Id, link => link.ChildId));
+
+    context.CreateDeleteBuilder<AotJunctionLink>()
+        .Where(link => link.Id >= firstLinkId && link.Id <= firstLinkId + 2)
+        .Delete();
+    context.CreateDeleteBuilder<AotJunctionTag>()
+        .Where(tag => tag.Id == firstTagId || tag.Id == secondTagId)
+        .Delete();
+    context.CreateDeleteBuilder<AotJunctionParent>()
+        .Where(parent => parent.Id == parentId || parent.Id == emptyParentId)
+        .Delete();
+
+    context.CreateInsertBuilder<AotJunctionParent>()
+        .Values([
+            new AotJunctionParent { Id = parentId, Name = "native-m2m" },
+            new AotJunctionParent { Id = emptyParentId, Name = "native-empty" }
+        ])
+        .Insert();
+    context.CreateInsertBuilder<AotJunctionTag>()
+        .Values([
+            new AotJunctionTag { Id = firstTagId, Name = "first" },
+            new AotJunctionTag { Id = secondTagId, Name = "second" }
+        ])
+        .Insert();
+    context.CreateInsertBuilder<AotJunctionLink>()
+        .Values([
+            new AotJunctionLink { Id = firstLinkId, ParentId = parentId, ChildId = firstTagId },
+            new AotJunctionLink { Id = firstLinkId + 1, ParentId = parentId, ChildId = firstTagId },
+            new AotJunctionLink { Id = firstLinkId + 2, ParentId = parentId, ChildId = secondTagId }
+        ])
+        .Insert();
+
+    var joinIntoCounter = new AotQueryCounter();
+    context.AddInterceptor(joinIntoCounter);
+    try
+    {
+        var parents = context.From<AotJunctionParent>()
+            .Where(parent => parent.Id == parentId || parent.Id == emptyParentId)
+            .OrderBy(parent => parent.Id)
+            .JoinInto(
+                context.From<AotJunctionTag>(),
+                (parent, tag) => parent.Id > 0,
+                parent => parent.Tags)
+            .ToList();
+        Console.WriteLine($"component-slice=join-into-many-to-many-join-into\tstatus=pass\tvalues={Escape(FormatJunctionGraph(parents, joinIntoCounter.CommandCount))}");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(
+            $"component-slice=join-into-many-to-many-join-into\tstatus=fail\texception={Escape(ex.GetType().FullName ?? ex.GetType().Name)}\tmessage={Escape(ex.Message)}\tdetails={Escape(ex.ToString())}");
+    }
+
+    var loadWithCounter = new AotQueryCounter();
+    context.AddInterceptor(loadWithCounter);
+    try
+    {
+        var parents = context.From<AotJunctionParent>()
+            .Where(parent => parent.Id == parentId || parent.Id == emptyParentId)
+            .OrderBy(parent => parent.Id)
+            .LoadWith(parent => parent.Tags)
+            .ToList();
+        Console.WriteLine($"component-slice=join-into-many-to-many\tstatus=pass\tvalues={Escape(FormatJunctionGraph(parents, loadWithCounter.CommandCount))}");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(
+            $"component-slice=join-into-many-to-many\tstatus=fail\texception={Escape(ex.GetType().FullName ?? ex.GetType().Name)}\tmessage={Escape(ex.Message)}\tdetails={Escape(ex.ToString())}");
+    }
+}
+
+static void RunCompositeManyToManySingleQuerySlice(string databasePath)
+{
+    const int parentId = 1_500_002_000;
+    const int emptyParentId = parentId + 1;
+    const int firstTagId = parentId + 300;
+    const int secondTagId = parentId + 301;
+    const int firstLinkId = parentId + 400;
+
+    EnsureCompositeJunctionTables(databasePath);
+
+    using var context = new SqliteDataContext(
+        $"Data Source='{databasePath}';Default Timeout=30",
+        new DataContextBuilder().UseEagerLoadMode(EagerLoadMode.SingleQuery));
+    RegisterCompositeJunctionNavigation(context);
+
+    context.CreateDeleteBuilder<AotCompositeJunctionLink>()
+        .Where(link => link.Id >= firstLinkId && link.Id <= firstLinkId + 2)
+        .Delete();
+    context.CreateDeleteBuilder<AotCompositeJunctionTag>()
+        .Where(tag => tag.Id == firstTagId || tag.Id == secondTagId)
+        .Delete();
+    context.CreateDeleteBuilder<AotCompositeJunctionParent>()
+        .Where(parent => parent.Id == parentId || parent.Id == emptyParentId)
+        .Delete();
+
+    context.CreateInsertBuilder<AotCompositeJunctionParent>()
+        .Values([
+            new AotCompositeJunctionParent { Id = parentId, ParentKeyA = 5001, ParentKeyB = 5002, Name = "native-composite" },
+            new AotCompositeJunctionParent { Id = emptyParentId, ParentKeyA = 5003, ParentKeyB = 5004, Name = "native-composite-empty" }
+        ])
+        .Insert();
+    context.CreateInsertBuilder<AotCompositeJunctionTag>()
+        .Values([
+            new AotCompositeJunctionTag { Id = firstTagId, TagKeyA = 6001, TagKeyB = 6002, Name = "first" },
+            new AotCompositeJunctionTag { Id = secondTagId, TagKeyA = 6003, TagKeyB = 6004, Name = "second" }
+        ])
+        .Insert();
+    context.CreateInsertBuilder<AotCompositeJunctionLink>()
+        .Values([
+            new AotCompositeJunctionLink { Id = firstLinkId, ParentKeyA = 5001, ParentKeyB = 5002, TagKeyA = 6001, TagKeyB = 6002 },
+            new AotCompositeJunctionLink { Id = firstLinkId + 1, ParentKeyA = 5001, ParentKeyB = 5002, TagKeyA = 6001, TagKeyB = 6002 },
+            new AotCompositeJunctionLink { Id = firstLinkId + 2, ParentKeyA = 5001, ParentKeyB = 5002, TagKeyA = 6003, TagKeyB = 6004 }
+        ])
+        .Insert();
+
+    var joinIntoCounter = new AotQueryCounter();
+    context.AddInterceptor(joinIntoCounter);
+    try
+    {
+        var parents = context.From<AotCompositeJunctionParent>()
+            .Where(parent => parent.Id == parentId || parent.Id == emptyParentId)
+            .OrderBy(parent => parent.Id)
+            .JoinInto(
+                context.From<AotCompositeJunctionTag>(),
+                (parent, tag) => parent.Id > 0,
+                parent => parent.Tags)
+            .ToList();
+        Console.WriteLine($"component-slice=join-into-many-to-many-composite-join-into\tstatus=pass\tvalues={Escape(FormatCompositeJunctionGraph(parents, joinIntoCounter.CommandCount))}");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(
+            $"component-slice=join-into-many-to-many-composite-join-into\tstatus=fail\texception={Escape(ex.GetType().FullName ?? ex.GetType().Name)}\tmessage={Escape(ex.Message)}\tdetails={Escape(ex.ToString())}");
+    }
+
+    var loadWithCounter = new AotQueryCounter();
+    context.AddInterceptor(loadWithCounter);
+    try
+    {
+        var parents = context.From<AotCompositeJunctionParent>()
+            .Where(parent => parent.Id == parentId || parent.Id == emptyParentId)
+            .OrderBy(parent => parent.Id)
+            .LoadWith(parent => parent.Tags)
+            .ToList();
+        Console.WriteLine($"component-slice=join-into-many-to-many-composite\tstatus=pass\tvalues={Escape(FormatCompositeJunctionGraph(parents, loadWithCounter.CommandCount))}");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(
+            $"component-slice=join-into-many-to-many-composite\tstatus=fail\texception={Escape(ex.GetType().FullName ?? ex.GetType().Name)}\tmessage={Escape(ex.Message)}\tdetails={Escape(ex.ToString())}");
+    }
+}
+
+static void RunJoinIntoKeyTypeMatrix(string databasePath)
+{
+    try
+    {
+        using var context = new SqliteDataContext(
+            $"Data Source='{databasePath}';Default Timeout=30", new DataContextBuilder());
+        var counter = new AotQueryCounter();
+        context.AddInterceptor(counter);
+
+        context.From<AotJunctionTag>();
+        context.From<AotJunctionLink>();
+        context.From<AotJunctionParent>(builder => builder
+            .HasManyThrough<AotJunctionTag, AotJunctionLink, int, int>(
+                parent => parent.Tags, parent => parent.Id, link => link.ParentId, tag => tag.Id, link => link.ChildId));
+
+        context.From<AotIntLongChild>();
+        context.From<AotIntLongLink>();
+        context.From<AotIntLongParent>(builder => builder
+            .HasManyThrough<AotIntLongChild, AotIntLongLink, int, long>(
+                parent => parent.Children, parent => parent.Id, link => link.ParentId, child => child.Id, link => link.ChildId));
+
+        context.From<AotConvertedKeyLink>();
+
+        context.From<AotNullableKeyChild>();
+        context.From<AotNullableKeyLink>();
+        context.From<AotNullableKeyParent>(builder => builder
+            .HasManyThrough<AotNullableKeyChild, AotNullableKeyLink>(
+                parent => parent.Children,
+                parent => new { TenantId = parent.TenantId, Id = parent.Id },
+                link => new { TenantId = link.ParentTenant, Id = link.ParentId },
+                child => child.Id,
+                link => link.ChildId));
+
+        RunKeyTypeCase("join-into-key-int-int", () =>
+        {
+            var parents = context.From<AotJunctionParent>()
+                .Where(parent => parent.Id == 1_500_001_000 || parent.Id == 1_500_001_001)
+                .OrderBy(parent => parent.Id)
+                .JoinInto(context.From<AotJunctionTag>(), (parent, tag) => parent.Id > 0, parent => parent.Tags)
+                .ToList();
+            return FormatKeyGraph(parents, parent => parent.Id, parent => parent.Tags, tag => tag.Id, counter.CommandCount);
+        });
+
+        RunKeyTypeCase("join-into-key-int-long", () =>
+        {
+            var parents = context.From<AotIntLongParent>()
+                .OrderBy(parent => parent.Id)
+                .JoinInto(context.From<AotIntLongChild>(), (parent, child) => parent.Id > 0, parent => parent.Children)
+                .ToList();
+            return FormatKeyGraph(parents, parent => parent.Id, parent => parent.Children, child => child.Id, counter.CommandCount);
+        });
+
+        RunKeyTypeCase("join-into-key-converted-int", () =>
+        {
+            var parents = context.From<AotRelCustomer>()
+                .OrderBy(parent => parent.Amount)
+                .JoinInto(
+                    context.From<AotRelOrder>(),
+                    (parent, child) => parent.Id > 0,
+                    parent => parent.Orders,
+                    options => options.ManyToMany<AotRelCustomer, AotRelOrder, AotConvertedKeyLink, decimal, int>(
+                        parent => parent.Amount, link => link.ParentId, child => child.Id, link => link.ChildId))
+                .ToList();
+            var graph = string.Join(";", parents.OrderBy(parent => parent.Amount)
+                .Select(parent =>
+                    $"{parent.Amount.ToString(CultureInfo.InvariantCulture)}" +
+                    $"[{string.Join(",", parent.Orders.Select(child => child.Id).OrderBy(id => id))}]"));
+            return $"graph={graph};commands={counter.CommandCount}";
+        });
+
+        RunKeyTypeCase("join-into-key-nullable-composite", () =>
+        {
+            var parents = context.From<AotNullableKeyParent>()
+                .OrderBy(parent => parent.Id)
+                .JoinInto(context.From<AotNullableKeyChild>(), (parent, child) => parent.Id > 0, parent => parent.Children)
+                .ToList();
+            var graph = string.Join(";", parents
+                .OrderBy(parent => parent.TenantId is null ? 0 : 1)
+                .ThenBy(parent => parent.Id)
+                .Select(parent =>
+                    $"{parent.TenantId?.ToString(CultureInfo.InvariantCulture) ?? "null"}/{parent.Id}" +
+                    $"[{string.Join(",", parent.Children.Select(child => child.Id).OrderBy(id => id))}]"));
+            return $"graph={graph};commands={counter.CommandCount}";
+        });
+
+        void RunKeyTypeCase(string name, Func<string> run)
+        {
+            counter.Reset();
+            try
+            {
+                Console.WriteLine($"component-slice={name}\tstatus=pass\tvalues={Escape(run())}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(
+                    $"component-slice={name}\tstatus=fail\texception={Escape(ex.GetType().FullName ?? ex.GetType().Name)}\tmessage={Escape(ex.Message)}\tdetails={Escape(ex.ToString())}");
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(
+            $"component-slice=join-into-key-type-registration\tstatus=fail\texception={Escape(ex.GetType().FullName ?? ex.GetType().Name)}\tmessage={Escape(ex.Message)}\tdetails={Escape(ex.ToString())}");
+    }
+}
+
+static string FormatKeyGraph<TParent, TChild>(
+    IEnumerable<TParent> parents,
+    Func<TParent, long> parentId,
+    Func<TParent, IEnumerable<TChild>> children,
+    Func<TChild, long> childId,
+    int commandCount)
+{
+    var graph = string.Join(";", parents.OrderBy(parentId)
+        .Select(parent => $"{parentId(parent)}[{string.Join(",", children(parent).Select(childId).OrderBy(id => id))}]"));
+    return $"graph={graph};commands={commandCount}";
+}
+
+static void RegisterCompositeJunctionNavigation(IDataContext context)
+{
+    context.From<AotCompositeJunctionTag>();
+    context.From<AotCompositeJunctionLink>();
+    context.From<AotCompositeJunctionParent>(builder => builder
+        .HasManyThrough<AotCompositeJunctionTag, AotCompositeJunctionLink>(
+            parent => parent.Tags,
+            parent => new { parent.ParentKeyA, parent.ParentKeyB },
+            link => new { link.ParentKeyA, link.ParentKeyB },
+            tag => new { tag.TagKeyA, tag.TagKeyB },
+            link => new { link.TagKeyA, link.TagKeyB }));
+}
+
+static void EnsureCompositeJunctionTables(string databasePath)
+{
+    using var connection = new SqliteConnection($"Data Source='{databasePath}';Default Timeout=30");
+    connection.Open();
+    foreach (var commandText in new[]
+    {
+        "CREATE TABLE IF NOT EXISTS aot_composite_parent (id INTEGER PRIMARY KEY, parent_key_a INTEGER NOT NULL, parent_key_b INTEGER NOT NULL, name TEXT NULL)",
+        "CREATE TABLE IF NOT EXISTS aot_composite_tag (id INTEGER PRIMARY KEY, tag_key_a INTEGER NOT NULL, tag_key_b INTEGER NOT NULL, name TEXT NULL)",
+        "CREATE TABLE IF NOT EXISTS aot_composite_link (id INTEGER PRIMARY KEY, parent_key_a INTEGER NOT NULL, parent_key_b INTEGER NOT NULL, tag_key_a INTEGER NOT NULL, tag_key_b INTEGER NOT NULL)"
+    })
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = commandText;
+        command.ExecuteNonQuery();
+    }
+}
+
+static string FormatJunctionGraph(IEnumerable<AotJunctionParent> parents, int commandCount)
+{
+    var graph = string.Join(";", parents
+        .OrderBy(parent => parent.Id)
+        .Select(parent => $"{parent.Id}[{string.Join(",", parent.Tags.OrderBy(tag => tag.Id).Select(tag => $"{tag.Id}:{tag.Name}"))}]"));
+    return $"graph={graph};commands={commandCount}";
+}
+
+static string FormatCompositeJunctionGraph(IEnumerable<AotCompositeJunctionParent> parents, int commandCount)
+{
+    var graph = string.Join(";", parents
+        .OrderBy(parent => parent.Id)
+        .Select(parent => $"{parent.Id}[{string.Join(",", parent.Tags.OrderBy(tag => tag.Id).Select(tag => $"{tag.Id}:{tag.Name}"))}]"));
+    return $"graph={graph};commands={commandCount}";
 }
 
 static void Run(string id, Func<object?> action)
@@ -348,6 +663,23 @@ static void Run(string id, Func<object?> action)
         message = string.IsNullOrEmpty(stack) ? message : $"{message} StackTrace={stack}";
         Console.WriteLine($"scenario={id}\tstatus=fail\tvalues=\texception={Escape(ex.GetType().FullName ?? ex.GetType().Name)}\tmessage={Escape(message)}\tframe={Escape(location ?? "")}");
     }
+}
+
+static string FormatRelCustomerGraph(IEnumerable<AotRelCustomer> parents, int commandCount)
+{
+    var graph = string.Join(";", parents
+        .OrderBy(parent => parent.Id)
+        .Select(parent => $"{parent.Id}[{string.Join(",", parent.Orders.Select(order => order.Id).OrderBy(id => id))}]"));
+    return $"graph={graph};commands={commandCount}";
+}
+
+static string FormatNestedRelCustomerGraph(IEnumerable<AotRelCustomer> parents, int commandCount)
+{
+    var graph = string.Join(";", parents.OrderBy(parent => parent.Id)
+        .Select(parent =>
+            $"{parent.Id}[{string.Join(",", parent.Orders.OrderBy(order => order.Id).Select(order =>
+                $"{order.Id}:{order.Approver?.Id.ToString(CultureInfo.InvariantCulture) ?? "null"}"))}]"));
+    return $"graph={graph};commands={commandCount}";
 }
 
 static string Escape(string value) => value.Replace("\\", "\\\\").Replace("\t", "\\t").Replace("\r", "\\r").Replace("\n", "\\n");
@@ -407,4 +739,17 @@ public sealed class AotNavPerson
     public int Id { get; set; }
     [Column("name")]
     public string? Name { get; set; }
+}
+
+internal sealed class AotQueryCounter : IQueryInterceptor
+{
+    private int _commandCount;
+
+    public int CommandCount => System.Threading.Volatile.Read(ref _commandCount);
+
+    public void CommandExecuting(CommandEventData eventData, System.Data.Common.DbCommand command)
+        => System.Threading.Interlocked.Increment(ref _commandCount);
+
+    public void Reset()
+        => System.Threading.Interlocked.Exchange(ref _commandCount, 0);
 }

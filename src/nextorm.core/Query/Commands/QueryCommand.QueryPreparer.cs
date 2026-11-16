@@ -1900,6 +1900,7 @@ public partial class QueryCommand
                 OutputName = outputName,
                 IsProjectionOutputReference = true,
                 ProviderType = src.ProviderType,
+                ReaderType = src.ReaderType,
                 Converter = src.Converter,
                 DurationUnit = src.DurationUnit,
                 DurationPrecision = src.DurationPrecision,
@@ -1990,6 +1991,7 @@ public partial class QueryCommand
                 OutputName = outputName,
                 IsProjectionOutputReference = true,
                 ProviderType = shape.ProviderType,
+                ReaderType = shape.ReaderType,
                 Converter = shape.Converter,
                 DurationUnit = shape.DurationUnit,
                 DurationPrecision = shape.DurationPrecision,
@@ -2056,7 +2058,15 @@ public partial class QueryCommand
                 // derived/read-CTE item by expanding its readable CLR surface, mirroring
                 // JoinedReturningProjection.ParseIdentity and the mutation's RETURNING list. The gate on
                 // IdentitySlotAliases keeps ordinary joined projection queries on their existing path.
-                if (!TryExpandEntityItem(itemTypes[i], itemExpression, i, srcType.GetProperty(memberName), null, output, cancellationToken, reRoot)
+                IReadOnlyList<JoinIntoLinkKeyColumn>? linkKeyColumns = null;
+                if (i > 0
+                    && cmd._joins is { } projectionJoins
+                    && i - 1 < projectionJoins.Length)
+                {
+                    linkKeyColumns = projectionJoins[i - 1].JoinIntoLinkKeyColumns;
+                }
+
+                if (!TryExpandEntityItem(itemTypes[i], itemExpression, i, srcType.GetProperty(memberName), null, output, cancellationToken, reRoot, linkKeyColumns)
                     && !(cmd.IdentitySlotAliases && TryAppendShapeItem(itemTypes[i], itemExpression, i, srcType.GetProperty(memberName), output)))
                     return false;
             }
@@ -2243,7 +2253,8 @@ public partial class QueryCommand
             CorrelatedQueryExpressionVisitor? visitor,
             List<SelectExpression> output,
             CancellationToken cancellationToken,
-            bool reRoot = true)
+            bool reRoot = true,
+            IReadOnlyList<JoinIntoLinkKeyColumn>? linkKeyColumns = null)
         {
             if (!DataContextCache.Metadata.TryGetValue(itemType, out var metadata) || metadata.Properties.Count == 0)
                 return false;
@@ -2251,6 +2262,27 @@ public partial class QueryCommand
             var (columns, _) = EntitySelectListBuilder.Build(itemType, metadata, cancellationToken);
 
             var group = new ProjectionEntityItem(slot, itemType, member);
+
+            if (linkKeyColumns is not null)
+            {
+                for (var i = 0; i < columns.Length; i++)
+                {
+                    var column = columns[i];
+                    for (var keyIndex = 0; keyIndex < linkKeyColumns.Count; keyIndex++)
+                    {
+                        var key = linkKeyColumns[keyIndex];
+                        if (column.PropertyInfo != key.LinkMember)
+                            continue;
+
+                        column.ReaderType = key.ReaderType;
+                        column.ProviderType = key.ProviderType;
+                        column.Converter = key.Converter;
+                        column.DurationUnit = key.DurationUnit;
+                        column.DurationPrecision = key.DurationPrecision;
+                        break;
+                    }
+                }
+            }
 
             for (var i = 0; i < columns.Length; i++)
             {

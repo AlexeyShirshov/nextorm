@@ -141,7 +141,7 @@ public sealed class AotParent
 
     /// <summary>The children loaded by the split loader.</summary>
     [Relationship(ForeignKey = nameof(AotChild.ParentId))]
-    public ICollection<AotChild> Children { get; } = new List<AotChild>();
+    public ICollection<AotChild> Children { get; set; } = new List<AotChild>();
 }
 
 /// <summary>The eager-load child.</summary>
@@ -194,7 +194,7 @@ public sealed class AotProbeAmountConverter : ValueConverter<decimal, string>
             : decimal.Parse(provider.Substring(2), CultureInfo.InvariantCulture);
 }
 
-/// <summary>The many-to-many parent used by the native rejection check; the navigation is declared fluently.</summary>
+/// <summary>The scalar-key many-to-many parent; its navigation is declared fluently for the success probes.</summary>
 [SqlTable("aot_m2m_parent")]
 public sealed class AotM2mParent
 {
@@ -204,10 +204,10 @@ public sealed class AotM2mParent
     public int Id { get; set; }
 
     /// <summary>The linked tags.</summary>
-    public ICollection<AotM2mTag> Tags { get; } = new List<AotM2mTag>();
+    public ICollection<AotM2mTag> Tags { get; set; } = new List<AotM2mTag>();
 }
 
-/// <summary>The many-to-many child used by the native rejection check.</summary>
+/// <summary>The scalar-key many-to-many tag used by the success probes.</summary>
 [SqlTable("aot_m2m_tag")]
 public sealed class AotM2mTag
 {
@@ -233,4 +233,69 @@ public sealed class AotM2mLink
     /// <summary>The linked tag.</summary>
     [Column("child_id")]
     public int ChildId { get; set; }
+}
+
+/// <summary>The parent with a two-component relationship key for composite many-to-many probes.</summary>
+[SqlTable("aot_composite_m2m_parent")]
+public sealed class AotCompositeM2mParent
+{
+    /// <summary>Stable entity identity.</summary>
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    /// <summary>First component of the relationship key.</summary>
+    [Column("tenant_id")]
+    public int ParentTenantId { get; set; }
+
+    /// <summary>Second component of the relationship key.</summary>
+    [Column("link_id")]
+    public int LinkId { get; set; }
+
+    /// <summary>Tags related through the composite junction.</summary>
+    public ICollection<AotCompositeM2mTag> Tags { get; set; } = new List<AotCompositeM2mTag>();
+}
+
+/// <summary>The tag with a two-component relationship key for composite many-to-many probes.</summary>
+[SqlTable("aot_composite_m2m_tag")]
+public sealed class AotCompositeM2mTag
+{
+    /// <summary>Stable entity identity.</summary>
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    /// <summary>First component of the relationship key.</summary>
+    [Column("tenant_id")]
+    public int TagTenantId { get; set; }
+
+    /// <summary>Second component of the relationship key.</summary>
+    [Column("tag_id")]
+    public int TagId { get; set; }
+}
+
+/// <summary>The junction carrying both two-component relationship keys.</summary>
+[SqlTable("aot_composite_m2m_link")]
+public sealed class AotCompositeM2mLink
+{
+    /// <summary>Stable junction-row identity, distinct for duplicate link occurrences.</summary>
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    /// <summary>First parent-key component.</summary>
+    [Column("parent_tenant_id")]
+    public int ParentTenantId { get; set; }
+
+    /// <summary>Second parent-key component.</summary>
+    [Column("parent_link_id")]
+    public int ParentLinkId { get; set; }
+
+    /// <summary>First tag-key component.</summary>
+    [Column("tag_tenant_id")]
+    public int TagTenantId { get; set; }
+
+    /// <summary>Second tag-key component.</summary>
+    [Column("tag_id")]
+    public int TagId { get; set; }
 }

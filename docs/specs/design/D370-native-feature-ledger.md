@@ -1,6 +1,6 @@
 # D370 Stream B — NativeAOT feature ledger (fail-closed)
 
-Status: S6 evidence, r3 (reconciled to the strict per-cell evidence rule). Scope: every provider that
+Status: S6 evidence, r4 (reconciled to the strict per-cell evidence rule). Scope: every provider that
 ships a `nextorm.*` data context, with the NativeAOT status of each query/mapping capability.
 
 ## Classification rule (strict, per cell)
@@ -21,11 +21,11 @@ paging through `Paging` is not implied by an aggregate query.
 | Provider | Instrument | Native | JIT comparison |
 |---|---|---|---|
 | SQLite | `tests/nextorm.aot.runner`, 37 scenarios (21 harness + 16 shared-catalog shapes) | 37/37 | equal per scenario |
-| PostgreSQL | `tests/nextorm.aot.sqlprobe --provider postgres`, 24 shapes; `examples/nextorm.aotexamples.postgres.aviasales`, 10 queries | 24/24 + 10/10 | identical |
-| SQL Server | `tests/nextorm.aot.sqlprobe --provider sqlserver`, 24 shapes; `examples/nextorm.aotexamples.mssql.adventureworks`, 11 queries | 24/24 + 11/11 | identical |
-| MySQL | `tests/nextorm.aot.sqlprobe --provider mysql`, 24 shapes | 24/24 | identical |
-| MariaDB | `tests/nextorm.aot.sqlprobe --provider mariadb`, 24 shapes | 24/24 | identical |
-| ClickHouse | `tests/nextorm.aot.sqlprobe --provider clickhouse`, 24 shapes; `examples/nextorm.aotexamples.clickhouse.analytics`, 9 queries | 24/24 + 9/9 | identical (the analytics example compares sorted row sets) |
+| PostgreSQL | `tests/nextorm.aot.sqlprobe --provider postgres`, 30 shapes; `examples/nextorm.aotexamples.postgres.aviasales`, 10 queries | 30/30 + 10/10 | identical |
+| SQL Server | `tests/nextorm.aot.sqlprobe --provider sqlserver`, 30 shapes; `examples/nextorm.aotexamples.mssql.adventureworks`, 11 queries | 30/30 + 11/11 | identical |
+| MySQL | `tests/nextorm.aot.sqlprobe --provider mysql`, 30 shapes | 30/30 | identical |
+| MariaDB | `tests/nextorm.aot.sqlprobe --provider mariadb`, 30 shapes | 30/30 | identical |
+| ClickHouse | `tests/nextorm.aot.sqlprobe --provider clickhouse`, 30 shapes; `examples/nextorm.aotexamples.clickhouse.analytics`, 9 queries | 30/30 + 9/9 | identical (the analytics example compares sorted row sets) |
 
 The shared catalog (`tests/nextorm.aot.scenarios`) holds the shapes that every SQLite instrument and the
 JIT control execute from one declaration, so a native arm and its control cannot drift. It currently
@@ -33,11 +33,12 @@ carries the sixteen SQLite shapes above.
 
 `tests/nextorm.aot.sqlprobe` is the cross-provider instrument: it provisions its own tiny schema in the
 provider's own dialect and seeds it with raw ADO, so no shape depends on a dataset image, and the same
-twenty-four shapes run against all five server providers. Each shape prints a row count and a digest of
-the formatted rows; the published native binary output is compared line by line with the control run of
-the same source. The control is CoreCLR with the project's feature switches (`PublishAot=true` also
-disables `IsDynamicCodeSupported` in the framework-dependent runtime config), so it is a stricter control
-than a stock JIT host, never a weaker one. The shapes are: `customer-filter` (typed scalar projection, constant predicate, `OrderBy`),
+thirty shapes run against all five server providers. Tabular shapes print a row count and digest of the
+formatted rows; eager-loading shapes also print the loaded graph and successful SQL-command count. The
+published native output is compared with a genuine JIT control built with `PublishAot=false`: the JIT
+reports `dynamic-code-supported=True`, `dynamic-code-compiled=True`, while the native executable reports
+both flags as `False`. All 30 shapes passed on each provider and the JIT/native outcomes matched. The
+shapes are: `customer-filter` (typed scalar projection, constant predicate, `OrderBy`),
 `orders-page` (`Paging`), `aggregate` (`GroupBy` + `count` + `sum(decimal)`), `selectgroup`,
 `selectgroup-having`, `join`, `cte`, `prepared-reuse` (one command executed twice), `csv-streaming`,
 `json-streaming`, `row-streaming` (`ToAsyncEnumerable`), `raw-sql-mapping` (`ExecuteRaw`, a scalar set and
@@ -45,7 +46,10 @@ a mapped entity), `dml-builders` (insert/update/delete), `bulk-insert`, `capture
 local compared against a decimal column), `aggregate-count-distinct`, `aggregate-avg`, `aggregate-min`,
 `aggregate-max`, `having`, `window-function`, `json-column` (a `[JsonColumn]` write and read through the
 generated converter), `relationship-load-with` (the split loader over an attribute-declared
-`[Relationship]`) and `value-converters` (a `[ValueConverter]` written and read back).
+`[Relationship]`), `value-converters` (a `[ValueConverter]` written and read back),
+`eager-load-single-query`, `join-into-collection`, `eager-load-many-to-many`,
+`join-into-many-to-many`, `eager-load-composite-many-to-many` and
+`join-into-composite-many-to-many`.
 
 The probe's write shapes use explicit primary keys instead of an identity column: ClickHouse has no
 identity, and a fixed key keeps the native arm and its control from ever printing a generated value. The
@@ -84,8 +88,8 @@ invariant one, which preserves the digest determinism.
 | Decimal binary/comparison operators in rewriting | P | P | P | P | P | P |
 | Prepared command reuse / plan cache | P | P | P | P | P | P |
 | Eager loading of a declared relationship (split loader) | P | P | P | P | P | P |
-| Single-query eager loading (`JoinInto` row projection) | F | F | F | F | F | F |
-| Many-to-many `JoinInto` (scalar and composite junction) | F | F | F | F | F | F |
+| Single-query eager loading (`JoinInto` row projection) | P | P | P | P | P | P |
+| Many-to-many `JoinInto` (scalar and composite junction) | P | P | P | P | P | P |
 | Value converters (`[JsonColumn]`, custom converter) | P | P | P | P | P | P |
 | CSV streaming (`WriteCsv`) | P | P | P | P | P | P |
 | JSON streaming (`WriteJson`) | P | P | P | P | P | P |
@@ -94,7 +98,7 @@ invariant one, which preserves the digest determinism.
 | Raw SQL row mapping (`ExecuteRaw`) | P | P | P | P | P | P |
 | DML builders (insert/update/delete) | P | P | P | P | P | P |
 
-Cell totals: **175 `supported-proven`, 0 `supported-by-design`, 13 `fail-closed`, 10 `not-covered`**
+Cell totals: **187 `supported-proven`, 0 `supported-by-design`, 1 `fail-closed`, 10 `not-covered`**
 (198 cells across 33 capabilities and six providers; counted mechanically across the matrix rows).
 
 What each `P` rests on:
@@ -119,11 +123,12 @@ What each `P` rests on:
   `ReturningIdentity`, updates, reads back and deletes (`cleaned=0;updated=1;ages=8;removed=1`);
   `bulk-insert` writes five rows in one command (`cleaned=0;written=5;ages=0,1,2,3,4;removed=5`). All
   four match the JIT control exactly.
-- SQLite, **many-to-many single-query loading**: rejected at declaration, before any SQL, by a
-  deterministic `NotSupportedException` naming the run-time-closed link row type and the composite
-  junction's `Reflection.Emit` carrier; the `join-into-many-to-many` component slice asserts the
-  rejection in the published binary (a silent success would mean the mapper reached a row type the
-  image does not carry).
+- SQLite, **single-query eager loading and `JoinInto`**: the expanded native runner and its JIT
+  control match for ordinary and nested `LoadWith(SingleQuery)` graphs, scalar and composite
+  many-to-many graphs, mixed `int`/`long` keys, a converted key and nullable composite keys. The
+  one-command graph cases pass. Full output and runner exit evidence:
+  `/tmp/opencode/aot-joininto-20261116/native-evidence-focused-r1/native-run.log` and
+  `/tmp/opencode/aot-joininto-20261116/acceptance-focused-handoff.md`.
 - SQLite, **JSON columns** and **value converters**: the `value-converters` catalog shape writes a
   `[JsonColumn(Storage = Text)]` property and a `[ValueConverter]` property through `Update` and reads
   both back through the converter (`1:12.5:native/42;2:-3:null/null`). The mapping comes from the
@@ -142,14 +147,14 @@ What each `P` rests on:
 - SQLite, **eager loading of a many-to-many navigation**: the `many-to-many-load-with` catalog shape
   declares `HasManyThrough<Tag, Link, int, int>` and loads the tags with `LoadWith` (the default split
   loader), which reads the junction as an ordinary typed entity instead of closing a link row type at
-  run time. Native output `1500000000:2:t1,t2` equals the JIT control, so the remediation the
-  single-query rejection names is itself proven.
+  run time. Native output `1500000000:2:t1,t2` equals the JIT control, independently covering the
+  split-loader path.
 - Every provider, **decimal binary/comparison operators in rewriting**: the `captured-parameter` shape
   compares a decimal column against a captured decimal local, so preparation rebuilds that binary node
   with `Expression.MakeBinary` over operand types only known at run time — the seam the earlier
   structural argument covered. It runs on the published native binary of all six providers, so those
   cells are `P` rather than `D`.
-- PostgreSQL, SQL Server, MySQL, MariaDB, ClickHouse: the twenty-four-shape probe, identical under JIT
+- PostgreSQL, SQL Server, MySQL, MariaDB, ClickHouse: the thirty-shape probe, identical under JIT
   and natively on every provider. The seed is the same everywhere, so most digests are shared across the
   five providers (`customer-filter` 2/`9971efbc…`, `orders-page` 3/`71a626d4…`, `aggregate`
   3/`b78cc7c1…`, `selectgroup` 3/`8663d521…`, `selectgroup-having` 3/`1206c50c…`, `join`
@@ -167,37 +172,36 @@ What each `P` rests on:
   model through `[JsonColumn(Storage = Text)]` and reads it back through the generated converter, with the
   contract metadata coming from a source-generated `JsonSerializerContext` the generator finds in the
   probe assembly.
-- PostgreSQL, SQL Server, MySQL, MariaDB, ClickHouse, **single-query and many-to-many eager loading**: the
-  probe's two native checks build the single-query command and the many-to-many declaration against a
-  context switched to `EagerLoadMode.SingleQuery`; both report `rejected=NotSupportedException` in the
-  published binary, before any SQL, and the control reports the same rejection (its runtime config sets
-  `IsDynamicCodeSupported=false`, the same feature switch the native image carries). The split loader for
-  the same navigations is proven by the `relationship-load-with` shape above.
+- PostgreSQL, SQL Server, MySQL, MariaDB, ClickHouse, **single-query and many-to-many eager loading**:
+  all six added graph shapes passed in both real JIT and native runs on every provider. The graph and
+  command-count oracles were `1[10,11];2[];commands=1` (single-query eager load and `JoinInto`
+  collection), `1[10,10,11];2[12];3[];commands=1` (scalar many-to-many), and
+  `1[10,10,11];2[11];3[];commands=1` (composite many-to-many). `ProbeCommandCounter` verifies one
+  successful command and zero command failures for each graph. The JIT arm reported dynamic-code
+  support/compilation `True/True`; the native arm reported `False/False`. Per-provider logs and full
+  command evidence are listed in `/tmp/opencode/aot-joininto-20261116/server-native-handoff.md`.
 - The probe references the entity generator, because a mapped entity used only by `ExecuteRaw<T>` has no
   query of its own to keep its members: without the compile-time description the trimmed mapping came
   back empty and the raw read failed closed on the native build (found on MySQL, fixed for every
   provider).
 
-## Fail-closed entries (native-proven)
+## Remaining rejection evidence (native status distinguished)
 
 | Provider | Shape | Rejection | Evidence |
 |---|---|---|---|
 | ClickHouse | `Tuple<...>` result column of element types other than the driver's registration sample | `NotSupportedException` at preparation naming `ClickHouse.Driver` `TupleType.Read`/`Activator.CreateInstance` and the remediation (`tupleElement(...)` columns or `toString(...)` + client parse) | native `Retention` run, `.pdca/370/rv1/attempts/s5-probe-clickhouse-retention-failclosed.log` |
 | All providers | `TimeOnly` projection without a converter | `NotSupportedException` at preparation (provider-specific text) | JIT suite; deterministic preparation-time rejection (not native-proven, listed for completeness only) |
-| All providers, native image | Single-query eager loading (`JoinInto`, or `LoadWith` with `EagerLoadMode.SingleQuery`) | `NotSupportedException` at declaration naming the run-time-closed `Projection<…>` row type and pointing at the split loader | SQLite: native `join-into-single-query` component slice in `native-run.log` (the child reports the rejection, the harness asserts it). PostgreSQL, SQL Server, MySQL, MariaDB, ClickHouse: the probe's `eager-load-single-query` check reports `rejected=NotSupportedException` in the published binary |
-| All providers, native image | Many-to-many eager loading in one query (`JoinInto`, or `LoadWith` with `EagerLoadMode.SingleQuery`) | `NotSupportedException` at declaration naming the run-time-closed link row type (a composite junction would additionally need a carrier emitted with `Reflection.Emit`), pointing at the split loader | SQLite: native `join-into-many-to-many` component slice in `native-run.log`. PostgreSQL, SQL Server, MySQL, MariaDB, ClickHouse: the probe's `eager-load-many-to-many` check reports `rejected=NotSupportedException` in the published binary; the split loader stays available for the same navigation |
 | PostgreSQL / SQL Server | `System.Tuple` with more than seven elements in a raw ROW | `NotSupportedException` | JIT suite (`RawMapperFactory` guard) |
 
-The ClickHouse row, the tuple-column row, the single-query eager-load row and the many-to-many
-eager-load row are native-proven; the other two are JIT-only and are not counted as native fail-closed
-evidence.
+The ClickHouse tuple-column row is the remaining native-proven fail-closed cell in the matrix. The
+`TimeOnly` and raw `System.Tuple` rows are JIT-only and are not counted as native fail-closed evidence.
 
 ## What this ledger does not claim
 
 - It does not claim whole-surface NativeAOT support. The canonical registry still lists 215 residual
   diagnostic rows (`.pdca/370/rv1/registry-s6.tsv`); each remains tracked by the campaign.
 - `U` cells are unknowns of this ledger, not refusals and not support.
-- The probe proves the twenty-four shapes it runs on the tiny seeded schema (three customers, six
+- The probe proves the thirty shapes it runs on the tiny seeded schema (three customers, six
   orders, one write table, one JSON table, one parent/child pair, one converter table), not the
   providers' whole surface.
 - The ten `U` cells are: array/nested types (every provider except ClickHouse) and the tuple-typed result

@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace NextORM.Core;
 
@@ -33,10 +35,14 @@ internal static class JunctionLinkSourceFactory
     /// <param name="parentKeyType">The CLR type of the parent-side key / junction parent foreign key.</param>
     /// <param name="childKeyType">The CLR type of the child-side key / junction child foreign key.</param>
     /// <returns>The closed link type.</returns>
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.PublicProperties, typeof(JoinIntoLink<,>))]
     internal static Type GetLinkType(Type parentKeyType, Type childKeyType)
     {
         ArgumentNullException.ThrowIfNull(parentKeyType);
         ArgumentNullException.ThrowIfNull(childKeyType);
+
+        if (!RuntimeFeature.IsDynamicCodeSupported)
+            return typeof(JoinIntoLink<object, object>);
 
         return LinkTypeCache.GetOrAdd(
             (parentKeyType, childKeyType),
@@ -157,9 +163,13 @@ internal static class JunctionLinkSourceFactory
 
         var bindings = new List<MemberBinding>(parentForeignKeys.Length + childForeignKeys.Length + 1);
         for (var i = 0; i < parentForeignKeys.Length; i++)
-            bindings.Add(Expression.Bind(carrier.ParentKeys[i], Expression.Property(junctionParameter, parentForeignKeys[i])));
+            bindings.Add(Expression.Bind(
+                carrier.ParentKeys[i],
+                ConvertToPropertyType(Expression.Property(junctionParameter, parentForeignKeys[i]), carrier.ParentKeys[i])));
         for (var i = 0; i < childForeignKeys.Length; i++)
-            bindings.Add(Expression.Bind(carrier.ChildKeys[i], Expression.Property(junctionParameter, childForeignKeys[i])));
+            bindings.Add(Expression.Bind(
+                carrier.ChildKeys[i],
+                ConvertToPropertyType(Expression.Property(junctionParameter, childForeignKeys[i]), carrier.ChildKeys[i])));
         bindings.Add(Expression.Bind(carrier.Occurrence, occurrence));
 
         var body = Expression.MemberInit(Expression.New(carrier.LinkType), bindings);
@@ -229,10 +239,17 @@ internal static class JunctionLinkSourceFactory
             Expression.Quote(BuildKeyLambda(junctionParameter, childForeignKey)),
             Expression.Constant(null, typeof(WindowFrame)));
 
+        var parentKeyValue = ConvertToPropertyType(
+            Expression.Property(junctionParameter, parentForeignKey),
+            linkParentKey);
+        var childKeyValue = ConvertToPropertyType(
+            Expression.Property(junctionParameter, childForeignKey),
+            linkChildKey);
+
         var body = Expression.MemberInit(
             Expression.New(linkType),
-            Expression.Bind(linkParentKey, Expression.Property(junctionParameter, parentForeignKey)),
-            Expression.Bind(linkChildKey, Expression.Property(junctionParameter, childForeignKey)),
+            Expression.Bind(linkParentKey, parentKeyValue),
+            Expression.Bind(linkChildKey, childKeyValue),
             Expression.Bind(linkOccurrence, occurrence));
 
         var selector = Expression.Lambda(
@@ -252,6 +269,11 @@ internal static class JunctionLinkSourceFactory
 
         return new FromExpression(command);
     }
+
+    private static Expression ConvertToPropertyType(Expression value, PropertyInfo property)
+        => value.Type == property.PropertyType
+            ? value
+            : Expression.Convert(value, property.PropertyType);
 
     /// <summary>
     /// Resolves the <c>FROM</c> source of the junction table. The relationship resolver maps the
@@ -336,6 +358,9 @@ internal static class JunctionLinkSourceFactory
 
     private static IEntityMetadata BuildMetadata(Type linkType)
     {
+        if (linkType == typeof(JoinIntoLink<object, object>))
+            return new EntityMetadataBuilder<JoinIntoLink<object, object>>().Build();
+
         var builderType = typeof(EntityMetadataBuilder<>).MakeGenericType(linkType);
         var builder = Activator.CreateInstance(builderType)
             ?? throw new InvalidOperationException(

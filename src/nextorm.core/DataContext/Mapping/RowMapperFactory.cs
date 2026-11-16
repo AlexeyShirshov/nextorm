@@ -68,7 +68,8 @@ internal static class RowMapperFactory
             throw new NotSupportedException(
                 $"Column '{column.PropertyName}' is a streaming LOB column and cannot be materialized by the buffered row mapper; stream the row with ToAsyncEnumerable, or read a single LOB column with ToStream/ToTextReader instead.");
 
-        var realType = Nullable.GetUnderlyingType(column.PropertyType) ?? column.PropertyType;
+        var readType = column.ReaderType ?? column.PropertyType;
+        var realType = Nullable.GetUnderlyingType(readType) ?? readType;
 
         var converter = ResolveConverter(column.Converter, dialect);
         if (converter is not null)
@@ -636,6 +637,7 @@ internal static class RowMapperFactory
                     signature = signature * 31 + (column.PropertyName?.GetHashCode() ?? 0);
                     signature = signature * 31 + (column.DurationUnit?.GetHashCode() ?? 0);
                     signature = signature * 31 + (column.ProviderType?.GetHashCode() ?? 0);
+                    signature = signature * 31 + (column.ReaderType?.GetHashCode() ?? 0);
                     signature = signature * 31 + (column.Converter is null ? 0 : RuntimeHelpers.GetHashCode(column.Converter));
                     signature = signature * 31 + (column.ProjectionItem is { } item ? item.EntityType.GetHashCode() * 31 + item.Slot : 0);
                     // #173: the target member is part of the materialized shape, so the compiled-mapper

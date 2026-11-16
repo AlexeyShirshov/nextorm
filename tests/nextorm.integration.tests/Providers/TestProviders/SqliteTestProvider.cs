@@ -96,6 +96,38 @@ public sealed class SqliteTestProvider : ITestProvider
         }
     }
 
+    internal static IsolatedSqliteDatabase CreateIsolatedDatabase()
+    {
+        var databasePath = Path.Combine(
+            Path.GetTempPath(),
+            $"nextorm.integration.aot.{Environment.ProcessId}.{Guid.NewGuid():N}.db");
+        using var context = new SqliteDataContext(
+            string.Format(ConnectionString, databasePath),
+            new DataContextBuilder());
+        using var connection = context.GetConnection();
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = SeedSql;
+        command.ExecuteNonQuery();
+
+        return new IsolatedSqliteDatabase(databasePath);
+    }
+
+    internal sealed class IsolatedSqliteDatabase(string databasePath) : IDisposable
+    {
+        public string DatabasePath { get; } = databasePath;
+
+        public void Dispose()
+        {
+            foreach (var suffix in new[] { "", "-journal", "-wal", "-shm" })
+            {
+                var path = DatabasePath + suffix;
+                if (File.Exists(path))
+                    File.Delete(path);
+            }
+        }
+    }
+
     private const string SeedSql =
         """
         create table simple_entity (id integer primary key);

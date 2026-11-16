@@ -66,6 +66,14 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     public Type? ProviderType { get; set; }
 
     /// <summary>
+    /// The CLR type to read before assigning the column to its materializer member, or
+    /// <see langword="null"/> when that type is <see cref="PropertyType"/>. Synthetic JoinInto link
+    /// members use this when their public carrier slot is <see cref="object"/> but the source key has
+    /// a concrete CLR type; the row mapper reads that type and boxes it for the carrier.
+    /// </summary>
+    internal Type? ReaderType { get; set; }
+
+    /// <summary>
     /// The value converter applied to this column after reading and before materialization, or
     /// <see langword="null"/> when the column is read as-is.
     /// </summary>

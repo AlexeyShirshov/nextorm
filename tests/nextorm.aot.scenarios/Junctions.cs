@@ -6,8 +6,7 @@ namespace NextORM.AotScenarios;
 
 /// <summary>
 /// The many-to-many shapes (#370 Stream B): the split loader, which reads the junction as an ordinary
-/// typed entity and therefore works on a native image, next to the single-query shape the component
-/// slices assert is rejected there.
+/// typed entity, and the single-query scalar/composite shapes exercised by the native runner.
 /// </summary>
 public static partial class AotScenarioCatalog
 {
@@ -127,4 +126,63 @@ public sealed class AotJunctionLink
     /// <summary>The linked tag.</summary>
     [Column("child_id")]
     public int ChildId { get; set; }
+}
+
+/// <summary>A composite-key parent for NativeAOT many-to-many single-query scenarios.</summary>
+[SqlTable("aot_composite_parent")]
+public sealed class AotCompositeJunctionParent
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("parent_key_a")]
+    public int ParentKeyA { get; set; }
+
+    [Column("parent_key_b")]
+    public int ParentKeyB { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+
+    public ICollection<AotCompositeJunctionTag> Tags { get; set; } = new List<AotCompositeJunctionTag>();
+}
+
+/// <summary>A composite-key child for NativeAOT many-to-many single-query scenarios.</summary>
+[SqlTable("aot_composite_tag")]
+public sealed class AotCompositeJunctionTag
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("tag_key_a")]
+    public int TagKeyA { get; set; }
+
+    [Column("tag_key_b")]
+    public int TagKeyB { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+}
+
+/// <summary>The composite junction for NativeAOT many-to-many single-query scenarios.</summary>
+[SqlTable("aot_composite_link")]
+public sealed class AotCompositeJunctionLink
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("parent_key_a")]
+    public int ParentKeyA { get; set; }
+
+    [Column("parent_key_b")]
+    public int ParentKeyB { get; set; }
+
+    [Column("tag_key_a")]
+    public int TagKeyA { get; set; }
+
+    [Column("tag_key_b")]
+    public int TagKeyB { get; set; }
 }

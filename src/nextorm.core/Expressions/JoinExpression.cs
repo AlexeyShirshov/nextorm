@@ -188,6 +188,12 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     /// </summary>
     internal JoinIntoIdentity? JoinIntoIdentity { get; set; }
     /// <summary>
+    /// The source key metadata for a synthetic many-to-many JoinInto link item, in link-member order.
+    /// It lets the projection expander read object-typed carrier members through their original typed
+    /// foreign-key mapping. <see langword="null"/> for every other join.
+    /// </summary>
+    internal IReadOnlyList<JoinIntoLinkKeyColumn>? JoinIntoLinkKeyColumns { get; init; }
+    /// <summary>
     /// The right-hand (child) side's selective global-query-filter scope, or <see langword="null"/> to
     /// inherit the command's <see cref="QueryCommand.FilterScope"/>. <see langword="null"/> and an empty
     /// scope are equivalent (both inherit): the effective child scope is always the <b>union</b> of this
@@ -239,6 +245,7 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
             OriginalJoinCondition = _originalJoinCondition,
             IsJoinInto = IsJoinInto,
             JoinIntoIdentity = JoinIntoIdentity,
+            JoinIntoLinkKeyColumns = JoinIntoLinkKeyColumns,
             SuppressCartesianWarning = SuppressCartesianWarning,
             FilterScope = FilterScope,
             EagerPerParentOrdering = EagerPerParentOrdering,
@@ -261,6 +268,7 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
             OriginalJoinCondition = _originalJoinCondition,
             IsJoinInto = IsJoinInto,
             JoinIntoIdentity = JoinIntoIdentity,
+            JoinIntoLinkKeyColumns = JoinIntoLinkKeyColumns,
             SuppressCartesianWarning = SuppressCartesianWarning,
             FilterScope = FilterScope,
             EagerPerParentOrdering = EagerPerParentOrdering,

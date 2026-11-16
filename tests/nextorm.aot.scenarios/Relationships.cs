@@ -21,6 +21,10 @@ public sealed class AotRelCustomer : AotRelEntity
     [Column("name")]
     public string? Name { get; set; }
 
+    [Column("amount")]
+    [ValueConverter(typeof(AotAmountConverter))]
+    public decimal Amount { get; set; }
+
     [Relationship(ForeignKey = nameof(AotRelOrder.BuyerId))]
     public ICollection<AotRelOrder> Orders { get; } = new List<AotRelOrder>();
 }
@@ -36,4 +40,7 @@ public sealed class AotRelOrder : AotRelEntity
 
     [Relationship(ForeignKey = nameof(BuyerId))]
     public AotRelCustomer? Buyer { get; set; }
+
+    [Relationship(ForeignKey = nameof(ApproverId))]
+    public AotRelCustomer? Approver { get; set; }
 }

@@ -1,5 +1,7 @@
 using System.Collections;
+using System.Data.Common;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using NextORM.AotSqlProbe;
@@ -30,7 +32,8 @@ if (provider is null)
     return 2;
 }
 
-Console.WriteLine($"[aot-sqlprobe] provider={provider.Name}");
+Console.WriteLine(
+    $"[aot-sqlprobe] provider={provider.Name} dynamic-code-supported={RuntimeFeature.IsDynamicCodeSupported} dynamic-code-compiled={RuntimeFeature.IsDynamicCodeCompiled}");
 
 await SeedAsync(provider, connectionString).ConfigureAwait(false);
 
@@ -66,6 +69,12 @@ var shapes = new (string Name, Func<CancellationToken, Task<object>> Run)[]
     ("window-function", RunWindowFunction),
     ("json-column", RunJsonColumn),
     ("relationship-load-with", RunRelationshipLoadWith),
+    ("eager-load-single-query", RunEagerLoadSingleQuery),
+    ("join-into-collection", RunJoinIntoCollection),
+    ("eager-load-many-to-many", RunEagerLoadManyToMany),
+    ("join-into-many-to-many", RunJoinIntoManyToMany),
+    ("eager-load-composite-many-to-many", RunEagerLoadCompositeManyToMany),
+    ("join-into-composite-many-to-many", RunJoinIntoCompositeManyToMany),
     ("value-converters", RunValueConverters),
 };
 
@@ -97,39 +106,9 @@ foreach (var shape in shapes)
     }
 }
 
-// Single-query eager loading closes its row type over the parent and child types at run time, so a native
-// image rejects it before any SQL. That rejection cannot be part of the JIT/native digest comparison (the
-// JIT arm has dynamic code and executes the shape), so it is reported as a separate check that only the
-// published binary is expected to satisfy. The split loader is proven by a shape above.
-var checkFailures = 0;
-if (System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
-{
-    Console.WriteLine("[CHECK] eager-load-single-query: skipped (dynamic code is available)");
-    Console.WriteLine("[CHECK] eager-load-many-to-many: skipped (dynamic code is available)");
-}
-else
-{
-    checkFailures += CheckRejection("eager-load-single-query", "Single-query eager loading", () =>
-    {
-        using var single = provider.CreateContext(connectionString, new DataContextBuilder().UseEagerLoadMode(EagerLoadMode.SingleQuery));
-        single.From<AotParent>().LoadWith(parent => parent.Children).ToList();
-    });
-
-    checkFailures += CheckRejection("eager-load-many-to-many", "Many-to-many eager loading", () =>
-    {
-        using var many = provider.CreateContext(connectionString, new DataContextBuilder().UseEagerLoadMode(EagerLoadMode.SingleQuery));
-        many.From<AotM2mTag>();
-        many.From<AotM2mLink>();
-        many.From<AotM2mParent>(builder => builder
-            .HasManyThrough<AotM2mTag, AotM2mLink, int, int>(
-                parent => parent.Tags, parent => parent.Id, link => link.ParentId, tag => tag.Id, link => link.ChildId));
-        many.From<AotM2mParent>().LoadWith(parent => parent.Tags).ToList();
-    });
-}
-
 Console.WriteLine();
-Console.WriteLine($"{shapes.Length - failed - skipped}/{shapes.Length} shapes completed; {failed} failed; {skipped} unsupported; {checkFailures} check(s) failed.");
-return failed == 0 && checkFailures == 0 ? 0 : 1;
+Console.WriteLine($"{shapes.Length - failed - skipped}/{shapes.Length} shapes completed; {failed} failed; {skipped} unsupported.");
+return failed == 0 ? 0 : 1;
 
 async Task<object> RunCustomerFilter(CancellationToken ct)
     => await ctx.From<ICustomer>()
@@ -370,15 +349,159 @@ async Task<object> RunWindowFunction(CancellationToken ct)
 
 async Task<object> RunRelationshipLoadWith(CancellationToken ct)
 {
-    // The split loader: the parent query runs once and the declared navigation is loaded in a second
-    // command, so this shape exercises the relationship metadata (and nothing closed at run time).
-    var parents = await ctx.From<AotParent>()
+    // Keep this default-mode split load independent from the explicit one-command SingleQuery shape below.
+    var counter = new ProbeCommandCounter();
+    await using var split = CreateCountedContext(counter);
+    var parents = await split.From<AotParent>()
         .OrderBy(parent => parent.Id)
         .LoadWith(parent => parent.Children)
         .ToListAsync(ct).ConfigureAwait(false);
 
+    var graph = FormatGraph(parents.Select(parent =>
+        (parent.Id, parent.Children.Select(child => child.Id))));
+    RequireGraph("relationship-load-with", graph, "1[10,11];2[]");
+    RequireCommandCount(counter, "relationship-load-with", 2);
+    ReportGraph("relationship-load-with", graph, 2);
+
     return parents.Select(parent =>
         $"{parent.Id}:{parent.Name}[{string.Join(",", parent.Children.OrderBy(child => child.Id).Select(child => child.Id))}]").ToList();
+}
+
+async Task<object> RunEagerLoadSingleQuery(CancellationToken ct)
+{
+    var counter = new ProbeCommandCounter();
+    await using var single = CreateCountedContext(counter, EagerLoadMode.SingleQuery);
+    var parents = await single.From<AotParent>()
+        .OrderBy(parent => parent.Id)
+        .LoadWith(parent => parent.Children)
+        .ToListAsync(ct).ConfigureAwait(false);
+
+    var graph = FormatGraph(parents.Select(parent =>
+        (parent.Id, parent.Children.Select(child => child.Id))));
+    RequireGraph("eager-load-single-query", graph, "1[10,11];2[]");
+    RequireCommandCount(counter, "eager-load-single-query", 1);
+    ReportGraph("eager-load-single-query", graph, 1);
+    return graph;
+}
+
+async Task<object> RunJoinIntoCollection(CancellationToken ct)
+{
+    var counter = new ProbeCommandCounter();
+    await using var joined = CreateCountedContext(counter);
+    var parents = await joined.From<AotParent>()
+        .OrderBy(parent => parent.Id)
+        .JoinInto(joined.From<AotChild>(), (parent, child) => parent.Id == child.ParentId, parent => parent.Children)
+        .ToListAsync(ct).ConfigureAwait(false);
+
+    var graph = FormatGraph(parents.Select(parent =>
+        (parent.Id, parent.Children.Select(child => child.Id))));
+    RequireGraph("join-into-collection", graph, "1[10,11];2[]");
+    RequireCommandCount(counter, "join-into-collection", 1);
+    ReportGraph("join-into-collection", graph, 1);
+    return graph;
+}
+
+async Task<object> RunEagerLoadManyToMany(CancellationToken ct)
+{
+    var counter = new ProbeCommandCounter();
+    await using var many = CreateCountedContext(counter, EagerLoadMode.SingleQuery);
+    RegisterScalarM2m(many);
+    var parents = await many.From<AotM2mParent>()
+        .OrderBy(parent => parent.Id)
+        .LoadWith(parent => parent.Tags)
+        .ToListAsync(ct).ConfigureAwait(false);
+
+    var graph = FormatGraph(parents.Select(parent =>
+        (parent.Id, parent.Tags.Select(tag => tag.Id))));
+    RequireGraph("eager-load-many-to-many", graph, "1[10,10,11];2[12];3[]");
+    RequireCommandCount(counter, "eager-load-many-to-many", 1);
+    ReportGraph("eager-load-many-to-many", graph, 1);
+    return graph;
+}
+
+async Task<object> RunJoinIntoManyToMany(CancellationToken ct)
+{
+    var counter = new ProbeCommandCounter();
+    await using var many = CreateCountedContext(counter);
+    RegisterScalarM2m(many);
+    var parents = await many.From<AotM2mParent>()
+        .OrderBy(parent => parent.Id)
+        .JoinInto(many.From<AotM2mTag>(), (parent, tag) => true, parent => parent.Tags)
+        .ToListAsync(ct).ConfigureAwait(false);
+
+    var graph = FormatGraph(parents.Select(parent =>
+        (parent.Id, parent.Tags.Select(tag => tag.Id))));
+    RequireGraph("join-into-many-to-many", graph, "1[10,10,11];2[12];3[]");
+    RequireCommandCount(counter, "join-into-many-to-many", 1);
+    ReportGraph("join-into-many-to-many", graph, 1);
+    return graph;
+}
+
+async Task<object> RunEagerLoadCompositeManyToMany(CancellationToken ct)
+{
+    var counter = new ProbeCommandCounter();
+    await using var many = CreateCountedContext(counter, EagerLoadMode.SingleQuery);
+    RegisterCompositeM2m(many);
+    var parents = await many.From<AotCompositeM2mParent>()
+        .OrderBy(parent => parent.Id)
+        .LoadWith(parent => parent.Tags)
+        .ToListAsync(ct).ConfigureAwait(false);
+
+    var graph = FormatGraph(parents.Select(parent =>
+        (parent.Id, parent.Tags.Select(tag => tag.Id))));
+    RequireGraph("eager-load-composite-many-to-many", graph, "1[10,10,11];2[11];3[]");
+    RequireCommandCount(counter, "eager-load-composite-many-to-many", 1);
+    ReportGraph("eager-load-composite-many-to-many", graph, 1);
+    return graph;
+}
+
+async Task<object> RunJoinIntoCompositeManyToMany(CancellationToken ct)
+{
+    var counter = new ProbeCommandCounter();
+    await using var many = CreateCountedContext(counter);
+    RegisterCompositeM2m(many);
+    var parents = await many.From<AotCompositeM2mParent>()
+        .OrderBy(parent => parent.Id)
+        .JoinInto(many.From<AotCompositeM2mTag>(), (parent, tag) => true, parent => parent.Tags)
+        .ToListAsync(ct).ConfigureAwait(false);
+
+    var graph = FormatGraph(parents.Select(parent =>
+        (parent.Id, parent.Tags.Select(tag => tag.Id))));
+    RequireGraph("join-into-composite-many-to-many", graph, "1[10,10,11];2[11];3[]");
+    RequireCommandCount(counter, "join-into-composite-many-to-many", 1);
+    ReportGraph("join-into-composite-many-to-many", graph, 1);
+    return graph;
+}
+
+IDataContext CreateCountedContext(ProbeCommandCounter counter, EagerLoadMode? eagerLoadMode = null)
+{
+    var builder = new DataContextBuilder().AddInterceptor(counter);
+    if (eagerLoadMode is { } mode)
+        builder.UseEagerLoadMode(mode);
+
+    return provider.CreateContext(connectionString, builder);
+}
+
+void RegisterScalarM2m(IDataContext target)
+{
+    target.From<AotM2mTag>();
+    target.From<AotM2mLink>();
+    target.From<AotM2mParent>(builder => builder
+        .HasManyThrough<AotM2mTag, AotM2mLink, int, int>(
+            parent => parent.Tags, parent => parent.Id, link => link.ParentId, tag => tag.Id, link => link.ChildId));
+}
+
+void RegisterCompositeM2m(IDataContext target)
+{
+    target.From<AotCompositeM2mTag>();
+    target.From<AotCompositeM2mLink>();
+    target.From<AotCompositeM2mParent>(builder => builder
+        .HasManyThrough<AotCompositeM2mTag, AotCompositeM2mLink>(
+            parent => parent.Tags,
+            parent => new { TenantId = parent.ParentTenantId, LinkId = parent.LinkId },
+            link => new { TenantId = link.ParentTenantId, LinkId = link.ParentLinkId },
+            tag => new { TenantId = tag.TagTenantId, TagId = tag.TagId },
+            link => new { TenantId = link.TagTenantId, TagId = link.TagId }));
 }
 
 async Task<object> RunValueConverters(CancellationToken ct)
@@ -420,6 +543,29 @@ static async Task SeedAsync(ProbeProvider provider, string connectionString)
     }
 }
 
+static string FormatGraph(IEnumerable<(int ParentId, IEnumerable<int> ChildIds)> parents)
+    => string.Join(";", parents
+        .OrderBy(parent => parent.ParentId)
+        .Select(parent => $"{parent.ParentId}[{string.Join(",", parent.ChildIds.OrderBy(id => id))}]"));
+
+static void RequireGraph(string shapeName, string actual, string expected)
+{
+    if (!string.Equals(actual, expected, StringComparison.Ordinal))
+        throw new InvalidOperationException($"{shapeName}: expected graph '{expected}', received '{actual}'.");
+}
+
+static void RequireCommandCount(ProbeCommandCounter counter, string shapeName, int expected)
+{
+    if (counter.Executing != expected || counter.Executed != expected || counter.Failed != 0)
+    {
+        throw new InvalidOperationException(
+            $"Expected {expected} successful SQL command(s) for {shapeName}; observed executing={counter.Executing}, executed={counter.Executed}, failed={counter.Failed}.");
+    }
+}
+
+static void ReportGraph(string shapeName, string graph, int commands)
+    => Console.WriteLine($"[GRAPH] {shapeName}: {graph};commands={commands}");
+
 static string? ParseValue(string[] args, string name)
 {
     for (var i = 0; i < args.Length - 1; i++)
@@ -437,27 +583,6 @@ static string[] ParseList(string[] args, string name)
     return string.IsNullOrWhiteSpace(value)
         ? []
         : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-}
-
-static int CheckRejection(string name, string expected, Action run)
-{
-    try
-    {
-        run();
-    }
-    catch (NotSupportedException exception) when (exception.Message.Contains(expected, StringComparison.Ordinal))
-    {
-        Console.WriteLine($"[CHECK] {name}: rejected=NotSupportedException");
-        return 0;
-    }
-    catch (Exception exception)
-    {
-        Console.WriteLine($"[CHECK] {name}: status=fail exception={DescribeFailure(exception)}");
-        return 1;
-    }
-
-    Console.WriteLine($"[CHECK] {name}: status=fail exception=NoRejection");
-    return 1;
 }
 
 static string DescribeFailure(Exception exception)
@@ -486,3 +611,23 @@ static (int Count, string Digest) Describe(object rows)
 
 static string DigestOf(string text)
     => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)))[..16].ToLowerInvariant();
+
+internal sealed class ProbeCommandCounter : IQueryInterceptor
+{
+    private int _executing;
+    private int _executed;
+    private int _failed;
+
+    public int Executing => Volatile.Read(ref _executing);
+    public int Executed => Volatile.Read(ref _executed);
+    public int Failed => Volatile.Read(ref _failed);
+
+    public void CommandExecuting(CommandEventData eventData, DbCommand command)
+        => Interlocked.Increment(ref _executing);
+
+    public void CommandExecuted(CommandEventData eventData, DbCommand command, TimeSpan elapsed)
+        => Interlocked.Increment(ref _executed);
+
+    public void CommandFailed(CommandEventData eventData, DbCommand command, Exception exception)
+        => Interlocked.Increment(ref _failed);
+}

@@ -35,17 +35,18 @@ Query surface: typed and anonymous projections, whole-entity materialization, fi
 `GROUP BY`/`HAVING`, joins, CTEs, window functions (where the provider supports them), SQLite JSON
 functions, ClickHouse arrays, `SelectGroup`/`SelectGroupHaving`, `SelectWhereMin`/`SelectWhereMax`,
 prepared-command reuse, correlated subqueries, value converters, JSON columns (see below), eager
-loading of a declared `[Relationship]` collection through the split loader (`LoadWith`), the
-insert/update/delete builders, bulk insert, raw-SQL row mapping (`ExecuteRaw`, scalar and mapped-entity
-results) and the streaming terminals — `WriteCsv`, `WriteJson` and the asynchronous row sequence
-(`ToAsyncEnumerable`).
+loading of a declared `[Relationship]` collection through the split loader (`LoadWith`) or in one
+query (`LoadWith(..., EagerLoadMode.SingleQuery)` and `JoinInto`), including tested scalar and
+composite-key many-to-many shapes, the insert/update/delete builders, bulk insert, raw-SQL row mapping
+(`ExecuteRaw`, scalar and mapped-entity results) and the streaming terminals — `WriteCsv`, `WriteJson`
+and the asynchronous row sequence (`ToAsyncEnumerable`).
 
-Every supported scenario runs natively and under JIT and is compared row by row: row counts and
-values must match. That comparison runs automatically on every change, so "works natively" is a
-standing build condition, not a one-off check. Each of the six providers is verified with its own
-published native binary against a live server: the projection, filtering, grouping, aggregate,
-`HAVING`/`SelectGroupHaving`, join, CTE, window, prepared-command, converter, eager-loading, write and
-streaming shapes are all exercised that way, so no provider relies on another provider's run.
+The repository contains native-versus-JIT regression checks for representative SQLite scenarios and
+cross-provider query shapes. The server-provider checks use a published native binary against each
+provider's live database; they include single-query eager-loading graphs with one SQL command and
+compare their results with a genuine JIT run. This coverage is representative, not exhaustive or an
+automatic compatibility guarantee for every query combination. Test your own query set against the
+native build before shipping.
 
 ## JSON columns
 
@@ -69,12 +70,9 @@ context declares is serialized with the default options.
 
 - The EF Core bridge (`nextorm.entityframeworkcore`) is not part of the native build yet — keep that
   scenario on the regular JIT runtime.
-- Single-query eager loading — `JoinInto`, or `LoadWith(..., EagerLoadMode.SingleQuery)` — closes its
-  row type over the parent and child types at run time, which a native image cannot materialize. A
-  many-to-many navigation cannot be loaded in one query for the same reason: its link row type is
-  closed over the junction key types, and a composite junction also emits a carrier with
-  `Reflection.Emit`. Both shapes are rejected before any SQL runs; the split loader (`LoadWith` default)
-  covers the same navigations, many-to-many included.
+- ClickHouse tuple result columns whose element type is not registered by the driver are not
+  materialized by the native build. Select individual `tupleElement(...)` columns or retrieve the
+  tuple as text and parse it on the client.
 - A query outside the surface above can fail on first execution. Run your own query set against the
   native build before shipping: the analyzers do not see through the dynamic query pipeline, so the
   native run is the check.
