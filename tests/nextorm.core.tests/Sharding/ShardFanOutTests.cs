@@ -102,9 +102,9 @@ public sealed class ShardFanOutTests
         public bool TryGetHost(in TopologyContext context, out HostTarget host)
         {
             host = default;
-            if (context.Scope == global::NextORM.Core.MappingScope.Default || string.IsNullOrEmpty(context.Scope.Key))
+            if (context.Variant == global::NextORM.Core.MappingVariant.Default || string.IsNullOrEmpty(context.Variant.Key))
                 return false;
-            if (!int.TryParse(context.Scope.Key, out var bucket))
+            if (!int.TryParse(context.Variant.Key, out var bucket))
                 return false;
 
             var shardId = ring.GetShard(bucket);

@@ -19,21 +19,21 @@ public interface IRoutedTransactionManager
     /// pins the topology to that host, so later commands routed there join the transaction.
     /// </summary>
     /// <param name="target">The topology to transact on.</param>
-    /// <param name="scope">The mapping scope that selects the host, for example a bucket scope.</param>
+    /// <param name="scope">The mapping variant that selects the host, for example a bucket scope.</param>
     /// <param name="isolationLevel">The isolation level to request; <see cref="IsolationLevel.Unspecified"/> uses the provider default.</param>
     /// <returns>The started transaction.</returns>
     /// <exception cref="InvalidOperationException">
     /// The topology is not registered, selected no host for the scope, or another transaction is open.
     /// </exception>
-    DbTransaction BeginTransaction(RouteTarget target, MappingScope scope = default, IsolationLevel isolationLevel = IsolationLevel.Unspecified);
+    DbTransaction BeginTransaction(RouteTarget target, MappingVariant scope = default, IsolationLevel isolationLevel = IsolationLevel.Unspecified);
 
     /// <summary>Asynchronously starts a transaction on the routed host and pins the topology to it.</summary>
     /// <param name="target">The topology to transact on.</param>
-    /// <param name="scope">The mapping scope that selects the host.</param>
+    /// <param name="scope">The mapping variant that selects the host.</param>
     /// <param name="isolationLevel">The isolation level to request.</param>
     /// <param name="cancellationToken">Token used to cancel the operation.</param>
     /// <returns>A task producing the started transaction.</returns>
-    Task<DbTransaction> BeginTransactionAsync(RouteTarget target, MappingScope scope = default, IsolationLevel isolationLevel = IsolationLevel.Unspecified, CancellationToken cancellationToken = default);
+    Task<DbTransaction> BeginTransactionAsync(RouteTarget target, MappingVariant scope = default, IsolationLevel isolationLevel = IsolationLevel.Unspecified, CancellationToken cancellationToken = default);
 
     /// <summary>The transaction currently open on <paramref name="target"/>'s host, or <see langword="null"/>.</summary>
     /// <param name="target">The topology to inspect.</param>
@@ -47,22 +47,22 @@ public interface IRoutedTransactionManager
 /// </summary>
 public static class RoutedTransactionExtensions
 {
-    /// <inheritdoc cref="IRoutedTransactionManager.BeginTransaction(RouteTarget, MappingScope, IsolationLevel)"/>
+    /// <inheritdoc cref="IRoutedTransactionManager.BeginTransaction(RouteTarget, MappingVariant, IsolationLevel)"/>
     public static DbTransaction BeginTransaction(
         this DataContext context,
         RouteTarget target,
-        MappingScope scope = default,
+        MappingVariant scope = default,
         IsolationLevel isolationLevel = IsolationLevel.Unspecified)
     {
         ArgumentNullException.ThrowIfNull(context);
         return ((IRoutedTransactionManager)context).BeginTransaction(target, scope, isolationLevel);
     }
 
-    /// <inheritdoc cref="IRoutedTransactionManager.BeginTransactionAsync(RouteTarget, MappingScope, IsolationLevel, CancellationToken)"/>
+    /// <inheritdoc cref="IRoutedTransactionManager.BeginTransactionAsync(RouteTarget, MappingVariant, IsolationLevel, CancellationToken)"/>
     public static Task<DbTransaction> BeginTransactionAsync(
         this DataContext context,
         RouteTarget target,
-        MappingScope scope = default,
+        MappingVariant scope = default,
         IsolationLevel isolationLevel = IsolationLevel.Unspecified,
         CancellationToken cancellationToken = default)
     {

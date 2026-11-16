@@ -2,7 +2,7 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Expands the physical-name placeholders of a raw SQL fragment from the metadata of the entity bound to
-/// the source and the mapping scope of the command. Expansion runs while the plan is built, so the
+/// the source and the mapping variant of the command. Expansion runs while the plan is built, so the
 /// emitted SQL carries the scope's real schema and table exactly like a mapped source does.
 /// </summary>
 /// <remarks>
@@ -64,7 +64,7 @@ internal static class RawSqlPlaceholders
             ?? throw new InvalidOperationException(
                 "The raw SQL placeholders require a metadata provider, but the build context has none.");
 
-        var scope = ctx.MappingScope;
+        var scope = ctx.MappingVariant;
         var metadata = provider.GetMetadata(entityType, in scope);
         var table = metadata.TableName;
         if (string.IsNullOrEmpty(table))

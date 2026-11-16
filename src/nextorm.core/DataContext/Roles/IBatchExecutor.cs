@@ -24,7 +24,7 @@ internal interface IBatchExecutor
     /// <returns>The rendered statements and the result-bearing query.</returns>
     /// <exception cref="NotSupportedException">
     /// The dialect has no batch form, a materialisation option is unsupported, or the steps resolve to
-    /// different topologies or mapping scopes (a batch runs on one host).
+    /// different topologies or mapping variants (a batch runs on one host).
     /// </exception>
     BatchPlan RenderBatch(IReadOnlyList<BatchStepSpec> steps);
 
@@ -214,7 +214,7 @@ internal sealed class BatchResultSpec
 
 /// <summary>
 /// The host one rendered batch runs on. A batch is one session and one round trip, so every statement of
-/// it must belong to one topology and one mapping scope — the same rule a single statement applies to its
+/// it must belong to one topology and one mapping variant — the same rule a single statement applies to its
 /// sources. The route carries the step that decided it; the context turns it into a connection when it
 /// executes the plan, so <c>ToSql</c> can validate the batch without opening anything.
 /// </summary>
@@ -222,10 +222,10 @@ internal readonly struct BatchRoute
 {
     /// <summary>Creates a route decided by one step of the batch.</summary>
     /// <param name="plan">The resolved topology, or none.</param>
-    /// <param name="scope">The mapping scope the deciding step runs under.</param>
+    /// <param name="scope">The mapping variant the deciding step runs under.</param>
     /// <param name="sources">The entity types the deciding step reads or writes, or <see langword="null"/>.</param>
     /// <param name="kind">Whether the batch must be served by a writer.</param>
-    public BatchRoute(RoutePlan plan, MappingScope scope, IReadOnlyList<Type>? sources, CommandKind kind)
+    public BatchRoute(RoutePlan plan, MappingVariant scope, IReadOnlyList<Type>? sources, CommandKind kind)
     {
         Plan = plan;
         Scope = scope;
@@ -237,13 +237,13 @@ internal readonly struct BatchRoute
     /// <param name="kind">Whether the batch must be served by a writer.</param>
     /// <returns>The context route.</returns>
     public static BatchRoute OnContext(CommandKind kind)
-        => new(RoutePlan.None, MappingScope.Default, null, kind);
+        => new(RoutePlan.None, MappingVariant.Default, null, kind);
 
     /// <summary>The topology the batch belongs to, or none.</summary>
     public RoutePlan Plan { get; }
 
-    /// <summary>The mapping scope the deciding step runs under.</summary>
-    public MappingScope Scope { get; }
+    /// <summary>The mapping variant the deciding step runs under.</summary>
+    public MappingVariant Scope { get; }
 
     /// <summary>The entity types the deciding step reads or writes, or <see langword="null"/>.</summary>
     public IReadOnlyList<Type>? Sources { get; }

@@ -1,43 +1,43 @@
 #nullable enable
-NextORM.Core.EntityBuilder<TEntity>.WithScope(NextORM.Core.MappingScope scope) -> NextORM.Core.EntityBuilder<TEntity>!
+NextORM.Core.EntityBuilder<TEntity>.WithVariant(NextORM.Core.MappingVariant scope) -> NextORM.Core.EntityBuilder<TEntity>!
 NextORM.Core.EntityBuilder<TEntity>.WithShardKey(params object?[]! shardKeyValues) -> NextORM.Core.EntityBuilder<TEntity>!
 NextORM.Core.InsertBuilder<TEntity>.WithShardKey(params object?[]! shardKeyValues) -> NextORM.Core.InsertBuilder<TEntity>!
 NextORM.Core.EntityMetadataBuilder<T>.Schema(string! schema) -> NextORM.Core.EntityMetadataBuilder<T>!
 NextORM.Core.DataContextBuilder.EntityMetadataProvider.get -> NextORM.Core.IEntityMetadataProvider!
-NextORM.Core.DataContextBuilder.EntityScopeResolver.get -> NextORM.Core.IEntityScopeResolver!
+NextORM.Core.DataContextBuilder.EntityVariantResolver.get -> NextORM.Core.IEntityVariantResolver!
 NextORM.Core.DataContextBuilder.UseEntityMetadataProvider(NextORM.Core.IEntityMetadataProvider! provider) -> NextORM.Core.DataContextBuilder!
-NextORM.Core.DataContextBuilder.UseScopeResolver(NextORM.Core.IEntityScopeResolver! resolver) -> NextORM.Core.DataContextBuilder!
-NextORM.Core.DefaultEntityScopeResolver
-NextORM.Core.DefaultEntityScopeResolver.DefaultEntityScopeResolver() -> void
-NextORM.Core.DefaultEntityScopeResolver.Resolve(System.Type! entityType) -> NextORM.Core.MappingScope
-NextORM.Core.DefaultEntityScopeResolver.Resolve(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingScope
-NextORM.Core.DefaultEntityScopeResolver.Resolve(System.Type! entityType, object! entity) -> NextORM.Core.MappingScope
+NextORM.Core.DataContextBuilder.UseVariantResolver(NextORM.Core.IEntityVariantResolver! resolver) -> NextORM.Core.DataContextBuilder!
+NextORM.Core.DefaultEntityVariantResolver
+NextORM.Core.DefaultEntityVariantResolver.DefaultEntityVariantResolver() -> void
+NextORM.Core.DefaultEntityVariantResolver.Resolve(System.Type! entityType) -> NextORM.Core.MappingVariant
+NextORM.Core.DefaultEntityVariantResolver.Resolve(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingVariant
+NextORM.Core.DefaultEntityVariantResolver.Resolve(System.Type! entityType, object! entity) -> NextORM.Core.MappingVariant
 NextORM.Core.DefaultEntityMetadataProvider
 NextORM.Core.DefaultEntityMetadataProvider.DefaultEntityMetadataProvider() -> void
-NextORM.Core.DefaultEntityMetadataProvider.GetColumnName(System.Reflection.PropertyInfo! property, in NextORM.Core.MappingScope scope, NextORM.Core.INamingConvention? convention) -> string!
-NextORM.Core.DefaultEntityMetadataProvider.GetMetadata(System.Type! entityType, in NextORM.Core.MappingScope scope) -> NextORM.Core.IEntityMetadata!
+NextORM.Core.DefaultEntityMetadataProvider.GetColumnName(System.Reflection.PropertyInfo! property, in NextORM.Core.MappingVariant scope, NextORM.Core.INamingConvention? convention) -> string!
+NextORM.Core.DefaultEntityMetadataProvider.GetMetadata(System.Type! entityType, in NextORM.Core.MappingVariant scope) -> NextORM.Core.IEntityMetadata!
 NextORM.Core.IEntityMetadataProvider
-NextORM.Core.IEntityMetadataProvider.GetColumnName(System.Reflection.PropertyInfo! property, in NextORM.Core.MappingScope scope, NextORM.Core.INamingConvention? convention) -> string!
-NextORM.Core.IEntityMetadataProvider.GetMetadata(System.Type! entityType, in NextORM.Core.MappingScope scope) -> NextORM.Core.IEntityMetadata!
+NextORM.Core.IEntityMetadataProvider.GetColumnName(System.Reflection.PropertyInfo! property, in NextORM.Core.MappingVariant scope, NextORM.Core.INamingConvention? convention) -> string!
+NextORM.Core.IEntityMetadataProvider.GetMetadata(System.Type! entityType, in NextORM.Core.MappingVariant scope) -> NextORM.Core.IEntityMetadata!
 NextORM.Core.IEntityMetadata.Schema.get -> string?
-NextORM.Core.IEntityScopeResolver
-NextORM.Core.IEntityScopeResolver.Resolve(System.Type! entityType) -> NextORM.Core.MappingScope
-NextORM.Core.IEntityScopeResolver.Resolve(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingScope
-NextORM.Core.IEntityScopeResolver.Resolve(System.Type! entityType, object! entity) -> NextORM.Core.MappingScope
-NextORM.Core.MappingScope
-NextORM.Core.MappingScope.Equals(NextORM.Core.MappingScope other) -> bool
-NextORM.Core.MappingScope.Key.get -> string?
-NextORM.Core.MappingScope.Key.init -> void
-NextORM.Core.MappingScope.MappingScope() -> void
-NextORM.Core.MappingScope.MappingScope(string? Key) -> void
-NextORM.Core.MappingScope.ParameterPrefix.get -> string!
-NextORM.Core.MappingScope.Deconstruct(out string? Key) -> void
-~override NextORM.Core.MappingScope.Equals(object obj) -> bool
-~override NextORM.Core.MappingScope.ToString() -> string
-override NextORM.Core.MappingScope.GetHashCode() -> int
-static readonly NextORM.Core.MappingScope.Default -> NextORM.Core.MappingScope
-static NextORM.Core.MappingScope.operator !=(NextORM.Core.MappingScope left, NextORM.Core.MappingScope right) -> bool
-static NextORM.Core.MappingScope.operator ==(NextORM.Core.MappingScope left, NextORM.Core.MappingScope right) -> bool
+NextORM.Core.IEntityVariantResolver
+NextORM.Core.IEntityVariantResolver.Resolve(System.Type! entityType) -> NextORM.Core.MappingVariant
+NextORM.Core.IEntityVariantResolver.Resolve(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingVariant
+NextORM.Core.IEntityVariantResolver.Resolve(System.Type! entityType, object! entity) -> NextORM.Core.MappingVariant
+NextORM.Core.MappingVariant
+NextORM.Core.MappingVariant.Equals(NextORM.Core.MappingVariant other) -> bool
+NextORM.Core.MappingVariant.Key.get -> string?
+NextORM.Core.MappingVariant.Key.init -> void
+NextORM.Core.MappingVariant.MappingVariant() -> void
+NextORM.Core.MappingVariant.MappingVariant(string? Key) -> void
+NextORM.Core.MappingVariant.ParameterPrefix.get -> string!
+NextORM.Core.MappingVariant.Deconstruct(out string? Key) -> void
+~override NextORM.Core.MappingVariant.Equals(object obj) -> bool
+~override NextORM.Core.MappingVariant.ToString() -> string
+override NextORM.Core.MappingVariant.GetHashCode() -> int
+static readonly NextORM.Core.MappingVariant.Default -> NextORM.Core.MappingVariant
+static NextORM.Core.MappingVariant.operator !=(NextORM.Core.MappingVariant left, NextORM.Core.MappingVariant right) -> bool
+static NextORM.Core.MappingVariant.operator ==(NextORM.Core.MappingVariant left, NextORM.Core.MappingVariant right) -> bool
 NextORM.Core.PrefixedParameterProvider
 NextORM.Core.PrefixedParameterProvider.GetParamName() -> string!
 NextORM.Core.PrefixedParameterProvider.PrefixedParameterProvider(NextORM.Core.IParameterProvider! inner, string! prefix) -> void
@@ -56,7 +56,7 @@ NextORM.Core.PostgresFunctions.vector_concat<T>(T left, T right) -> T
 NextORM.Core.PostgresFunctions.vector_dims<T>(T value) -> int?
 NextORM.Core.PostgresFunctions.vector_multiply<T>(T left, T right) -> T
 NextORM.Core.PostgresFunctions.vector_norm<T>(T value) -> double?
-NextORM.Core.MergeBuilder<TEntity>.WithScope(NextORM.Core.MappingScope scope) -> NextORM.Core.MergeBuilder<TEntity>!
+NextORM.Core.MergeBuilder<TEntity>.WithVariant(NextORM.Core.MappingVariant scope) -> NextORM.Core.MergeBuilder<TEntity>!
 NextORM.Core.PostgresFunctions.vector_subtract<T>(T left, T right) -> T
 *REMOVED*NextORM.Core.OuterRefMarker<T>
 *REMOVED*NextORM.Core.OuterRefMarker<T>.I.get -> int
@@ -87,16 +87,19 @@ NextORM.Core.IShardKeyProvider.IsSharded(System.Type! entityType) -> bool
 NextORM.Core.IShardRouter
 NextORM.Core.IShardRouter.GetShardKey(System.Type! entityType) -> System.Collections.Generic.IReadOnlyList<System.Reflection.PropertyInfo!>!
 NextORM.Core.IShardRouter.IsSharded(System.Type! entityType) -> bool
-NextORM.Core.IShardRouter.ResolveShard(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingScope
+NextORM.Core.IShardRouter.ResolveShard(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingVariant
 NextORM.Core.IShardTopology
 NextORM.Core.IShardTopology.Ring.get -> NextORM.Core.IConsistentHashRing!
 NextORM.Core.IShardTopology.ShardIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
 NextORM.Core.IShardTopology.Version.get -> int
 NextORM.Core.ShardDataContextBuilderExtensions
+NextORM.Core.ShardDataContextExtensions
+static NextORM.Core.ShardDataContextExtensions.GetShardRouter(this NextORM.Core.IDataContext! context) -> NextORM.Core.IShardRouter!
+static NextORM.Core.ShardDataContextExtensions.TryGetShardRouter(this NextORM.Core.IDataContext! context, out NextORM.Core.IShardRouter? router) -> bool
 static NextORM.Core.ShardDataContextBuilderExtensions.UseSharding(this NextORM.Core.DataContextBuilder! builder, NextORM.Core.IShardTopology! topology, NextORM.Core.IShardKeyProvider? keyProvider = null) -> NextORM.Core.DataContextBuilder!
 NextORM.Core.ShardEntityMetadataProvider
-NextORM.Core.ShardEntityMetadataProvider.GetColumnName(System.Reflection.PropertyInfo! property, in NextORM.Core.MappingScope scope, NextORM.Core.INamingConvention? convention) -> string!
-NextORM.Core.ShardEntityMetadataProvider.GetMetadata(System.Type! entityType, in NextORM.Core.MappingScope scope) -> NextORM.Core.IEntityMetadata!
+NextORM.Core.ShardEntityMetadataProvider.GetColumnName(System.Reflection.PropertyInfo! property, in NextORM.Core.MappingVariant scope, NextORM.Core.INamingConvention? convention) -> string!
+NextORM.Core.ShardEntityMetadataProvider.GetMetadata(System.Type! entityType, in NextORM.Core.MappingVariant scope) -> NextORM.Core.IEntityMetadata!
 NextORM.Core.ShardEntityMetadataProvider.ShardEntityMetadataProvider(NextORM.Core.IEntityMetadataProvider! inner, NextORM.Core.IShardTopology! topology) -> void
 NextORM.Core.ShardKeyAttribute
 NextORM.Core.ShardKeyAttribute.PropertyNames.get -> System.Collections.Generic.IReadOnlyList<string!>!
@@ -119,12 +122,17 @@ static NextORM.Core.ShardPlacement.operator ==(NextORM.Core.ShardPlacement left,
 static NextORM.Core.ShardPlacement.operator !=(NextORM.Core.ShardPlacement left, NextORM.Core.ShardPlacement right) -> bool
 NextORM.Core.ShardRouter
 NextORM.Core.ShardRouter.GetShardKey(System.Type! entityType) -> System.Collections.Generic.IReadOnlyList<System.Reflection.PropertyInfo!>!
+NextORM.Core.ShardRouter.GetBucket(System.Type! entityType, object! entity) -> int
+NextORM.Core.ShardRouter.GetBucket(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> int
+NextORM.Core.ShardRouter.GetScope(int bucket) -> NextORM.Core.MappingVariant
 NextORM.Core.ShardRouter.IsSharded(System.Type! entityType) -> bool
-NextORM.Core.ShardRouter.Resolve(System.Type! entityType) -> NextORM.Core.MappingScope
-NextORM.Core.ShardRouter.Resolve(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingScope
-NextORM.Core.ShardRouter.Resolve(System.Type! entityType, object! entity) -> NextORM.Core.MappingScope
-NextORM.Core.ShardRouter.ResolveShard(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingScope
+NextORM.Core.ShardRouter.Resolve(System.Type! entityType) -> NextORM.Core.MappingVariant
+NextORM.Core.ShardRouter.Resolve(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingVariant
+NextORM.Core.ShardRouter.Resolve(System.Type! entityType, object! entity) -> NextORM.Core.MappingVariant
+NextORM.Core.ShardRouter.ResolveShard(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingVariant
 NextORM.Core.ShardRouter.ShardRouter(NextORM.Core.IShardTopology! topology, NextORM.Core.IShardKeyProvider? keyProvider = null) -> void
+NextORM.Core.ShardRouterExtensions
+static NextORM.Core.ShardRouterExtensions.GetBucket<TEntity>(this NextORM.Core.IShardRouter! router, TEntity entity) -> int
 NextORM.Core.ShardTopology
 NextORM.Core.ShardTopology.RemoveShard(string! shardId) -> void
 NextORM.Core.ShardTopology.Ring.get -> NextORM.Core.IConsistentHashRing!
@@ -153,10 +161,13 @@ NextORM.Core.ShardTopology.GetConnectionString(string! shardId) -> string!
 NextORM.Core.ShardTopology.PlacementMode.get -> NextORM.Core.BucketPlacementMode
 NextORM.Core.ShardTopology.ShardTopology(int bucketCount, NextORM.Core.BucketPlacementMode placementMode = NextORM.Core.BucketPlacementMode.SchemaPerBucket) -> void
 NextORM.Core.IShardRouter.BucketCount.get -> int
+NextORM.Core.IShardRouter.GetBucket(System.Type! entityType, object! entity) -> int
+NextORM.Core.IShardRouter.GetBucket(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> int
+NextORM.Core.IShardRouter.GetScope(int bucket) -> NextORM.Core.MappingVariant
 NextORM.Core.IShardRouter.GetShard(int bucket) -> string!
 NextORM.Core.ShardRouter.BucketCount.get -> int
 NextORM.Core.ShardRouter.GetShard(int bucket) -> string!
-NextORM.Core.PreparedQueryCommand<TResult, TRecord>.MappingScope.get -> NextORM.Core.MappingScope
+NextORM.Core.PreparedQueryCommand<TResult, TRecord>.MappingVariant.get -> NextORM.Core.MappingVariant
 NextORM.Core.EntityBuilder<TEntity>.AcrossBuckets(int? parallelism = null) -> NextORM.Core.ShardQuery<TEntity>!
 NextORM.Core.ShardQuery<TEntity, TResult>.Any() -> bool[]!
 NextORM.Core.ShardQuery<TEntity, TResult>.AsAsyncEnumerable(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<TResult[]!>!
@@ -240,7 +251,7 @@ NextORM.Core.HostTarget.HostTarget(string! Id, string! ConnectionString) -> void
 NextORM.Core.HostTarget.Id.get -> string!
 NextORM.Core.HostTarget.Id.init -> void
 NextORM.Core.IEntityRouteResolver
-NextORM.Core.IEntityRouteResolver.TryResolve(System.Type! entityType, in NextORM.Core.MappingScope scope, out NextORM.Core.RouteTarget target) -> bool
+NextORM.Core.IEntityRouteResolver.TryResolve(System.Type! entityType, in NextORM.Core.MappingVariant scope, out NextORM.Core.RouteTarget target) -> bool
 NextORM.Core.IHostTopology
 NextORM.Core.IHostTopology.Name.get -> string!
 NextORM.Core.IHostTopology.TryGetHost(in NextORM.Core.TopologyContext context, out NextORM.Core.HostTarget host) -> bool
@@ -258,7 +269,7 @@ NextORM.Core.ShardTopology.Name.get -> string!
 NextORM.Core.ShardTopology.TryGetHost(in NextORM.Core.TopologyContext context, out NextORM.Core.HostTarget host) -> bool
 NextORM.Core.TopologyContext
 NextORM.Core.TopologyContext.Kind.get -> NextORM.Core.CommandKind
-NextORM.Core.TopologyContext.Scope.get -> NextORM.Core.MappingScope
+NextORM.Core.TopologyContext.Variant.get -> NextORM.Core.MappingVariant
 NextORM.Core.TopologyContext.TopologyContext() -> void
 override NextORM.Core.HostTarget.GetHashCode() -> int
 override NextORM.Core.RouteTarget.GetHashCode() -> int
@@ -283,12 +294,12 @@ NextORM.Core.RoundRobinTopology.RoundRobinTopology(string! name, params string![
 NextORM.Core.RoundRobinTopology.TryGetHost(in NextORM.Core.TopologyContext context, out NextORM.Core.HostTarget host) -> bool
 NextORM.Core.RoutedTransactionExtensions
 NextORM.Core.TopologyContext.HostId.get -> string?
-NextORM.Core.TopologyContext.TopologyContext(NextORM.Core.MappingScope scope, NextORM.Core.CommandKind kind, string? hostId = null) -> void
+NextORM.Core.TopologyContext.TopologyContext(NextORM.Core.MappingVariant scope, NextORM.Core.CommandKind kind, string? hostId = null) -> void
 static NextORM.Core.RoutedTransactionExtensions.GetCurrentTransaction(this NextORM.Core.DataContext! context, NextORM.Core.RouteTarget target) -> System.Data.Common.DbTransaction?
-NextORM.Core.IRoutedTransactionManager.BeginTransaction(NextORM.Core.RouteTarget target, NextORM.Core.MappingScope scope = default(NextORM.Core.MappingScope), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified) -> System.Data.Common.DbTransaction!
-NextORM.Core.IRoutedTransactionManager.BeginTransactionAsync(NextORM.Core.RouteTarget target, NextORM.Core.MappingScope scope = default(NextORM.Core.MappingScope), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Data.Common.DbTransaction!>!
-static NextORM.Core.RoutedTransactionExtensions.BeginTransaction(this NextORM.Core.DataContext! context, NextORM.Core.RouteTarget target, NextORM.Core.MappingScope scope = default(NextORM.Core.MappingScope), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified) -> System.Data.Common.DbTransaction!
-static NextORM.Core.RoutedTransactionExtensions.BeginTransactionAsync(this NextORM.Core.DataContext! context, NextORM.Core.RouteTarget target, NextORM.Core.MappingScope scope = default(NextORM.Core.MappingScope), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Data.Common.DbTransaction!>!
+NextORM.Core.IRoutedTransactionManager.BeginTransaction(NextORM.Core.RouteTarget target, NextORM.Core.MappingVariant scope = default(NextORM.Core.MappingVariant), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified) -> System.Data.Common.DbTransaction!
+NextORM.Core.IRoutedTransactionManager.BeginTransactionAsync(NextORM.Core.RouteTarget target, NextORM.Core.MappingVariant scope = default(NextORM.Core.MappingVariant), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Data.Common.DbTransaction!>!
+static NextORM.Core.RoutedTransactionExtensions.BeginTransaction(this NextORM.Core.DataContext! context, NextORM.Core.RouteTarget target, NextORM.Core.MappingVariant scope = default(NextORM.Core.MappingVariant), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified) -> System.Data.Common.DbTransaction!
+static NextORM.Core.RoutedTransactionExtensions.BeginTransactionAsync(this NextORM.Core.DataContext! context, NextORM.Core.RouteTarget target, NextORM.Core.MappingVariant scope = default(NextORM.Core.MappingVariant), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Data.Common.DbTransaction!>!
 NextORM.Core.DataContextBuilder.DefaultTopologyName.get -> string?
 NextORM.Core.DataContextBuilder.UseDefaultTopology(string! topologyName) -> NextORM.Core.DataContextBuilder!
 NextORM.Core.DataRoutingBuilder.UseDefaultTopology(string! topologyName) -> NextORM.Core.DataRoutingBuilder!
@@ -298,7 +309,7 @@ NextORM.Core.HostPin
 NextORM.Core.HostPin.Dispose() -> void
 NextORM.Core.HostPin.HostId.get -> string!
 NextORM.Core.HostPin.Topology.get -> string!
-NextORM.Core.DataContext.GetPhysicalTableName<TEntity>(NextORM.Core.MappingScope scope = default(NextORM.Core.MappingScope)) -> NextORM.Core.PhysicalTableName
+NextORM.Core.DataContext.GetPhysicalTableName<TEntity>(NextORM.Core.MappingVariant scope = default(NextORM.Core.MappingVariant)) -> NextORM.Core.PhysicalTableName
 NextORM.Core.PhysicalTableName
 NextORM.Core.PhysicalTableName.Deconstruct(out string? Schema, out string! TableName) -> void
 NextORM.Core.PhysicalTableName.Equals(NextORM.Core.PhysicalTableName other) -> bool

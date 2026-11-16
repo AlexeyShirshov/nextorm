@@ -71,7 +71,7 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
         // it. Two types mapped to the same table would otherwise share a cached plan and inherit each
         // other's routing, so the routed type is part of the plan key.
 
-        if (x.MappingScope != y.MappingScope) return false;
+        if (x.MappingVariant != y.MappingVariant) return false;
 
         if (x.ResultType != y.ResultType) return false;
 
@@ -457,7 +457,7 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             if (obj.RouteEntityType is not null)
                 hash.Add(obj.RouteEntityType);
 
-            hash.Add(obj.MappingScope);
+            hash.Add(obj.MappingVariant);
 
             if (obj.ResultPlanHash != 0)
                 hash.Add(obj.ResultPlanHash);

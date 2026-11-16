@@ -66,7 +66,7 @@ internal sealed class RouteTable
     /// one topology.
     /// </summary>
     /// <exception cref="InvalidOperationException">Two matching rules disagree on the topology.</exception>
-    internal RouteTarget? Resolve(Type? entityType, in MappingScope scope)
+    internal RouteTarget? Resolve(Type? entityType, in MappingVariant scope)
     {
         // Attribute rules are implicit, so a table with no registered rule can still route: the
         // structural lookups below are cached per type/assembly and cost a dictionary hit.

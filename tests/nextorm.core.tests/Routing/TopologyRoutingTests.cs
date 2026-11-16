@@ -416,7 +416,7 @@ public sealed class TopologyRoutingTests : IDisposable
 
     private sealed class TypeNameResolver(string typeName, string topology) : IEntityRouteResolver
     {
-        public bool TryResolve(Type entityType, in global::NextORM.Core.MappingScope scope, out RouteTarget target)
+        public bool TryResolve(Type entityType, in global::NextORM.Core.MappingVariant scope, out RouteTarget target)
         {
             if (entityType.Name == typeName)
             {

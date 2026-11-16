@@ -1238,7 +1238,7 @@ internal static class MemberTranslator
         // this correlated outer member. Resolve scoped metadata against the outer member's declaring
         // type; passing the inner type makes the metadata provider return no column and lets the
         // marker's integer slot leak into parameter extraction.
-        var colName = visitor.Options.MappingScope == MappingScope.Default
+        var colName = visitor.Options.MappingVariant == MappingVariant.Default
             ? node.Member.GetPropertyColumnName(visitor.Options.NamingConvention)
             : node.Member.GetPropertyColumnName(visitor.Options, node.Member.DeclaringType);
         if (string.IsNullOrEmpty(colName))

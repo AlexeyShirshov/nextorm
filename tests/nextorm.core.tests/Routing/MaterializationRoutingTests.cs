@@ -63,10 +63,10 @@ public sealed class MaterializationRoutingTests : IDisposable
     public void ToTableOnABucketScopedSource_ShouldCreateOnTheShard()
     {
         using var context = CreateShardedContext();
-        var scope = new global::NextORM.Core.MappingScope("3");
+        var scope = new global::NextORM.Core.MappingVariant("3");
 
         context.From<ShardRow>()
-            .WithScope(scope)
+            .WithVariant(scope)
             .Select(row => new { row.Id, row.Name })
             .ToTable("bucket_copy");
 

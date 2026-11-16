@@ -458,7 +458,7 @@ public static class TempTableExtensions
         // materialisation runs: under the source's scope and routed by the source's own entities.
         var command = new DropTableCommand(name, source.QuoteIdentifiers, source.KeywordCase)
         {
-            MappingScope = source.MappingScope,
+            MappingVariant = source.MappingVariant,
             RouteSources = CommandRouteSources.Collect(source),
         };
 

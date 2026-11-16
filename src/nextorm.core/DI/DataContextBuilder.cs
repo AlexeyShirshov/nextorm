@@ -21,7 +21,7 @@ public class DataContextBuilder
     private int? _commandTimeout;
     private Func<DataContextBuilder, IDataContext>? _factory;
     private IEntityMetadataProvider _entityMetadataProvider = new DefaultEntityMetadataProvider();
-    private IEntityScopeResolver _entityScopeResolver = new DefaultEntityScopeResolver();
+    private IEntityVariantResolver _entityVariantResolver = new DefaultEntityVariantResolver();
     // One ordered list holds every interceptor registration: either an already-created interceptor
     // instance or a Type to resolve from the captured IServiceProvider when a context is created.
     // Registration order is the invocation order in each event pipeline.
@@ -139,14 +139,14 @@ public class DataContextBuilder
         return this;
     }
 
-    /// <summary>The resolver used to select a mapping scope for entities.</summary>
-    public IEntityScopeResolver EntityScopeResolver => _entityScopeResolver;
+    /// <summary>The resolver used to select a mapping variant for entities.</summary>
+    public IEntityVariantResolver EntityVariantResolver => _entityVariantResolver;
 
-    /// <summary>Sets the resolver used to select a mapping scope for entities.</summary>
-    public DataContextBuilder UseScopeResolver(IEntityScopeResolver resolver)
+    /// <summary>Sets the resolver used to select a mapping variant for entities.</summary>
+    public DataContextBuilder UseVariantResolver(IEntityVariantResolver resolver)
     {
         ArgumentNullException.ThrowIfNull(resolver);
-        _entityScopeResolver = resolver;
+        _entityVariantResolver = resolver;
         return this;
     }
 

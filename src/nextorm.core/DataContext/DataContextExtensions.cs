@@ -179,8 +179,8 @@ public static class DataContextExtensions
 
         var metadata = ResolveMetadata(dataContext, configEntity);
         var scope = dataContext is DataContext scopedContext
-            ? scopedContext.EntityScopeResolver.Resolve(typeof(TEntity))
-            : MappingScope.Default;
+            ? scopedContext.EntityVariantResolver.Resolve(typeof(TEntity))
+            : MappingVariant.Default;
         return new(dataContext, metadata, scope);
     }
 
@@ -201,9 +201,9 @@ public static class DataContextExtensions
 
         var metadata = ResolveMetadata(dataContext, configEntity);
         var scope = dataContext is DataContext scopedContext
-            ? scopedContext.EntityScopeResolver.Resolve(typeof(TEntity))
-            : MappingScope.Default;
-        var targetMetadata = scope != MappingScope.Default && dataContext is DataContext scopedDataContext
+            ? scopedContext.EntityVariantResolver.Resolve(typeof(TEntity))
+            : MappingVariant.Default;
+        var targetMetadata = scope != MappingVariant.Default && dataContext is DataContext scopedDataContext
             ? scopedDataContext.EntityMetadataProvider.GetMetadata(typeof(TEntity), scope)
             : metadata;
         return new(dataContext, metadata, scope, targetMetadata);
@@ -227,9 +227,9 @@ public static class DataContextExtensions
 
         var metadata = ResolveMetadata<TEntity>(dataContext, null);
         var scope = dataContext is DataContext scopedContext
-            ? scopedContext.EntityScopeResolver.Resolve(typeof(TEntity), entity!)
-            : MappingScope.Default;
-        var targetMetadata = scope != MappingScope.Default && dataContext is DataContext scopedDataContext
+            ? scopedContext.EntityVariantResolver.Resolve(typeof(TEntity), entity!)
+            : MappingVariant.Default;
+        var targetMetadata = scope != MappingVariant.Default && dataContext is DataContext scopedDataContext
             ? scopedDataContext.EntityMetadataProvider.GetMetadata(typeof(TEntity), scope)
             : metadata;
         return new UpdateBuilder<TEntity>(dataContext, metadata, scope, targetMetadata).UpdateEntity(entity);
@@ -253,9 +253,9 @@ public static class DataContextExtensions
 
         var metadata = ResolveMetadata<TEntity>(dataContext, null);
         var scope = dataContext is DataContext scopedContext
-            ? scopedContext.EntityScopeResolver.Resolve(typeof(TEntity), entity!)
-            : MappingScope.Default;
-        var targetMetadata = scope != MappingScope.Default && dataContext is DataContext scopedDataContext
+            ? scopedContext.EntityVariantResolver.Resolve(typeof(TEntity), entity!)
+            : MappingVariant.Default;
+        var targetMetadata = scope != MappingVariant.Default && dataContext is DataContext scopedDataContext
             ? scopedDataContext.EntityMetadataProvider.GetMetadata(typeof(TEntity), scope)
             : metadata;
         return new UpdateBuilder<TEntity>(dataContext, metadata, scope, targetMetadata).UpdateEntityAsync(entity, cancellationToken);
@@ -426,9 +426,9 @@ public static class DataContextExtensions
         ArgumentNullException.ThrowIfNull(dataContext);
         var metadata = ResolveMetadata(dataContext, configEntity);
         var scope = dataContext is DataContext scopedContext
-            ? scopedContext.EntityScopeResolver.Resolve(typeof(TEntity))
-            : MappingScope.Default;
-        var targetMetadata = scope != MappingScope.Default && dataContext is DataContext scopedDataContext
+            ? scopedContext.EntityVariantResolver.Resolve(typeof(TEntity))
+            : MappingVariant.Default;
+        var targetMetadata = scope != MappingVariant.Default && dataContext is DataContext scopedDataContext
             ? scopedDataContext.EntityMetadataProvider.GetMetadata(typeof(TEntity), scope)
             : metadata;
         return new(dataContext, metadata, scope, targetMetadata);
@@ -450,9 +450,9 @@ public static class DataContextExtensions
 
         var metadata = ResolveMetadata<TEntity>(dataContext, null);
         var scope = dataContext is DataContext scopedContext
-            ? scopedContext.EntityScopeResolver.Resolve(typeof(TEntity), entity!)
-            : MappingScope.Default;
-        var targetMetadata = scope != MappingScope.Default && dataContext is DataContext scopedDataContext
+            ? scopedContext.EntityVariantResolver.Resolve(typeof(TEntity), entity!)
+            : MappingVariant.Default;
+        var targetMetadata = scope != MappingVariant.Default && dataContext is DataContext scopedDataContext
             ? scopedDataContext.EntityMetadataProvider.GetMetadata(typeof(TEntity), scope)
             : metadata;
         return new DeleteBuilder<TEntity>(dataContext, metadata, scope, targetMetadata).DeleteEntity(entity);
@@ -475,9 +475,9 @@ public static class DataContextExtensions
 
         var metadata = ResolveMetadata<TEntity>(dataContext, null);
         var scope = dataContext is DataContext scopedContext
-            ? scopedContext.EntityScopeResolver.Resolve(typeof(TEntity), entity!)
-            : MappingScope.Default;
-        var targetMetadata = scope != MappingScope.Default && dataContext is DataContext scopedDataContext
+            ? scopedContext.EntityVariantResolver.Resolve(typeof(TEntity), entity!)
+            : MappingVariant.Default;
+        var targetMetadata = scope != MappingVariant.Default && dataContext is DataContext scopedDataContext
             ? scopedDataContext.EntityMetadataProvider.GetMetadata(typeof(TEntity), scope)
             : metadata;
         return new DeleteBuilder<TEntity>(dataContext, metadata, scope, targetMetadata).DeleteEntityAsync(entity, cancellationToken);
@@ -1068,8 +1068,8 @@ public static class DataContextExtensions
         ArgumentNullException.ThrowIfNull(dataContext);
 
         var metadata = ResolveMetadata(dataContext, configEntity);
-        var scope = dataContext is DataContext scopedContext ? scopedContext.EntityScopeResolver.Resolve(typeof(TEntity)) : MappingScope.Default;
-        if (scope != MappingScope.Default && dataContext is DataContext scopedDataContext)
+        var scope = dataContext is DataContext scopedContext ? scopedContext.EntityVariantResolver.Resolve(typeof(TEntity)) : MappingVariant.Default;
+        if (scope != MappingVariant.Default && dataContext is DataContext scopedDataContext)
             metadata = scopedDataContext.EntityMetadataProvider.GetMetadata(typeof(TEntity), scope);
         return new(dataContext, metadata, scope);
     }

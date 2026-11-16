@@ -4,9 +4,9 @@ using NextORM.Core;
 using NextORM.SqlServer;
 using NextORM.Sqlite;
 
-namespace NextORM.Core.Tests.MappingScope;
+namespace NextORM.Core.Tests.MappingVariant;
 
-public sealed class MappingScopeIsolationTests
+public sealed class MappingVariantIsolationTests
 {
     [Fact]
     public void PrefixedParameterProvider_ShouldPrefixNamesFromInnerProvider()
@@ -21,17 +21,17 @@ public sealed class MappingScopeIsolationTests
     {
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(new AlphaScopeResolver());
+            .UseVariantResolver(new AlphaVariantResolver());
         using var context = new SqlServerDataContext("Server=localhost", builder);
-        var scope = new global::NextORM.Core.MappingScope("alpha");
+        var scope = new global::NextORM.Core.MappingVariant("alpha");
 
         var entitySql = context.CreateMergeBuilder<ScopedRow>()
             .Using(new ScopedRow { Id = 4, Name = "one" }).OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert().ToSql();
-        var batchSql = context.CreateMergeBuilder<ScopedRow>().WithScope(scope)
+        var batchSql = context.CreateMergeBuilder<ScopedRow>().WithVariant(scope)
             .Using([new ScopedRow { Id = 4, Name = "one" }, new ScopedRow { Id = 5, Name = "two" }])
             .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert().ToSql();
-        var querySql = context.CreateMergeBuilder<ScopedRow>().WithScope(scope)
-            .Using(context.From<ScopedRow>().WithScope(scope))
+        var querySql = context.CreateMergeBuilder<ScopedRow>().WithVariant(scope)
+            .Using(context.From<ScopedRow>().WithVariant(scope))
             .OnKeys().WhenMatched().ThenUpdate().WhenNotMatched().ThenInsert().ToSql();
 
         entitySql.Should().Contain("alpha_schema.alpha_rows").And.Contain("alpha_id");
@@ -44,26 +44,26 @@ public sealed class MappingScopeIsolationTests
     {
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(new FixedScopeResolver());
+            .UseVariantResolver(new FixedVariantResolver());
         using var context = new SqlServerDataContext("Server=localhost", builder);
-        var alpha = new global::NextORM.Core.MappingScope("alpha");
-        var beta = new global::NextORM.Core.MappingScope("beta");
+        var alpha = new global::NextORM.Core.MappingVariant("alpha");
+        var beta = new global::NextORM.Core.MappingVariant("beta");
         var entity = new ScopedRow { Id = 4, Name = "one" };
         var batch = new[] { entity, new ScopedRow { Id = 5, Name = "two" } };
 
-        var alphaEntity = context.CreateMergeBuilder<ScopedRow>().WithScope(alpha).Using(entity)
+        var alphaEntity = context.CreateMergeBuilder<ScopedRow>().WithVariant(alpha).Using(entity)
             .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert().ToSql();
-        var betaEntity = context.CreateMergeBuilder<ScopedRow>().WithScope(beta).Using(entity)
+        var betaEntity = context.CreateMergeBuilder<ScopedRow>().WithVariant(beta).Using(entity)
             .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert().ToSql();
-        var alphaBatch = context.CreateMergeBuilder<ScopedRow>().WithScope(alpha).Using(batch)
+        var alphaBatch = context.CreateMergeBuilder<ScopedRow>().WithVariant(alpha).Using(batch)
             .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert().ToSql();
-        var betaBatch = context.CreateMergeBuilder<ScopedRow>().WithScope(beta).Using(batch)
+        var betaBatch = context.CreateMergeBuilder<ScopedRow>().WithVariant(beta).Using(batch)
             .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert().ToSql();
-        var alphaQuery = context.CreateMergeBuilder<ScopedRow>().WithScope(alpha)
-            .Using(context.From<ScopedRow>().WithScope(alpha))
+        var alphaQuery = context.CreateMergeBuilder<ScopedRow>().WithVariant(alpha)
+            .Using(context.From<ScopedRow>().WithVariant(alpha))
             .OnKeys().WhenMatched().ThenUpdate().WhenNotMatched().ThenInsert().ToSql();
-        var betaQuery = context.CreateMergeBuilder<ScopedRow>().WithScope(beta)
-            .Using(context.From<ScopedRow>().WithScope(beta))
+        var betaQuery = context.CreateMergeBuilder<ScopedRow>().WithVariant(beta)
+            .Using(context.From<ScopedRow>().WithVariant(beta))
             .OnKeys().WhenMatched().ThenUpdate().WhenNotMatched().ThenInsert().ToSql();
 
         alphaEntity.Should().Contain("alpha_schema.alpha_rows").And.Contain("alpha_id");
@@ -82,7 +82,7 @@ public sealed class MappingScopeIsolationTests
     {
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(new AlternatingScopeResolver());
+            .UseVariantResolver(new AlternatingVariantResolver());
         using var context = new SqlServerDataContext("Server=localhost", builder);
 
         var alpha = context.CreateTruncateBuilder<ScopedRow>().ToSql();
@@ -98,7 +98,7 @@ public sealed class MappingScopeIsolationTests
     {
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(new AlphaScopeResolver());
+            .UseVariantResolver(new AlphaVariantResolver());
         using var context = new SqlServerDataContext("Server=localhost", builder);
 
         context.CreateTruncateBuilder<ScopedRow>().ToSql()
@@ -110,7 +110,7 @@ public sealed class MappingScopeIsolationTests
     {
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(new AlphaScopeResolver());
+            .UseVariantResolver(new AlphaVariantResolver());
         using var context = new SqliteDataContext("Data Source=:memory:", builder);
 
         var insert = context.CreateInsertBuilder<ScopedRow>().Value(row => row.Id, 5);
@@ -125,7 +125,7 @@ public sealed class MappingScopeIsolationTests
     {
         using var context = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
         var minimum = 3;
-        var query = context.From<ScopedRow>().WithScope(global::NextORM.Core.MappingScope.Default)
+        var query = context.From<ScopedRow>().WithVariant(global::NextORM.Core.MappingVariant.Default)
             .Where(row => row.Id > minimum).Select(row => row.Id);
         var prepared = (DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
             query, false, true, CancellationToken.None);
@@ -144,15 +144,15 @@ public sealed class MappingScopeIsolationTests
     {
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(new FixedScopeResolver());
+            .UseVariantResolver(new FixedVariantResolver());
         using var context = new SqliteDataContext("Data Source=:memory:", builder);
 
         var defaultFirst = (DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
-            BuildScopedQuery(context, global::NextORM.Core.MappingScope.Default, 3), false, true, CancellationToken.None);
+            BuildScopedQuery(context, global::NextORM.Core.MappingVariant.Default, 3), false, true, CancellationToken.None);
         var defaultAgain = (DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
-            BuildScopedQuery(context, global::NextORM.Core.MappingScope.Default, 3), false, true, CancellationToken.None);
+            BuildScopedQuery(context, global::NextORM.Core.MappingVariant.Default, 3), false, true, CancellationToken.None);
         var alpha = (DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
-            BuildScopedQuery(context, new global::NextORM.Core.MappingScope("alpha"), 3), false, true, CancellationToken.None);
+            BuildScopedQuery(context, new global::NextORM.Core.MappingVariant("alpha"), 3), false, true, CancellationToken.None);
 
         defaultAgain.Should().BeSameAs(defaultFirst, "an identical default-scope query must be served by its cached plan");
         alpha.Should().NotBeSameAs(defaultFirst, "a non-default scope must not reuse the default-scope cache entry");
@@ -164,12 +164,12 @@ public sealed class MappingScopeIsolationTests
     {
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(new FixedScopeResolver());
+            .UseVariantResolver(new FixedVariantResolver());
         using var context = new SqliteDataContext("Data Source=:memory:", builder);
 
-        var alpha = Prepare(context, new global::NextORM.Core.MappingScope("alpha"), 3);
-        var beta = Prepare(context, new global::NextORM.Core.MappingScope("beta"), 3);
-        var alphaAgain = Prepare(context, new global::NextORM.Core.MappingScope("alpha"), 7);
+        var alpha = Prepare(context, new global::NextORM.Core.MappingVariant("alpha"), 3);
+        var beta = Prepare(context, new global::NextORM.Core.MappingVariant("beta"), 3);
+        var alphaAgain = Prepare(context, new global::NextORM.Core.MappingVariant("alpha"), 7);
 
         alpha.Sql.Should().Contain("alpha_schema").And.Contain("alpha_rows").And.Contain("alpha_id");
         beta.Sql.Should().Contain("beta_schema").And.Contain("beta_rows").And.Contain("beta_id");
@@ -183,18 +183,18 @@ public sealed class MappingScopeIsolationTests
     }
 
     [Fact]
-    public void Join_ReadSource_UsesTheQueryMappingScope()
+    public void Join_ReadSource_UsesTheQueryMappingVariant()
     {
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(new FixedScopeResolver());
+            .UseVariantResolver(new FixedVariantResolver());
         using var context = new SqliteDataContext("Data Source=:memory:", builder);
-        var alpha = new global::NextORM.Core.MappingScope("alpha");
-        var beta = new global::NextORM.Core.MappingScope("beta");
+        var alpha = new global::NextORM.Core.MappingVariant("alpha");
+        var beta = new global::NextORM.Core.MappingVariant("beta");
 
         var query = context.From<ScopedRow>()
             .Join(context.From<ScopedRow>(), (left, right) => left.Id == right.Id)
-            .WithScope(alpha).Select(pair => pair.Item1.Id);
+            .WithVariant(alpha).Select(pair => pair.Item1.Id);
         var sql = ((DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
             query, false, true, CancellationToken.None)).DbCommand.CommandText;
 
@@ -202,17 +202,17 @@ public sealed class MappingScopeIsolationTests
     }
 
     [Fact]
-    public void Subquery_ReadSource_UsesItsMappingScope()
+    public void Subquery_ReadSource_UsesItsMappingVariant()
     {
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(new FixedScopeResolver());
+            .UseVariantResolver(new FixedVariantResolver());
         using var context = new SqliteDataContext("Data Source=:memory:", builder);
-        var alpha = new global::NextORM.Core.MappingScope("alpha");
-        var beta = new global::NextORM.Core.MappingScope("beta");
-        var subquery = context.From<ScopedRow>().WithScope(beta).Where(row => row.Id > 1);
+        var alpha = new global::NextORM.Core.MappingVariant("alpha");
+        var beta = new global::NextORM.Core.MappingVariant("beta");
+        var subquery = context.From<ScopedRow>().WithVariant(beta).Where(row => row.Id > 1);
 
-        var query = context.From<ScopedRow>().WithScope(alpha)
+        var query = context.From<ScopedRow>().WithVariant(alpha)
             .Where(row => subquery.Any()).Select(row => row.Id);
         var sql = ((DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
             query, false, true, CancellationToken.None)).DbCommand.CommandText;
@@ -222,17 +222,17 @@ public sealed class MappingScopeIsolationTests
     }
 
     [Fact]
-    public void Cte_ReadSource_UsesItsMappingScope()
+    public void Cte_ReadSource_UsesItsMappingVariant()
     {
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(new FixedScopeResolver());
+            .UseVariantResolver(new FixedVariantResolver());
         using var context = new SqliteDataContext("Data Source=:memory:", builder);
-        var alpha = new global::NextORM.Core.MappingScope("alpha");
-        var beta = new global::NextORM.Core.MappingScope("beta");
-        var cte = context.From<ScopedRow>().WithScope(beta).ToCommand().AsCte("scoped_rows");
+        var alpha = new global::NextORM.Core.MappingVariant("alpha");
+        var beta = new global::NextORM.Core.MappingVariant("beta");
+        var cte = context.From<ScopedRow>().WithVariant(beta).ToCommand().AsCte("scoped_rows");
 
-        var query = context.From(cte).WithScope(alpha).Select(row => row.Id);
+        var query = context.From(cte).WithVariant(alpha).Select(row => row.Id);
         var sql = ((DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
             query, false, true, CancellationToken.None)).DbCommand.CommandText;
 
@@ -244,14 +244,14 @@ public sealed class MappingScopeIsolationTests
     {
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(new FixedScopeResolver());
+            .UseVariantResolver(new FixedVariantResolver());
         using var context = new SqliteDataContext("Data Source=:memory:", builder);
 
-        var alpha = Prepare(context, new global::NextORM.Core.MappingScope("alpha"), 1);
+        var alpha = Prepare(context, new global::NextORM.Core.MappingVariant("alpha"), 1);
         var defaultQuery = context.From<ScopedRow>().Where(row => row.Id > 1).Select(row => row.Id);
         var defaultPrepared = (DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
             defaultQuery, false, true, CancellationToken.None);
-        var beta = Prepare(context, new global::NextORM.Core.MappingScope("beta"), 1);
+        var beta = Prepare(context, new global::NextORM.Core.MappingVariant("beta"), 1);
         var defaultAgain = (DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
             defaultQuery, false, true, CancellationToken.None);
 
@@ -267,8 +267,8 @@ public sealed class MappingScopeIsolationTests
     public async Task MetadataProvider_ConcurrentScopes_ReturnIndependentMetadata()
     {
         var provider = new ScopedMetadataProvider();
-        var alphaScope = new global::NextORM.Core.MappingScope("alpha");
-        var betaScope = new global::NextORM.Core.MappingScope("beta");
+        var alphaScope = new global::NextORM.Core.MappingVariant("alpha");
+        var betaScope = new global::NextORM.Core.MappingVariant("beta");
 
         var results = await Task.WhenAll(Enumerable.Range(0, 128).Select(i => Task.Run(() =>
         {
@@ -287,7 +287,7 @@ public sealed class MappingScopeIsolationTests
     }
 
     private static (string Sql, IReadOnlyList<System.Data.Common.DbParameter> Parameters) Prepare(
-        SqliteDataContext context, global::NextORM.Core.MappingScope scope, int minimum)
+        SqliteDataContext context, global::NextORM.Core.MappingVariant scope, int minimum)
     {
         var command = BuildScopedQuery(context, scope, minimum);
         var prepared = (DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
@@ -296,8 +296,8 @@ public sealed class MappingScopeIsolationTests
     }
 
     private static QueryCommand<int> BuildScopedQuery(
-        SqliteDataContext context, global::NextORM.Core.MappingScope scope, int minimum)
-        => context.From<ScopedRow>().WithScope(scope)
+        SqliteDataContext context, global::NextORM.Core.MappingVariant scope, int minimum)
+        => context.From<ScopedRow>().WithVariant(scope)
             .Where(row => row.Id > minimum)
             .Select(row => row.Id);
 
@@ -314,46 +314,46 @@ public sealed class MappingScopeIsolationTests
         public string Name { get; set; } = "";
     }
 
-    private sealed class FixedScopeResolver : IEntityScopeResolver
+    private sealed class FixedVariantResolver : IEntityVariantResolver
     {
-        public global::NextORM.Core.MappingScope Resolve(Type entityType) => global::NextORM.Core.MappingScope.Default;
-        public global::NextORM.Core.MappingScope Resolve(Type entityType, object entity) => global::NextORM.Core.MappingScope.Default;
-        public global::NextORM.Core.MappingScope Resolve(Type entityType, IReadOnlyList<object?> keyValues) => global::NextORM.Core.MappingScope.Default;
+        public global::NextORM.Core.MappingVariant Resolve(Type entityType) => global::NextORM.Core.MappingVariant.Default;
+        public global::NextORM.Core.MappingVariant Resolve(Type entityType, object entity) => global::NextORM.Core.MappingVariant.Default;
+        public global::NextORM.Core.MappingVariant Resolve(Type entityType, IReadOnlyList<object?> keyValues) => global::NextORM.Core.MappingVariant.Default;
     }
 
-    private sealed class AlphaScopeResolver : IEntityScopeResolver
+    private sealed class AlphaVariantResolver : IEntityVariantResolver
     {
-        private static readonly global::NextORM.Core.MappingScope Scope = new("alpha");
-        public global::NextORM.Core.MappingScope Resolve(Type entityType) => Scope;
-        public global::NextORM.Core.MappingScope Resolve(Type entityType, object entity) => Scope;
-        public global::NextORM.Core.MappingScope Resolve(Type entityType, IReadOnlyList<object?> keyValues) => Scope;
+        private static readonly global::NextORM.Core.MappingVariant Scope = new("alpha");
+        public global::NextORM.Core.MappingVariant Resolve(Type entityType) => Scope;
+        public global::NextORM.Core.MappingVariant Resolve(Type entityType, object entity) => Scope;
+        public global::NextORM.Core.MappingVariant Resolve(Type entityType, IReadOnlyList<object?> keyValues) => Scope;
     }
 
-    private sealed class AlternatingScopeResolver : IEntityScopeResolver
+    private sealed class AlternatingVariantResolver : IEntityVariantResolver
     {
         private int _next;
-        public global::NextORM.Core.MappingScope Resolve(Type entityType)
+        public global::NextORM.Core.MappingVariant Resolve(Type entityType)
             => Interlocked.Increment(ref _next) % 2 == 1
-                ? new global::NextORM.Core.MappingScope("alpha")
-                : new global::NextORM.Core.MappingScope("beta");
-        public global::NextORM.Core.MappingScope Resolve(Type entityType, object entity) => Resolve(entityType);
-        public global::NextORM.Core.MappingScope Resolve(Type entityType, IReadOnlyList<object?> keyValues) => Resolve(entityType);
+                ? new global::NextORM.Core.MappingVariant("alpha")
+                : new global::NextORM.Core.MappingVariant("beta");
+        public global::NextORM.Core.MappingVariant Resolve(Type entityType, object entity) => Resolve(entityType);
+        public global::NextORM.Core.MappingVariant Resolve(Type entityType, IReadOnlyList<object?> keyValues) => Resolve(entityType);
     }
 
     private sealed class ScopedMetadataProvider : IEntityMetadataProvider
     {
         private readonly DefaultEntityMetadataProvider _inner = new();
 
-        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingScope scope)
+        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingVariant scope)
         {
-            var metadata = _inner.GetMetadata(entityType, global::NextORM.Core.MappingScope.Default);
+            var metadata = _inner.GetMetadata(entityType, global::NextORM.Core.MappingVariant.Default);
             var suffix = scope.Key ?? "default";
             return new ScopedMetadata($"{suffix}_rows", $"{suffix}_schema",
                 metadata.Properties.Select(p => (IPropertyMetadata)new ScopedProperty(
                     p.PropertyInfo, $"{suffix}_{p.PropertyInfo.Name.ToLowerInvariant()}")).ToArray());
         }
 
-        public string GetColumnName(PropertyInfo property, in global::NextORM.Core.MappingScope scope, INamingConvention? convention)
+        public string GetColumnName(PropertyInfo property, in global::NextORM.Core.MappingVariant scope, INamingConvention? convention)
             => $"{scope.Key ?? "default"}_{property.Name.ToLowerInvariant()}";
     }
 

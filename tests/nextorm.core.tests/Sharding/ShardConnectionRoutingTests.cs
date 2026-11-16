@@ -60,6 +60,70 @@ public sealed class ShardConnectionRoutingTests : IDisposable
     }
 
     [Fact]
+    public void PinnedHostId_ShouldBeTheShardIdAndOverruleTheBucket()
+    {
+        var topology = CreateTopology();
+        using var context = CreateContext(topology);
+        Seed(topology);
+
+        var (tenantB, bucketB) = FindTenant(topology, "server-b");
+        // The row physically sits on server-a although its bucket is owned by server-b.
+        InsertRaw(topology, "server-a", bucketB, 7, tenantB, "moved-to-a");
+
+        using (context.PinHost(topology.Name, "server-a"))
+        {
+            context.From<ShardedRow>().Where(row => row.Tenant == tenantB).Select(row => row.Name).ToList()
+                .Should().Equal("moved-to-a");
+        }
+
+        FluentActions.Invoking(() => context.PinHost(topology.Name, "server-c"))
+            .Should().Throw<ArgumentException>().WithMessage("*has no host 'server-c'*");
+    }
+
+    [Fact]
+    public void MultiRowInsert_ShouldWriteOneBucketPerStatement()
+    {
+        var topology = CreateTopology();
+        using var context = CreateContext(topology);
+        Seed(topology);
+
+        var (tenantA, bucketA) = FindTenant(topology, "server-a");
+        var (tenantB, _) = FindTenant(topology, "server-b");
+        var rows = new[]
+        {
+            new ShardedRow { Id = 1, Tenant = tenantA, Name = "a-1" },
+            new ShardedRow { Id = 2, Tenant = tenantA, Name = "a-2" },
+        };
+
+        context.CreateInsertBuilder<ShardedRow>().Values(rows).Insert().Should().Be(2);
+        CountIn(topology, "server-a", bucketA).Should().Be(2L);
+
+        var mixed = new[] { rows[0], new ShardedRow { Id = 3, Tenant = tenantB, Name = "b" } };
+        FluentActions.Invoking(() => context.CreateInsertBuilder<ShardedRow>().Values(mixed))
+            .Should().Throw<InvalidOperationException>().WithMessage("*different buckets*");
+    }
+
+    [Fact]
+    public void BatchPerBucket_ShouldRunEveryStepOnThatBucketShard()
+    {
+        var topology = CreateTopology();
+        using var context = CreateContext(topology);
+        Seed(topology);
+
+        var (tenantA, bucketA) = FindTenant(topology, "server-a");
+        var rows = new[] { new ShardedRow { Id = 11, Tenant = tenantA, Name = "batched" } };
+
+        var ids = context.CreateBatchBuilder()
+            .Insert(context.CreateInsertBuilder<ShardedRow>().Values(rows))
+            .Query(context.From<ShardedRow>().WithVariant(context.GetShardRouter().GetScope(bucketA))
+                .Select(row => row.Id))
+            .ToList();
+
+        ids.Should().Equal(11);
+        CountIn(topology, "server-a", bucketA).Should().Be(1L);
+    }
+
+    [Fact]
     public void ScalarFanOut_ShouldReturnOneValuePerBucket()
     {
         var topology = CreateTopology();

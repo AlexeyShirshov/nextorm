@@ -42,21 +42,21 @@ public sealed partial class MergeBuilder<TEntity>
     private LambdaExpression? _keyUpdateAssignments;
     private LambdaExpression? _keyInsertAssignments;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
-    private MappingScope _mappingScope = MappingScope.Default;
+    private MappingVariant _mappingVariant = MappingVariant.Default;
 
-    internal MergeBuilder(IDataContext dataContext, IEntityMetadata metadata, MappingScope mappingScope = default)
+    internal MergeBuilder(IDataContext dataContext, IEntityMetadata metadata, MappingVariant mappingVariant = default)
     {
         _dataContext = dataContext;
         _metadata = metadata;
-        _mappingScope = mappingScope;
+        _mappingVariant = mappingVariant;
     }
 
     /// <summary>Selects a runtime mapping variant for the merge target and source.</summary>
     /// <param name="scope">The mapping variant used to resolve table, schema and column names.</param>
     /// <returns>This builder, for chaining.</returns>
-    public MergeBuilder<TEntity> WithScope(MappingScope scope)
+    public MergeBuilder<TEntity> WithVariant(MappingVariant scope)
     {
-        _mappingScope = scope;
+        _mappingVariant = scope;
         return this;
     }
 
@@ -691,17 +691,17 @@ public sealed partial class MergeBuilder<TEntity>
     /// </summary>
     private void EnsureShardScopeResolved()
     {
-        if (_mappingScope != MappingScope.Default)
+        if (_mappingVariant != MappingVariant.Default)
             return;
 
-        if (_dataContext is not DataContext dataContext || dataContext.EntityScopeResolver is not IShardRouter router)
+        if (_dataContext is not DataContext dataContext || dataContext.EntityVariantResolver is not IShardRouter router)
             return;
 
         if (!router.IsSharded(typeof(TEntity)))
             return;
 
         throw new InvalidOperationException(
-            $"Entity '{typeof(TEntity)}' is sharded. Call WithScope(...) with a shard scope before executing the merge.");
+            $"Entity '{typeof(TEntity)}' is sharded. Call WithVariant(...) with a shard scope before executing the merge.");
     }
 
     private MergeCommand BuildCommand(IReadOnlyList<IPropertyMetadata>? returningColumns = null)
@@ -775,7 +775,7 @@ public sealed partial class MergeBuilder<TEntity>
             // every captured or constant assignment value (the scalar visitor keys such a value through the
             // registry's plan comparer), so an expression branch needs it with or without a condition.
             var registry = hasCondition || HasActiveFilter() || HasExpressionBranch() ? _registry ??= new EntityBuilder<TEntity>(_dataContext).ToCommand() : null;
-            return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys ?? [], [], [.. _branches], returningColumns, _source, _matchCondition, registry, _dynamicColumns, _filterScope, mappingScope: _mappingScope);
+            return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys ?? [], [], [.. _branches], returningColumns, _source, _matchCondition, registry, _dynamicColumns, _filterScope, mappingVariant: _mappingVariant);
         }
 
         if (_source is not null)
@@ -828,7 +828,7 @@ public sealed partial class MergeBuilder<TEntity>
             keyUpdateAssignments: keyUpdateAssignments,
             keyInsertAssignments: keyInsertAssignments,
             sourceRow: keyUpdateAssignments is { UsesSource: true } || keyInsertAssignments is { UsesSource: true } ? sourceRow : null,
-            mappingScope: _mappingScope);
+            mappingVariant: _mappingVariant);
     }
 
     /// <summary>

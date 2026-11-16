@@ -78,7 +78,7 @@ public sealed class ShardRoutingTests
     }
 
     [Fact]
-    public void InsertMixedShards_ShouldThrowBeforeSql()
+    public void InsertMixedBuckets_ShouldThrowBeforeSql()
     {
         var topology = CreateTopology();
         var (eastTenant, _) = FindTenant(topology, "east");
@@ -91,7 +91,7 @@ public sealed class ShardRoutingTests
         };
 
         FluentActions.Invoking(() => context.CreateInsertBuilder<ShardedRow>().Values(rows))
-            .Should().Throw<InvalidOperationException>().WithMessage("*different shards*");
+            .Should().Throw<InvalidOperationException>().WithMessage("*different buckets*");
     }
 
     [Fact]

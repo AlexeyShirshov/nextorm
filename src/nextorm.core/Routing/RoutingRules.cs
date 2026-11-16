@@ -7,17 +7,17 @@ namespace NextORM.Core;
 public readonly record struct RouteTarget(string Topology);
 
 /// <summary>
-/// A custom routing rule: decides the topology of an entity type, optionally by the mapping scope
+/// A custom routing rule: decides the topology of an entity type, optionally by the mapping variant
 /// (which is how a data rule such as sharding reads the entity's key values).
 /// </summary>
 public interface IEntityRouteResolver
 {
     /// <summary>Resolves the topology of <paramref name="entityType"/> under <paramref name="scope"/>.</summary>
     /// <param name="entityType">The entity type being routed.</param>
-    /// <param name="scope">The mapping scope the command runs under.</param>
+    /// <param name="scope">The mapping variant the command runs under.</param>
     /// <param name="target">Receives the topology when the rule applies.</param>
     /// <returns><see langword="true"/> when this rule claims the type.</returns>
-    bool TryResolve(Type entityType, in MappingScope scope, out RouteTarget target);
+    bool TryResolve(Type entityType, in MappingVariant scope, out RouteTarget target);
 }
 
 /// <summary>

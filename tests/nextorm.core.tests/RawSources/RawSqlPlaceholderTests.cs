@@ -7,7 +7,7 @@ namespace NextORM.Core.Tests.RawSources;
 
 /// <summary>
 /// Physical-name placeholders in raw SQL: <c>{schema}</c>, <c>{table}</c> and <c>{qualified}</c> are
-/// expanded from the metadata of the entity bound to the source and the command's mapping scope while
+/// expanded from the metadata of the entity bound to the source and the command's mapping variant while
 /// the plan is built, so raw SQL can address a bucket's table without the caller composing the name.
 /// </summary>
 public sealed class RawSqlPlaceholderTests
@@ -113,14 +113,14 @@ public sealed class RawSqlPlaceholderTests
             return Prepare(context, context.FromSql(sql).Select(row => row["Id"].AsInt));
 
         var bound = context.FromSql(sql).BindEntity<PlaceholderRow>(["Id", "Name"]);
-        return Prepare(context, bound.WithScope(Scope(7)).Select(row => row.Id));
+        return Prepare(context, bound.WithVariant(Scope(7)).Select(row => row.Id));
     }
 
     private static string Prepare(SqliteDataContext context, QueryCommand<int> command)
         => ((DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
             command, false, false, CancellationToken.None)).DbCommand.CommandText;
 
-    private static global::NextORM.Core.MappingScope Scope(int bucket)
+    private static global::NextORM.Core.MappingVariant Scope(int bucket)
         => new(bucket.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
     private static SqliteDataContext CreateSharded(BucketPlacementMode mode, IEntityMetadataProvider? metadata = null)
@@ -139,10 +139,10 @@ public sealed class RawSqlPlaceholderTests
     {
         private readonly DefaultEntityMetadataProvider _inner = new();
 
-        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingScope scope)
+        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingVariant scope)
             => new SchemaMetadata(_inner.GetMetadata(entityType, scope));
 
-        public string GetColumnName(PropertyInfo property, in global::NextORM.Core.MappingScope scope, INamingConvention? convention)
+        public string GetColumnName(PropertyInfo property, in global::NextORM.Core.MappingVariant scope, INamingConvention? convention)
             => _inner.GetColumnName(property, scope, convention);
 
         private sealed class SchemaMetadata(IEntityMetadata inner) : IEntityMetadata

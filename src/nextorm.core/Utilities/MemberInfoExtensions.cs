@@ -13,7 +13,7 @@ public static class MemberInfoExtensions
     // so the resolved column name is stable for a given naming convention for the lifetime of the
     // process. Caching it turns the per-member metadata lookup + linear scan into a dictionary read
     // on the SQL-build path.
-    private static readonly ConcurrentDictionary<(PropertyInfo, INamingConvention?, Type?, MappingScope, IEntityMetadataProvider?), string> _columnNames = new();
+    private static readonly ConcurrentDictionary<(PropertyInfo, INamingConvention?, Type?, MappingVariant, IEntityMetadataProvider?), string> _columnNames = new();
 
     /// <summary>
     /// Drops the cached column names, all of them or only those of <paramref name="entityType"/>. Called
@@ -66,7 +66,7 @@ public static class MemberInfoExtensions
     {
         if (mi is PropertyInfo pi)
         {
-            var key = (pi, convention, entityType, MappingScope.Default, (IEntityMetadataProvider?)null);
+            var key = (pi, convention, entityType, MappingVariant.Default, (IEntityMetadataProvider?)null);
 
             if (_columnNames.TryGetValue(key, out var cached))
                 return cached;
@@ -110,18 +110,18 @@ public static class MemberInfoExtensions
 
     internal static string GetPropertyColumnName(this MemberInfo mi, VisitorOptions options, Type? entityType = null)
     {
-        if (options.MappingScope != MappingScope.Default && mi is PropertyInfo property && options.MetadataProvider is { } provider)
+        if (options.MappingVariant != MappingVariant.Default && mi is PropertyInfo property && options.MetadataProvider is { } provider)
         {
-            var key = (property, options.NamingConvention, entityType ?? options.EntityType, options.MappingScope, provider);
-            return _columnNames.GetOrAdd(key, _ => provider.GetColumnName(property, options.MappingScope, options.NamingConvention));
+            var key = (property, options.NamingConvention, entityType ?? options.EntityType, options.MappingVariant, provider);
+            return _columnNames.GetOrAdd(key, _ => provider.GetColumnName(property, options.MappingVariant, options.NamingConvention));
         }
 
         return GetPropertyColumnName(mi, options.NamingConvention, entityType ?? options.EntityType);
     }
 
-    internal static string GetPropertyColumnName(this MemberInfo mi, INamingConvention? convention, Type? entityType, MappingScope scope, IEntityMetadataProvider? metadataProvider)
+    internal static string GetPropertyColumnName(this MemberInfo mi, INamingConvention? convention, Type? entityType, MappingVariant scope, IEntityMetadataProvider? metadataProvider)
     {
-        if (scope != MappingScope.Default && mi is PropertyInfo property && metadataProvider is not null)
+        if (scope != MappingVariant.Default && mi is PropertyInfo property && metadataProvider is not null)
         {
             var key = (property, convention, entityType, scope, metadataProvider);
             return _columnNames.GetOrAdd(key, _ => metadataProvider.GetColumnName(property, scope, convention));

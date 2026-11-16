@@ -8,9 +8,9 @@ using NextORM.Postgres;
 using NextORM.SqlServer;
 using NextORM.Sqlite;
 
-namespace NextORM.Postgres.Tests.MappingScope;
+namespace NextORM.Postgres.Tests.MappingVariant;
 
-public sealed class MappingScopeDialectTests
+public sealed class MappingVariantDialectTests
 {
     [Theory]
     [InlineData("sqlite")]
@@ -23,7 +23,7 @@ public sealed class MappingScopeDialectTests
         var builder = new DataContextBuilder().UseEntityMetadataProvider(new ScopedMetadataProvider());
         using var scopedContext = CreateContext(provider, builder);
         var minimum = 3;
-        var query = scopedContext.From<ScopedRow>().WithScope(new global::NextORM.Core.MappingScope("tenant"))
+        var query = scopedContext.From<ScopedRow>().WithVariant(new global::NextORM.Core.MappingVariant("tenant"))
             .Where(row => row.Id > minimum)
             .Select(row => row.Id);
         var prepared = (DbPreparedQueryCommand<int>)scopedContext.GetPreparedQueryCommand(
@@ -45,7 +45,7 @@ public sealed class MappingScopeDialectTests
     {
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(new TenantScopeResolver());
+            .UseVariantResolver(new TenantVariantResolver());
         using var scopedContext = CreateContext(provider, builder);
         var minimum = 3;
         var sql = scopedContext.CreateUpdateBuilder<ScopedRow>()
@@ -64,20 +64,20 @@ public sealed class MappingScopeDialectTests
     [InlineData("clickhouse")]
     public void ScopedInsertAndDelete_RenderScopeSpecificTargetColumnsAndPrefixes(string provider)
     {
-        var resolver = new MutableScopeResolver();
+        var resolver = new MutableVariantResolver();
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(resolver);
+            .UseVariantResolver(resolver);
         using var context = CreateContext(provider, builder);
 
-        resolver.Scope = global::NextORM.Core.MappingScope.Default;
+        resolver.Scope = global::NextORM.Core.MappingVariant.Default;
         var defaultInsert = context.CreateInsertBuilder<ScopedRow>().Value(row => row.Id, 1).ToSql();
         var defaultDelete = context.CreateDeleteBuilder<ScopedRow>().Where(row => row.Id > 2).ToSql();
-        resolver.Scope = new global::NextORM.Core.MappingScope("alpha");
+        resolver.Scope = new global::NextORM.Core.MappingVariant("alpha");
         var alphaInsert = context.CreateInsertBuilder<ScopedRow>().Value(row => row.Id, 11).ToSql();
         var minimum = 2;
         var alphaDelete = context.CreateDeleteBuilder<ScopedRow>().Where(row => row.Id > minimum).ToSql();
-        resolver.Scope = new global::NextORM.Core.MappingScope("beta");
+        resolver.Scope = new global::NextORM.Core.MappingVariant("beta");
         var betaInsert = context.CreateInsertBuilder<ScopedRow>().Value(row => row.Id, 22).ToSql();
         var betaDelete = context.CreateDeleteBuilder<ScopedRow>().Where(row => row.Id > minimum).ToSql();
 
@@ -99,7 +99,7 @@ public sealed class MappingScopeDialectTests
     {
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(new TenantScopeResolver());
+            .UseVariantResolver(new TenantVariantResolver());
         using var context = CreateContext(provider, builder);
         var minimum = 4;
 
@@ -141,7 +141,7 @@ public sealed class MappingScopeDialectTests
     {
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(new TenantScopeResolver());
+            .UseVariantResolver(new TenantVariantResolver());
         using var context = CreateContext(provider, builder);
         var minimum = 4;
 
@@ -173,7 +173,7 @@ public sealed class MappingScopeDialectTests
     {
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(new TenantScopeResolver());
+            .UseVariantResolver(new TenantVariantResolver());
         using var context = CreateContext(provider, builder);
 
         var sql = context.CreateInsertBuilder<ScopedDefaultRow>()
@@ -193,7 +193,7 @@ public sealed class MappingScopeDialectTests
     {
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(new TenantScopeResolver());
+            .UseVariantResolver(new TenantVariantResolver());
         using var context = CreateContext(provider, builder);
         var minimum = 2;
         var source = context.From<ScopedRow>().Where(row => row.Id > minimum);
@@ -214,15 +214,15 @@ public sealed class MappingScopeDialectTests
     {
         var builder = new DataContextBuilder().UseEntityMetadataProvider(new ScopedMetadataProvider());
         using var context = CreateContext(provider, builder);
-        var scope = new global::NextORM.Core.MappingScope("tenant");
+        var scope = new global::NextORM.Core.MappingVariant("tenant");
         var entity = context.CreateMergeBuilder<ScopedRow>()
             .Using(new ScopedRow { Id = 1, Label = "one" })
             .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
-            .WithScope(scope).ToSql();
+            .WithVariant(scope).ToSql();
         var batch = context.CreateMergeBuilder<ScopedRow>()
             .Using(new[] { new ScopedRow { Id = 2, Label = "two" } })
             .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
-            .WithScope(scope).ToSql();
+            .WithVariant(scope).ToSql();
 
         entity.Should().Contain("tenant_schema").And.Contain("tenant_rows").And.Contain("tenant_id").And.Contain("tenant_label").And.Contain("tenant_");
         batch.Should().Contain("tenant_schema").And.Contain("tenant_rows").And.Contain("tenant_id").And.Contain("tenant_label").And.Contain("tenant_");
@@ -237,7 +237,7 @@ public sealed class MappingScopeDialectTests
     {
         var builder = new DataContextBuilder().UseEntityMetadataProvider(new ScopedMetadataProvider());
         using var context = CreateContext(provider, builder);
-        var scope = new global::NextORM.Core.MappingScope("batch");
+        var scope = new global::NextORM.Core.MappingVariant("batch");
         IEnumerable<ScopedRow> source = new[]
         {
             new ScopedRow { Id = 3, Label = "three" },
@@ -247,7 +247,7 @@ public sealed class MappingScopeDialectTests
         var sql = context.CreateMergeBuilder<ScopedRow>()
             .Using(source)
             .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
-            .WithScope(scope)
+            .WithVariant(scope)
             .ToSql();
 
         sql.Should().Contain("batch_schema").And.Contain("batch_rows").And.Contain("batch_id")
@@ -259,15 +259,15 @@ public sealed class MappingScopeDialectTests
     {
         var builder = new DataContextBuilder().UseEntityMetadataProvider(new ScopedMetadataProvider());
         using var context = CreateContext("sqlserver", builder);
-        var scope = new global::NextORM.Core.MappingScope("tenant");
-        var source = context.From<ScopedRow>().WithScope(scope).Select(row => row);
+        var scope = new global::NextORM.Core.MappingVariant("tenant");
+        var source = context.From<ScopedRow>().WithVariant(scope).Select(row => row);
 
         var sql = context.CreateMergeBuilder<ScopedRow>()
             .Using(source)
             .OnKeys()
             .WhenMatched().ThenUpdate()
             .WhenNotMatched().ThenInsert()
-            .WithScope(scope)
+            .WithVariant(scope)
             .ToSql();
 
         sql.Should().Contain("tenant_schema").And.Contain("tenant_rows").And.Contain("tenant_id").And.Contain("tenant_label");
@@ -278,7 +278,7 @@ public sealed class MappingScopeDialectTests
     {
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(new TenantScopeResolver());
+            .UseVariantResolver(new TenantVariantResolver());
         using var context = CreateContext("postgres", builder);
 
         var sql = context.CreateTruncateBuilder<ScopedRow>().ToSql();
@@ -291,7 +291,7 @@ public sealed class MappingScopeDialectTests
     {
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(new TenantScopeResolver());
+            .UseVariantResolver(new TenantVariantResolver());
         using var context = CreateContext("sqlserver", builder);
         var query = context.From<ScopedRow>().Select(row => row.Id);
         var sql = context.CreateBatchBuilder()
@@ -309,7 +309,7 @@ public sealed class MappingScopeDialectTests
     {
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(new TenantScopeResolver());
+            .UseVariantResolver(new TenantVariantResolver());
         using var context = CreateContext("sqlserver", builder);
         var batch = context.CreateBatchBuilder();
         var update = context.CreateUpdateBuilder<ScopedRow>()
@@ -329,7 +329,7 @@ public sealed class MappingScopeDialectTests
     {
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(new TenantScopeResolver());
+            .UseVariantResolver(new TenantVariantResolver());
         using var context = CreateContext("postgres", builder);
         var minimum = 10;
         var mutation = context.CreateUpdateBuilder<ScopedRow>()
@@ -351,7 +351,7 @@ public sealed class MappingScopeDialectTests
     {
         var builder = new DataContextBuilder()
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
-            .UseScopeResolver(new TenantScopeResolver());
+            .UseVariantResolver(new TenantVariantResolver());
         using var context = (SqliteDataContext)CreateContext("sqlite", builder);
         await context.ExecuteRawAsync("ATTACH DATABASE ':memory:' AS tenant_schema", TestContext.Current.CancellationToken);
         await context.ExecuteRawAsync("CREATE TABLE tenant_schema.tenant_rows (tenant_id INTEGER PRIMARY KEY, tenant_label TEXT NOT NULL)", TestContext.Current.CancellationToken);
@@ -398,34 +398,34 @@ public sealed class MappingScopeDialectTests
     {
         private readonly DefaultEntityMetadataProvider _inner = new();
 
-        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingScope scope)
+        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingVariant scope)
         {
-            var metadata = _inner.GetMetadata(entityType, global::NextORM.Core.MappingScope.Default);
+            var metadata = _inner.GetMetadata(entityType, global::NextORM.Core.MappingVariant.Default);
             var suffix = scope.Key ?? "default";
             return new ScopedMetadata($"{suffix}_rows", $"{suffix}_schema",
                 metadata.Properties.Select(property => (IPropertyMetadata)new ScopedProperty(property.PropertyInfo,
                     $"{suffix}_{(property.PropertyInfo.Name == nameof(ScopedRow.Id) ? "id" : "label")}")).ToArray());
         }
 
-        public string GetColumnName(PropertyInfo property, in global::NextORM.Core.MappingScope scope, INamingConvention? convention)
+        public string GetColumnName(PropertyInfo property, in global::NextORM.Core.MappingVariant scope, INamingConvention? convention)
             => $"{scope.Key ?? "default"}_{(property.Name == nameof(ScopedRow.Id) ? "id" : "label")}";
     }
 
-    private sealed class TenantScopeResolver : IEntityScopeResolver
+    private sealed class TenantVariantResolver : IEntityVariantResolver
     {
-        public global::NextORM.Core.MappingScope Resolve(Type entityType) => new("tenant");
+        public global::NextORM.Core.MappingVariant Resolve(Type entityType) => new("tenant");
 
-        public global::NextORM.Core.MappingScope Resolve(Type entityType, object entity) => new("tenant");
+        public global::NextORM.Core.MappingVariant Resolve(Type entityType, object entity) => new("tenant");
 
-        public global::NextORM.Core.MappingScope Resolve(Type entityType, IReadOnlyList<object?> keyValues) => new("tenant");
+        public global::NextORM.Core.MappingVariant Resolve(Type entityType, IReadOnlyList<object?> keyValues) => new("tenant");
     }
 
-    private sealed class MutableScopeResolver : IEntityScopeResolver
+    private sealed class MutableVariantResolver : IEntityVariantResolver
     {
-        public global::NextORM.Core.MappingScope Scope { get; set; } = global::NextORM.Core.MappingScope.Default;
-        public global::NextORM.Core.MappingScope Resolve(Type entityType) => Scope;
-        public global::NextORM.Core.MappingScope Resolve(Type entityType, object entity) => Scope;
-        public global::NextORM.Core.MappingScope Resolve(Type entityType, IReadOnlyList<object?> keyValues) => Scope;
+        public global::NextORM.Core.MappingVariant Scope { get; set; } = global::NextORM.Core.MappingVariant.Default;
+        public global::NextORM.Core.MappingVariant Resolve(Type entityType) => Scope;
+        public global::NextORM.Core.MappingVariant Resolve(Type entityType, object entity) => Scope;
+        public global::NextORM.Core.MappingVariant Resolve(Type entityType, IReadOnlyList<object?> keyValues) => Scope;
     }
 
     private sealed class ScopedMetadata(string tableName, string schema, IReadOnlyList<IPropertyMetadata> properties) : IEntityMetadata

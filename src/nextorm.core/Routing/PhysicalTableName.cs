@@ -1,7 +1,7 @@
 namespace NextORM.Core;
 
 /// <summary>
-/// The physical schema and table an entity uses under one mapping scope: the same names the planner
+/// The physical schema and table an entity uses under one mapping variant: the same names the planner
 /// writes into a statement. Useful when a statement is assembled as raw SQL outside the query builder.
 /// </summary>
 /// <param name="Schema">The schema name, or <see langword="null"/> when the entity declares none.</param>

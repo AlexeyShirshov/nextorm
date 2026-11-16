@@ -33,7 +33,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
     private QueryCommand? _query;
     private Expression<Func<TEntity, bool>>? _condition;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
-    private MappingScope _mappingScope = MappingScope.Default;
+    private MappingVariant _mappingVariant = MappingVariant.Default;
     private LambdaExpression? _group;
     private LimitByClause? _limitBy
     {
@@ -487,16 +487,16 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
     /// the join chain can hand the pre-join builder's scope to its joined projection builder.
     /// </summary>
     internal QueryFilterScope FilterScope { get => _filterScope; set => _filterScope = value; }
-    /// <summary>Returns a copy of this builder bound to the supplied runtime mapping scope.</summary>
+    /// <summary>Returns a copy of this builder bound to the supplied runtime mapping variant.</summary>
     /// <param name="scope">The mapping variant used to resolve metadata for this query.</param>
     /// <returns>A builder that carries <paramref name="scope"/> into its query command.</returns>
-    public EntityBuilder<TEntity> WithScope(MappingScope scope)
+    public EntityBuilder<TEntity> WithVariant(MappingVariant scope)
     {
-        if (_mappingScope == scope)
+        if (_mappingVariant == scope)
             return this;
 
         var copy = Clone();
-        copy._mappingScope = scope;
+        copy._mappingVariant = scope;
         return copy;
     }
     /// <summary>
@@ -509,13 +509,13 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
     /// </exception>
     public EntityBuilder<TEntity> WithShardKey(params object?[] shardKeyValues)
     {
-        if (_dataProvider is not DataContext dataContext || dataContext.EntityScopeResolver is not IShardRouter router)
+        if (_dataProvider is not DataContext dataContext || dataContext.EntityVariantResolver is not IShardRouter router)
             throw new InvalidOperationException("WithShardKey requires a context configured with a shard router.");
 
         if (!router.IsSharded(typeof(TEntity)))
             throw new InvalidOperationException($"Entity '{typeof(TEntity)}' does not declare a shard key.");
 
-        return WithScope(router.ResolveShard(typeof(TEntity), shardKeyValues));
+        return WithVariant(router.ResolveShard(typeof(TEntity), shardKeyValues));
     }
     /// <summary>
     /// Starts a client-side fan-out that runs this query once per bucket and returns one result vector
@@ -548,7 +548,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
     /// Returns the configured shard router or throws when the context is not sharding-enabled.
     /// </summary>
     private IShardRouter RequireShardRouter()
-        => _dataProvider is DataContext dataContext && dataContext.EntityScopeResolver is IShardRouter router
+        => _dataProvider is DataContext dataContext && dataContext.EntityVariantResolver is IShardRouter router
             ? router
             : throw new InvalidOperationException("AcrossBuckets requires a context configured with a shard router.");
 
@@ -570,14 +570,14 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
         return copy;
     }
     internal Expression<Func<TEntity, bool>>? Condition { get => _condition; set => _condition = value; }
-    /// <summary>The mapping scope carried by this builder; read-only seam for native-route eligibility.</summary>
-    internal MappingScope MappingScope => _mappingScope;
+    /// <summary>The mapping variant carried by this builder; read-only seam for native-route eligibility.</summary>
+    internal MappingVariant MappingVariant => _mappingVariant;
     /// <summary>
-    /// Whether this builder is bound to a non-default mapping scope (one shard bucket). A scoped builder
+    /// Whether this builder is bound to a non-default mapping variant (one shard bucket). A scoped builder
     /// renders different table/schema names and runs on a different connection per value, so it must never
     /// share a context-wide singleton command or a scope-less scalar artifact with another scope.
     /// </summary>
-    internal bool IsShardScoped => _mappingScope != MappingScope.Default;
+    internal bool IsShardScoped => _mappingVariant != MappingVariant.Default;
     /// <summary>
     /// The <c>HAVING</c> predicate applied by <see cref="Having"/>, or <c>null</c> when there is none.
     /// Read-only neutral seam used by provider extensions that must inspect the composed state (for
@@ -739,7 +739,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
             SrcType = _sourceEntityType,
             Condition = _condition,
             FilterScope = _filterScope,
-            MappingScope = _mappingScope,
+            MappingVariant = _mappingVariant,
             Joins = _joins?.ToArray(),
             Paging = Paging,
             Sorting = _sorting?.ToArray(),
@@ -782,21 +782,21 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
     /// <see cref="Select{TResult}"/>, <see cref="ToCommand"/> and the <c>JoinInto</c> pair command.
     /// </summary>
     /// <summary>
-    /// Resolves the mapping scope the command runs under: an explicit scope always wins, otherwise a
+    /// Resolves the mapping variant the command runs under: an explicit scope always wins, otherwise a
     /// sharded entity is routed by the shard-key equality found in the predicate, and an unroutable
     /// sharded query fails before any SQL is rendered.
     /// </summary>
-    private MappingScope ResolveCommandScope()
+    private MappingVariant ResolveCommandScope()
     {
-        if (_mappingScope != MappingScope.Default)
-            return _mappingScope;
+        if (_mappingVariant != MappingVariant.Default)
+            return _mappingVariant;
 
-        if (_dataProvider is not DataContext dataContext || dataContext.EntityScopeResolver is not IShardRouter router)
-            return MappingScope.Default;
+        if (_dataProvider is not DataContext dataContext || dataContext.EntityVariantResolver is not IShardRouter router)
+            return MappingVariant.Default;
 
         var entityType = _sourceEntityType ?? typeof(TEntity);
         if (!router.IsSharded(entityType))
-            return MappingScope.Default;
+            return MappingVariant.Default;
 
         if (entityType == typeof(TEntity) && _condition is not null &&
             ShardKeyPredicateExtractor.TryGetValues(_condition, router.GetShardKey(entityType), out var values))
@@ -839,7 +839,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
         // Structural identity of the collection-valued projection slot graph this entity query materializes
         // (#249 / T353). Empty for every ordinary command, so unrelated plan keys are untouched.
         cmd.CollectionSlotShape = _collectionSlotShape;
-        cmd.MappingScope = ResolveCommandScope();
+        cmd.MappingVariant = ResolveCommandScope();
         cmd.RouteEntityType = _sourceEntityType ?? typeof(TEntity);
 
         // Eager-load strategy and graph identity: only commands that actually carry eager loads record
@@ -914,7 +914,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
             SrcType = _sourceEntityType ?? typeof(TEntity),
             Condition = _condition,
             FilterScope = _filterScope,
-            MappingScope = _mappingScope,
+            MappingVariant = _mappingVariant,
             Joins = _joins?.ToArray(),
             Paging = Paging,
             Sorting = _sorting?.ToArray(),
@@ -2860,7 +2860,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
             BindArrayJoinElement = _bindArrayJoinElement,
         });
 
-        cmd.MappingScope = _mappingScope;
+        cmd.MappingVariant = _mappingVariant;
         cmd.From = from ?? ResolveSource();
 
         if (Ctes is not null)
@@ -3618,7 +3618,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
         CopyProjectionIndependentStateTo(dst);
         dst._condition = _condition;
         dst._filterScope = _filterScope;
-        dst._mappingScope = _mappingScope;
+        dst._mappingVariant = _mappingVariant;
         dst._having = _having;
         dst._arrayJoins = _arrayJoins is null ? null : [.. _arrayJoins];
         dst._windows = _windows;
@@ -3684,7 +3684,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
         dst.CommandTimeout = CommandTimeout;
         dst.Ctes = Ctes;
         dst._collectionSlotShape = _collectionSlotShape;
-        dst._mappingScope = _mappingScope;
+        dst._mappingVariant = _mappingVariant;
     }
     /// <summary>
     /// Creates a typed copy of this raw-source builder with <paramref name="binding"/> attached to the

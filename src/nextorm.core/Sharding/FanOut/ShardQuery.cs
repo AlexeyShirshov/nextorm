@@ -118,7 +118,7 @@ public sealed class ShardQuery<TEntity>
     public TEntity[] Single() => RunEach(static query => query.Single());
 
     private EntityBuilder<TEntity> Scoped(int bucket)
-        => _source.WithScope(new MappingScope(bucket.ToString(CultureInfo.InvariantCulture)));
+        => _source.WithVariant(new MappingVariant(bucket.ToString(CultureInfo.InvariantCulture)));
 
     private TResult[] RunEach<TResult>(Func<EntityBuilder<TEntity>, TResult> run)
     {
@@ -272,7 +272,7 @@ public sealed class ShardQuery<TEntity, TResult>
     public bool[] Any() => RunEach(static query => query.Any());
 
     private EntityBuilder<TEntity> Scoped(int bucket)
-        => _source.WithScope(new MappingScope(bucket.ToString(CultureInfo.InvariantCulture)));
+        => _source.WithVariant(new MappingVariant(bucket.ToString(CultureInfo.InvariantCulture)));
 
     private TValue[] RunEach<TValue>(Func<EntityBuilder<TEntity>, TValue> run)
     {

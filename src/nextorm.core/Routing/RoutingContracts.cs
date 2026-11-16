@@ -20,21 +20,21 @@ public enum CommandKind
 public readonly struct TopologyContext
 {
     /// <summary>Creates a context for one command.</summary>
-    /// <param name="scope">The mapping scope the command was planned for.</param>
+    /// <param name="scope">The mapping variant the command was planned for.</param>
     /// <param name="kind">Whether the command reads or writes.</param>
     /// <param name="hostId">
     /// The host the caller pinned, or <see langword="null"/> to let the topology choose. A topology must
     /// return that host when the id is set.
     /// </param>
-    public TopologyContext(MappingScope scope, CommandKind kind, string? hostId = null)
+    public TopologyContext(MappingVariant scope, CommandKind kind, string? hostId = null)
     {
-        Scope = scope;
+        Variant = scope;
         Kind = kind;
         HostId = hostId;
     }
 
-    /// <summary>The mapping scope of the command.</summary>
-    public MappingScope Scope { get; }
+    /// <summary>The mapping variant of the command.</summary>
+    public MappingVariant Variant { get; }
 
     /// <summary>Whether the command reads or writes.</summary>
     public CommandKind Kind { get; }

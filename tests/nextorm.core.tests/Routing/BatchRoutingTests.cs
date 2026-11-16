@@ -119,11 +119,11 @@ public sealed class BatchRoutingTests : IDisposable
         using var context = CreateShardedContext();
 
         FluentActions.Invoking(() => context.CreateBatchBuilder()
-                .AddQuery(context.From<ShardRow>().WithScope(Scope(3)).Select(row => row.Id))
-                .AddQuery(context.From<ShardRow>().WithScope(Scope(5)).Select(row => row.Id))
+                .AddQuery(context.From<ShardRow>().WithVariant(Scope(3)).Select(row => row.Id))
+                .AddQuery(context.From<ShardRow>().WithVariant(Scope(5)).Select(row => row.Id))
                 .ToSql())
             .Should().Throw<NotSupportedException>()
-            .WithMessage("*span the mapping scopes '3' and '5'*one scope*");
+            .WithMessage("*span the mapping variants '3' and '5'*one scope*");
     }
 
     [Fact]
@@ -155,12 +155,12 @@ public sealed class BatchRoutingTests : IDisposable
         // The temporary table is a batch (drop, create as select, read) that runs on one session: the
         // shard the bucket belongs to, where the source rows live.
         var source = context.From<ShardRow>()
-            .WithScope(scope)
+            .WithVariant(scope)
             .Select(row => new { row.Id, row.Name })
             .AsTempTable();
 
         var rows = context.From(source)
-            .WithScope(scope)
+            .WithVariant(scope)
             .OrderBy(row => row.GetInt32("Id"))
             .Select(row => row.GetString("Name"))
             .ToList();
@@ -182,11 +182,11 @@ public sealed class BatchRoutingTests : IDisposable
             .AsTempTable();
 
         FluentActions.Invoking(() => context.From(source)
-                .WithScope(Scope(3))
+                .WithVariant(Scope(3))
                 .Select(row => row.GetInt32("Id"))
                 .ToList())
             .Should().Throw<NotSupportedException>()
-            .WithMessage("*mapping scopes '5' and '3'*source query*");
+            .WithMessage("*mapping variants '5' and '3'*source query*");
     }
 
     public void Dispose()
@@ -222,7 +222,7 @@ public sealed class BatchRoutingTests : IDisposable
             .UseDataRouting(routing => routing.UseDefaultTopology(DefaultTopology, DefaultConnectionString())));
     }
 
-    private static global::NextORM.Core.MappingScope Scope(int bucket)
+    private static global::NextORM.Core.MappingVariant Scope(int bucket)
         => new(bucket.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
     private string DefaultConnectionString() => $"Data Source={Path.Combine(_directory, "main.db")}";

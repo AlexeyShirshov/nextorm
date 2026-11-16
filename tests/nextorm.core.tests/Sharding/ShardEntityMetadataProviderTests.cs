@@ -11,7 +11,7 @@ public sealed class ShardEntityMetadataProviderTests
     {
         var inner = new DefaultEntityMetadataProvider();
         var provider = new ShardEntityMetadataProvider(inner, CreateTopology());
-        var scope = global::NextORM.Core.MappingScope.Default;
+        var scope = global::NextORM.Core.MappingVariant.Default;
         var expected = inner.GetMetadata(typeof(Orders), scope);
 
         provider.GetMetadata(typeof(Orders), scope).Should().BeSameAs(expected);
@@ -88,7 +88,7 @@ public sealed class ShardEntityMetadataProviderTests
     {
         var provider = new ShardEntityMetadataProvider(new DefaultEntityMetadataProvider(), CreateTopology());
 
-        FluentActions.Invoking(() => provider.GetMetadata(typeof(Orders), new global::NextORM.Core.MappingScope("east")))
+        FluentActions.Invoking(() => provider.GetMetadata(typeof(Orders), new global::NextORM.Core.MappingVariant("east")))
             .Should().Throw<InvalidOperationException>().WithMessage("*not a bucket number*");
         FluentActions.Invoking(() => provider.GetMetadata(typeof(Orders), BucketScope(4096)))
             .Should().Throw<InvalidOperationException>().WithMessage("*outside*");
@@ -132,7 +132,7 @@ public sealed class ShardEntityMetadataProviderTests
             .Should().Throw<ArgumentException>();
     }
 
-    private static global::NextORM.Core.MappingScope BucketScope(int bucket)
+    private static global::NextORM.Core.MappingVariant BucketScope(int bucket)
         => new(bucket.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
     private static ShardTopology CreateTopology()
@@ -153,13 +153,13 @@ public sealed class ShardEntityMetadataProviderTests
     {
         private readonly DefaultEntityMetadataProvider _inner = new();
 
-        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingScope scope)
+        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingVariant scope)
         {
             var metadata = _inner.GetMetadata(entityType, scope);
             return new SchemaMetadata(metadata);
         }
 
-        public string GetColumnName(PropertyInfo property, in global::NextORM.Core.MappingScope scope, INamingConvention? convention)
+        public string GetColumnName(PropertyInfo property, in global::NextORM.Core.MappingVariant scope, INamingConvention? convention)
             => _inner.GetColumnName(property, scope, convention);
 
         private sealed class SchemaMetadata(IEntityMetadata inner) : IEntityMetadata
@@ -177,12 +177,12 @@ public sealed class ShardEntityMetadataProviderTests
     private sealed class ColumnMarkerProvider : IEntityMetadataProvider
     {
         private readonly DefaultEntityMetadataProvider _inner = new();
-        public global::NextORM.Core.MappingScope LastScope { get; private set; }
+        public global::NextORM.Core.MappingVariant LastScope { get; private set; }
 
-        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingScope scope)
+        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingVariant scope)
             => _inner.GetMetadata(entityType, scope);
 
-        public string GetColumnName(PropertyInfo property, in global::NextORM.Core.MappingScope scope, INamingConvention? convention)
+        public string GetColumnName(PropertyInfo property, in global::NextORM.Core.MappingVariant scope, INamingConvention? convention)
         {
             LastScope = scope;
             return $"custom_{property.Name}";

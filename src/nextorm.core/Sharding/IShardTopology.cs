@@ -65,7 +65,7 @@ public sealed class ShardTopology : IShardTopology
 
     /// <inheritdoc />
     /// <remarks>
-    /// The mapping scope carries the bucket number (the shard router put it there); the ring turns the
+    /// The mapping variant carries the bucket number (the shard router put it there); the ring turns the
     /// bucket into a shard and the shard into its connection string. A pinned host id selects that shard
     /// directly, whatever the bucket would have chosen — that is how a session keeps one server. A
     /// default or non-bucket scope is not claimed, so the command stays on the context connection.
@@ -83,8 +83,8 @@ public sealed class ShardTopology : IShardTopology
             return true;
         }
 
-        var scope = context.Scope;
-        if (scope == MappingScope.Default || string.IsNullOrEmpty(scope.Key))
+        var scope = context.Variant;
+        if (scope == MappingVariant.Default || string.IsNullOrEmpty(scope.Key))
             return false;
 
         if (!int.TryParse(scope.Key, NumberStyles.None, CultureInfo.InvariantCulture, out var bucket) ||

@@ -36,7 +36,7 @@ internal readonly record struct SqlBuildContext
         IncludeNestedSources = options.IncludeNestedSources;
         this.KeywordCase = options.KeywordCase;
         ParameterNamePrefix = options.ParameterNamePrefix;
-        MappingScope = options.MappingScope;
+        MappingVariant = options.MappingVariant;
         MetadataProvider = options.MetadataProvider;
         Capture = options.Capture;
         MutationLowering = options.MutationLowering;
@@ -101,7 +101,7 @@ internal readonly record struct SqlBuildContext
 
     internal KeywordCase KeywordCase { get; init; }
     internal string ParameterNamePrefix { get; init; }
-    internal MappingScope MappingScope { get; init; } = MappingScope.Default;
+    internal MappingVariant MappingVariant { get; init; } = MappingVariant.Default;
     internal IEntityMetadataProvider? MetadataProvider { get; init; }
 
     /// <summary>
@@ -130,8 +130,8 @@ internal readonly record struct SqlBuildContext
     internal List<SourceLockTarget>? SourceLocks { get; init; }
 
     internal WhereExpressionVisitor CreateWhereVisitor(Type entityType, int dim, bool dontNeedAlias = false)
-        => new(new VisitorOptions(entityType, Dialect, ColumnsProvider, dim, AliasProvider, ParameterProvider, QueryProvider, dontNeedAlias, ParamMode, Params, Logger) { QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, IncludeNestedSources = IncludeNestedSources, KeywordCase = KeywordCase, ParameterNamePrefix = ParameterNamePrefix, MappingScope = MappingScope, MetadataProvider = MetadataProvider, Capture = Capture, MutationLowering = MutationLowering });
+        => new(new VisitorOptions(entityType, Dialect, ColumnsProvider, dim, AliasProvider, ParameterProvider, QueryProvider, dontNeedAlias, ParamMode, Params, Logger) { QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, IncludeNestedSources = IncludeNestedSources, KeywordCase = KeywordCase, ParameterNamePrefix = ParameterNamePrefix, MappingVariant = MappingVariant, MetadataProvider = MetadataProvider, Capture = Capture, MutationLowering = MutationLowering });
 
     internal BaseExpressionVisitor CreateColumnVisitor(Type entityType, int dim, bool dontNeedAlias)
-        => new(new VisitorOptions(entityType, Dialect, ColumnsProvider, dim, AliasProvider, ParameterProvider, QueryProvider, dontNeedAlias, ParamMode, Params, Logger) { QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, IncludeNestedSources = IncludeNestedSources, KeywordCase = KeywordCase, ParameterNamePrefix = ParameterNamePrefix, MappingScope = MappingScope, MetadataProvider = MetadataProvider, Capture = Capture, MutationLowering = MutationLowering });
+        => new(new VisitorOptions(entityType, Dialect, ColumnsProvider, dim, AliasProvider, ParameterProvider, QueryProvider, dontNeedAlias, ParamMode, Params, Logger) { QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, IncludeNestedSources = IncludeNestedSources, KeywordCase = KeywordCase, ParameterNamePrefix = ParameterNamePrefix, MappingVariant = MappingVariant, MetadataProvider = MetadataProvider, Capture = Capture, MutationLowering = MutationLowering });
 }

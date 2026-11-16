@@ -66,7 +66,7 @@ public sealed record VisitorOptions(
     /// </summary>
     public string ParameterNamePrefix { get; init; } = string.Empty;
 
-    internal MappingScope MappingScope { get; init; } = MappingScope.Default;
+    internal MappingVariant MappingVariant { get; init; } = MappingVariant.Default;
     internal IEntityMetadataProvider? MetadataProvider { get; init; }
 
     /// <summary>

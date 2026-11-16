@@ -12,7 +12,7 @@ namespace NextORM.Core;
 /// </para>
 /// <para>
 /// The batch runs on the host the read is routed to, and the source query is rendered under its own
-/// mapping scope: scope the source like the read, so the materialisation and the read address the same
+/// mapping variant: scope the source like the read, so the materialisation and the read address the same
 /// bucket. A source that resolves to another bucket than the read is rejected.
 /// </para>
 /// </summary>

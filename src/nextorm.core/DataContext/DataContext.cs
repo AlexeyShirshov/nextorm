@@ -19,7 +19,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     private bool _disposed;
     private readonly ContextEnvironment _environment;
     internal IEntityMetadataProvider EntityMetadataProvider { get; }
-    internal IEntityScopeResolver EntityScopeResolver { get; }
+    internal IEntityVariantResolver EntityVariantResolver { get; }
     private readonly Version? _serverVersion;
     private readonly NextORM.Core.EagerLoadMode _eagerLoadMode;
     private readonly QueryCache _queryCache;
@@ -83,7 +83,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             optionsBuilder.MultilineBatchSql,
             optionsBuilder.CommandTimeout);
         EntityMetadataProvider = optionsBuilder.EntityMetadataProvider;
-        EntityScopeResolver = optionsBuilder.EntityScopeResolver;
+        EntityVariantResolver = optionsBuilder.EntityVariantResolver;
 
         QueryCacheEnabled = optionsBuilder.QueryCacheEnabled;
 
@@ -145,7 +145,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
                     "(or UseDataRouting) before creating the context.");
             }
 
-            var defaultRoute = new TopologyContext(MappingScope.Default, CommandKind.Read);
+            var defaultRoute = new TopologyContext(MappingVariant.Default, CommandKind.Read);
             if (!defaultTopology.TryGetHost(in defaultRoute, out var defaultHost)
                 || string.IsNullOrWhiteSpace(defaultHost.ConnectionString))
             {
@@ -206,7 +206,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             new ProviderHooks(MapColumn, _createParam, _createParamSimple),
             new LoggingOptions(_environment.Logger, _environment.ResultSetEnumeratorLogger, _environment.LogSensitiveData, QueryFilterLogger: _environment.QueryFilterLogger),
             EntityMetadataProvider,
-            EntityScopeResolver);
+            EntityVariantResolver);
     }
 
     /// <summary>
@@ -367,13 +367,13 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// planner bakes into a statement, exposed for raw SQL assembled outside the query builder.
     /// </summary>
     /// <typeparam name="TEntity">The mapped entity type.</typeparam>
-    /// <param name="scope">The mapping scope, for example a bucket scope; the default scope keeps the mapping.</param>
+    /// <param name="scope">The mapping variant, for example a bucket scope; the default scope keeps the mapping.</param>
     /// <returns>The physical schema and table for that scope.</returns>
     /// <exception cref="InvalidOperationException">The provider returned no table name for the type.</exception>
-    public PhysicalTableName GetPhysicalTableName<TEntity>(MappingScope scope = default)
+    public PhysicalTableName GetPhysicalTableName<TEntity>(MappingVariant scope = default)
         => GetPhysicalTableName(typeof(TEntity), scope);
 
-    private PhysicalTableName GetPhysicalTableName(Type entityType, MappingScope scope)
+    private PhysicalTableName GetPhysicalTableName(Type entityType, MappingVariant scope)
     {
         ArgumentNullException.ThrowIfNull(entityType);
 
@@ -396,11 +396,11 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// running one side of the statement on a host it does not belong to.
     /// </summary>
     /// <param name="sources">The entity types the statement reads or writes, or <see langword="null"/> when it has none.</param>
-    /// <param name="scope">The mapping scope the command runs under.</param>
+    /// <param name="scope">The mapping variant the command runs under.</param>
     /// <returns>The topology the statement runs on, or <see cref="RoutePlan.None"/> for the context connection.</returns>
     /// <exception cref="NotSupportedException">The sources resolve to different topologies.</exception>
     /// <exception cref="InvalidOperationException">A rule names a topology that is not registered.</exception>
-    internal RoutePlan RouteFor(IReadOnlyList<Type>? sources, MappingScope scope)
+    internal RoutePlan RouteFor(IReadOnlyList<Type>? sources, MappingVariant scope)
     {
         RouteTarget? resolved = null;
         Type? resolvedType = null;
@@ -444,8 +444,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         return new RoutePlan(route.Topology);
     }
 
-    /// <inheritdoc cref="RouteFor(IReadOnlyList{Type}?, MappingScope)"/>
-    internal RoutePlan RouteFor(Type? entityType, MappingScope scope)
+    /// <inheritdoc cref="RouteFor(IReadOnlyList{Type}?, MappingVariant)"/>
+    internal RoutePlan RouteFor(Type? entityType, MappingVariant scope)
         => entityType is null ? RouteFor((IReadOnlyList<Type>?)null, scope) : RouteFor([entityType], scope);
 
     /// <summary>
@@ -476,7 +476,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         }
 
         var resolved = GetTopology(topology);
-        var probe = new TopologyContext(MappingScope.Default, CommandKind.Read, hostId);
+        var probe = new TopologyContext(MappingVariant.Default, CommandKind.Read, hostId);
         if (!resolved.TryGetHost(in probe, out var host))
         {
             throw new ArgumentException(
@@ -530,7 +530,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// command, the context connection otherwise. Every host keeps its own lazy connection, cached by
     /// <c>topology/host</c> for the lifetime of the context.
     /// </summary>
-    internal IConnectionManager ManagerFor(MappingScope scope, IReadOnlyList<Type>? sources, CommandKind kind)
+    internal IConnectionManager ManagerFor(MappingVariant scope, IReadOnlyList<Type>? sources, CommandKind kind)
     {
         var route = RouteFor(sources, scope);
         if (!route.HasTopology)
@@ -692,10 +692,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     // Routed transactions: a transaction on a host other than the context connection. Starting one pins
     // the topology to that host, so later commands routed there join the transaction instead of picking
     // another host and writing outside it.
-    DbTransaction IRoutedTransactionManager.BeginTransaction(RouteTarget target, MappingScope scope, IsolationLevel isolationLevel)
+    DbTransaction IRoutedTransactionManager.BeginTransaction(RouteTarget target, MappingVariant scope, IsolationLevel isolationLevel)
         => BeginRoutedTransaction(target, scope, isolationLevel);
 
-    Task<DbTransaction> IRoutedTransactionManager.BeginTransactionAsync(RouteTarget target, MappingScope scope, IsolationLevel isolationLevel, CancellationToken cancellationToken)
+    Task<DbTransaction> IRoutedTransactionManager.BeginTransactionAsync(RouteTarget target, MappingVariant scope, IsolationLevel isolationLevel, CancellationToken cancellationToken)
         => BeginRoutedTransactionAsync(target, scope, isolationLevel, cancellationToken);
 
     DbTransaction? IRoutedTransactionManager.CurrentTransaction(RouteTarget target)
@@ -704,7 +704,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
                 ? manager.CurrentTransaction
                 : null;
 
-    private DbTransaction BeginRoutedTransaction(RouteTarget target, MappingScope scope, IsolationLevel isolationLevel)
+    private DbTransaction BeginRoutedTransaction(RouteTarget target, MappingVariant scope, IsolationLevel isolationLevel)
     {
         var (manager, hostId) = RoutedTransactionHost(target, scope);
         var transaction = manager.BeginTransaction(isolationLevel);
@@ -712,7 +712,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         return transaction;
     }
 
-    private async Task<DbTransaction> BeginRoutedTransactionAsync(RouteTarget target, MappingScope scope, IsolationLevel isolationLevel, CancellationToken cancellationToken)
+    private async Task<DbTransaction> BeginRoutedTransactionAsync(RouteTarget target, MappingVariant scope, IsolationLevel isolationLevel, CancellationToken cancellationToken)
     {
         var (manager, hostId) = RoutedTransactionHost(target, scope);
         var transaction = await manager.BeginTransactionAsync(isolationLevel, cancellationToken).ConfigureAwait(false);
@@ -725,7 +725,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <paramref name="scope"/>. Refuses when another transaction already holds a connection of this
     /// context, because one context carries one transaction at a time.
     /// </summary>
-    private (DbConnectionManager Manager, string HostId) RoutedTransactionHost(RouteTarget target, MappingScope scope)
+    private (DbConnectionManager Manager, string HostId) RoutedTransactionHost(RouteTarget target, MappingVariant scope)
     {
         if (string.Equals(target.Topology, _defaultTopologyName, StringComparison.Ordinal))
         {
@@ -1418,26 +1418,26 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         var (sql, parameters) = BuildInsertSql((InsertCommand)command);
         // The identity function runs in the same batch as the insert: SCOPE_IDENTITY() is scoped to the
         // batch, so issuing it as a separate command would return NULL on SQL Server.
-        return _executor.ExecuteScalar(sql + "; " + Dialect.MakeIdentityFunction(KeywordCase), parameters, command.MappingScope, command.EntityType, command.RouteSources);
+        return _executor.ExecuteScalar(sql + "; " + Dialect.MakeIdentityFunction(KeywordCase), parameters, command.MappingVariant, command.EntityType, command.RouteSources);
     }
 
     async Task<object?> IMutationExecutor.ExecuteIdentityFunction(MutationCommand command, CancellationToken cancellationToken)
     {
         EnsureIdentityFunctionSupported();
         var (sql, parameters) = BuildInsertSql((InsertCommand)command);
-        return await _executor.ExecuteScalarAsync(sql + "; " + Dialect.MakeIdentityFunction(KeywordCase), parameters, cancellationToken, command.MappingScope, command.EntityType, command.RouteSources).ConfigureAwait(false);
+        return await _executor.ExecuteScalarAsync(sql + "; " + Dialect.MakeIdentityFunction(KeywordCase), parameters, cancellationToken, command.MappingVariant, command.EntityType, command.RouteSources).ConfigureAwait(false);
     }
 
     int IMutationExecutor.Execute(MutationCommand command)
     {
         var (sql, parameters) = BuildMutationSql(command);
-        return _executor.ExecuteNonQuery(sql, parameters, command.MappingScope, command.EntityType, command.RouteSources);
+        return _executor.ExecuteNonQuery(sql, parameters, command.MappingVariant, command.EntityType, command.RouteSources);
     }
 
     async Task<int> IMutationExecutor.Execute(MutationCommand command, CancellationToken cancellationToken)
     {
         var (sql, parameters) = BuildMutationSql(command);
-        return await _executor.ExecuteNonQueryAsync(sql, parameters, cancellationToken, command.MappingScope, command.EntityType, command.RouteSources).ConfigureAwait(false);
+        return await _executor.ExecuteNonQueryAsync(sql, parameters, cancellationToken, command.MappingVariant, command.EntityType, command.RouteSources).ConfigureAwait(false);
     }
 
     object? IMutationExecutor.ExecuteIdentity(MutationCommand command)
@@ -1445,15 +1445,15 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         if (Dialect.SupportsReturning || Dialect.SupportsOutput)
         {
             var (sql, parameters) = BuildInsertSql((InsertCommand)command);
-            return _executor.ExecuteScalar(sql, parameters, command.MappingScope, command.EntityType, command.RouteSources);
+            return _executor.ExecuteScalar(sql, parameters, command.MappingVariant, command.EntityType, command.RouteSources);
         }
 
         if (Dialect.SupportsLastInsertId)
         {
             EnsureIdentityColumn(command);
             var (sql, parameters) = BuildInsertSql((InsertCommand)command);
-            _executor.ExecuteNonQuery(sql, parameters, command.MappingScope, command.EntityType, command.RouteSources);
-            return _executor.ExecuteScalar(Dialect.MakeLastInsertId(KeywordCase), [], command.MappingScope, command.EntityType, command.RouteSources);
+            _executor.ExecuteNonQuery(sql, parameters, command.MappingVariant, command.EntityType, command.RouteSources);
+            return _executor.ExecuteScalar(Dialect.MakeLastInsertId(KeywordCase), [], command.MappingVariant, command.EntityType, command.RouteSources);
         }
 
         throw new NotSupportedException(
@@ -1465,15 +1465,15 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         if (Dialect.SupportsReturning || Dialect.SupportsOutput)
         {
             var (sql, parameters) = BuildInsertSql((InsertCommand)command);
-            return await _executor.ExecuteScalarAsync(sql, parameters, cancellationToken, command.MappingScope, command.EntityType, command.RouteSources).ConfigureAwait(false);
+            return await _executor.ExecuteScalarAsync(sql, parameters, cancellationToken, command.MappingVariant, command.EntityType, command.RouteSources).ConfigureAwait(false);
         }
 
         if (Dialect.SupportsLastInsertId)
         {
             EnsureIdentityColumn(command);
             var (sql, parameters) = BuildInsertSql((InsertCommand)command);
-            await _executor.ExecuteNonQueryAsync(sql, parameters, cancellationToken, command.MappingScope, command.EntityType, command.RouteSources).ConfigureAwait(false);
-            return await _executor.ExecuteScalarAsync(Dialect.MakeLastInsertId(KeywordCase), [], cancellationToken, command.MappingScope, command.EntityType, command.RouteSources).ConfigureAwait(false);
+            await _executor.ExecuteNonQueryAsync(sql, parameters, cancellationToken, command.MappingVariant, command.EntityType, command.RouteSources).ConfigureAwait(false);
+            return await _executor.ExecuteScalarAsync(Dialect.MakeLastInsertId(KeywordCase), [], cancellationToken, command.MappingVariant, command.EntityType, command.RouteSources).ConfigureAwait(false);
         }
 
         throw new NotSupportedException(
@@ -1486,7 +1486,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         EnsureReturningMaterializable<TResult>(oneColumn);
         var (sql, parameters) = BuildReturningSql(command);
         var mapper = RowMapperFactory.GetOrBuild<TResult>(sql, GetType(), selectList, oneColumn, MapColumnExpression);
-        return _executor.ExecuteReader(sql, parameters, mapper, command.MappingScope, command.EntityType, command.RouteSources);
+        return _executor.ExecuteReader(sql, parameters, mapper, command.MappingVariant, command.EntityType, command.RouteSources);
     }
 
     async Task<IReadOnlyList<TResult>> IMutationExecutor.ExecuteReturning<TResult>(MutationCommand command, SelectExpression[] selectList, bool oneColumn, CancellationToken cancellationToken)
@@ -1495,7 +1495,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         EnsureReturningMaterializable<TResult>(oneColumn);
         var (sql, parameters) = BuildReturningSql(command);
         var mapper = RowMapperFactory.GetOrBuild<TResult>(sql, GetType(), selectList, oneColumn, MapColumnExpression);
-        return await _executor.ExecuteReaderAsync(sql, parameters, mapper, cancellationToken, command.MappingScope, command.EntityType, command.RouteSources).ConfigureAwait(false);
+        return await _executor.ExecuteReaderAsync(sql, parameters, mapper, cancellationToken, command.MappingVariant, command.EntityType, command.RouteSources).ConfigureAwait(false);
     }
 
     // Raw command execution (IRawCommandExecutor). Public so a concrete context exposes the entry
@@ -2152,7 +2152,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     /// <summary>
     /// Resolves the one host a batch runs on. A batch is a single session and a single round trip, so its
-    /// statements cannot span topologies or mapping scopes any more than the sources of one statement can:
+    /// statements cannot span topologies or mapping variants any more than the sources of one statement can:
     /// the first routed step decides, and a step that disagrees is rejected instead of silently running on
     /// a host its names were not rendered for.
     /// </summary>
@@ -2190,7 +2190,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             if (route.Scope != scope)
             {
                 throw new NotSupportedException(
-                    $"A batch runs on one host, but its statements span the mapping scopes " +
+                    $"A batch runs on one host, but its statements span the mapping variants " +
                     $"'{ScopeName(route.Scope)}' and '{ScopeName(scope)}'. A batch is one SQL session, so every " +
                     "statement of it must run under one scope; scope the statements the same way (a lazy " +
                     "temporary table also takes the scope of its source query, not only of the read).");
@@ -2205,25 +2205,25 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// (which carries no entity and rides along on the host the other steps choose).
     /// </summary>
     /// <param name="step">The step being rendered.</param>
-    /// <returns>The step's mapping scope and entities, or <see langword="null"/>.</returns>
-    private static (MappingScope Scope, IReadOnlyList<Type> Sources)? BatchStepRoute(BatchStepSpec step)
+    /// <returns>The step's mapping variant and entities, or <see langword="null"/>.</returns>
+    private static (MappingVariant Scope, IReadOnlyList<Type> Sources)? BatchStepRoute(BatchStepSpec step)
     {
         if (step.Query is { } query)
-            return (query.MappingScope, CommandRouteSources.Collect(query));
+            return (query.MappingVariant, CommandRouteSources.Collect(query));
 
         if (step.CreateTableAs is { } createTableAs)
-            return (createTableAs.MappingScope, createTableAs.RouteSources ?? CommandRouteSources.Collect(createTableAs.Source));
+            return (createTableAs.MappingVariant, createTableAs.RouteSources ?? CommandRouteSources.Collect(createTableAs.Source));
 
         if (step.Mutation is { } mutation)
-            return (mutation.MappingScope, [mutation.EntityType]);
+            return (mutation.MappingVariant, [mutation.EntityType]);
 
         if (step.Capture is { } capture)
-            return (capture.Mutation.MappingScope, [capture.Mutation.EntityType]);
+            return (capture.Mutation.MappingVariant, [capture.Mutation.EntityType]);
 
         return null;
     }
 
-    private static string ScopeName(in MappingScope scope)
+    private static string ScopeName(in MappingVariant scope)
         => string.IsNullOrEmpty(scope.Key) ? "default" : scope.Key;
 
     // A statement's parameters are the accumulator slice it produced. A captured member referenced more

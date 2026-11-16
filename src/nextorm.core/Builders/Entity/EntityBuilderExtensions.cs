@@ -299,7 +299,7 @@ public static class EntityBuilderExtensions
             return native;
 
         // A shard-scoped builder renders its bucket's table names and runs on that bucket's connection. The
-        // context-wide Any command is a single shared instance carrying one MappingScope, so reusing it for a
+        // context-wide Any command is a single shared instance carrying one MappingVariant, so reusing it for a
         // second bucket would render and execute the first bucket's statement; a scoped call builds its own.
         if (builder.IsShardScoped)
             return ExecuteScopedAny(builder, @params);
@@ -380,7 +380,7 @@ public static class EntityBuilderExtensions
     private static IPreparedQueryCommand<bool> PrepareScopedAny<TEntity>(EntityBuilder<TEntity> builder)
     {
         var queryCommand = AnyCommand(builder);
-        queryCommand.MappingScope = builder.MappingScope;
+        queryCommand.MappingVariant = builder.MappingVariant;
         // The EXISTS command is built from a query definition, so it has no source type of its own; record
         // the entity the scope belongs to so the planner can route the bucket to its topology's host.
         queryCommand.RouteEntityType = typeof(TEntity);

@@ -20,7 +20,7 @@ public sealed partial class InsertBuilder<TEntity>
 {
     private readonly IDataContext _dataContext;
     private readonly IEntityMetadata _metadata;
-    private MappingScope _mappingScope;
+    private MappingVariant _mappingVariant;
     private readonly List<ColumnAccumulator> _columns = [];
     private DynamicColumnSet? _dynamicColumns;
     private int _rowCount;
@@ -47,9 +47,9 @@ public sealed partial class InsertBuilder<TEntity>
     {
         _dataContext = dataContext;
         _metadata = metadata;
-        _mappingScope = dataContext is DataContext scopedContext
-            ? scopedContext.EntityScopeResolver.Resolve(typeof(TEntity))
-            : MappingScope.Default;
+        _mappingVariant = dataContext is DataContext scopedContext
+            ? scopedContext.EntityVariantResolver.Resolve(typeof(TEntity))
+            : MappingVariant.Default;
     }
 
     /// <summary>
@@ -62,13 +62,13 @@ public sealed partial class InsertBuilder<TEntity>
     /// </exception>
     public InsertBuilder<TEntity> WithShardKey(params object?[] shardKeyValues)
     {
-        if (_dataContext is not DataContext dataContext || dataContext.EntityScopeResolver is not IShardRouter router)
+        if (_dataContext is not DataContext dataContext || dataContext.EntityVariantResolver is not IShardRouter router)
             throw new InvalidOperationException("WithShardKey requires a context configured with a shard router.");
 
         if (!router.IsSharded(typeof(TEntity)))
             throw new InvalidOperationException($"Entity '{typeof(TEntity)}' does not declare a shard key.");
 
-        _mappingScope = router.ResolveShard(typeof(TEntity), shardKeyValues);
+        _mappingVariant = router.ResolveShard(typeof(TEntity), shardKeyValues);
         return this;
     }
 
@@ -660,16 +660,16 @@ public sealed partial class InsertBuilder<TEntity>
     /// </summary>
     private void ResolveShardScope(IReadOnlyList<TEntity> entities)
     {
-        if (_mappingScope != MappingScope.Default)
+        if (_mappingVariant != MappingVariant.Default)
             return;
 
-        if (_dataContext is not DataContext dataContext || dataContext.EntityScopeResolver is not IShardRouter router)
+        if (_dataContext is not DataContext dataContext || dataContext.EntityVariantResolver is not IShardRouter router)
             return;
 
         if (!router.IsSharded(typeof(TEntity)))
             return;
 
-        MappingScope? resolved = null;
+        MappingVariant? resolved = null;
         for (var index = 0; index < entities.Count; index++)
         {
             var entity = entities[index];
@@ -686,12 +686,12 @@ public sealed partial class InsertBuilder<TEntity>
             if (resolved.Value != scope)
             {
                 throw new InvalidOperationException(
-                    $"Insert rows target different shards ('{resolved.Value.Key}' and '{scope.Key}'). " +
-                    "A single insert must target one shard; group the rows by shard and insert each group separately.");
+                    $"Insert rows target different buckets ('{resolved.Value.Key}' and '{scope.Key}'). " +
+                    "One INSERT writes one bucket's table; group the rows by bucket and insert each group separately.");
             }
         }
 
-        _mappingScope = resolved ?? MappingScope.Default;
+        _mappingVariant = resolved ?? MappingVariant.Default;
     }
 
     /// <summary>
@@ -699,10 +699,10 @@ public sealed partial class InsertBuilder<TEntity>
     /// </summary>
     private void EnsureShardScopeResolved()
     {
-        if (_mappingScope != MappingScope.Default)
+        if (_mappingVariant != MappingVariant.Default)
             return;
 
-        if (_dataContext is not DataContext dataContext || dataContext.EntityScopeResolver is not IShardRouter router)
+        if (_dataContext is not DataContext dataContext || dataContext.EntityVariantResolver is not IShardRouter router)
             return;
 
         if (!router.IsSharded(typeof(TEntity)))
@@ -717,7 +717,7 @@ public sealed partial class InsertBuilder<TEntity>
         EnsureShardScopeResolved();
 
         if (_source is not null)
-            return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, [], 1, identityColumn, returningColumns, _source, _selectColumns, outputInto: outputInto) { MappingScope = _mappingScope };
+            return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, [], 1, identityColumn, returningColumns, _source, _selectColumns, outputInto: outputInto) { MappingVariant = _mappingVariant };
 
         if (_columns.Count == 0 && _dynamicColumns is null)
         {
@@ -726,7 +726,7 @@ public sealed partial class InsertBuilder<TEntity>
             if (HasWritableColumns())
                 throw new InvalidOperationException("No values were specified for the insert.");
 
-            return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, [], 1, identityColumn, returningColumns, outputInto: outputInto) { MappingScope = _mappingScope };
+            return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, [], 1, identityColumn, returningColumns, outputInto: outputInto) { MappingVariant = _mappingVariant };
         }
 
         foreach (var column in _columns)
@@ -739,7 +739,7 @@ public sealed partial class InsertBuilder<TEntity>
         for (var i = 0; i < columns.Length; i++)
             columns[i] = new InsertColumn(_columns[i].Property, _columns[i].Values);
 
-        return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, identityColumn, returningColumns, outputInto: outputInto, dynamicColumns: _dynamicColumns) { MappingScope = _mappingScope };
+        return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, identityColumn, returningColumns, outputInto: outputInto, dynamicColumns: _dynamicColumns) { MappingVariant = _mappingVariant };
     }
 
     private bool HasWritableColumns()

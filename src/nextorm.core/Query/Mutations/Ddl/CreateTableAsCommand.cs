@@ -25,7 +25,7 @@ internal sealed class CreateTableAsCommand : MutationCommand
         // A materialisation writes a literal target name and reads its source query, so it runs where
         // that query runs and under its scope: routing it by the projected row type would send the
         // statement to the context connection while its SQL reads a bucket's table.
-        MappingScope = source.MappingScope;
+        MappingVariant = source.MappingVariant;
         RouteSources = CommandRouteSources.Collect(source);
     }
 

@@ -22,14 +22,14 @@ public sealed class ShardEntityMetadataProvider : IEntityMetadataProvider
     }
 
     /// <inheritdoc />
-    public IEntityMetadata GetMetadata(Type entityType, in MappingScope scope)
+    public IEntityMetadata GetMetadata(Type entityType, in MappingVariant scope)
     {
         ArgumentNullException.ThrowIfNull(entityType);
-        if (scope == MappingScope.Default)
+        if (scope == MappingVariant.Default)
             return _inner.GetMetadata(entityType, scope);
 
         var bucket = ParseBucket(scope.Key, _topology.Ring.BucketCount);
-        var metadata = _inner.GetMetadata(entityType, MappingScope.Default);
+        var metadata = _inner.GetMetadata(entityType, MappingVariant.Default);
         return _topology.PlacementMode switch
         {
             BucketPlacementMode.SchemaPerBucket => new ShardMetadata(
@@ -44,7 +44,7 @@ public sealed class ShardEntityMetadataProvider : IEntityMetadataProvider
     }
 
     /// <inheritdoc />
-    public string GetColumnName(PropertyInfo property, in MappingScope scope, INamingConvention? convention)
+    public string GetColumnName(PropertyInfo property, in MappingVariant scope, INamingConvention? convention)
         => _inner.GetColumnName(property, scope, convention);
 
     private static int ParseBucket(string? scopeKey, int bucketCount)
@@ -53,12 +53,12 @@ public sealed class ShardEntityMetadataProvider : IEntityMetadataProvider
             throw new InvalidOperationException("A non-default bucket scope must contain a bucket number.");
 
         if (!int.TryParse(scopeKey, NumberStyles.None, CultureInfo.InvariantCulture, out var bucket))
-            throw new InvalidOperationException($"The mapping scope key '{scopeKey}' is not a bucket number.");
+            throw new InvalidOperationException($"The mapping variant key '{scopeKey}' is not a bucket number.");
 
         if ((uint)bucket >= (uint)bucketCount)
         {
             throw new InvalidOperationException(
-                $"The mapping scope key '{scopeKey}' is outside [0, {bucketCount}).");
+                $"The mapping variant key '{scopeKey}' is outside [0, {bucketCount}).");
         }
 
         return bucket;

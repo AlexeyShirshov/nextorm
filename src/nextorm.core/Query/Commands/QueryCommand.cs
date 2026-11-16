@@ -23,7 +23,7 @@ internal readonly struct QueryShape
     /// <summary>The selective query-filter scope disabled for this command, or <c>null</c> for none.</summary>
     public QueryFilterScope? FilterScope { get; init; }
     /// <summary>The runtime mapping variant selected for this command.</summary>
-    public MappingScope MappingScope { get; init; }
+    public MappingVariant MappingVariant { get; init; }
     /// <summary>Joins accumulated by the builder.</summary>
     public JoinExpression[]? Joins { get; init; }
     /// <summary>Paging (limit/offset) applied to the query.</summary>
@@ -139,7 +139,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     internal bool IdentitySlotAliases { get; set; }
     private bool _dontCache;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
-    internal MappingScope MappingScope { get; set; } = MappingScope.Default;
+    internal MappingVariant MappingVariant { get; set; } = MappingVariant.Default;
 
     /// <summary>
     /// The entity type the command is routed by. Projected and scalar commands have no
@@ -414,7 +414,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         IdentitySlotAliases = source.IdentitySlotAliases;
         _condition = forCache ? null : source._condition;
         _filterScope = source._filterScope;
-        MappingScope = source.MappingScope;
+        MappingVariant = source.MappingVariant;
         RouteEntityType = source.RouteEntityType;
         // Own a private array, exactly like the definition constructor: preparation writes the prepared
         // copy back into the array (PrepareJoin), so sharing it would let one command's preparation
@@ -476,7 +476,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _srcType = shape.SrcType;
         _condition = shape.Condition;
         _filterScope = shape.FilterScope ?? QueryFilterScope.None;
-        MappingScope = shape.MappingScope;
+        MappingVariant = shape.MappingVariant;
         _joins = shape.Joins is { } joins
             ? (ownJoins ? joins : CloneJoinArray(joins)!)
             : null;

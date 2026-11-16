@@ -8,7 +8,7 @@ using NextORM.Sqlite;
 namespace NextORM.Integration.Tests;
 
 [Collection("Sqlite")]
-public sealed class SqliteMappingScopeLiveTests : ProviderTestSuite
+public sealed class SqliteMappingVariantLiveTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqliteTestProvider.Instance;
 
@@ -20,7 +20,7 @@ public sealed class SqliteMappingScopeLiveTests : ProviderTestSuite
         using (var setup = context.CreateCommand("ATTACH DATABASE ':memory:' AS scope_live; CREATE TABLE scope_live.scope_rows (live_id INTEGER PRIMARY KEY, live_name TEXT NOT NULL); INSERT INTO scope_live.scope_rows VALUES (41, 'scoped'); CREATE TABLE scope_rows (id INTEGER PRIMARY KEY, name TEXT NOT NULL); INSERT INTO scope_rows VALUES (99, 'default');"))
             setup.ExecuteNonQuery();
 
-        var rows = context.From<ScopedRow>().WithScope(Scope).OrderBy(row => row.Id).Select(row => row.Id).ToList();
+        var rows = context.From<ScopedRow>().WithVariant(Scope).OrderBy(row => row.Id).Select(row => row.Id).ToList();
 
         rows.Should().Equal(41);
     }
@@ -44,7 +44,7 @@ public sealed class SqliteMappingScopeLiveTests : ProviderTestSuite
         context.CreateDeleteBuilder<ScopedDmlRow>()
             .Where(row => row.Id == 2)
             .Delete().Should().Be(1);
-        context.From<ScopedDmlRow>().WithScope(new MappingScope("livedml"))
+        context.From<ScopedDmlRow>().WithVariant(new MappingVariant("livedml"))
             .OrderBy(row => row.Id).Select(row => row.Name).ToList()
             .Should().Equal("scoped-updated", "scoped-insert");
         using var defaultRead = context.CreateCommand("SELECT name FROM main.scope_dml_rows WHERE id = 1");
@@ -63,32 +63,32 @@ public sealed class SqliteMappingScopeLiveTests : ProviderTestSuite
 
     private static DataContextBuilder DmlBuilder() => new DataContextBuilder()
         .UseEntityMetadataProvider(new LiveDmlMetadataProvider())
-        .UseScopeResolver(new LiveDmlScopeResolver());
+        .UseVariantResolver(new LiveDmlVariantResolver());
 
     private static DataContextBuilder Builder() => new DataContextBuilder()
         .UseEntityMetadataProvider(new LiveMetadataProvider())
-        .UseScopeResolver(new LiveScopeResolver());
+        .UseVariantResolver(new LiveVariantResolver());
 
-    private static readonly MappingScope Scope = new("live");
+    private static readonly MappingVariant Scope = new("live");
 
     private sealed class ScopedRow { public int Id { get; set; } public string Name { get; set; } = ""; }
 
-    private sealed class LiveScopeResolver : IEntityScopeResolver
+    private sealed class LiveVariantResolver : IEntityVariantResolver
     {
-        public MappingScope Resolve(Type entityType) => Scope;
-        public MappingScope Resolve(Type entityType, object entity) => Scope;
-        public MappingScope Resolve(Type entityType, IReadOnlyList<object?> keyValues) => Scope;
+        public MappingVariant Resolve(Type entityType) => Scope;
+        public MappingVariant Resolve(Type entityType, object entity) => Scope;
+        public MappingVariant Resolve(Type entityType, IReadOnlyList<object?> keyValues) => Scope;
     }
 
     private sealed class LiveMetadataProvider : IEntityMetadataProvider
     {
         private readonly DefaultEntityMetadataProvider _inner = new();
-        public IEntityMetadata GetMetadata(Type entityType, in MappingScope scope)
+        public IEntityMetadata GetMetadata(Type entityType, in MappingVariant scope)
         {
-            var metadata = _inner.GetMetadata(entityType, MappingScope.Default);
+            var metadata = _inner.GetMetadata(entityType, MappingVariant.Default);
             return new Metadata(metadata.Properties.Select(p => (IPropertyMetadata)new Property(p.PropertyInfo, "live_" + p.PropertyInfo.Name.ToLowerInvariant())).ToArray());
         }
-        public string GetColumnName(PropertyInfo property, in MappingScope scope, INamingConvention? convention) => "live_" + property.Name.ToLowerInvariant();
+        public string GetColumnName(PropertyInfo property, in MappingVariant scope, INamingConvention? convention) => "live_" + property.Name.ToLowerInvariant();
     }
 
     private sealed class Metadata(IReadOnlyList<IPropertyMetadata> properties) : IEntityMetadata
@@ -105,7 +105,7 @@ public sealed class SqliteMappingScopeLiveTests : ProviderTestSuite
     }
 }
 
-public sealed class PostgresMappingScopeLiveTests : ProviderTestSuite
+public sealed class PostgresMappingVariantLiveTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => PostgresTestProvider.Instance;
 
@@ -117,7 +117,7 @@ public sealed class PostgresMappingScopeLiveTests : ProviderTestSuite
         using (var setup = context.CreateCommand("CREATE SCHEMA IF NOT EXISTS scope_live; CREATE TABLE IF NOT EXISTS scope_live.scope_rows (live_id INTEGER PRIMARY KEY, live_name TEXT NOT NULL); TRUNCATE TABLE scope_live.scope_rows; INSERT INTO scope_live.scope_rows VALUES (41, 'scoped'); CREATE TABLE IF NOT EXISTS public.scope_rows (id INTEGER PRIMARY KEY, name TEXT NOT NULL); TRUNCATE TABLE public.scope_rows; INSERT INTO public.scope_rows VALUES (99, 'default');"))
             setup.ExecuteNonQuery();
 
-        var rows = context.From<ScopedRow>().WithScope(Scope).OrderBy(row => row.Id).Select(row => row.Id).ToList();
+        var rows = context.From<ScopedRow>().WithVariant(Scope).OrderBy(row => row.Id).Select(row => row.Id).ToList();
 
         rows.Should().Equal(41);
     }
@@ -154,7 +154,7 @@ public sealed class PostgresMappingScopeLiveTests : ProviderTestSuite
             .WhenNotMatchedInsert()
             .Merge().Should().Be(1);
 
-        context.From<ScopedDmlRow>().WithScope(new MappingScope("livedml"))
+        context.From<ScopedDmlRow>().WithVariant(new MappingVariant("livedml"))
             .OrderBy(row => row.Id).Select(row => row.Name).ToList()
             .Should().Equal("scoped-merged", "scoped-insert", "scoped-merge-insert");
         using var defaultRead = context.CreateCommand("SELECT name FROM public.scope_dml_rows WHERE id = 1");
@@ -171,13 +171,13 @@ public sealed class PostgresMappingScopeLiveTests : ProviderTestSuite
 
         context.CreateMergeBuilder<ScopedDmlRow>()
             .Using(new[] { new ScopedDmlRow { Id = 1, Name = "batch-merged" }, new ScopedDmlRow { Id = 2, Name = "batch-inserted" } })
-            .WithScope(new MappingScope("livedml"))
+            .WithVariant(new MappingVariant("livedml"))
             .OnKeys()
             .WhenMatchedUpdate()
             .WhenNotMatchedInsert()
             .Merge().Should().Be(2);
 
-        context.From<ScopedDmlRow>().WithScope(new MappingScope("livedml"))
+        context.From<ScopedDmlRow>().WithVariant(new MappingVariant("livedml"))
             .OrderBy(row => row.Id).Select(row => row.Name).ToList()
             .Should().Equal("batch-merged", "batch-inserted");
         using var defaultRead = context.CreateCommand("SELECT name FROM public.scope_dml_rows WHERE id = 1");
@@ -194,36 +194,36 @@ public sealed class PostgresMappingScopeLiveTests : ProviderTestSuite
 
         context.CreateTruncateBuilder<ScopedDmlRow>().Execute();
 
-        context.From<ScopedDmlRow>().WithScope(new MappingScope("livedml")).Count().Should().Be(0);
+        context.From<ScopedDmlRow>().WithVariant(new MappingVariant("livedml")).Count().Should().Be(0);
         using var defaultRead = context.CreateCommand("SELECT name FROM public.scope_dml_rows WHERE id = 1");
         defaultRead.ExecuteScalar().Should().Be("default-sentinel");
     }
 
     private static DataContextBuilder DmlBuilder() => new DataContextBuilder()
         .UseEntityMetadataProvider(new LiveDmlMetadataProvider())
-        .UseScopeResolver(new LiveDmlScopeResolver());
+        .UseVariantResolver(new LiveDmlVariantResolver());
 
     private static DataContextBuilder Builder() => new DataContextBuilder()
         .UseEntityMetadataProvider(new LiveMetadataProvider())
-        .UseScopeResolver(new LiveScopeResolver());
+        .UseVariantResolver(new LiveVariantResolver());
 
-    private static readonly MappingScope Scope = new("live");
+    private static readonly MappingVariant Scope = new("live");
     private sealed class ScopedRow { public int Id { get; set; } public string Name { get; set; } = ""; }
-    private sealed class LiveScopeResolver : IEntityScopeResolver
+    private sealed class LiveVariantResolver : IEntityVariantResolver
     {
-        public MappingScope Resolve(Type entityType) => Scope;
-        public MappingScope Resolve(Type entityType, object entity) => Scope;
-        public MappingScope Resolve(Type entityType, IReadOnlyList<object?> keyValues) => Scope;
+        public MappingVariant Resolve(Type entityType) => Scope;
+        public MappingVariant Resolve(Type entityType, object entity) => Scope;
+        public MappingVariant Resolve(Type entityType, IReadOnlyList<object?> keyValues) => Scope;
     }
     private sealed class LiveMetadataProvider : IEntityMetadataProvider
     {
         private readonly DefaultEntityMetadataProvider _inner = new();
-        public IEntityMetadata GetMetadata(Type entityType, in MappingScope scope)
+        public IEntityMetadata GetMetadata(Type entityType, in MappingVariant scope)
         {
-            var metadata = _inner.GetMetadata(entityType, MappingScope.Default);
+            var metadata = _inner.GetMetadata(entityType, MappingVariant.Default);
             return new Metadata(metadata.Properties.Select(p => (IPropertyMetadata)new Property(p.PropertyInfo, "live_" + p.PropertyInfo.Name.ToLowerInvariant())).ToArray());
         }
-        public string GetColumnName(PropertyInfo property, in MappingScope scope, INamingConvention? convention) => "live_" + property.Name.ToLowerInvariant();
+        public string GetColumnName(PropertyInfo property, in MappingVariant scope, INamingConvention? convention) => "live_" + property.Name.ToLowerInvariant();
     }
     private sealed class Metadata(IReadOnlyList<IPropertyMetadata> properties) : IEntityMetadata
     {
@@ -245,28 +245,28 @@ internal sealed class ScopedDmlRow
     public string Name { get; set; } = "";
 }
 
-internal sealed class LiveDmlScopeResolver : IEntityScopeResolver
+internal sealed class LiveDmlVariantResolver : IEntityVariantResolver
 {
-    private static readonly MappingScope Scope = new("livedml");
-    public MappingScope Resolve(Type entityType) => Scope;
-    public MappingScope Resolve(Type entityType, object entity) => Scope;
-    public MappingScope Resolve(Type entityType, IReadOnlyList<object?> keyValues) => Scope;
+    private static readonly MappingVariant Scope = new("livedml");
+    public MappingVariant Resolve(Type entityType) => Scope;
+    public MappingVariant Resolve(Type entityType, object entity) => Scope;
+    public MappingVariant Resolve(Type entityType, IReadOnlyList<object?> keyValues) => Scope;
 }
 
 internal sealed class LiveDmlMetadataProvider : IEntityMetadataProvider
 {
     private readonly DefaultEntityMetadataProvider _inner = new();
 
-    public IEntityMetadata GetMetadata(Type entityType, in MappingScope scope)
+    public IEntityMetadata GetMetadata(Type entityType, in MappingVariant scope)
     {
-        var metadata = _inner.GetMetadata(entityType, MappingScope.Default);
+        var metadata = _inner.GetMetadata(entityType, MappingVariant.Default);
         var properties = metadata.Properties.Select(property =>
             (IPropertyMetadata)new LiveDmlProperty(property.PropertyInfo,
                 "live_" + property.PropertyInfo.Name.ToLowerInvariant())).ToArray();
         return new LiveDmlMetadata(properties);
     }
 
-    public string GetColumnName(PropertyInfo property, in MappingScope scope, INamingConvention? convention)
+    public string GetColumnName(PropertyInfo property, in MappingVariant scope, INamingConvention? convention)
         => "live_" + property.Name.ToLowerInvariant();
 
     private sealed class LiveDmlMetadata(IReadOnlyList<IPropertyMetadata> properties) : IEntityMetadata

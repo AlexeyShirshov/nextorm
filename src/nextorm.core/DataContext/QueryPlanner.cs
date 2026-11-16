@@ -22,7 +22,7 @@ internal sealed class QueryPlanner : IQueryPlanner
 {
     private readonly IDataContext _context;
     private readonly IEntityMetadataProvider _metadataProvider;
-    private readonly IEntityScopeResolver _scopeResolver;
+    private readonly IEntityVariantResolver _scopeResolver;
     private readonly Func<ISqlDialect> _dialect;
     private readonly ILogger? _logger;
     private readonly Type _contextType;
@@ -80,7 +80,7 @@ internal sealed class QueryPlanner : IQueryPlanner
         ProviderHooks hooks,
         LoggingOptions logging,
         IEntityMetadataProvider metadataProvider,
-        IEntityScopeResolver scopeResolver)
+        IEntityVariantResolver scopeResolver)
     {
         _context = context;
         _metadataProvider = metadataProvider;
@@ -105,7 +105,7 @@ internal sealed class QueryPlanner : IQueryPlanner
         ProviderHooks hooks,
         LoggingOptions logging)
         : this(context, dialect, contextType, hooks, logging,
-            new DefaultEntityMetadataProvider(), new DefaultEntityScopeResolver())
+            new DefaultEntityMetadataProvider(), new DefaultEntityVariantResolver())
     {
     }
 
@@ -182,8 +182,8 @@ internal sealed class QueryPlanner : IQueryPlanner
             QuoteIdentifiers = source.ResolvedQuoteIdentifiers,
             NamingConvention = source.ResolvedNamingConvention,
             KeywordCase = source.ResolvedKeywordCase,
-            ParameterNamePrefix = string.IsNullOrEmpty(parameterNamePrefix) ? source.MappingScope.ParameterPrefix : parameterNamePrefix,
-            MappingScope = source.MappingScope,
+            ParameterNamePrefix = string.IsNullOrEmpty(parameterNamePrefix) ? source.MappingVariant.ParameterPrefix : parameterNamePrefix,
+            MappingVariant = source.MappingVariant,
             MetadataProvider = _metadataProvider,
             RenderMutationBody = _renderMutationBody,
             // A statement source renders a select list whose output is addressed by column identifier
@@ -250,8 +250,8 @@ internal sealed class QueryPlanner : IQueryPlanner
             QuoteIdentifiers = command.ResolvedQuoteIdentifiers,
             NamingConvention = command.ResolvedNamingConvention,
             KeywordCase = command.ResolvedKeywordCase,
-            ParameterNamePrefix = string.IsNullOrEmpty(parameterNamePrefix) ? command.MappingScope.ParameterPrefix : parameterNamePrefix,
-            MappingScope = command.MappingScope,
+            ParameterNamePrefix = string.IsNullOrEmpty(parameterNamePrefix) ? command.MappingVariant.ParameterPrefix : parameterNamePrefix,
+            MappingVariant = command.MappingVariant,
             MetadataProvider = _metadataProvider,
             MutationLowering = lowering,
         };
@@ -499,7 +499,7 @@ internal sealed class QueryPlanner : IQueryPlanner
 
         var quoteIdentifiers = source.ResolvedQuoteIdentifiers;
         var namingConvention = source.ResolvedNamingConvention;
-        var mappingScope = source.MappingScope;
+        var mappingVariant = source.MappingVariant;
 
         var ctx = new SqlBuildContext
         {
@@ -514,8 +514,8 @@ internal sealed class QueryPlanner : IQueryPlanner
             QuoteIdentifiers = quoteIdentifiers,
             NamingConvention = namingConvention,
             KeywordCase = source.ResolvedKeywordCase,
-            ParameterNamePrefix = string.IsNullOrEmpty(parameterNamePrefix) ? mappingScope.ParameterPrefix : parameterNamePrefix,
-            MappingScope = mappingScope,
+            ParameterNamePrefix = string.IsNullOrEmpty(parameterNamePrefix) ? mappingVariant.ParameterPrefix : parameterNamePrefix,
+            MappingVariant = mappingVariant,
             MetadataProvider = _metadataProvider,
             MutationLowering = lowering,
         };
@@ -528,7 +528,7 @@ internal sealed class QueryPlanner : IQueryPlanner
                 builder.Append(", ");
 
             var assignment = command.Assignments[i];
-            builder.Append(SqlMutationBuilder.RenderColumnReference(ctx.Dialect, quoteIdentifiers, assignment.Property, namingConvention, mappingScope, _metadataProvider));
+            builder.Append(SqlMutationBuilder.RenderColumnReference(ctx.Dialect, quoteIdentifiers, assignment.Property, namingConvention, mappingVariant, _metadataProvider));
             builder.Append(" = ");
 
             switch (assignment.Kind)
@@ -548,7 +548,7 @@ internal sealed class QueryPlanner : IQueryPlanner
                     builder.Append(ctx.Dialect.MakeParam(name));
                     break;
                 case UpdateValueKind.Column:
-                    builder.Append(SqlMutationBuilder.RenderColumnReference(ctx.Dialect, quoteIdentifiers, assignment.Column!, namingConvention, mappingScope, _metadataProvider));
+                    builder.Append(SqlMutationBuilder.RenderColumnReference(ctx.Dialect, quoteIdentifiers, assignment.Column!, namingConvention, mappingVariant, _metadataProvider));
                     break;
                 default:
                     using (var visitor = ctx.CreateColumnVisitor(command.EntityType!, 0, dontNeedAlias: true))
@@ -730,9 +730,9 @@ internal sealed class QueryPlanner : IQueryPlanner
             // The statement-level occurrence capture, created by the planning render only. The parameter
             // extraction pass (paramMode) never creates one, so it records nothing.
             Capture = capture,
-            MappingScope = queryCommand.MappingScope,
+            MappingVariant = queryCommand.MappingVariant,
             MetadataProvider = _metadataProvider,
-            ParameterNamePrefix = queryCommand.MappingScope.ParameterPrefix,
+            ParameterNamePrefix = queryCommand.MappingVariant.ParameterPrefix,
         };
         var sqlBuilder = new SqlBuilder(in ctx);
         return sqlBuilder.MakeSelect(queryCommand);
@@ -844,10 +844,10 @@ internal sealed class QueryPlanner : IQueryPlanner
             && !queryCommand.HasDataModifyingCte
             && !queryCommand.HasTemporaryTableSource()
             && !IsSharedAnyCommand(queryCommand)
-            // The value-free raw fingerprint describes the command graph, not the mapping scope: a
+            // The value-free raw fingerprint describes the command graph, not the mapping variant: a
             // recipe prepared for one shard would be adopted by a command targeting another shard and
             // would render the wrong table. Scope-keyed plans keep the ordinary (normalized key) route.
-            && queryCommand.MappingScope == MappingScope.Default)
+            && queryCommand.MappingVariant == MappingVariant.Default)
         {
             // A global/builder query filter is injected only during preparation and is absent from the
             // value-free raw shape, so a fresh command whose raw graph resolves ANY applicable filter for
@@ -1029,7 +1029,7 @@ internal sealed class QueryPlanner : IQueryPlanner
                 Cache = cache,
             })
             {
-                MappingScope = queryCommand.MappingScope,
+                MappingVariant = queryCommand.MappingVariant,
                 RouteEntityType = queryCommand.RouteEntityType,
                 RouteSources = CommandRouteSources.Collect(queryCommand),
             };
@@ -1176,18 +1176,18 @@ internal sealed class QueryPlanner : IQueryPlanner
 
     // A table source is immutable, so one instance can be shared by every query (and cached plan)
     // that selects from the entity. This removes a small allocation and a metadata lookup per join.
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(Type Type, MappingScope Scope), FromExpression> _fromCache = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(Type Type, MappingVariant Scope), FromExpression> _fromCache = new();
 
     internal static void ClearFromCache() => _fromCache.Clear();
 
     private FromExpression GetFrom(Type t) => GetFrom(t, _scopeResolver.Resolve(t));
 
-    private FromExpression GetFrom(Type t, MappingScope scope)
+    private FromExpression GetFrom(Type t, MappingVariant scope)
     {
         // The FROM cache is process-wide and keyed by (type, scope) only. A scoped table depends on the
         // metadata provider that produced it, and two contexts may configure different topologies under
         // the same shard id, so a non-default scope is resolved per plan instead of being shared.
-        var cacheable = scope == MappingScope.Default;
+        var cacheable = scope == MappingVariant.Default;
         if (cacheable && _fromCache.TryGetValue((t, scope), out var cached))
             return cached;
 
@@ -1223,7 +1223,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             {
                 var propT1 = srcType.GetProperty("Item1") ?? throw new BuildSqlCommandException($"Projection {srcType} must have Item1 property");
 
-                var scope = queryCommand is { MappingScope: var selected } && selected != MappingScope.Default
+                var scope = queryCommand is { MappingVariant: var selected } && selected != MappingVariant.Default
                     ? selected
                     : _scopeResolver.Resolve(propT1.PropertyType);
                 var f = GetFrom(propT1.PropertyType, scope);
@@ -1232,7 +1232,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             }
             else
             {
-                var scope = queryCommand is { MappingScope: var selected } && selected != MappingScope.Default
+                var scope = queryCommand is { MappingVariant: var selected } && selected != MappingVariant.Default
                     ? selected
                     : _scopeResolver.Resolve(srcType);
                 return GetFrom(srcType, scope);

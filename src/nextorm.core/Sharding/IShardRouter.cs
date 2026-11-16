@@ -3,8 +3,8 @@ using System.Reflection;
 
 namespace NextORM.Core;
 
-/// <summary>Resolves entity shard keys to mapping scopes.</summary>
-public interface IShardRouter : IEntityScopeResolver
+/// <summary>Resolves entity shard keys to mapping variants.</summary>
+public interface IShardRouter : IEntityVariantResolver
 {
     /// <summary>Returns whether the entity type declares a shard key.</summary>
     /// <param name="entityType">The entity type to inspect.</param>
@@ -27,12 +27,34 @@ public interface IShardRouter : IEntityScopeResolver
     /// <returns>The owning shard identifier.</returns>
     string GetShard(int bucket);
 
-    /// <summary>Resolves an ordered list of shard-key values to a mapping scope.</summary>
+    /// <summary>Gets the mapping variant of a bucket number.</summary>
+    /// <param name="bucket">A bucket in the range <c>[0, BucketCount)</c>.</param>
+    /// <returns>The scope that addresses that bucket, ready for <c>WithVariant</c>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="bucket"/> is outside the range.</exception>
+    MappingVariant GetScope(int bucket);
+
+    /// <summary>Gets the bucket an entity instance belongs to.</summary>
+    /// <param name="entityType">The entity type being routed.</param>
+    /// <param name="entity">The instance whose shard-key properties select the bucket.</param>
+    /// <returns>The bucket number, in the range <c>[0, BucketCount)</c>.</returns>
+    /// <exception cref="InvalidOperationException"><paramref name="entityType"/> declares no shard key.</exception>
+    int GetBucket(Type entityType, object entity);
+
+    /// <summary>Gets the bucket an ordered list of shard-key values hashes to.</summary>
+    /// <param name="entityType">The entity type being routed.</param>
+    /// <param name="keyValues">The shard-key values in declared property order.</param>
+    /// <returns>The bucket number, in the range <c>[0, BucketCount)</c>.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// <paramref name="entityType"/> declares no shard key, or the value count does not match it.
+    /// </exception>
+    int GetBucket(Type entityType, IReadOnlyList<object?> keyValues);
+
+    /// <summary>Resolves an ordered list of shard-key values to a mapping variant.</summary>
     /// <param name="entityType">The entity type being routed.</param>
     /// <param name="keyValues">The shard-key values in declared property order.</param>
     /// <returns>The default scope for an unsharded type; otherwise the selected bucket scope.</returns>
     /// <exception cref="InvalidOperationException">A sharded entity has missing or mismatched key values.</exception>
-    MappingScope ResolveShard(Type entityType, IReadOnlyList<object?> keyValues);
+    MappingVariant ResolveShard(Type entityType, IReadOnlyList<object?> keyValues);
 }
 
 /// <summary>Routes entity instances and explicit shard-key values through a shard topology.</summary>
@@ -76,47 +98,88 @@ public sealed class ShardRouter : IShardRouter
     public string GetShard(int bucket) => _topology.Ring.GetShard(bucket);
 
     /// <inheritdoc />
-    public MappingScope Resolve(Type entityType)
+    public MappingVariant GetScope(int bucket)
     {
-        ArgumentNullException.ThrowIfNull(entityType);
-        return MappingScope.Default;
+        if ((uint)bucket >= (uint)BucketCount)
+            throw new ArgumentOutOfRangeException(nameof(bucket), bucket, $"Bucket '{bucket}' is outside [0, {BucketCount}).");
+
+        return new MappingVariant(bucket.ToString(CultureInfo.InvariantCulture));
     }
 
     /// <inheritdoc />
-    public MappingScope Resolve(Type entityType, object entity)
+    public MappingVariant Resolve(Type entityType)
+    {
+        ArgumentNullException.ThrowIfNull(entityType);
+        return MappingVariant.Default;
+    }
+
+    /// <inheritdoc />
+    public MappingVariant Resolve(Type entityType, object entity)
     {
         ArgumentNullException.ThrowIfNull(entityType);
         ArgumentNullException.ThrowIfNull(entity);
-        if (!IsSharded(entityType))
-            return MappingScope.Default;
-
-        var properties = _keyProvider.GetShardKey(entityType);
-        var values = new object?[properties.Count];
-        for (var index = 0; index < properties.Count; index++)
-            values[index] = properties[index].GetValue(entity);
-        return ResolveShard(entityType, values);
+        return IsSharded(entityType) ? GetScope(GetBucket(entityType, entity)) : MappingVariant.Default;
     }
 
     /// <inheritdoc />
-    public MappingScope Resolve(Type entityType, IReadOnlyList<object?> keyValues)
+    public MappingVariant Resolve(Type entityType, IReadOnlyList<object?> keyValues)
         => ResolveShard(entityType, keyValues);
 
     /// <inheritdoc />
-    public MappingScope ResolveShard(Type entityType, IReadOnlyList<object?> keyValues)
+    public int GetBucket(Type entityType, object entity)
     {
         ArgumentNullException.ThrowIfNull(entityType);
-        if (!IsSharded(entityType))
-            return MappingScope.Default;
-
+        ArgumentNullException.ThrowIfNull(entity);
         var properties = _keyProvider.GetShardKey(entityType);
-        if (keyValues is null || keyValues.Count == 0 || keyValues.Count != properties.Count)
+        if (properties.Count == 0)
+            throw new InvalidOperationException($"Entity '{entityType}' does not declare a shard key.");
+
+        var values = new object?[properties.Count];
+        for (var index = 0; index < properties.Count; index++)
+            values[index] = properties[index].GetValue(entity);
+        return GetBucket(entityType, values);
+    }
+
+    /// <inheritdoc />
+    public int GetBucket(Type entityType, IReadOnlyList<object?> keyValues)
+    {
+        ArgumentNullException.ThrowIfNull(entityType);
+        var properties = _keyProvider.GetShardKey(entityType);
+        if (properties.Count == 0)
+            throw new InvalidOperationException($"Entity '{entityType}' does not declare a shard key.");
+        if (keyValues is null || keyValues.Count != properties.Count)
         {
             throw new InvalidOperationException(
                 $"Entity '{entityType}' requires {properties.Count} shard-key value(s), but received {keyValues?.Count ?? 0}.");
         }
 
-        var bytes = ShardKeyHasher.GetCanonicalBytes(keyValues);
-        var bucket = _topology.Ring.GetBucket(bytes);
-        return new MappingScope(bucket.ToString(CultureInfo.InvariantCulture));
+        return _topology.Ring.GetBucket(ShardKeyHasher.GetCanonicalBytes(keyValues));
+    }
+
+    /// <inheritdoc />
+    public MappingVariant ResolveShard(Type entityType, IReadOnlyList<object?> keyValues)
+    {
+        ArgumentNullException.ThrowIfNull(entityType);
+        return IsSharded(entityType) ? GetScope(GetBucket(entityType, keyValues)) : MappingVariant.Default;
+    }
+}
+
+/// <summary>
+/// Type-inferring convenience over <see cref="IShardRouter"/>: the shard key is declared on the entity
+/// type, so a caller holding an instance does not need to spell the type out.
+/// </summary>
+public static class ShardRouterExtensions
+{
+    /// <summary>Gets the bucket an entity instance belongs to.</summary>
+    /// <typeparam name="TEntity">The entity type, taken from the argument.</typeparam>
+    /// <param name="router">The router to resolve with.</param>
+    /// <param name="entity">The instance whose shard-key properties select the bucket.</param>
+    /// <returns>The bucket number, in the range <c>[0, BucketCount)</c>.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException"><typeparamref name="TEntity"/> declares no shard key.</exception>
+    public static int GetBucket<TEntity>(this IShardRouter router, TEntity entity)
+    {
+        ArgumentNullException.ThrowIfNull(router);
+        return router.GetBucket(typeof(TEntity), entity!);
     }
 }

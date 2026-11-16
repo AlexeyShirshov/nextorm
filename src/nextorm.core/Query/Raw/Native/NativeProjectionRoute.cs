@@ -142,9 +142,9 @@ internal static class NativeProjectionRoute
         if (command.IsPrepared
             || command.HasEverPrepared
             || !command.Cache
-            // The shape header does not carry the mapping scope, so a native hit would execute the
+            // The shape header does not carry the mapping variant, so a native hit would execute the
             // holder compiled for another shard and read the wrong table.
-            || command.MappingScope != MappingScope.Default
+            || command.MappingVariant != MappingVariant.Default
             || command.CustomData is RawSqlOverride
             || command.HasDataModifyingCte
             || command.HasTemporaryTableSource()

@@ -22,17 +22,17 @@ public sealed class UpdateBuilder<TEntity>
     private readonly IDataContext _dataContext;
     private readonly IEntityMetadata _metadata;
     private readonly IEntityMetadata _targetMetadata;
-    private readonly MappingScope _mappingScope;
+    private readonly MappingVariant _mappingVariant;
     private readonly List<UpdateAssignment> _assignments = [];
     private DynamicColumnSet? _dynamicColumns;
     private EntityBuilder<TEntity>? _filter;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
 
-    internal UpdateBuilder(IDataContext dataContext, IEntityMetadata metadata, MappingScope mappingScope = default, IEntityMetadata? targetMetadata = null)
+    internal UpdateBuilder(IDataContext dataContext, IEntityMetadata metadata, MappingVariant mappingVariant = default, IEntityMetadata? targetMetadata = null)
     {
         _dataContext = dataContext;
         _metadata = metadata;
-        _mappingScope = mappingScope;
+        _mappingVariant = mappingVariant;
         _targetMetadata = targetMetadata ?? metadata;
     }
 
@@ -292,7 +292,7 @@ public sealed class UpdateBuilder<TEntity>
     }
 
     /// <summary>
-    /// Builds the update command for <paramref name="source"/>, carrying the mapping scope the statement
+    /// Builds the update command for <paramref name="source"/>, carrying the mapping variant the statement
     /// must execute under. The source command resolves a shard scope from its predicate when the builder
     /// carries no explicit scope, and the renderer reads the source's scope while the executor reads the
     /// command's own: both have to name the same bucket.
@@ -309,7 +309,7 @@ public sealed class UpdateBuilder<TEntity>
         OutputIntoClause? outputInto = null)
         => new(typeof(TEntity), _targetMetadata.TableName!, _targetMetadata.IsTableNameAuto, _assignments, source, keys, returningColumns, outputInto, _dynamicColumns, _targetMetadata.Schema)
         {
-            MappingScope = _mappingScope != MappingScope.Default ? _mappingScope : source.MappingScope,
+            MappingVariant = _mappingVariant != MappingVariant.Default ? _mappingVariant : source.MappingVariant,
         };
 
     /// <summary>Builds the update command for use as a side-effecting step of a batch.</summary>
@@ -348,8 +348,8 @@ public sealed class UpdateBuilder<TEntity>
     private EntityBuilder<TEntity> FilterSource()
     {
         var source = _filter ?? _dataContext.From<TEntity>();
-        if (_mappingScope != MappingScope.Default)
-            source = source.WithScope(_mappingScope);
+        if (_mappingVariant != MappingVariant.Default)
+            source = source.WithVariant(_mappingVariant);
 
         return source.WithFilterScope(_filterScope);
     }

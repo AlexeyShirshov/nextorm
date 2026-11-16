@@ -50,10 +50,10 @@ internal abstract class MutationCommand
     public Type EntityType { get; }
 
     /// <summary>
-    /// The mapping scope (bucket) the mutation was built for; it selects the shard connection that
+    /// The mapping variant (bucket) the mutation was built for; it selects the shard connection that
     /// executes the statement. The default scope keeps the context connection.
     /// </summary>
-    internal MappingScope MappingScope { get; set; } = MappingScope.Default;
+    internal MappingVariant MappingVariant { get; set; } = MappingVariant.Default;
 
     /// <summary>
     /// The entity types the statement reads or writes, when they are not just <see cref="EntityType"/>.
@@ -251,7 +251,7 @@ internal sealed class InsertCommand : MutationCommand
         OutputInto = outputInto;
         DynamicColumns = dynamicColumns;
         IsBulkReturning = isBulkReturning;
-        MappingScope = MappingScope.Default;
+        MappingVariant = MappingVariant.Default;
     }
 
     /// <summary>The mapped table name, before the naming convention and identifier quoting are applied.</summary>

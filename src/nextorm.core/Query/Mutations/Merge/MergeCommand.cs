@@ -96,7 +96,7 @@ internal sealed class MergeCommand : MutationCommand
     /// <param name="keyUpdateAssignments">The explicit key-upsert update assignments, or <see langword="null"/> for the no-argument form.</param>
     /// <param name="keyInsertAssignments">The explicit key-upsert insert assignments, or <see langword="null"/> for the no-argument form.</param>
     /// <param name="sourceRow">The single materialized source entity, used to bind original-source values of a native key upsert, or <see langword="null"/>.</param>
-    /// <param name="mappingScope">The runtime mapping variant for this command.</param>
+    /// <param name="mappingVariant">The runtime mapping variant for this command.</param>
     public MergeCommand(
         Type entityType,
         string tableName,
@@ -115,7 +115,7 @@ internal sealed class MergeCommand : MutationCommand
         MergeAssignmentSet? keyUpdateAssignments = null,
         MergeAssignmentSet? keyInsertAssignments = null,
         object? sourceRow = null,
-        MappingScope mappingScope = default)
+        MappingVariant mappingVariant = default)
         : base(SqlStatementType.Merge, entityType)
     {
         FilterScope = filterScope ?? QueryFilterScope.None;
@@ -134,7 +134,7 @@ internal sealed class MergeCommand : MutationCommand
         KeyUpdateAssignments = keyUpdateAssignments;
         KeyInsertAssignments = keyInsertAssignments;
         SourceRow = sourceRow;
-        MappingScope = mappingScope;
+        MappingVariant = mappingVariant;
     }
 
     /// <summary>

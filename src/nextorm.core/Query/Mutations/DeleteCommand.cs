@@ -16,9 +16,9 @@ internal sealed class DeleteCommand : MutationCommand
     /// <param name="keys">The declared key values of the key form, or <see langword="null"/> for the predicate/all-rows forms.</param>
     /// <param name="returningColumns">The mapped columns to return through <c>RETURNING</c>/<c>OUTPUT</c>, or <see langword="null"/> for a plain delete.</param>
     /// <param name="outputInto">The <c>OUTPUT ... INTO</c> target, or <see langword="null"/>.</param>
-    /// <param name="schema">The mapped target schema, when the target uses a non-default mapping scope.</param>
-    /// <param name="mappingScope">The resolved mapping scope for the target.</param>
-    public DeleteCommand(Type entityType, string tableName, bool isTableNameAuto, QueryCommand? condition, IReadOnlyList<KeyValue>? keys, IReadOnlyList<IPropertyMetadata>? returningColumns = null, OutputIntoClause? outputInto = null, string? schema = null, MappingScope mappingScope = default)
+    /// <param name="schema">The mapped target schema, when the target uses a non-default mapping variant.</param>
+    /// <param name="mappingVariant">The resolved mapping variant for the target.</param>
+    public DeleteCommand(Type entityType, string tableName, bool isTableNameAuto, QueryCommand? condition, IReadOnlyList<KeyValue>? keys, IReadOnlyList<IPropertyMetadata>? returningColumns = null, OutputIntoClause? outputInto = null, string? schema = null, MappingVariant mappingVariant = default)
         : base(SqlStatementType.Delete, entityType)
     {
         TableName = tableName;
@@ -28,7 +28,7 @@ internal sealed class DeleteCommand : MutationCommand
         ReturningColumns = returningColumns;
         OutputInto = outputInto;
         Schema = schema;
-        MappingScope = mappingScope;
+        MappingVariant = mappingVariant;
     }
 
     /// <summary>The mapped table name, before the naming convention and identifier quoting are applied.</summary>

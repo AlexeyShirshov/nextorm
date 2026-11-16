@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace NextORM.Core;
 
 /// <summary>Provides data-context builder configuration for shard-aware routing and metadata.</summary>
@@ -22,7 +24,7 @@ public static class ShardDataContextBuilderExtensions
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(topology);
 
-        if (builder.EntityScopeResolver is not DefaultEntityScopeResolver)
+        if (builder.EntityVariantResolver is not DefaultEntityVariantResolver)
         {
             throw new InvalidOperationException(
                 "UseSharding cannot replace a custom entity-scope resolver; configure the resolver before enabling sharding.");
@@ -31,12 +33,46 @@ public static class ShardDataContextBuilderExtensions
         var metadataProvider = new ShardEntityMetadataProvider(builder.EntityMetadataProvider, topology);
         var shardRouter = new ShardRouter(topology, keyProvider);
         builder.UseEntityMetadataProvider(metadataProvider);
-        builder.UseScopeResolver(shardRouter);
+        builder.UseVariantResolver(shardRouter);
         // The sharding topology is one implementation of the general hosting contract: the router claims
         // the sharded types and the topology turns the bucket scope into the owning shard's host.
         builder.AddTopology(topology);
         builder.UseRouteResolver(new ShardRouteResolver(shardRouter, topology.Name));
         builder.ShardTopology = topology;
         return builder;
+    }
+}
+
+/// <summary>
+/// Provides access to the shard router a data context routes with, so a caller holding only the context can
+/// resolve a bucket without keeping the topology at hand.
+/// </summary>
+public static class ShardDataContextExtensions
+{
+    /// <summary>Gets the shard router this context routes with.</summary>
+    /// <param name="context">The context to inspect.</param>
+    /// <returns>The router <see cref="ShardDataContextBuilderExtensions.UseSharding"/> installed on the builder.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">Sharding is not configured for this context.</exception>
+    public static IShardRouter GetShardRouter(this IDataContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return context is DataContext { EntityVariantResolver: IShardRouter router }
+            ? router
+            : throw new InvalidOperationException(
+                "This context has no shard router: enable sharding with UseSharding(topology) on the " +
+                "DataContextBuilder the context is created from.");
+    }
+
+    /// <summary>Tries to get the shard router this context routes with.</summary>
+    /// <param name="context">The context to inspect.</param>
+    /// <param name="router">The configured router, or <see langword="null"/> when sharding is not configured.</param>
+    /// <returns><see langword="true"/> when the context is sharded.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
+    public static bool TryGetShardRouter(this IDataContext context, [NotNullWhen(true)] out IShardRouter? router)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        router = context is DataContext dataContext ? dataContext.EntityVariantResolver as IShardRouter : null;
+        return router is not null;
     }
 }

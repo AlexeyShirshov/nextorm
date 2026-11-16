@@ -16,16 +16,16 @@ public sealed class DeleteBuilder<TEntity>
     private readonly IDataContext _dataContext;
     private readonly IEntityMetadata _metadata;
     private readonly IEntityMetadata _targetMetadata;
-    private readonly MappingScope _mappingScope;
+    private readonly MappingVariant _mappingVariant;
     private EntityBuilder<TEntity>? _filter;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
     private bool _all;
 
-    internal DeleteBuilder(IDataContext dataContext, IEntityMetadata metadata, MappingScope mappingScope = default, IEntityMetadata? targetMetadata = null)
+    internal DeleteBuilder(IDataContext dataContext, IEntityMetadata metadata, MappingVariant mappingVariant = default, IEntityMetadata? targetMetadata = null)
     {
         _dataContext = dataContext;
         _metadata = metadata;
-        _mappingScope = mappingScope;
+        _mappingVariant = mappingVariant;
         _targetMetadata = targetMetadata ?? metadata;
     }
 
@@ -47,7 +47,7 @@ public sealed class DeleteBuilder<TEntity>
         if (_all)
             throw new InvalidOperationException("Where(...) cannot be combined with All(); a delete is either filtered or full-table.");
 
-        _filter = (_filter ?? _dataContext.From<TEntity>().WithScope(_mappingScope)).Where(predicate);
+        _filter = (_filter ?? _dataContext.From<TEntity>().WithVariant(_mappingVariant)).Where(predicate);
         return this;
     }
 
@@ -239,7 +239,7 @@ public sealed class DeleteBuilder<TEntity>
         // The key form carries the target entity's global filter through a no-predicate source command:
         // preparing it injects the filter (minus the IgnoreFilters scope) into the condition, which the
         // planner ANDs to the key equalities.
-        var condition = ApplyFilterScope(_filter ?? _dataContext.From<TEntity>().WithScope(_mappingScope)).ToCommand();
+        var condition = ApplyFilterScope(_filter ?? _dataContext.From<TEntity>().WithVariant(_mappingVariant)).ToCommand();
         return CreateCommand(condition, keys);
     }
 
@@ -277,12 +277,12 @@ public sealed class DeleteBuilder<TEntity>
         // The condition command resolves the shard scope from the predicate when the builder carries no
         // explicit scope; the DELETE target has to follow it, because the renderer reads the command's
         // scope rather than the condition's.
-        var scope = condition is not null && condition.MappingScope != MappingScope.Default
-            ? condition.MappingScope
-            : _mappingScope;
+        var scope = condition is not null && condition.MappingVariant != MappingVariant.Default
+            ? condition.MappingVariant
+            : _mappingVariant;
 
         return new(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, condition, keys, returningColumns, outputInto,
-            scope == MappingScope.Default ? null : _targetMetadata.Schema, scope);
+            scope == MappingVariant.Default ? null : _targetMetadata.Schema, scope);
     }
 
     // Applies the builder's selective filter scope to the source command that carries the DELETE's

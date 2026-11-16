@@ -13,13 +13,13 @@ public sealed class TruncateBuilder<TEntity>
 {
     private readonly IDataContext _dataContext;
     private readonly IEntityMetadata _metadata;
-    private readonly MappingScope _mappingScope;
+    private readonly MappingVariant _mappingVariant;
 
-    internal TruncateBuilder(IDataContext dataContext, IEntityMetadata metadata, MappingScope mappingScope = default)
+    internal TruncateBuilder(IDataContext dataContext, IEntityMetadata metadata, MappingVariant mappingVariant = default)
     {
         _dataContext = dataContext;
         _metadata = metadata;
-        _mappingScope = mappingScope;
+        _mappingVariant = mappingVariant;
     }
 
     /// <summary>The context the truncate executes on.</summary>
@@ -70,7 +70,7 @@ public sealed class TruncateBuilder<TEntity>
     private TruncateCommand BuildCommand()
     {
         EnsureShardScopeResolved();
-        return new(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _mappingScope);
+        return new(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _mappingVariant);
     }
 
     /// <summary>
@@ -79,10 +79,10 @@ public sealed class TruncateBuilder<TEntity>
     /// </summary>
     private void EnsureShardScopeResolved()
     {
-        if (_mappingScope != MappingScope.Default)
+        if (_mappingVariant != MappingVariant.Default)
             return;
 
-        if (_dataContext is not DataContext dataContext || dataContext.EntityScopeResolver is not IShardRouter router)
+        if (_dataContext is not DataContext dataContext || dataContext.EntityVariantResolver is not IShardRouter router)
             return;
 
         if (!router.IsSharded(typeof(TEntity)))
