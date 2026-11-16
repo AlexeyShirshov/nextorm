@@ -51,6 +51,21 @@ await ctx.DeleteAsync(new SimpleEntity { Id = 1 });
 delete from simple_entity where id = @p0
 ```
 
+## Sharded entities
+
+A sharded delete must name the bucket: the statement takes its scope from an equality on the shard key in
+the predicate, or from the entity in the key form. A predicate without that equality — and a full-table
+`All()` delete — throws before SQL instead of naming the default table:
+
+```csharp
+ctx.CreateDeleteBuilder<Order>().Where(x => x.Tenant == tenant).Delete();   // routed by the predicate
+ctx.Delete(new Order { Id = 1 });                                          // routed by the instance
+ctx.CreateDeleteBuilder<Order>().All().ToSql();                            // throws: no bucket to name
+```
+
+The bucket table, its shard and the placement rules are described in
+[Sharding and horizontal partitioning](35-sharding-and-horizontal-partitioning.md).
+
 ## Global query filters
 
 A [global query filter](../advanced/query-filters.md) declared for the deleted entity is `and`-ed into the

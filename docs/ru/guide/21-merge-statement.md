@@ -26,6 +26,24 @@ ctx.CreateMergeBuilder<Order>()
     .Merge();
 ```
 
+Шардированный merge обязан передать вариант явно: билдер получает область только по типу сущности и
+никогда — по значениям источника, поэтому merge без `WithVariant(...)` падает, вместо того чтобы писать
+в таблицу по умолчанию. Вариант — это бакет, поэтому merge идёт по одному бакету за раз:
+
+```csharp
+foreach (var entitiesPerBucket in ctx.GroupByBucket(orders))
+{
+    ctx.CreateMergeBuilder<Order>()
+        .Using(entitiesPerBucket.Rows)
+        .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
+        .WithVariant(entitiesPerBucket.Variant)   // таблица этого бакета на его шарде
+        .Merge();
+}
+```
+
+Бакеты, их физические имена и правила shard key описаны в разделе
+[«Шардирование и горизонтальное партиционирование»](35-sharding-and-horizontal-partitioning.md).
+
 `CreateTruncateBuilder<TEntity>()` также разрешает настроенный для контекста вариант сущности, поэтому `TRUNCATE` использует соответствующую таблицу и схему.
 
 Сам механизм варианта — резолвер, провайдер метаданных, выводящий имена таблицы/схемы/колонок, и

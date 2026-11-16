@@ -41,6 +41,11 @@ The common aggregates also have convenience terminals on `EntityBuilder<T>`: [`C
 an overload that accepts positional parameters. `count`, `count_big`, `count_distinct` and
 `count_big_distinct` have no entity terminal and are used through ``
 
+**Fan-out over buckets.** `AcrossBuckets()` runs the query once per bucket and returns one result vector
+per bucket, so `GroupBy` and the aggregates above are computed **inside** each bucket; nothing is merged or
+re-aggregated across buckets. See
+[Sharding and horizontal partitioning](35-sharding-and-horizontal-partitioning.md#fan-out-over-buckets).
+
 ## AVG result types and argument policy
 
 `avg` does not return its input type: an integral column produces a fractional result, so `avg` over

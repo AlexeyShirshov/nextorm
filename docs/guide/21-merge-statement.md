@@ -26,6 +26,24 @@ ctx.CreateMergeBuilder<Order>()
     .Merge();
 ```
 
+A **sharded** merge must pass the variant explicitly: the builder resolves its scope from the entity type
+only, never from the source values, so a merge without `WithVariant(...)` throws instead of writing the
+default table. The variant is the bucket, so merge one bucket at a time:
+
+```csharp
+foreach (var entitiesPerBucket in ctx.GroupByBucket(orders))
+{
+    ctx.CreateMergeBuilder<Order>()
+        .Using(entitiesPerBucket.Rows)
+        .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
+        .WithVariant(entitiesPerBucket.Variant)   // this bucket's table on its shard
+        .Merge();
+}
+```
+
+Buckets, their physical names and the shard-key rules are described in
+[Sharding and horizontal partitioning](35-sharding-and-horizontal-partitioning.md).
+
 `CreateTruncateBuilder<TEntity>()` resolves the context's configured entity variant as well, so the truncate target uses the corresponding table and schema.
 
 The variant itself — its resolver, the metadata provider that derives table/schema/column names and the

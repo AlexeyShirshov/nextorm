@@ -281,6 +281,26 @@ SQL Server и SQLite; `() VALUES ()` у MySQL/MariaDB). Запись `DEFAULT` �
 ни одну из форм; в обоих случаях бросается `NotSupportedException`. `SqlDefault.Value` также
 работает как член проекции в `Values(source, mapping)`.
 
+## Шардированные сущности
+
+Шардированная сущность пишется в бакет, в который хешируется её shard key: бакет читается из значений
+экземпляра, поэтому statement называет таблицу этого бакета и выполняется на его шарде. Один `INSERT`
+называет одну таблицу бакета, поэтому многострочный `Values(...)` обязан оставаться внутри **одного**
+бакета — строки разных бакетов отклоняются до SQL. Сгруппируйте их заранее или передайте ключ явно:
+
+```csharp
+foreach (var entitiesPerBucket in ctx.GroupByBucket(orders))
+    ctx.CreateInsertBuilder<Order>().Values(entitiesPerBucket.Rows).Insert();
+
+// экземпляра нет — ключ передаётся напрямую
+ctx.CreateInsertBuilder<Order>().WithShardKey(tenant).Value(x => x.Id, 1).Insert();
+```
+
+У column-only вставки нет экземпляра для маршрутизации, и она падает, пока не передан ключ; то же с
+`Insert()` для сущности, у которой все колонки генерируемые. Бакеты, их физические имена и правила
+fan-out описаны в разделе
+[«Шардирование и горизонтальное партиционирование»](35-sharding-and-horizontal-partitioning.md).
+
 ## Модифицирующий CTE (PostgreSQL)
 
 PostgreSQL — единственный поддерживаемый провайдер, принимающий модифицирующую инструкцию как тело CTE

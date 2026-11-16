@@ -325,6 +325,12 @@ public Task<ProcedureResult> ExecuteRawAsync(string sql, IReadOnlyList<Procedure
 public static Task<ProcedureResult> ExecuteRawAsync(this IDataContext dataContext, string sql, CancellationToken cancellationToken = default);
 ```
 
+**Routed statements.** `ExecuteRaw`, `ExecuteRawAsync` and `ExecuteProcedure` run on the context's own
+connection and carry no mapping variant, so they cannot address a bucket table on its shard. Address a
+bucket through `FromSql` with a variant (the `{qualified}` token supplies the physical name), or through a
+context already routed to that shard — see
+[Sharding and horizontal partitioning](35-sharding-and-horizontal-partitioning.md).
+
 Because `parameters` is a `params` collection, an inline argument is accepted in two equivalent shapes: the expanded form `ExecuteRaw(sql, new ProcedureParameter("min", 0))` and the collection form `ExecuteRaw(sql, [new ProcedureParameter("min", 0)])`. `ExecuteProcedure(name, new ProcedureParameter("a", 1))` does the same. A `params` parameter must be last (CS0231), so on the async twins the token-less expanded call `ExecuteRawAsync(sql, new ProcedureParameter(...))` works, while passing a `CancellationToken` requires the collection form `ExecuteRawAsync(sql, [p1, p2], cancellationToken)` — the two cannot be combined. `ExecuteProcedureAsync` behaves identically.
 
 The statement text is passed through verbatim and is **not** put through the query planner, so it never reuses the plan cache; the result mapper is cached by **result shape** (the reader's ordered column names and the result type), not by SQL text, so arbitrary statements do not grow the mapper cache.

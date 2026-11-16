@@ -278,6 +278,25 @@ SQLite; `() VALUES ()` on MySQL/MariaDB). Writing `DEFAULT` as a value is not ex
 throw `NotSupportedException`. `SqlDefault.Value` also works as a mapped member in a
 `Values(source, mapping)` projection.
 
+## Sharded entities
+
+A sharded entity is written into the bucket its shard key hashes to: the bucket is read from the entity
+values, so the statement names that bucket's table and runs on its shard. One `INSERT` names one bucket
+table, therefore a multi-row `Values(...)` has to stay inside **one** bucket — rows of different buckets
+are rejected before SQL. Group them first, or supply the key explicitly:
+
+```csharp
+foreach (var entitiesPerBucket in ctx.GroupByBucket(orders))
+    ctx.CreateInsertBuilder<Order>().Values(entitiesPerBucket.Rows).Insert();
+
+// nothing to route from — the key is supplied directly
+ctx.CreateInsertBuilder<Order>().WithShardKey(tenant).Value(x => x.Id, 1).Insert();
+```
+
+A column-only insert has no instance to route from and throws until the key is supplied, and so does
+`Insert()` on an entity whose columns are all generated. Buckets, their physical names and the fan-out
+rules are described in [Sharding and horizontal partitioning](35-sharding-and-horizontal-partitioning.md).
+
 ## Data-modifying CTE (PostgreSQL)
 
 PostgreSQL is the only supported provider that accepts a data-modifying statement as a CTE body

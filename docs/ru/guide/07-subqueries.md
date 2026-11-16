@@ -23,6 +23,12 @@
 допустимым SQL только в SQL Server и PostgreSQL. В SQLite нет ни одного из этих операторов, поэтому
 запрос доходит до базы данных и завершается с `SqliteException` во время выполнения.
 
+**Маршрутизированные запросы.** Подзапрос едет внутри своего statement и отдельного перехода не
+добавляет: все маршрутизированные источники statement должны сходиться в одну топологию, а шардированный
+источник несёт вариант своего бакета. См.
+[«Маршрутизация данных по топологиям»](34-routing-data-to-topologies.md) и
+[«Шардирование и горизонтальное партиционирование»](35-sharding-and-horizontal-partitioning.md).
+
 ## Подзапрос как источник FROM
 
 [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) принимает подготовленный `QueryCommand<T>` (или `EntityBuilder<T>`) и создаёт построитель по его

@@ -23,6 +23,11 @@ One provider limitation is worth knowing up front: `SqlFunctions.Sql.any` and `S
 only on SQL Server and PostgreSQL. SQLite has neither operator, so the query reaches the database and
 fails with a `SqliteException` at execution time.
 
+**Routed statements.** A subquery travels inside its statement, so it adds no separate hop: every routed
+source of the statement must resolve to one topology, and a sharded source carries its bucket variant. See
+[Routing data to topologies](34-routing-data-to-topologies.md) and
+[Sharding and horizontal partitioning](35-sharding-and-horizontal-partitioning.md).
+
 ## Subquery as a FROM source
 
 [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) accepts a prepared `QueryCommand<T>` (or an `EntityBuilder<T>`) and produces a builder over its

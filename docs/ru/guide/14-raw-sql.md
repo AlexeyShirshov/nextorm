@@ -333,6 +333,12 @@ public Task<ProcedureResult> ExecuteRawAsync(string sql, IReadOnlyList<Procedure
 public static Task<ProcedureResult> ExecuteRawAsync(this IDataContext dataContext, string sql, CancellationToken cancellationToken = default);
 ```
 
+**Маршрутизированные команды.** `ExecuteRaw`, `ExecuteRawAsync` и `ExecuteProcedure` выполняются на
+собственном соединении контекста и не несут вариант сопоставления, поэтому таблицу бакета на его шарде
+они не адресуют. Бакет адресуется через `FromSql` с вариантом (токен `{qualified}` даёт физическое имя)
+либо через контекст, уже направленный на этот шард — см.
+[«Шардирование и горизонтальное партиционирование»](35-sharding-and-horizontal-partitioning.md).
+
 Поскольку `parameters` — это `params`-коллекция, встроенный аргумент принимается в двух эквивалентных формах: развёрнутой `ExecuteRaw(sql, new ProcedureParameter("min", 0))` и коллекционной `ExecuteRaw(sql, [new ProcedureParameter("min", 0)])`. `ExecuteProcedure(name, new ProcedureParameter("a", 1))` работает так же. Параметр `params` обязан быть последним (CS0231), поэтому у асинхронных двойников без токена работает развёрнутый вызов `ExecuteRawAsync(sql, new ProcedureParameter(...))`, а для передачи `CancellationToken` нужна коллекционная форма `ExecuteRawAsync(sql, [p1, p2], cancellationToken)` — совмещать их нельзя. `ExecuteProcedureAsync` ведёт себя так же.
 
 Текст инструкции передаётся дословно и **не** проходит через планировщик запросов, поэтому он никогда не переиспользует кэш планов; кэш мапперов результатов ведётся по **форме результата** (упорядоченные имена столбцов читателя и тип результата), а не по тексту SQL, поэтому произвольные инструкции не разрастаются в кэше.

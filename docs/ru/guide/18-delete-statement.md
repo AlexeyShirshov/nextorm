@@ -51,6 +51,21 @@ await ctx.DeleteAsync(new SimpleEntity { Id = 1 });
 delete from simple_entity where id = @p0
 ```
 
+## Шардированные сущности
+
+Шардированный delete обязан назвать бакет: область берётся из равенства по shard key в предикате либо
+из экземпляра в ключевой форме. Предикат без такого равенства — как и полный `All()` — падает до SQL,
+вместо того чтобы назвать таблицу по умолчанию:
+
+```csharp
+ctx.CreateDeleteBuilder<Order>().Where(x => x.Tenant == tenant).Delete();   // по предикату
+ctx.Delete(new Order { Id = 1 });                                          // по экземпляру
+ctx.CreateDeleteBuilder<Order>().All().ToSql();                            // падает: бакет не назван
+```
+
+Таблица бакета, её шард и правила размещения описаны в разделе
+[«Шардирование и горизонтальное партиционирование»](35-sharding-and-horizontal-partitioning.md).
+
 ## Глобальные фильтры запросов
 
 [Глобальный фильтр запроса](../advanced/query-filters.md), объявленный для удаляемой сущности, подмешивается в `WHERE` инструкции через `and`:

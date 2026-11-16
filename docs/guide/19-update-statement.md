@@ -115,6 +115,19 @@ await ctx.UpdateAsync(new SimpleEntity { Id = 1, Name = "renamed" });
 
 The entity type must declare a key; otherwise the call throws `InvalidOperationException`.
 
+## Sharded entities
+
+A sharded update takes its scope from an equality on the shard key in the predicate, or from the entity in
+the key form; an update without either throws before SQL rather than writing the default table:
+
+```csharp
+ctx.CreateUpdateBuilder<Order>().Set(x => x.Total, 10m).Where(x => x.Tenant == tenant).Update();
+ctx.Update(new Order { Id = 1, Total = 10m });   // routed by the instance
+```
+
+The bucket table, its shard and the placement rules are described in
+[Sharding and horizontal partitioning](35-sharding-and-horizontal-partitioning.md).
+
 ## Returning the updated rows
 
 `Returning()` / `Returning(projection)` materialise the updated rows through the provider's

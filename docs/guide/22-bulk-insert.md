@@ -63,6 +63,11 @@ validated in full before the first batch; an async source is validated as it str
 violation can leave earlier rows written. See
 [INSERT and MERGE (validation)](../advanced/query-filters.md#insert-and-merge-validation).
 
+A sharded entity is **not** bulk-inserted by bucket: the bulk path targets the mapped table of the default
+variant on the context connection and ignores the shard router. Group the rows and insert one bucket at a
+time with the ordinary insert builders instead — see
+[Sharding and horizontal partitioning](35-sharding-and-horizontal-partitioning.md).
+
 ## Execution modes
 
 [`BulkInsertMode`](xref:NextORM.Core.BulkInsertMode) selects the path. [`Mode`](xref:NextORM.Core.BulkInsertOptions.Mode)

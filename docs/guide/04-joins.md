@@ -45,6 +45,11 @@ The generated SQL references each table under a positional alias: `t1` for the b
 `t3`, … for the joined tables, in the order they were added. Aliases are quoted per provider
 (`'t1'` on SQLite, `[t1]` on SQL Server, `"t1"` on PostgreSQL).
 
+**Routed statements.** One statement runs on one host: every routed source of a join must resolve to a
+single topology, sources without a rule follow it, and a sharded source carries its bucket variant. See
+[Routing data to topologies](34-routing-data-to-topologies.md) and
+[Sharding and horizontal partitioning](35-sharding-and-horizontal-partitioning.md).
+
 ## Inner join
 
 ```csharp

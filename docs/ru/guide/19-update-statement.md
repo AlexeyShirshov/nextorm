@@ -117,6 +117,19 @@ await ctx.UpdateAsync(new SimpleEntity { Id = 1, Name = "renamed" });
 
 Тип сущности должен объявлять ключ; иначе вызов бросает `InvalidOperationException`.
 
+## Шардированные сущности
+
+Шардированный update берёт область из равенства по shard key в предикате либо из экземпляра в ключевой
+форме; update без того и другого падает до SQL, вместо того чтобы писать в таблицу по умолчанию:
+
+```csharp
+ctx.CreateUpdateBuilder<Order>().Set(x => x.Total, 10m).Where(x => x.Tenant == tenant).Update();
+ctx.Update(new Order { Id = 1, Total = 10m });   // по экземпляру
+```
+
+Таблица бакета, её шард и правила размещения описаны в разделе
+[«Шардирование и горизонтальное партиционирование»](35-sharding-and-horizontal-partitioning.md).
+
 ## Возврат обновлённых строк
 
 `Returning()` / `Returning(projection)` материализуют обновлённые строки через `RETURNING`/`OUTPUT`

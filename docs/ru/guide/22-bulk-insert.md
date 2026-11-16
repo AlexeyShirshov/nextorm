@@ -62,6 +62,11 @@ var written = ctx.CreateBulkInsertBuilder<IOrder>().Values(orders).BulkInsert();
 до первого батча; асинхронный — по мере потока, поэтому при нарушении в поздней строке ранее записанные
 строки остаются. См. [INSERT и MERGE (проверка)](../advanced/query-filters.md#insert-и-merge-проверка).
 
+Шардированная сущность **не** вставляется bulk-путём по бакетам: bulk пишет в сопоставленную таблицу
+варианта по умолчанию на соединении контекста и роутер шардирования не учитывает. Сгруппируйте строки и
+вставляйте по одному бакету обычными билдерами вставки — см.
+[«Шардирование и горизонтальное партиционирование»](35-sharding-and-horizontal-partitioning.md).
+
 ## Режимы выполнения
 
 [`BulkInsertMode`](xref:NextORM.Core.BulkInsertMode) выбирает путь. [`Mode`](xref:NextORM.Core.BulkInsertOptions.Mode)
