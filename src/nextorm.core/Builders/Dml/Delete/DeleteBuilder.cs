@@ -281,8 +281,32 @@ public sealed class DeleteBuilder<TEntity>
             ? condition.MappingVariant
             : _mappingVariant;
 
+        EnsureShardScopeResolved(scope);
+
         return new(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, condition, keys, returningColumns, outputInto,
             scope == MappingVariant.Default ? null : _targetMetadata.Schema, scope);
+    }
+
+    /// <summary>
+    /// Rejects a sharded delete that carries no resolved shard scope. Without it the statement would name
+    /// the default table and run on the context connection — exactly the silent wrong target the other
+    /// sharded mutations (insert, truncate, merge) already refuse.
+    /// </summary>
+    /// <param name="scope">The scope the statement resolved, or <see cref="MappingVariant.Default"/>.</param>
+    private void EnsureShardScopeResolved(MappingVariant scope)
+    {
+        if (scope != MappingVariant.Default)
+            return;
+
+        if (_dataContext is not DataContext dataContext || dataContext.EntityVariantResolver is not IShardRouter router)
+            return;
+
+        if (!router.IsSharded(typeof(TEntity)))
+            return;
+
+        throw new InvalidOperationException(
+            $"Entity '{typeof(TEntity)}' is sharded. A delete must name the bucket: add an equality on the shard key " +
+            "to the predicate, or delete by entity.");
     }
 
     // Applies the builder's selective filter scope to the source command that carries the DELETE's

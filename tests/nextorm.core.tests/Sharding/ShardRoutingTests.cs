@@ -125,6 +125,15 @@ public sealed class ShardRoutingTests
     }
 
     [Fact]
+    public void DeleteAll_OnShardedEntity_ShouldFailBeforeSql()
+    {
+        using var context = CreateContext(CreateTopology());
+
+        FluentActions.Invoking(() => context.CreateDeleteBuilder<ShardedRow>().All().ToSql())
+            .Should().Throw<InvalidOperationException>().WithMessage("*sharded*");
+    }
+
+    [Fact]
     public void DeletePredicate_ShouldRouteAndUnroutedDeleteShouldFail()
     {
         var topology = CreateTopology();
