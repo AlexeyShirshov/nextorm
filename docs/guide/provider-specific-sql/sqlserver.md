@@ -379,6 +379,9 @@ Server.
 Unsupported metrics, an undeclared or pre-17 server version, and providers without vector-search
 support fail explicitly before a command is sent.
 
+For the shared vector contract and an application-level embedding/search workflow, see
+[AI and vector search](../../guide/36-ai-and-vector-search.md).
+
 ## Sequences
 
 `SqlFunctions.SqlServer.next_value_for(sequence)` and its alias `nextval(sequence)` render the T-SQL

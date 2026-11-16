@@ -599,6 +599,9 @@ SQL Server remains unchanged: exact search uses `VECTOR_DISTANCE`, while approxi
 context's explicitly selected `VECTOR_SEARCH` grammar. See [SQL Server vector search](sqlserver.md#vector-nearest-neighbor-search)
 for its SQL forms.
 
+For the shared vector contract and an application-level embedding/search workflow, see
+[AI and vector search](../../guide/36-ai-and-vector-search.md).
+
 ## See also
 
 * [PostgreSQL provider](../../connecting-providers/postgres.md)

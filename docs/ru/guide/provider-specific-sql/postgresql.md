@@ -608,6 +608,9 @@ var nearest = ctx.From<Document>()
 точный поиск использует `VECTOR_DISTANCE`, приближённый — явно выбранную грамматику `VECTOR_SEARCH`.
 См. [SQL Server: формы SQL для поиска по векторам](sqlserver.md#поиск-ближайших-соседей-по-векторам).
 
+Общий контракт векторов и конвейер эмбеддингов/поиска на уровне приложения описаны в руководстве
+[«ИИ и векторный поиск»](../../guide/36-ai-and-vector-search.md).
+
 ## См. также
 
 * [Провайдер PostgreSQL](../../connecting-providers/postgres.md)

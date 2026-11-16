@@ -108,6 +108,8 @@
       href: guide/34-routing-data-to-topologies.md
     - name: Шардирование и горизонтальное партиционирование
       href: guide/35-sharding-and-horizontal-partitioning.md
+    - name: ИИ и векторный поиск
+      href: guide/36-ai-and-vector-search.md
     - name: Специфичный для провайдеров SQL
       items:
         - name: Обзор

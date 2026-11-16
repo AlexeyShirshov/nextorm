@@ -70,6 +70,8 @@
   href: 34-routing-data-to-topologies.md
 - name: Sharding and horizontal partitioning
   href: 35-sharding-and-horizontal-partitioning.md
+- name: AI and vector search
+  href: 36-ai-and-vector-search.md
 - name: Provider-specific SQL
   items:
     - name: Overview

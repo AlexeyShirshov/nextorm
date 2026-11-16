@@ -445,6 +445,9 @@ The library emits only the explicitly selected grammar and does not probe syntax
 live-verified on SQL Server `17.0.5005.3`, while `WithApproximate` has SQL-generation coverage only and
 must be confirmed against the target engine build.
 
+For the shared vector contract and an application-level embedding/search workflow, see
+[AI and vector search](../guide/36-ai-and-vector-search.md).
+
 ## Provider differences
 
 | Aspect | SQL Server |
