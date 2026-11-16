@@ -139,11 +139,11 @@ public sealed class RawSqlPlaceholderTests
     {
         private readonly DefaultEntityMetadataProvider _inner = new();
 
-        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingVariant scope)
-            => new SchemaMetadata(_inner.GetMetadata(entityType, scope));
+        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingVariant variant)
+            => new SchemaMetadata(_inner.GetMetadata(entityType, variant));
 
-        public string GetColumnName(PropertyInfo property, in global::NextORM.Core.MappingVariant scope, INamingConvention? convention)
-            => _inner.GetColumnName(property, scope, convention);
+        public string GetColumnName(PropertyInfo property, in global::NextORM.Core.MappingVariant variant, INamingConvention? convention)
+            => _inner.GetColumnName(property, variant, convention);
 
         private sealed class SchemaMetadata(IEntityMetadata inner) : IEntityMetadata
         {

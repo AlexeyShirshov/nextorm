@@ -398,17 +398,17 @@ public sealed class MappingVariantDialectTests
     {
         private readonly DefaultEntityMetadataProvider _inner = new();
 
-        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingVariant scope)
+        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingVariant variant)
         {
             var metadata = _inner.GetMetadata(entityType, global::NextORM.Core.MappingVariant.Default);
-            var suffix = scope.Key ?? "default";
+            var suffix = variant.Key ?? "default";
             return new ScopedMetadata($"{suffix}_rows", $"{suffix}_schema",
                 metadata.Properties.Select(property => (IPropertyMetadata)new ScopedProperty(property.PropertyInfo,
                     $"{suffix}_{(property.PropertyInfo.Name == nameof(ScopedRow.Id) ? "id" : "label")}")).ToArray());
         }
 
-        public string GetColumnName(PropertyInfo property, in global::NextORM.Core.MappingVariant scope, INamingConvention? convention)
-            => $"{scope.Key ?? "default"}_{(property.Name == nameof(ScopedRow.Id) ? "id" : "label")}";
+        public string GetColumnName(PropertyInfo property, in global::NextORM.Core.MappingVariant variant, INamingConvention? convention)
+            => $"{variant.Key ?? "default"}_{(property.Name == nameof(ScopedRow.Id) ? "id" : "label")}";
     }
 
     private sealed class TenantVariantResolver : IEntityVariantResolver

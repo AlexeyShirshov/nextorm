@@ -107,7 +107,7 @@ internal static class SqlMutationBuilder
         if (sourceSql is null || sourceParameters is null)
             throw new BuildSqlCommandException("An INSERT ... SELECT command is missing its rendered source SQL.");
 
-        AppendColumnList(writer, dialect, quoteIdentifiers, namingConvention, command.SourceColumns!, scope: command.MappingVariant, metadataProvider: metadataProvider);
+        AppendColumnList(writer, dialect, quoteIdentifiers, namingConvention, command.SourceColumns!, variant: command.MappingVariant, metadataProvider: metadataProvider);
 
         if (overrideIdentity.Length > 0)
             writer.Append(overrideIdentity);
@@ -1093,7 +1093,7 @@ internal static class SqlMutationBuilder
         DynamicColumnSet? dynamicColumns,
         string? targetFilterSql,
         MergeAssignmentFragment? fragment = null,
-        MappingVariant scope = default,
+        MappingVariant variant = default,
         IEntityMetadataProvider? metadataProvider = null)
     {
         switch (branch.Action)
@@ -1109,7 +1109,7 @@ internal static class SqlMutationBuilder
                     break;
                 }
 
-                AppendMergeAssignments(writer, dialect, quoteIdentifiers, namingConvention, branch.Columns, qualifyTarget, dynamicColumns, scope, metadataProvider);
+                AppendMergeAssignments(writer, dialect, quoteIdentifiers, namingConvention, branch.Columns, qualifyTarget, dynamicColumns, variant, metadataProvider);
                 break;
             case MergeActionKind.Insert:
                 AppendMergeWhen(writer, MergeMatchKind.NotMatchedByTarget, condition, keywordCase, targetFilterSql);
@@ -1123,7 +1123,7 @@ internal static class SqlMutationBuilder
                     break;
                 }
 
-                var insertColumns = RenderColumns(dialect, quoteIdentifiers, namingConvention, branch.Columns, scope, metadataProvider);
+                var insertColumns = RenderColumns(dialect, quoteIdentifiers, namingConvention, branch.Columns, variant, metadataProvider);
                 if (dynamicColumns is not null)
                     insertColumns = [.. insertColumns, .. dynamicColumns.RenderKeys(dialect)];
 
@@ -1207,10 +1207,10 @@ internal static class SqlMutationBuilder
         IReadOnlyList<IPropertyMetadata> columns,
         bool qualifyTarget,
         DynamicColumnSet? dynamicColumns,
-        MappingVariant scope = default,
+        MappingVariant variant = default,
         IEntityMetadataProvider? metadataProvider = null)
     {
-        var rendered = RenderColumns(dialect, quoteIdentifiers, namingConvention, columns, scope, metadataProvider);
+        var rendered = RenderColumns(dialect, quoteIdentifiers, namingConvention, columns, variant, metadataProvider);
         var wrote = false;
         for (var i = 0; i < rendered.Length; i++)
         {
@@ -1250,17 +1250,17 @@ internal static class SqlMutationBuilder
         return properties;
     }
 
-    internal static string[] RenderColumns(ISqlDialect dialect, bool quoteIdentifiers, INamingConvention? namingConvention, IReadOnlyList<IPropertyMetadata> columns, MappingVariant scope = default, IEntityMetadataProvider? metadataProvider = null)
+    internal static string[] RenderColumns(ISqlDialect dialect, bool quoteIdentifiers, INamingConvention? namingConvention, IReadOnlyList<IPropertyMetadata> columns, MappingVariant variant = default, IEntityMetadataProvider? metadataProvider = null)
     {
         var rendered = new string[columns.Count];
         for (var i = 0; i < rendered.Length; i++)
-            rendered[i] = RenderColumnReference(dialect, quoteIdentifiers, columns[i], namingConvention, scope, metadataProvider);
+            rendered[i] = RenderColumnReference(dialect, quoteIdentifiers, columns[i], namingConvention, variant, metadataProvider);
 
         return rendered;
     }
 
-    private static string[]? RenderColumnsOrNull(ISqlDialect dialect, bool quoteIdentifiers, INamingConvention? namingConvention, IReadOnlyList<IPropertyMetadata>? columns, MappingVariant scope = default, IEntityMetadataProvider? metadataProvider = null)
-        => columns is { Count: > 0 } ? RenderColumns(dialect, quoteIdentifiers, namingConvention, columns, scope, metadataProvider) : null;
+    private static string[]? RenderColumnsOrNull(ISqlDialect dialect, bool quoteIdentifiers, INamingConvention? namingConvention, IReadOnlyList<IPropertyMetadata>? columns, MappingVariant variant = default, IEntityMetadataProvider? metadataProvider = null)
+        => columns is { Count: > 0 } ? RenderColumns(dialect, quoteIdentifiers, namingConvention, columns, variant, metadataProvider) : null;
 
     // The write-side output clauses of an INSERT/UPDATE/DELETE. SQL Server places them before the
     // source/values/filter; an OUTPUT INTO target is emitted first, then the optional client OUTPUT over
@@ -1277,7 +1277,7 @@ internal static class SqlMutationBuilder
         bool deleted,
         KeywordCase keywordCase,
         OutputIntoClause? captureInto = null,
-        MappingVariant scope = default,
+        MappingVariant variant = default,
         IEntityMetadataProvider? metadataProvider = null)
     {
         if (captureInto is not null)
@@ -1289,7 +1289,7 @@ internal static class SqlMutationBuilder
             if (captureInto.Columns.Count == 0)
                 throw new NotSupportedException("A batch OUTPUT ... INTO capture needs at least one output column.");
 
-            var capturedColumns = RenderColumns(dialect, quoteIdentifiers, namingConvention, captureInto.Columns, scope, metadataProvider);
+            var capturedColumns = RenderColumns(dialect, quoteIdentifiers, namingConvention, captureInto.Columns, variant, metadataProvider);
             // The capture target is always a same-batch table variable, addressed by its bare @name;
             // it is never identifier-quoted. The automatic read-back is not emitted: the composed
             // follow-up query of the batch replaces it. The INTO names are the caller's declaration
@@ -1311,7 +1311,7 @@ internal static class SqlMutationBuilder
             if (outputInto.Columns.Count == 0)
                 throw new NotSupportedException("OUTPUT ... INTO needs at least one output column.");
 
-            var intoColumns = RenderColumns(dialect, quoteIdentifiers, namingConvention, outputInto.Columns, scope, metadataProvider);
+            var intoColumns = RenderColumns(dialect, quoteIdentifiers, namingConvention, outputInto.Columns, variant, metadataProvider);
             // A table variable is addressed by its bare @name and must never be identifier-quoted; only an
             // existing target table goes through the dialect's quoting.
             var target = outputInto.IsTableVariable
@@ -1415,14 +1415,14 @@ internal static class SqlMutationBuilder
         INamingConvention? namingConvention,
         OutputIntoClause? outputInto,
         KeywordCase keywordCase,
-        MappingVariant scope = default,
+        MappingVariant variant = default,
         IEntityMetadataProvider? metadataProvider = null)
     {
         if (outputInto is not { IsTableVariable: true } target)
             return sql;
 
         var variable = target.VariableName!;
-        var columns = string.Join(", ", RenderColumns(dialect, quoteIdentifiers, namingConvention, target.Columns, scope, metadataProvider));
+        var columns = string.Join(", ", RenderColumns(dialect, quoteIdentifiers, namingConvention, target.Columns, variant, metadataProvider));
         var declare = SqlKeywords.Of(keywordCase, "declare ") + variable
             + SqlKeywords.Of(keywordCase, " table (") + target.ColumnDefinitions + "); ";
         var readBack = SqlKeywords.Of(keywordCase, "; select ") + columns
@@ -1602,19 +1602,19 @@ internal static class SqlMutationBuilder
     private static bool SupportsReturning(ISqlDialect dialect, InsertCommand command) =>
         dialect.SupportsReturning || (command.IsBulkReturning && SqlDialectBase.BulkInsertReturningSupported(dialect));
 
-    private static IReadOnlyList<string>? RenderReturningColumns(ISqlDialect dialect, bool quoteIdentifiers, INamingConvention? namingConvention, InsertCommand command, MappingVariant scope = default, IEntityMetadataProvider? metadataProvider = null)
+    private static IReadOnlyList<string>? RenderReturningColumns(ISqlDialect dialect, bool quoteIdentifiers, INamingConvention? namingConvention, InsertCommand command, MappingVariant variant = default, IEntityMetadataProvider? metadataProvider = null)
     {
         if (command.ReturningColumns is { Count: > 0 } columns)
         {
             var rendered = new string[columns.Count];
             for (var i = 0; i < columns.Count; i++)
-                rendered[i] = RenderColumnReference(dialect, quoteIdentifiers, columns[i], namingConvention, scope, metadataProvider);
+                rendered[i] = RenderColumnReference(dialect, quoteIdentifiers, columns[i], namingConvention, variant, metadataProvider);
 
             return rendered;
         }
 
         return command.IdentityColumn is not null
-            ? [RenderColumnReference(dialect, quoteIdentifiers, command.IdentityColumn, namingConvention, scope, metadataProvider)]
+            ? [RenderColumnReference(dialect, quoteIdentifiers, command.IdentityColumn, namingConvention, variant, metadataProvider)]
             : null;
     }
 
@@ -1623,10 +1623,10 @@ internal static class SqlMutationBuilder
             ? namingConvention.ColumnName(property.ColumnName)
             : property.ColumnName;
 
-    internal static string RenderColumnReference(ISqlDialect dialect, bool quoteIdentifiers, IPropertyMetadata property, INamingConvention? namingConvention, MappingVariant scope = default, IEntityMetadataProvider? metadataProvider = null)
+    internal static string RenderColumnReference(ISqlDialect dialect, bool quoteIdentifiers, IPropertyMetadata property, INamingConvention? namingConvention, MappingVariant variant = default, IEntityMetadataProvider? metadataProvider = null)
     {
-        var name = scope != MappingVariant.Default && metadataProvider is not null
-            ? property.PropertyInfo.GetPropertyColumnName(namingConvention, property.PropertyInfo.DeclaringType, scope, metadataProvider)
+        var name = variant != MappingVariant.Default && metadataProvider is not null
+            ? property.PropertyInfo.GetPropertyColumnName(namingConvention, property.PropertyInfo.DeclaringType, variant, metadataProvider)
             : ResolveColumnName(property, namingConvention);
         return quoteIdentifiers ? dialect.QuoteIdentifier(name) : name;
     }
@@ -1646,7 +1646,7 @@ internal static class SqlMutationBuilder
         INamingConvention? namingConvention,
         IReadOnlyList<IPropertyMetadata> columns,
         DynamicColumnSet? dynamicColumns = null,
-        MappingVariant scope = default,
+        MappingVariant variant = default,
         IEntityMetadataProvider? metadataProvider = null)
     {
         writer.Append(" (");
@@ -1656,7 +1656,7 @@ internal static class SqlMutationBuilder
             if (wrote)
                 writer.Append(", ");
 
-            writer.Append(RenderColumnReference(dialect, quoteIdentifiers, columns[c], namingConvention, scope, metadataProvider));
+            writer.Append(RenderColumnReference(dialect, quoteIdentifiers, columns[c], namingConvention, variant, metadataProvider));
             wrote = true;
         }
 

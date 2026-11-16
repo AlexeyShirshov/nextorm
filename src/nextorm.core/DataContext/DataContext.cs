@@ -362,26 +362,26 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     public DbConnection GetConnection() => _connectionManager.GetConnection();
 
     /// <summary>
-    /// Resolves the physical schema and table an entity uses under <paramref name="scope"/>, using the
+    /// Resolves the physical schema and table an entity uses under <paramref name="variant"/>, using the
     /// context's metadata provider (shard-aware when sharding is configured). This is the same answer the
     /// planner bakes into a statement, exposed for raw SQL assembled outside the query builder.
     /// </summary>
     /// <typeparam name="TEntity">The mapped entity type.</typeparam>
-    /// <param name="scope">The mapping variant, for example a bucket scope; the default scope keeps the mapping.</param>
+    /// <param name="variant">The mapping variant, for example a bucket scope; the default scope keeps the mapping.</param>
     /// <returns>The physical schema and table for that scope.</returns>
     /// <exception cref="InvalidOperationException">The provider returned no table name for the type.</exception>
-    public PhysicalTableName GetPhysicalTableName<TEntity>(MappingVariant scope = default)
-        => GetPhysicalTableName(typeof(TEntity), scope);
+    public PhysicalTableName GetPhysicalTableName<TEntity>(MappingVariant variant = default)
+        => GetPhysicalTableName(typeof(TEntity), variant);
 
-    private PhysicalTableName GetPhysicalTableName(Type entityType, MappingVariant scope)
+    private PhysicalTableName GetPhysicalTableName(Type entityType, MappingVariant variant)
     {
         ArgumentNullException.ThrowIfNull(entityType);
 
-        var metadata = EntityMetadataProvider.GetMetadata(entityType, in scope);
+        var metadata = EntityMetadataProvider.GetMetadata(entityType, in variant);
         if (string.IsNullOrEmpty(metadata.TableName))
         {
             throw new InvalidOperationException(
-                $"Entity '{entityType}' has no mapped table name under scope '{scope.Key}'. Materialize the entity " +
+                $"Entity '{entityType}' has no mapped table name under variant '{variant.Key}'. Materialize the entity " +
                 "first (for example with From<TEntity>()) so its mapping is registered.");
         }
 
@@ -396,11 +396,11 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// running one side of the statement on a host it does not belong to.
     /// </summary>
     /// <param name="sources">The entity types the statement reads or writes, or <see langword="null"/> when it has none.</param>
-    /// <param name="scope">The mapping variant the command runs under.</param>
+    /// <param name="variant">The mapping variant the command runs under.</param>
     /// <returns>The topology the statement runs on, or <see cref="RoutePlan.None"/> for the context connection.</returns>
     /// <exception cref="NotSupportedException">The sources resolve to different topologies.</exception>
     /// <exception cref="InvalidOperationException">A rule names a topology that is not registered.</exception>
-    internal RoutePlan RouteFor(IReadOnlyList<Type>? sources, MappingVariant scope)
+    internal RoutePlan RouteFor(IReadOnlyList<Type>? sources, MappingVariant variant)
     {
         RouteTarget? resolved = null;
         Type? resolvedType = null;
@@ -410,7 +410,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             for (var i = 0; i < list.Count; i++)
             {
                 var entityType = list[i];
-                var target = _routes.Resolve(entityType, in scope);
+                var target = _routes.Resolve(entityType, in variant);
                 if (target is not { } candidate)
                     continue;
 
@@ -445,8 +445,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     }
 
     /// <inheritdoc cref="RouteFor(IReadOnlyList{Type}?, MappingVariant)"/>
-    internal RoutePlan RouteFor(Type? entityType, MappingVariant scope)
-        => entityType is null ? RouteFor((IReadOnlyList<Type>?)null, scope) : RouteFor([entityType], scope);
+    internal RoutePlan RouteFor(Type? entityType, MappingVariant variant)
+        => entityType is null ? RouteFor((IReadOnlyList<Type>?)null, variant) : RouteFor([entityType], variant);
 
     /// <summary>
     /// Pins every command routed to <paramref name="topology"/> to one host: the topology is still the
@@ -530,9 +530,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// command, the context connection otherwise. Every host keeps its own lazy connection, cached by
     /// <c>topology/host</c> for the lifetime of the context.
     /// </summary>
-    internal IConnectionManager ManagerFor(MappingVariant scope, IReadOnlyList<Type>? sources, CommandKind kind)
+    internal IConnectionManager ManagerFor(MappingVariant variant, IReadOnlyList<Type>? sources, CommandKind kind)
     {
-        var route = RouteFor(sources, scope);
+        var route = RouteFor(sources, variant);
         if (!route.HasTopology)
         {
             EnsureNoRoutedTransaction(route);
@@ -551,7 +551,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
         var topology = GetTopology(route.TopologyName!);
         var pinnedHost = PinnedHostFor(route.TopologyName!);
-        var context = new TopologyContext(scope, kind, pinnedHost);
+        var context = new TopologyContext(variant, kind, pinnedHost);
 
         if (!topology.TryGetHost(in context, out var host))
         {
@@ -692,11 +692,11 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     // Routed transactions: a transaction on a host other than the context connection. Starting one pins
     // the topology to that host, so later commands routed there join the transaction instead of picking
     // another host and writing outside it.
-    DbTransaction IRoutedTransactionManager.BeginTransaction(RouteTarget target, MappingVariant scope, IsolationLevel isolationLevel)
-        => BeginRoutedTransaction(target, scope, isolationLevel);
+    DbTransaction IRoutedTransactionManager.BeginTransaction(RouteTarget target, MappingVariant variant, IsolationLevel isolationLevel)
+        => BeginRoutedTransaction(target, variant, isolationLevel);
 
-    Task<DbTransaction> IRoutedTransactionManager.BeginTransactionAsync(RouteTarget target, MappingVariant scope, IsolationLevel isolationLevel, CancellationToken cancellationToken)
-        => BeginRoutedTransactionAsync(target, scope, isolationLevel, cancellationToken);
+    Task<DbTransaction> IRoutedTransactionManager.BeginTransactionAsync(RouteTarget target, MappingVariant variant, IsolationLevel isolationLevel, CancellationToken cancellationToken)
+        => BeginRoutedTransactionAsync(target, variant, isolationLevel, cancellationToken);
 
     DbTransaction? IRoutedTransactionManager.CurrentTransaction(RouteTarget target)
         => _transactionPins.TryGetValue(target.Topology, out var hostId)
@@ -704,17 +704,17 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
                 ? manager.CurrentTransaction
                 : null;
 
-    private DbTransaction BeginRoutedTransaction(RouteTarget target, MappingVariant scope, IsolationLevel isolationLevel)
+    private DbTransaction BeginRoutedTransaction(RouteTarget target, MappingVariant variant, IsolationLevel isolationLevel)
     {
-        var (manager, hostId) = RoutedTransactionHost(target, scope);
+        var (manager, hostId) = RoutedTransactionHost(target, variant);
         var transaction = manager.BeginTransaction(isolationLevel);
         _transactionPins[target.Topology] = hostId;
         return transaction;
     }
 
-    private async Task<DbTransaction> BeginRoutedTransactionAsync(RouteTarget target, MappingVariant scope, IsolationLevel isolationLevel, CancellationToken cancellationToken)
+    private async Task<DbTransaction> BeginRoutedTransactionAsync(RouteTarget target, MappingVariant variant, IsolationLevel isolationLevel, CancellationToken cancellationToken)
     {
-        var (manager, hostId) = RoutedTransactionHost(target, scope);
+        var (manager, hostId) = RoutedTransactionHost(target, variant);
         var transaction = await manager.BeginTransactionAsync(isolationLevel, cancellationToken).ConfigureAwait(false);
         _transactionPins[target.Topology] = hostId;
         return transaction;
@@ -722,10 +722,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     /// <summary>
     /// Picks the host a routed transaction will own: the explicit pin, or the topology's own choice for
-    /// <paramref name="scope"/>. Refuses when another transaction already holds a connection of this
+    /// <paramref name="variant"/>. Refuses when another transaction already holds a connection of this
     /// context, because one context carries one transaction at a time.
     /// </summary>
-    private (DbConnectionManager Manager, string HostId) RoutedTransactionHost(RouteTarget target, MappingVariant scope)
+    private (DbConnectionManager Manager, string HostId) RoutedTransactionHost(RouteTarget target, MappingVariant variant)
     {
         if (string.Equals(target.Topology, _defaultTopologyName, StringComparison.Ordinal))
         {
@@ -745,12 +745,12 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
         var topology = GetTopology(target.Topology);
         var pinnedHost = PinnedHostFor(target.Topology);
-        var context = new TopologyContext(scope, CommandKind.Write, pinnedHost);
+        var context = new TopologyContext(variant, CommandKind.Write, pinnedHost);
 
         if (!topology.TryGetHost(in context, out var host))
         {
             throw new InvalidOperationException(
-                $"Topology '{target.Topology}' did not select a host for this scope, so a transaction cannot be " +
+                $"Topology '{target.Topology}' did not select a host for this variant, so a transaction cannot be " +
                 "started on it.");
         }
 
@@ -2223,8 +2223,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         return null;
     }
 
-    private static string ScopeName(in MappingVariant scope)
-        => string.IsNullOrEmpty(scope.Key) ? "default" : scope.Key;
+    private static string ScopeName(in MappingVariant variant)
+        => string.IsNullOrEmpty(variant.Key) ? "default" : variant.Key;
 
     // A statement's parameters are the accumulator slice it produced. A captured member referenced more
     // than once in the same statement is visited once per reference, so its (member-named) parameter is

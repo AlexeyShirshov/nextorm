@@ -222,13 +222,13 @@ internal readonly struct BatchRoute
 {
     /// <summary>Creates a route decided by one step of the batch.</summary>
     /// <param name="plan">The resolved topology, or none.</param>
-    /// <param name="scope">The mapping variant the deciding step runs under.</param>
+    /// <param name="variant">The mapping variant the deciding step runs under.</param>
     /// <param name="sources">The entity types the deciding step reads or writes, or <see langword="null"/>.</param>
     /// <param name="kind">Whether the batch must be served by a writer.</param>
-    public BatchRoute(RoutePlan plan, MappingVariant scope, IReadOnlyList<Type>? sources, CommandKind kind)
+    public BatchRoute(RoutePlan plan, MappingVariant variant, IReadOnlyList<Type>? sources, CommandKind kind)
     {
         Plan = plan;
-        Scope = scope;
+        Scope = variant;
         Sources = sources;
         Kind = kind;
     }

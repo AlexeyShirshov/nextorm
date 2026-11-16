@@ -488,15 +488,15 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
     /// </summary>
     internal QueryFilterScope FilterScope { get => _filterScope; set => _filterScope = value; }
     /// <summary>Returns a copy of this builder bound to the supplied runtime mapping variant.</summary>
-    /// <param name="scope">The mapping variant used to resolve metadata for this query.</param>
-    /// <returns>A builder that carries <paramref name="scope"/> into its query command.</returns>
-    public EntityBuilder<TEntity> WithVariant(MappingVariant scope)
+    /// <param name="variant">The mapping variant used to resolve metadata for this query.</param>
+    /// <returns>A builder that carries <paramref name="variant"/> into its query command.</returns>
+    public EntityBuilder<TEntity> WithVariant(MappingVariant variant)
     {
-        if (_mappingVariant == scope)
+        if (_mappingVariant == variant)
             return this;
 
         var copy = Clone();
-        copy._mappingVariant = scope;
+        copy._mappingVariant = variant;
         return copy;
     }
     /// <summary>

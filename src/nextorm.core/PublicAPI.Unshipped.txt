@@ -1,5 +1,5 @@
 #nullable enable
-NextORM.Core.EntityBuilder<TEntity>.WithVariant(NextORM.Core.MappingVariant scope) -> NextORM.Core.EntityBuilder<TEntity>!
+NextORM.Core.EntityBuilder<TEntity>.WithVariant(NextORM.Core.MappingVariant variant) -> NextORM.Core.EntityBuilder<TEntity>!
 NextORM.Core.EntityBuilder<TEntity>.WithShardKey(params object?[]! shardKeyValues) -> NextORM.Core.EntityBuilder<TEntity>!
 NextORM.Core.InsertBuilder<TEntity>.WithShardKey(params object?[]! shardKeyValues) -> NextORM.Core.InsertBuilder<TEntity>!
 NextORM.Core.EntityMetadataBuilder<T>.Schema(string! schema) -> NextORM.Core.EntityMetadataBuilder<T>!
@@ -14,11 +14,11 @@ NextORM.Core.DefaultEntityVariantResolver.Resolve(System.Type! entityType, Syste
 NextORM.Core.DefaultEntityVariantResolver.Resolve(System.Type! entityType, object! entity) -> NextORM.Core.MappingVariant
 NextORM.Core.DefaultEntityMetadataProvider
 NextORM.Core.DefaultEntityMetadataProvider.DefaultEntityMetadataProvider() -> void
-NextORM.Core.DefaultEntityMetadataProvider.GetColumnName(System.Reflection.PropertyInfo! property, in NextORM.Core.MappingVariant scope, NextORM.Core.INamingConvention? convention) -> string!
-NextORM.Core.DefaultEntityMetadataProvider.GetMetadata(System.Type! entityType, in NextORM.Core.MappingVariant scope) -> NextORM.Core.IEntityMetadata!
+NextORM.Core.DefaultEntityMetadataProvider.GetColumnName(System.Reflection.PropertyInfo! property, in NextORM.Core.MappingVariant variant, NextORM.Core.INamingConvention? convention) -> string!
+NextORM.Core.DefaultEntityMetadataProvider.GetMetadata(System.Type! entityType, in NextORM.Core.MappingVariant variant) -> NextORM.Core.IEntityMetadata!
 NextORM.Core.IEntityMetadataProvider
-NextORM.Core.IEntityMetadataProvider.GetColumnName(System.Reflection.PropertyInfo! property, in NextORM.Core.MappingVariant scope, NextORM.Core.INamingConvention? convention) -> string!
-NextORM.Core.IEntityMetadataProvider.GetMetadata(System.Type! entityType, in NextORM.Core.MappingVariant scope) -> NextORM.Core.IEntityMetadata!
+NextORM.Core.IEntityMetadataProvider.GetColumnName(System.Reflection.PropertyInfo! property, in NextORM.Core.MappingVariant variant, NextORM.Core.INamingConvention? convention) -> string!
+NextORM.Core.IEntityMetadataProvider.GetMetadata(System.Type! entityType, in NextORM.Core.MappingVariant variant) -> NextORM.Core.IEntityMetadata!
 NextORM.Core.IEntityMetadata.Schema.get -> string?
 NextORM.Core.IEntityVariantResolver
 NextORM.Core.IEntityVariantResolver.Resolve(System.Type! entityType) -> NextORM.Core.MappingVariant
@@ -56,7 +56,7 @@ NextORM.Core.PostgresFunctions.vector_concat<T>(T left, T right) -> T
 NextORM.Core.PostgresFunctions.vector_dims<T>(T value) -> int?
 NextORM.Core.PostgresFunctions.vector_multiply<T>(T left, T right) -> T
 NextORM.Core.PostgresFunctions.vector_norm<T>(T value) -> double?
-NextORM.Core.MergeBuilder<TEntity>.WithVariant(NextORM.Core.MappingVariant scope) -> NextORM.Core.MergeBuilder<TEntity>!
+NextORM.Core.MergeBuilder<TEntity>.WithVariant(NextORM.Core.MappingVariant variant) -> NextORM.Core.MergeBuilder<TEntity>!
 NextORM.Core.PostgresFunctions.vector_subtract<T>(T left, T right) -> T
 *REMOVED*NextORM.Core.OuterRefMarker<T>
 *REMOVED*NextORM.Core.OuterRefMarker<T>.I.get -> int
@@ -98,8 +98,8 @@ static NextORM.Core.ShardDataContextExtensions.GetShardRouter(this NextORM.Core.
 static NextORM.Core.ShardDataContextExtensions.TryGetShardRouter(this NextORM.Core.IDataContext! context, out NextORM.Core.IShardRouter? router) -> bool
 static NextORM.Core.ShardDataContextBuilderExtensions.UseSharding(this NextORM.Core.DataContextBuilder! builder, NextORM.Core.IShardTopology! topology, NextORM.Core.IShardKeyProvider? keyProvider = null) -> NextORM.Core.DataContextBuilder!
 NextORM.Core.ShardEntityMetadataProvider
-NextORM.Core.ShardEntityMetadataProvider.GetColumnName(System.Reflection.PropertyInfo! property, in NextORM.Core.MappingVariant scope, NextORM.Core.INamingConvention? convention) -> string!
-NextORM.Core.ShardEntityMetadataProvider.GetMetadata(System.Type! entityType, in NextORM.Core.MappingVariant scope) -> NextORM.Core.IEntityMetadata!
+NextORM.Core.ShardEntityMetadataProvider.GetColumnName(System.Reflection.PropertyInfo! property, in NextORM.Core.MappingVariant variant, NextORM.Core.INamingConvention? convention) -> string!
+NextORM.Core.ShardEntityMetadataProvider.GetMetadata(System.Type! entityType, in NextORM.Core.MappingVariant variant) -> NextORM.Core.IEntityMetadata!
 NextORM.Core.ShardEntityMetadataProvider.ShardEntityMetadataProvider(NextORM.Core.IEntityMetadataProvider! inner, NextORM.Core.IShardTopology! topology) -> void
 NextORM.Core.ShardKeyAttribute
 NextORM.Core.ShardKeyAttribute.PropertyNames.get -> System.Collections.Generic.IReadOnlyList<string!>!
@@ -251,7 +251,7 @@ NextORM.Core.HostTarget.HostTarget(string! Id, string! ConnectionString) -> void
 NextORM.Core.HostTarget.Id.get -> string!
 NextORM.Core.HostTarget.Id.init -> void
 NextORM.Core.IEntityRouteResolver
-NextORM.Core.IEntityRouteResolver.TryResolve(System.Type! entityType, in NextORM.Core.MappingVariant scope, out NextORM.Core.RouteTarget target) -> bool
+NextORM.Core.IEntityRouteResolver.TryResolve(System.Type! entityType, in NextORM.Core.MappingVariant variant, out NextORM.Core.RouteTarget target) -> bool
 NextORM.Core.IHostTopology
 NextORM.Core.IHostTopology.Name.get -> string!
 NextORM.Core.IHostTopology.TryGetHost(in NextORM.Core.TopologyContext context, out NextORM.Core.HostTarget host) -> bool
@@ -294,12 +294,12 @@ NextORM.Core.RoundRobinTopology.RoundRobinTopology(string! name, params string![
 NextORM.Core.RoundRobinTopology.TryGetHost(in NextORM.Core.TopologyContext context, out NextORM.Core.HostTarget host) -> bool
 NextORM.Core.RoutedTransactionExtensions
 NextORM.Core.TopologyContext.HostId.get -> string?
-NextORM.Core.TopologyContext.TopologyContext(NextORM.Core.MappingVariant scope, NextORM.Core.CommandKind kind, string? hostId = null) -> void
+NextORM.Core.TopologyContext.TopologyContext(NextORM.Core.MappingVariant variant, NextORM.Core.CommandKind kind, string? hostId = null) -> void
 static NextORM.Core.RoutedTransactionExtensions.GetCurrentTransaction(this NextORM.Core.DataContext! context, NextORM.Core.RouteTarget target) -> System.Data.Common.DbTransaction?
-NextORM.Core.IRoutedTransactionManager.BeginTransaction(NextORM.Core.RouteTarget target, NextORM.Core.MappingVariant scope = default(NextORM.Core.MappingVariant), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified) -> System.Data.Common.DbTransaction!
-NextORM.Core.IRoutedTransactionManager.BeginTransactionAsync(NextORM.Core.RouteTarget target, NextORM.Core.MappingVariant scope = default(NextORM.Core.MappingVariant), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Data.Common.DbTransaction!>!
-static NextORM.Core.RoutedTransactionExtensions.BeginTransaction(this NextORM.Core.DataContext! context, NextORM.Core.RouteTarget target, NextORM.Core.MappingVariant scope = default(NextORM.Core.MappingVariant), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified) -> System.Data.Common.DbTransaction!
-static NextORM.Core.RoutedTransactionExtensions.BeginTransactionAsync(this NextORM.Core.DataContext! context, NextORM.Core.RouteTarget target, NextORM.Core.MappingVariant scope = default(NextORM.Core.MappingVariant), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Data.Common.DbTransaction!>!
+NextORM.Core.IRoutedTransactionManager.BeginTransaction(NextORM.Core.RouteTarget target, NextORM.Core.MappingVariant variant = default(NextORM.Core.MappingVariant), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified) -> System.Data.Common.DbTransaction!
+NextORM.Core.IRoutedTransactionManager.BeginTransactionAsync(NextORM.Core.RouteTarget target, NextORM.Core.MappingVariant variant = default(NextORM.Core.MappingVariant), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Data.Common.DbTransaction!>!
+static NextORM.Core.RoutedTransactionExtensions.BeginTransaction(this NextORM.Core.DataContext! context, NextORM.Core.RouteTarget target, NextORM.Core.MappingVariant variant = default(NextORM.Core.MappingVariant), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified) -> System.Data.Common.DbTransaction!
+static NextORM.Core.RoutedTransactionExtensions.BeginTransactionAsync(this NextORM.Core.DataContext! context, NextORM.Core.RouteTarget target, NextORM.Core.MappingVariant variant = default(NextORM.Core.MappingVariant), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Data.Common.DbTransaction!>!
 NextORM.Core.DataContextBuilder.DefaultTopologyName.get -> string?
 NextORM.Core.DataContextBuilder.UseDefaultTopology(string! topologyName) -> NextORM.Core.DataContextBuilder!
 NextORM.Core.DataRoutingBuilder.UseDefaultTopology(string! topologyName) -> NextORM.Core.DataRoutingBuilder!
@@ -309,7 +309,7 @@ NextORM.Core.HostPin
 NextORM.Core.HostPin.Dispose() -> void
 NextORM.Core.HostPin.HostId.get -> string!
 NextORM.Core.HostPin.Topology.get -> string!
-NextORM.Core.DataContext.GetPhysicalTableName<TEntity>(NextORM.Core.MappingVariant scope = default(NextORM.Core.MappingVariant)) -> NextORM.Core.PhysicalTableName
+NextORM.Core.DataContext.GetPhysicalTableName<TEntity>(NextORM.Core.MappingVariant variant = default(NextORM.Core.MappingVariant)) -> NextORM.Core.PhysicalTableName
 NextORM.Core.PhysicalTableName
 NextORM.Core.PhysicalTableName.Deconstruct(out string? Schema, out string! TableName) -> void
 NextORM.Core.PhysicalTableName.Equals(NextORM.Core.PhysicalTableName other) -> bool

@@ -287,17 +287,17 @@ public sealed class MappingVariantIsolationTests
     }
 
     private static (string Sql, IReadOnlyList<System.Data.Common.DbParameter> Parameters) Prepare(
-        SqliteDataContext context, global::NextORM.Core.MappingVariant scope, int minimum)
+        SqliteDataContext context, global::NextORM.Core.MappingVariant variant, int minimum)
     {
-        var command = BuildScopedQuery(context, scope, minimum);
+        var command = BuildScopedQuery(context, variant, minimum);
         var prepared = (DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
             command, false, true, CancellationToken.None);
         return (prepared.DbCommand.CommandText, prepared.DbCommand.Parameters.Cast<System.Data.Common.DbParameter>().ToArray());
     }
 
     private static QueryCommand<int> BuildScopedQuery(
-        SqliteDataContext context, global::NextORM.Core.MappingVariant scope, int minimum)
-        => context.From<ScopedRow>().WithVariant(scope)
+        SqliteDataContext context, global::NextORM.Core.MappingVariant variant, int minimum)
+        => context.From<ScopedRow>().WithVariant(variant)
             .Where(row => row.Id > minimum)
             .Select(row => row.Id);
 
@@ -344,17 +344,17 @@ public sealed class MappingVariantIsolationTests
     {
         private readonly DefaultEntityMetadataProvider _inner = new();
 
-        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingVariant scope)
+        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingVariant variant)
         {
             var metadata = _inner.GetMetadata(entityType, global::NextORM.Core.MappingVariant.Default);
-            var suffix = scope.Key ?? "default";
+            var suffix = variant.Key ?? "default";
             return new ScopedMetadata($"{suffix}_rows", $"{suffix}_schema",
                 metadata.Properties.Select(p => (IPropertyMetadata)new ScopedProperty(
                     p.PropertyInfo, $"{suffix}_{p.PropertyInfo.Name.ToLowerInvariant()}")).ToArray());
         }
 
-        public string GetColumnName(PropertyInfo property, in global::NextORM.Core.MappingVariant scope, INamingConvention? convention)
-            => $"{scope.Key ?? "default"}_{property.Name.ToLowerInvariant()}";
+        public string GetColumnName(PropertyInfo property, in global::NextORM.Core.MappingVariant variant, INamingConvention? convention)
+            => $"{variant.Key ?? "default"}_{property.Name.ToLowerInvariant()}";
     }
 
     private sealed class ScopedMetadata(string tableName, string schema, IReadOnlyList<IPropertyMetadata> properties) : IEntityMetadata

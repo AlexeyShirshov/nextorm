@@ -6,11 +6,11 @@ namespace NextORM.Core;
 public sealed class DefaultEntityMetadataProvider : IEntityMetadataProvider
 {
     /// <inheritdoc />
-    public IEntityMetadata GetMetadata(Type entityType, in MappingVariant scope)
+    public IEntityMetadata GetMetadata(Type entityType, in MappingVariant variant)
     {
         ArgumentNullException.ThrowIfNull(entityType);
 
-        if (scope == MappingVariant.Default)
+        if (variant == MappingVariant.Default)
         {
             lock (DataContextCache.MetadataRegistrationGate)
             {
@@ -29,14 +29,14 @@ public sealed class DefaultEntityMetadataProvider : IEntityMetadataProvider
         }
 
         return DataContextCache.ScopedMetadata.GetOrAdd(
-            (entityType, scope), key => BuildMetadata(key.Type));
+            (entityType, variant), key => BuildMetadata(key.Type));
     }
 
     /// <inheritdoc />
-    public string GetColumnName(PropertyInfo property, in MappingVariant scope, INamingConvention? convention)
+    public string GetColumnName(PropertyInfo property, in MappingVariant variant, INamingConvention? convention)
     {
         ArgumentNullException.ThrowIfNull(property);
-        var metadata = GetMetadata(property.DeclaringType ?? throw new ArgumentException("Property must have a declaring type.", nameof(property)), scope);
+        var metadata = GetMetadata(property.DeclaringType ?? throw new ArgumentException("Property must have a declaring type.", nameof(property)), variant);
         var mapped = metadata.Properties.FirstOrDefault(p => p.PropertyInfo == property);
         if (mapped is null)
             return convention?.ColumnName(property.Name) ?? property.Name;

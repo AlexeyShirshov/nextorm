@@ -83,12 +83,12 @@ public sealed class SqliteMappingVariantLiveTests : ProviderTestSuite
     private sealed class LiveMetadataProvider : IEntityMetadataProvider
     {
         private readonly DefaultEntityMetadataProvider _inner = new();
-        public IEntityMetadata GetMetadata(Type entityType, in MappingVariant scope)
+        public IEntityMetadata GetMetadata(Type entityType, in MappingVariant variant)
         {
             var metadata = _inner.GetMetadata(entityType, MappingVariant.Default);
             return new Metadata(metadata.Properties.Select(p => (IPropertyMetadata)new Property(p.PropertyInfo, "live_" + p.PropertyInfo.Name.ToLowerInvariant())).ToArray());
         }
-        public string GetColumnName(PropertyInfo property, in MappingVariant scope, INamingConvention? convention) => "live_" + property.Name.ToLowerInvariant();
+        public string GetColumnName(PropertyInfo property, in MappingVariant variant, INamingConvention? convention) => "live_" + property.Name.ToLowerInvariant();
     }
 
     private sealed class Metadata(IReadOnlyList<IPropertyMetadata> properties) : IEntityMetadata
@@ -218,12 +218,12 @@ public sealed class PostgresMappingVariantLiveTests : ProviderTestSuite
     private sealed class LiveMetadataProvider : IEntityMetadataProvider
     {
         private readonly DefaultEntityMetadataProvider _inner = new();
-        public IEntityMetadata GetMetadata(Type entityType, in MappingVariant scope)
+        public IEntityMetadata GetMetadata(Type entityType, in MappingVariant variant)
         {
             var metadata = _inner.GetMetadata(entityType, MappingVariant.Default);
             return new Metadata(metadata.Properties.Select(p => (IPropertyMetadata)new Property(p.PropertyInfo, "live_" + p.PropertyInfo.Name.ToLowerInvariant())).ToArray());
         }
-        public string GetColumnName(PropertyInfo property, in MappingVariant scope, INamingConvention? convention) => "live_" + property.Name.ToLowerInvariant();
+        public string GetColumnName(PropertyInfo property, in MappingVariant variant, INamingConvention? convention) => "live_" + property.Name.ToLowerInvariant();
     }
     private sealed class Metadata(IReadOnlyList<IPropertyMetadata> properties) : IEntityMetadata
     {
@@ -257,7 +257,7 @@ internal sealed class LiveDmlMetadataProvider : IEntityMetadataProvider
 {
     private readonly DefaultEntityMetadataProvider _inner = new();
 
-    public IEntityMetadata GetMetadata(Type entityType, in MappingVariant scope)
+    public IEntityMetadata GetMetadata(Type entityType, in MappingVariant variant)
     {
         var metadata = _inner.GetMetadata(entityType, MappingVariant.Default);
         var properties = metadata.Properties.Select(property =>
@@ -266,7 +266,7 @@ internal sealed class LiveDmlMetadataProvider : IEntityMetadataProvider
         return new LiveDmlMetadata(properties);
     }
 
-    public string GetColumnName(PropertyInfo property, in MappingVariant scope, INamingConvention? convention)
+    public string GetColumnName(PropertyInfo property, in MappingVariant variant, INamingConvention? convention)
         => "live_" + property.Name.ToLowerInvariant();
 
     private sealed class LiveDmlMetadata(IReadOnlyList<IPropertyMetadata> properties) : IEntityMetadata

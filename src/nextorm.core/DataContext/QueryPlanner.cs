@@ -1182,29 +1182,29 @@ internal sealed class QueryPlanner : IQueryPlanner
 
     private FromExpression GetFrom(Type t) => GetFrom(t, _scopeResolver.Resolve(t));
 
-    private FromExpression GetFrom(Type t, MappingVariant scope)
+    private FromExpression GetFrom(Type t, MappingVariant variant)
     {
-        // The FROM cache is process-wide and keyed by (type, scope) only. A scoped table depends on the
+        // The FROM cache is process-wide and keyed by (type, variant) only. A scoped table depends on the
         // metadata provider that produced it, and two contexts may configure different topologies under
-        // the same shard id, so a non-default scope is resolved per plan instead of being shared.
-        var cacheable = scope == MappingVariant.Default;
-        if (cacheable && _fromCache.TryGetValue((t, scope), out var cached))
+        // the same shard id, so a non-default variant is resolved per plan instead of being shared.
+        var cacheable = variant == MappingVariant.Default;
+        if (cacheable && _fromCache.TryGetValue((t, variant), out var cached))
             return cached;
 
         // Keep the established registration boundary: resolving an arbitrary CLR type here must not
         // silently publish an auto-built table mapping. From<T>() (or another mapping entry point)
         // registers the entity before a query can reach this renderer. Scoped providers may then
-        // derive the scope-specific variant from that registered entity.
+        // derive the variant-specific variant from that registered entity.
         if (!DataContextCache.Metadata.TryGetValue(t, out var registered) || string.IsNullOrEmpty(registered.TableName))
             throw new BuildSqlCommandException(
                 $"Table name is not registered for type {t}. Materialize the entity first (for example with {nameof(DataContextExtensions.From)}<{t.Name}>()) so its metadata is registered.");
 
-        var entity = _metadataProvider.GetMetadata(t, scope);
+        var entity = _metadataProvider.GetMetadata(t, variant);
         if (!string.IsNullOrEmpty(entity.TableName))
         {
             var from = new FromExpression(entity.TableName, entity.Schema, entity.IsTableNameAuto, t.IsInterface);
             if (cacheable)
-                _fromCache.TryAdd((t, scope), from);
+                _fromCache.TryAdd((t, variant), from);
             return from;
         }
 

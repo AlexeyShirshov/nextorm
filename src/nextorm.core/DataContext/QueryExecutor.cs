@@ -318,14 +318,14 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     /// the current connection. Unlike a prepared query command, a mutation command is not reused across
     /// executions, so the parameters are added each time.
     /// </summary>
-    private DbCommand CreateMutationCommand(string sql, IReadOnlyList<Parameter> parameters, MappingVariant scope, Type? entityType, IReadOnlyList<Type>? sources)
+    private DbCommand CreateMutationCommand(string sql, IReadOnlyList<Parameter> parameters, MappingVariant variant, Type? entityType, IReadOnlyList<Type>? sources)
     {
         // Execution-time PostgreSQL guard: every ad-hoc mutation renderer ends here before the command
         // exists, including the ones that do not consult the MySQL-family lowering seam (the multi-table
         // UPDATE/DELETE renders). The final values are already converted, so this is the last seam that
         // sees them before the driver.
         PostgresParameterGuard.Validate(StringLiteralPolicy, parameters);
-        return CreateCommand(sql, new MutationParameterState(parameters, _createParam), BindMutationParameters, CommandType.Text, scope, entityType, sources);
+        return CreateCommand(sql, new MutationParameterState(parameters, _createParam), BindMutationParameters, CommandType.Text, variant, entityType, sources);
     }
 
     /// <summary>
@@ -336,12 +336,12 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     private DbCommand CreateRawCommand(string commandText, IReadOnlyList<ProcedureParameter> parameters, CommandType commandType)
         => CreateCommand(commandText, new ProcedureParameterState(parameters, _createProcedureParam), BindProcedureParameters, commandType);
 
-    private DbCommand CreateCommand<TState>(string commandText, TState state, Action<DbCommand, TState> bindParameters, CommandType commandType = CommandType.Text, MappingVariant scope = default, Type? entityType = null, IReadOnlyList<Type>? sources = null)
+    private DbCommand CreateCommand<TState>(string commandText, TState state, Action<DbCommand, TState> bindParameters, CommandType commandType = CommandType.Text, MappingVariant variant = default, Type? entityType = null, IReadOnlyList<Type>? sources = null)
     {
         // A mutation with no target entity (a materialisation) names the entities it reads instead, so its
         // statement is routed by what it reads rather than by the row type it projects.
         sources ??= entityType is null ? null : new[] { entityType };
-        var connectionManager = _managerFor(scope, sources, CommandKind.Write);
+        var connectionManager = _managerFor(variant, sources, CommandKind.Write);
         connectionManager.EnsureConnectionOpen();
         return InitCommand(connectionManager.GetConnection(), commandText, state, bindParameters, commandType, _currentTransaction(connectionManager));
     }
@@ -560,14 +560,14 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     /// <summary>Executes a mutation and returns the number of affected rows.</summary>
     /// <param name="sql">The parameterised statement text.</param>
     /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>
-    /// <param name="scope">The mapping variant that selects the shard connection; the default scope keeps the context connection.</param>
+    /// <param name="variant">The mapping variant that selects the shard connection; the default scope keeps the context connection.</param>
     /// <param name="entityType">The entity type the command is routed by, or <see langword="null"/> when it has none.</param>
     /// <param name="sources">The entity types the statement reads or writes, replacing <paramref name="entityType"/> when set.</param>
     /// <returns>The number of rows affected, as reported by the provider.</returns>
-    public int ExecuteNonQuery(string sql, IReadOnlyList<Parameter> parameters, MappingVariant scope = default, Type? entityType = null, IReadOnlyList<Type>? sources = null)
+    public int ExecuteNonQuery(string sql, IReadOnlyList<Parameter> parameters, MappingVariant variant = default, Type? entityType = null, IReadOnlyList<Type>? sources = null)
     {
         CheckDisposed();
-        using var cmd = CreateMutationCommand(sql, parameters, scope, entityType, sources);
+        using var cmd = CreateMutationCommand(sql, parameters, variant, entityType, sources);
         return RunNonQuery(cmd);
     }
 
@@ -575,28 +575,28 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     /// <param name="sql">The parameterised statement text.</param>
     /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>
     /// <param name="cancellationToken">Cancels execution.</param>
-    /// <param name="scope">The mapping variant that selects the shard connection; the default scope keeps the context connection.</param>
+    /// <param name="variant">The mapping variant that selects the shard connection; the default scope keeps the context connection.</param>
     /// <param name="entityType">The entity type the command is routed by, or <see langword="null"/> when it has none.</param>
     /// <param name="sources">The entity types the statement reads or writes, replacing <paramref name="entityType"/> when set.</param>
     /// <returns>A task producing the number of rows affected.</returns>
-    public async Task<int> ExecuteNonQueryAsync(string sql, IReadOnlyList<Parameter> parameters, CancellationToken cancellationToken, MappingVariant scope = default, Type? entityType = null, IReadOnlyList<Type>? sources = null)
+    public async Task<int> ExecuteNonQueryAsync(string sql, IReadOnlyList<Parameter> parameters, CancellationToken cancellationToken, MappingVariant variant = default, Type? entityType = null, IReadOnlyList<Type>? sources = null)
     {
         CheckDisposed();
-        using var cmd = CreateMutationCommand(sql, parameters, scope, entityType, sources);
+        using var cmd = CreateMutationCommand(sql, parameters, variant, entityType, sources);
         return await RunNonQueryAsync(cmd, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Executes a mutation and returns the first column of its first row, or <see langword="null"/>.</summary>
     /// <param name="sql">The parameterised statement text.</param>
     /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>
-    /// <param name="scope">The mapping variant that selects the shard connection; the default scope keeps the context connection.</param>
+    /// <param name="variant">The mapping variant that selects the shard connection; the default scope keeps the context connection.</param>
     /// <param name="entityType">The entity type the command is routed by, or <see langword="null"/> when it has none.</param>
     /// <param name="sources">The entity types the statement reads or writes, replacing <paramref name="entityType"/> when set.</param>
     /// <returns>The scalar value, with <see cref="DBNull"/> normalized to <see langword="null"/>.</returns>
-    public object? ExecuteScalar(string sql, IReadOnlyList<Parameter> parameters, MappingVariant scope = default, Type? entityType = null, IReadOnlyList<Type>? sources = null)
+    public object? ExecuteScalar(string sql, IReadOnlyList<Parameter> parameters, MappingVariant variant = default, Type? entityType = null, IReadOnlyList<Type>? sources = null)
     {
         CheckDisposed();
-        using var cmd = CreateMutationCommand(sql, parameters, scope, entityType, sources);
+        using var cmd = CreateMutationCommand(sql, parameters, variant, entityType, sources);
         var result = RunScalar(cmd);
         return result is DBNull ? null : result;
     }
@@ -605,14 +605,14 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     /// <param name="sql">The parameterised statement text.</param>
     /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>
     /// <param name="cancellationToken">Cancels execution.</param>
-    /// <param name="scope">The mapping variant that selects the shard connection; the default scope keeps the context connection.</param>
+    /// <param name="variant">The mapping variant that selects the shard connection; the default scope keeps the context connection.</param>
     /// <param name="entityType">The entity type the command is routed by, or <see langword="null"/> when it has none.</param>
     /// <param name="sources">The entity types the statement reads or writes, replacing <paramref name="entityType"/> when set.</param>
     /// <returns>A task producing the scalar value, with <see cref="DBNull"/> normalized to <see langword="null"/>.</returns>
-    public async Task<object?> ExecuteScalarAsync(string sql, IReadOnlyList<Parameter> parameters, CancellationToken cancellationToken, MappingVariant scope = default, Type? entityType = null, IReadOnlyList<Type>? sources = null)
+    public async Task<object?> ExecuteScalarAsync(string sql, IReadOnlyList<Parameter> parameters, CancellationToken cancellationToken, MappingVariant variant = default, Type? entityType = null, IReadOnlyList<Type>? sources = null)
     {
         CheckDisposed();
-        using var cmd = CreateMutationCommand(sql, parameters, scope, entityType, sources);
+        using var cmd = CreateMutationCommand(sql, parameters, variant, entityType, sources);
         var result = await RunScalarAsync(cmd, cancellationToken).ConfigureAwait(false);
         return result is DBNull ? null : result;
     }
@@ -625,14 +625,14 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     /// <param name="sql">The parameterised statement text.</param>
     /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>
     /// <param name="mapper">The compiled row mapper.</param>
-    /// <param name="scope">The mapping variant that selects the shard connection; the default scope keeps the context connection.</param>
+    /// <param name="variant">The mapping variant that selects the shard connection; the default scope keeps the context connection.</param>
     /// <param name="entityType">The entity type the command is routed by, or <see langword="null"/> when it has none.</param>
     /// <param name="sources">The entity types the statement reads or writes, replacing <paramref name="entityType"/> when set.</param>
     /// <returns>The returned rows, materialized in result-set order.</returns>
-    public List<TResult> ExecuteReader<TResult>(string sql, IReadOnlyList<Parameter> parameters, Func<IDataRecord, TResult> mapper, MappingVariant scope = default, Type? entityType = null, IReadOnlyList<Type>? sources = null)
+    public List<TResult> ExecuteReader<TResult>(string sql, IReadOnlyList<Parameter> parameters, Func<IDataRecord, TResult> mapper, MappingVariant variant = default, Type? entityType = null, IReadOnlyList<Type>? sources = null)
     {
         CheckDisposed();
-        using var cmd = CreateMutationCommand(sql, parameters, scope, entityType, sources);
+        using var cmd = CreateMutationCommand(sql, parameters, variant, entityType, sources);
         using var reader = RunReader(cmd, CommandBehavior.Default);
 
         var list = new List<TResult>();
@@ -648,14 +648,14 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>
     /// <param name="mapper">The compiled row mapper.</param>
     /// <param name="cancellationToken">Cancels execution.</param>
-    /// <param name="scope">The mapping variant that selects the shard connection; the default scope keeps the context connection.</param>
+    /// <param name="variant">The mapping variant that selects the shard connection; the default scope keeps the context connection.</param>
     /// <param name="entityType">The entity type the command is routed by, or <see langword="null"/> when it has none.</param>
     /// <param name="sources">The entity types the statement reads or writes, replacing <paramref name="entityType"/> when set.</param>
     /// <returns>A task producing the returned rows, materialized in result-set order.</returns>
-    public async Task<List<TResult>> ExecuteReaderAsync<TResult>(string sql, IReadOnlyList<Parameter> parameters, Func<IDataRecord, TResult> mapper, CancellationToken cancellationToken, MappingVariant scope = default, Type? entityType = null, IReadOnlyList<Type>? sources = null)
+    public async Task<List<TResult>> ExecuteReaderAsync<TResult>(string sql, IReadOnlyList<Parameter> parameters, Func<IDataRecord, TResult> mapper, CancellationToken cancellationToken, MappingVariant variant = default, Type? entityType = null, IReadOnlyList<Type>? sources = null)
     {
         CheckDisposed();
-        using var cmd = CreateMutationCommand(sql, parameters, scope, entityType, sources);
+        using var cmd = CreateMutationCommand(sql, parameters, variant, entityType, sources);
         using var reader = await RunReaderAsync(cmd, CommandBehavior.Default, cancellationToken).ConfigureAwait(false);
 
         var list = new List<TResult>();

@@ -56,7 +56,7 @@ scope)`, а не одного scope; «нет правила» — вот что
 // Правило роутинга: структура + данные + пользовательская логика.
 public interface IEntityRouteResolver
 {
-    bool TryResolve(Type entityType, in MappingVariant scope, out RouteTarget target);
+    bool TryResolve(Type entityType, in MappingVariant variant, out RouteTarget target);
 }
 
 // Таргет — имя топологии; к конкретному соединению не привязан.
@@ -232,7 +232,7 @@ scope.
 - физические имена в raw SQL: плейсхолдеры `{schema}`, `{table}`, `{qualified}` раскрываются при
   построении плана из метаданных привязанной сущности (`BindEntity`) и scope команды; без токенов текст
   выводится дословно, `{schema}` требует объявленной схемы, квотирование — по `QuoteIdentifiers`;
-  публичный `GetPhysicalTableName<TEntity>(scope)` отдаёт те же `Schema`/`TableName`/`QualifiedName`
+  публичный `GetPhysicalTableName<TEntity>(variant)` отдаёт те же `Schema`/`TableName`/`QualifiedName`
   для SQL, собираемого вне построителя. Размещение по умолчанию — `SchemaPerBucket`
   (`{placeholder}_{bucket}.{table}`, placeholder — схема сущности или `bucket`);
 - дефолтная топология: `UseDefaultTopology(name)` / `UseDefaultTopology(name, connectionString)`

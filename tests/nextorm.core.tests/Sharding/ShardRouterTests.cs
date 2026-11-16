@@ -160,10 +160,10 @@ public sealed class ShardRouterTests
     {
         private readonly DefaultEntityMetadataProvider _inner = new();
 
-        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingVariant scope)
-            => _inner.GetMetadata(entityType, scope);
+        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingVariant variant)
+            => _inner.GetMetadata(entityType, variant);
 
-        public string GetColumnName(System.Reflection.PropertyInfo property, in global::NextORM.Core.MappingVariant scope, INamingConvention? convention)
+        public string GetColumnName(System.Reflection.PropertyInfo property, in global::NextORM.Core.MappingVariant variant, INamingConvention? convention)
             => $"custom_{property.Name}";
     }
 

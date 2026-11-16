@@ -225,7 +225,7 @@ public sealed class DataRoutingTests : IDisposable
 
     private sealed class TypeNameResolver(string typeName, string topology) : IEntityRouteResolver
     {
-        public bool TryResolve(Type entityType, in global::NextORM.Core.MappingVariant scope, out RouteTarget target)
+        public bool TryResolve(Type entityType, in global::NextORM.Core.MappingVariant variant, out RouteTarget target)
         {
             if (entityType.Name == typeName)
             {

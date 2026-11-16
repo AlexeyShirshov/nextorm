@@ -119,12 +119,12 @@ public static class MemberInfoExtensions
         return GetPropertyColumnName(mi, options.NamingConvention, entityType ?? options.EntityType);
     }
 
-    internal static string GetPropertyColumnName(this MemberInfo mi, INamingConvention? convention, Type? entityType, MappingVariant scope, IEntityMetadataProvider? metadataProvider)
+    internal static string GetPropertyColumnName(this MemberInfo mi, INamingConvention? convention, Type? entityType, MappingVariant variant, IEntityMetadataProvider? metadataProvider)
     {
-        if (scope != MappingVariant.Default && mi is PropertyInfo property && metadataProvider is not null)
+        if (variant != MappingVariant.Default && mi is PropertyInfo property && metadataProvider is not null)
         {
-            var key = (property, convention, entityType, scope, metadataProvider);
-            return _columnNames.GetOrAdd(key, _ => metadataProvider.GetColumnName(property, scope, convention));
+            var key = (property, convention, entityType, variant, metadataProvider);
+            return _columnNames.GetOrAdd(key, _ => metadataProvider.GetColumnName(property, variant, convention));
         }
 
         return GetPropertyColumnName(mi, convention, entityType);

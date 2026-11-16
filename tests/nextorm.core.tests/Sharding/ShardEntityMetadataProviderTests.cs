@@ -153,14 +153,14 @@ public sealed class ShardEntityMetadataProviderTests
     {
         private readonly DefaultEntityMetadataProvider _inner = new();
 
-        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingVariant scope)
+        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingVariant variant)
         {
-            var metadata = _inner.GetMetadata(entityType, scope);
+            var metadata = _inner.GetMetadata(entityType, variant);
             return new SchemaMetadata(metadata);
         }
 
-        public string GetColumnName(PropertyInfo property, in global::NextORM.Core.MappingVariant scope, INamingConvention? convention)
-            => _inner.GetColumnName(property, scope, convention);
+        public string GetColumnName(PropertyInfo property, in global::NextORM.Core.MappingVariant variant, INamingConvention? convention)
+            => _inner.GetColumnName(property, variant, convention);
 
         private sealed class SchemaMetadata(IEntityMetadata inner) : IEntityMetadata
         {
@@ -179,12 +179,12 @@ public sealed class ShardEntityMetadataProviderTests
         private readonly DefaultEntityMetadataProvider _inner = new();
         public global::NextORM.Core.MappingVariant LastScope { get; private set; }
 
-        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingVariant scope)
-            => _inner.GetMetadata(entityType, scope);
+        public IEntityMetadata GetMetadata(Type entityType, in global::NextORM.Core.MappingVariant variant)
+            => _inner.GetMetadata(entityType, variant);
 
-        public string GetColumnName(PropertyInfo property, in global::NextORM.Core.MappingVariant scope, INamingConvention? convention)
+        public string GetColumnName(PropertyInfo property, in global::NextORM.Core.MappingVariant variant, INamingConvention? convention)
         {
-            LastScope = scope;
+            LastScope = variant;
             return $"custom_{property.Name}";
         }
     }

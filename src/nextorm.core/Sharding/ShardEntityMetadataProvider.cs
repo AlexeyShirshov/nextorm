@@ -22,13 +22,13 @@ public sealed class ShardEntityMetadataProvider : IEntityMetadataProvider
     }
 
     /// <inheritdoc />
-    public IEntityMetadata GetMetadata(Type entityType, in MappingVariant scope)
+    public IEntityMetadata GetMetadata(Type entityType, in MappingVariant variant)
     {
         ArgumentNullException.ThrowIfNull(entityType);
-        if (scope == MappingVariant.Default)
-            return _inner.GetMetadata(entityType, scope);
+        if (variant == MappingVariant.Default)
+            return _inner.GetMetadata(entityType, variant);
 
-        var bucket = ParseBucket(scope.Key, _topology.Ring.BucketCount);
+        var bucket = ParseBucket(variant.Key, _topology.Ring.BucketCount);
         var metadata = _inner.GetMetadata(entityType, MappingVariant.Default);
         return _topology.PlacementMode switch
         {
@@ -44,8 +44,8 @@ public sealed class ShardEntityMetadataProvider : IEntityMetadataProvider
     }
 
     /// <inheritdoc />
-    public string GetColumnName(PropertyInfo property, in MappingVariant scope, INamingConvention? convention)
-        => _inner.GetColumnName(property, scope, convention);
+    public string GetColumnName(PropertyInfo property, in MappingVariant variant, INamingConvention? convention)
+        => _inner.GetColumnName(property, variant, convention);
 
     private static int ParseBucket(string? scopeKey, int bucketCount)
     {

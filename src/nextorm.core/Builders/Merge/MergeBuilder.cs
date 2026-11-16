@@ -52,11 +52,11 @@ public sealed partial class MergeBuilder<TEntity>
     }
 
     /// <summary>Selects a runtime mapping variant for the merge target and source.</summary>
-    /// <param name="scope">The mapping variant used to resolve table, schema and column names.</param>
+    /// <param name="variant">The mapping variant used to resolve table, schema and column names.</param>
     /// <returns>This builder, for chaining.</returns>
-    public MergeBuilder<TEntity> WithVariant(MappingVariant scope)
+    public MergeBuilder<TEntity> WithVariant(MappingVariant variant)
     {
-        _mappingVariant = scope;
+        _mappingVariant = variant;
         return this;
     }
 

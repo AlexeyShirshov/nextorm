@@ -283,7 +283,7 @@ foreach (var bucket in orders.GroupBy(BucketOf))
 ```
 
 То же и для чтения: адресуйте **бакет**, а не шард, — сервер выберет роутер.
-`GetPhysicalTableName<Order>(scope)` отвечает, где бакет лежит физически (`bucket_7.Orders` либо
+`GetPhysicalTableName<Order>(variant)` отвечает, где бакет лежит физически (`bucket_7.Orders` либо
 `Orders_7` в режиме суффикса); [«Один батч — одна топология»](34-routing-data-to-topologies.md) содержит
 правило для батчей целиком.
 

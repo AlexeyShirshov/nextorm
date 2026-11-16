@@ -14,9 +14,9 @@ internal sealed class ShardRouteResolver(IShardRouter router, string topologyNam
     private readonly string _topologyName = topologyName;
 
     /// <inheritdoc />
-    public bool TryResolve(Type entityType, in MappingVariant scope, out RouteTarget target)
+    public bool TryResolve(Type entityType, in MappingVariant variant, out RouteTarget target)
     {
-        if ((entityType is not null && _router.IsSharded(entityType)) || IsBucketScope(in scope))
+        if ((entityType is not null && _router.IsSharded(entityType)) || IsBucketScope(in variant))
         {
             target = new RouteTarget(_topologyName);
             return true;
@@ -26,12 +26,12 @@ internal sealed class ShardRouteResolver(IShardRouter router, string topologyNam
         return false;
     }
 
-    private bool IsBucketScope(in MappingVariant scope)
+    private bool IsBucketScope(in MappingVariant variant)
     {
-        if (scope == MappingVariant.Default || string.IsNullOrEmpty(scope.Key))
+        if (variant == MappingVariant.Default || string.IsNullOrEmpty(variant.Key))
             return false;
 
-        return int.TryParse(scope.Key, NumberStyles.None, CultureInfo.InvariantCulture, out var bucket)
+        return int.TryParse(variant.Key, NumberStyles.None, CultureInfo.InvariantCulture, out var bucket)
             && (uint)bucket < (uint)_router.BucketCount;
     }
 }

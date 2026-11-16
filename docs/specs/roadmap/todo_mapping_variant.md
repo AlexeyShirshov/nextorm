@@ -102,10 +102,10 @@ public interface IEntityVariantResolver
 public interface IEntityMetadataProvider
 {
     /// <summary>Metadata for <paramref name="entityType"/> under <paramref name="scope"/>.</summary>
-    IEntityMetadata GetMetadata(Type entityType, in MappingVariant scope);
+    IEntityMetadata GetMetadata(Type entityType, in MappingVariant variant);
 
     /// <summary>Column name for <paramref name="property"/> under <paramref name="scope"/>.</summary>
-    string GetColumnName(PropertyInfo property, in MappingVariant scope, INamingConvention? convention);
+    string GetColumnName(PropertyInfo property, in MappingVariant variant, INamingConvention? convention);
 }
 ```
 
@@ -145,7 +145,7 @@ public sealed class PrefixedParameterProvider(IParameterProvider inner, string p
 ```
 
 - `NormParam` (`DataContext/NormParam.cs:12`) становится scope-aware:
-  `GetName(MappingVariant scope, int index)` / `IsName(scope, name)`; кэш `ParamNameCache` — на префикс,
+  `GetName(MappingVariant variant, int index)` / `IsName(scope, name)`; кэш `ParamNameCache` — на префикс,
   `"norm_p"` для default (без аллокаций и без смены имён в default-режиме).
 - Точки, которые обязаны прокидывать scope в имена: `QueryPlanner.cs:59,108`,
   `Visitors/NormSqlTranslator.cs:75`, `Cache/DbPreparedQueryCommand.cs:119`,
@@ -161,7 +161,7 @@ public DataContextBuilder UseEntityMetadataProvider(IEntityMetadataProvider prov
 public DataContextBuilder UseVariantResolver(IEntityVariantResolver resolver);
 
 // per-query (fluent, на EntityBuilder<T> / DML-билдерах):
-public TBuilder WithVariant(MappingVariant scope);
+public TBuilder WithVariant(MappingVariant variant);
 ```
 
 - Default-реализации регистрируются автоматически; при `MappingVariant.Default` — fast-path.

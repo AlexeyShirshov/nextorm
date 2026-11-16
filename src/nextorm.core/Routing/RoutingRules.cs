@@ -12,12 +12,12 @@ public readonly record struct RouteTarget(string Topology);
 /// </summary>
 public interface IEntityRouteResolver
 {
-    /// <summary>Resolves the topology of <paramref name="entityType"/> under <paramref name="scope"/>.</summary>
+    /// <summary>Resolves the topology of <paramref name="entityType"/> under <paramref name="variant"/>.</summary>
     /// <param name="entityType">The entity type being routed.</param>
-    /// <param name="scope">The mapping variant the command runs under.</param>
+    /// <param name="variant">The mapping variant the command runs under.</param>
     /// <param name="target">Receives the topology when the rule applies.</param>
     /// <returns><see langword="true"/> when this rule claims the type.</returns>
-    bool TryResolve(Type entityType, in MappingVariant scope, out RouteTarget target);
+    bool TryResolve(Type entityType, in MappingVariant variant, out RouteTarget target);
 }
 
 /// <summary>
