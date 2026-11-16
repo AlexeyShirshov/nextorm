@@ -102,8 +102,8 @@
       href: guide/31-provider-specific-features.md
     - name: Наследование и производные сущности
       href: guide/32-inheritance-and-derived-entities.md
-    - name: Область сопоставления времени выполнения (multi-tenancy)
-      href: guide/33-runtime-mapping-scope.md
+    - name: Вариант сопоставления времени выполнения (multi-tenancy)
+      href: guide/33-runtime-mapping-variant.md
     - name: Маршрутизация данных по топологиям
       href: guide/34-routing-data-to-topologies.md
     - name: Шардирование и горизонтальное партиционирование

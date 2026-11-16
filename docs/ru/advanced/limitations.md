@@ -118,6 +118,7 @@
 - переопределение источника на запрос (`WithTableName`/`WithSchema`/`WithDatabase`/`WithServer`/`WithTableExpression`) у всех SQL-провайдеров, входит в ключ кэша планов (см. [Переопределение источника для запроса](../guide/01-query-sources.md#переопределение-источника-для-запроса)).
 
 - сбор по бакетам: `AcrossBuckets()` возвращает по одному вектору результата на бакет и ничего не объединяет между бакетами, поэтому глобальные `ORDER BY`/`LIMIT`/`OFFSET`/`DISTINCT`/агрегаты — задача вызывающего кода, fan-out не является одной транзакцией, а `BulkInsertBuilder` не учитывает шардирование (см. [Шардирование](../guide/35-sharding-and-horizontal-partitioning.md)).
+- shard key при шардировании: значения хешируются канонически, поэтому принимаются только `null`, `int`/`long`/`short`/`byte`, `Guid`, `string`, `bool`, `DateTime`, `DateTimeOffset` и `decimal` — свойство-ключ типа enum, `uint`, `double`, `float` или `char` даёт `ArgumentException`, а `int 5` и `long 5` — разные ключи. [«Бакет строки»](../guide/35-sharding-and-horizontal-partitioning.md) показывает, как получить бакет из сущности через `IShardRouter`.
 
 ## См. также
 

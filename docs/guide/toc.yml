@@ -64,8 +64,8 @@
   href: 31-provider-specific-features.md
 - name: Inheritance and derived entities
   href: 32-inheritance-and-derived-entities.md
-- name: Runtime mapping scope (multi-tenancy)
-  href: 33-runtime-mapping-scope.md
+- name: Runtime mapping variant (multi-tenancy)
+  href: 33-runtime-mapping-variant.md
 - name: Routing data to topologies
   href: 34-routing-data-to-topologies.md
 - name: Sharding and horizontal partitioning

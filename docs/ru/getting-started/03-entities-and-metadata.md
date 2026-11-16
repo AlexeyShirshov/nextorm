@@ -342,27 +342,27 @@ public interface IOrder
 | ClickHouse | Имена используются как заданы; при отрисовке SQL идентификаторы и псевдонимы выделяются обратными кавычками. |
 | In-memory | Идентичные метаданные, общие с SQL-контекстами через [`DataContextCache`](xref:NextORM.Core.DataContextCache). |
 
-## Область сопоставления времени выполнения (одна сущность, несколько таблиц)
+## Вариант сопоставления времени выполнения (одна сущность, несколько таблиц)
 
 Один класс сущности может обращаться к разным физическим таблицам, схемам или наборам колонок в
-зависимости от *области* времени выполнения — это механизм, на котором стоит multi-tenancy. Область
-выбирает `IEntityScopeResolver`, отображает на имена `IEntityMetadataProvider`, а для одной команды выбор
-переопределяется через `WithScope(...)`:
+зависимости от *варианта* времени выполнения — это механизм, на котором стоит multi-tenancy. Вариант
+выбирает `IEntityVariantResolver`, отображает на имена `IEntityMetadataProvider`, а для одной команды выбор
+переопределяется через `WithVariant(...)`:
 
 ```csharp
 var builder = new DataContextBuilder()
-    .UseScopeResolver(new TenantScopeResolver())
+    .UseVariantResolver(new TenantVariantResolver())
     .UseEntityMetadataProvider(new TenantMetadataProvider());
 
 var rows = new SqliteDataContext(connectionString, builder)
     .From<Order>()
-    .WithScope(new MappingScope("acme"))
+    .WithVariant(new MappingVariant("acme"))
     .ToList();
 ```
 
-`MappingScope.Default` сохраняет обычный маппинг. Планы, метаданные и имена параметров изолированы по
-области, а DML-билдеры определяют область до построения команды. Полный гайд:
-[Область сопоставления времени выполнения](../guide/33-runtime-mapping-scope.md).
+`MappingVariant.Default` сохраняет обычный маппинг. Планы, метаданные и имена параметров изолированы по
+варианту, а DML-билдеры определяют вариант до построения команды. Полный гайд:
+[Вариант сопоставления времени выполнения](../guide/33-runtime-mapping-variant.md).
 
 ## См. также
 

@@ -9,7 +9,7 @@ Two kinds of rule produce the mapping:
 
 - **Structure** — an attribute on the entity type or its assembly, a namespace prefix, or a custom
   resolver. The rule is a property of the code.
-- **Data** — the sharding router turns a shard key or a bucket scope into a topology. This is the same
+- **Data** — the sharding router turns a shard key or a bucket variant into a topology. This is the same
   mechanism described in [Sharding and horizontal partitioning](35-sharding-and-horizontal-partitioning.md),
   seen from the routing side.
 
@@ -102,8 +102,8 @@ merges results across hosts.
 
 A batch (`CreateBatchBuilder`) is one SQL session and one round trip, not several statements that happen
 to travel together, so the rule applies to the batch as a whole: the entity types of every step must
-resolve to one topology and one mapping scope. The first routed step decides the host, a step with no
-rule rides along on it, and a step that needs another topology or another scope is rejected **while the
+resolve to one topology and one mapping variant. The first routed step decides the host, a step with no
+rule rides along on it, and a step that needs another topology or another variant is rejected **while the
 batch is rendered** — `ToSql()` fails too, before a connection is opened:
 
 ```text
@@ -121,19 +121,19 @@ leave it fails like any other command.
 
 The lazy temporary table is exactly this case. Reading an `AsTempTable` source runs one batch — `DROP`,
 `CREATE TEMPORARY TABLE ... AS SELECT`, then the read — on one session, so it must be one host, and the
-table is materialised from its source query **under that query's own scope**. Scope the source like the
-read:
+table is materialised from its source query **under that query's own variant**. Give the source the same
+variant as the read:
 
 ```csharp
-var scope = new MappingScope("3");
+var variant = new MappingVariant("3");
 
 var source = context.From<Order>()
-    .WithScope(scope)                       // the rows of bucket 3
+    .WithVariant(variant)                     // the rows of bucket 3
     .Select(order => new { order.Id, order.Total })
     .AsTempTable();
 
 var rows = context.From(source)
-    .WithScope(scope)                       // the same bucket: one batch, one host
+    .WithVariant(variant)                     // the same bucket: one batch, one host
     .Select(row => new { Id = row.GetInt32("Id"), Total = row.GetDecimal("Total") })
     .ToList();
 ```
@@ -143,7 +143,7 @@ read would have to run on two hosts.
 
 An eager materialisation follows the same rule: `ToTable`/`ToTempTable` writes a literal target name, so
 it is routed by the entities its **source query** reads — not by the row type it projects — and runs under
-that query's scope. With `DropExisting` the drop accompanies the create to the same host.
+that query's variant. With `DropExisting` the drop accompanies the create to the same host.
 
 `ExecuteRaw`, `ExecuteProcedure` and bulk insert take no part in routing: they run on the context
 connection. A batch is how several statements are kept together on one routed host.
@@ -188,7 +188,28 @@ using (context.PinHost("reports", "host-2"))   // the picker no longer chooses
 // the handle released the pin; the picker chooses again
 ```
 
-`PinHost` returns a handle that releases the pin when disposed, so a pin covers exactly the scope you
+`host-2` is a **host id** — the `HostTarget.Id` the topology returns for a command, unique inside that
+topology. `RoundRobinTopology("reports", cs1, cs2)` names its hosts `host-1`, `host-2`, … in the order the
+connection strings are given, so it is the second server above; pass your own `HostTarget`s when you want
+the ids you pin by:
+
+```csharp
+new RoundRobinTopology("reports",
+[
+    new HostTarget("eu", "Host=reports-1;Database=warehouse"),
+    new HostTarget("us", "Host=reports-2;Database=warehouse"),
+]);
+```
+
+A shard topology's host ids are its shard ids (`AddShard("pg-2", ...)`, listed by `ShardIds` — and by
+`IShardRouter.ShardIds` on the router a sharded context hands out), and `RoundRobinTopology.Hosts` lists
+its hosts. An `IHostTopology` of your own decides the ids in `TryGetHost`: the interface has only `Name`
+and `TryGetHost`, because hosts can be dynamic, so keep the ids you pin by in your own configuration. The
+context does not enumerate hosts. `PinHost` resolves the id through the topology and throws
+`ArgumentException` when the topology does not know it, so a stale id fails loudly instead of pinning
+silently elsewhere.
+
+`PinHost` returns a handle that releases the pin when disposed, so a pin covers exactly the block you
 give it. `UnpinHost("reports")` releases it explicitly when the handle is not kept. A pin belongs to the
 topology: pinning the same topology again replaces it, and disposing the older handle then does nothing.
 
@@ -206,7 +227,7 @@ public sealed class HealthAwareTopology : IHostTopology
 
     public bool TryGetHost(in TopologyContext context, out HostTarget host)
     {
-        // context.Scope   — the mapping scope the command runs under
+        // context.Scope   — the mapping variant the command runs under
         // context.Kind    — CommandKind.Read or CommandKind.Write
         // context.HostId  — a pinned host, or null to choose
         host = context.Kind == CommandKind.Read ? PickReadReplica() : PickPrimary();
@@ -221,7 +242,7 @@ selection, request-rate balancing, health checks, a read/write split — is impl
 
 ## Relation to sharding
 
-Sharding is the data rule of the same model: the shard key (or the bucket scope of a fan-out) selects
+Sharding is the data rule of the same model: the shard key (or the bucket variant of a fan-out) selects
 the `"sharding"` topology, and `ShardTopology` turns the bucket into a shard host. Nothing in this page
 is required to use sharding, and sharding does not require the structural rules. When both are
 configured, the sharding rule is an ordinary custom resolver that claims the sharded entity types.

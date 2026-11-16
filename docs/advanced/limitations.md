@@ -118,6 +118,7 @@ limitations:
 - per-query source overrides (`WithTableName`/`WithSchema`/`WithDatabase`/`WithServer`/`WithTableExpression`) on every SQL provider, part of the plan-cache key (see [Per-query source overrides](../guide/01-query-sources.md#per-query-source-overrides)).
 
 - sharding fan-out: `AcrossBuckets()` returns one result vector per bucket and never merges across buckets, so global `ORDER BY`/`LIMIT`/`OFFSET`/`DISTINCT`/aggregates are the caller's job, a fan-out is not one transaction, and `BulkInsertBuilder` is not shard-aware (see [Sharding](../guide/35-sharding-and-horizontal-partitioning.md)).
+- sharding shard keys: the values are hashed canonically, so only `null`, `int`/`long`/`short`/`byte`, `Guid`, `string`, `bool`, `DateTime`, `DateTimeOffset` and `decimal` are accepted — an enum, `uint`, `double`, `float` or `char` key property throws `ArgumentException`, and `int 5` and `long 5` are different keys. [The bucket of a row](../guide/35-sharding-and-horizontal-partitioning.md#the-bucket-of-a-row) shows how to get a bucket from an entity through `IShardRouter`.
 
 ## See also
 

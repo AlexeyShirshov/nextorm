@@ -3,7 +3,7 @@
 Внутренняя спека. Внешний трекер: [#394](https://github.com/AlexeyShirshov/nextorm/issues/394)
 (milestone **1.0.10**). Родительские решения:
 [#69](https://github.com/AlexeyShirshov/nextorm/issues/69) (шардирование),
-[#65](https://github.com/AlexeyShirshov/nextorm/issues/65) (mapping scope).
+[#65](https://github.com/AlexeyShirshov/nextorm/issues/65) (mapping variant).
 
 Статус: реализованы инкременты 1 и 2 (контракты, маршрутизация в контексте, инвариант одной
 топологии, round-robin, пиннинг хоста, транзакция на маршрутизированном хосте, публичный гайд) — см.
@@ -13,7 +13,7 @@
 
 Шардирование (#69) уже дало движку то, чего раньше не было: один `DataContext` держит **несколько
 соединений** и выбирает соединение на команду. Решение о соединении принимает
-`DataContext.ManagerFor(MappingScope)` (`src/nextorm.core/DataContext/DataContext.cs:303-323`):
+`DataContext.ManagerFor(MappingVariant)` (`src/nextorm.core/DataContext/DataContext.cs:303-323`):
 числовой ключ scope трактуется как бакет, кольцо топологии отдаёт шард, соединение создаётся лениво и
 кэшируется по `shardId` (`DataContext.cs:29-30, 318-328`), закрывается вместе с контекстом
 (`DataContext.cs:1936-1938`). Исполнитель спрашивает роутер на каждую команду через делегат
@@ -40,14 +40,14 @@
 
 | Вопрос | Слой | Состояние |
 |---|---|---|
-| Какая логическая область у сущности/команды | `IEntityScopeResolver` → `MappingScope` | есть, общий |
+| Какая логическая область у сущности/команды | `IEntityVariantResolver` → `MappingVariant` | есть, общий |
 | Какие физические имена | `IEntityMetadataProvider` | есть, общий |
 | На какой топологии выполнять | `IEntityRouteResolver` → `HostTarget` | **новый слой** |
 | Как топология выбирает хост | `IHostTopology` | **новый контракт**; шардинг — одна из реализаций |
 
-Ключевое следствие: сегодня `scope == MappingScope.Default` означает «соединение контекста». При
+Ключевое следствие: сегодня `scope == MappingVariant.Default` означает «соединение контекста». При
 структурном роутинге у сущности **нет ключа данных**: её scope — `Default`, а жить она должна на
-своём хосте. Поэтому решение о хосте обязано быть функцией пары `(Type entityType, MappingScope
+своём хосте. Поэтому решение о хосте обязано быть функцией пары `(Type entityType, MappingVariant
 scope)`, а не одного scope; «нет правила» — вот что теперь означает соединение контекста.
 
 ## Контракты
@@ -56,7 +56,7 @@ scope)`, а не одного scope; «нет правила» — вот что
 // Правило роутинга: структура + данные + пользовательская логика.
 public interface IEntityRouteResolver
 {
-    bool TryResolve(Type entityType, in MappingScope scope, out RouteTarget target);
+    bool TryResolve(Type entityType, in MappingVariant scope, out RouteTarget target);
 }
 
 // Таргет — имя топологии; к конкретному соединению не привязан.
@@ -75,7 +75,7 @@ public readonly record struct HostTarget(string Id, string ConnectionString);
 public readonly struct TopologyContext
 {
     public Type EntityType { get; init; }
-    public MappingScope Scope { get; init; }
+    public MappingVariant Scope { get; init; }
     public CommandKind Kind { get; init; }   // Read | Write — для read/write-пикеров
 }
 ```
@@ -190,7 +190,7 @@ scope.
 
 ## Что меняется в существующем коде
 
-- `DataContext.ManagerFor(MappingScope)` → `ManagerFor(Type, MappingScope)`: резолв правила →
+- `DataContext.ManagerFor(MappingVariant)` → `ManagerFor(Type, MappingVariant)`: резолв правила →
   `RouteTarget` → `IHostTopology.TryGetHost` → менеджер; кэш ключуется `HostTarget.Id`
   (`DataContext.cs:303-328`).
 - `QueryExecutor._managerForScope` (`QueryExecutor.cs:21,42`) принимает тип+scope либо готовый
@@ -252,7 +252,7 @@ scope.
   открытой маршрутизированной транзакции — `InvalidOperationException`; один контекст несёт одну
   транзакцию; savepoints остаются на соединении контекста;
 - батч — одна сессия и один round trip, поэтому маршрутизируется как целое: `RenderBatch` собирает
-  у каждого шага (query, CTAS-источник, мутация, capture) его `(MappingScope, источники)` и требует
+  у каждого шага (query, CTAS-источник, мутация, capture) его `(MappingVariant, источники)` и требует
   одну топологию и одну область на весь батч; результат едет в `BatchPlan.Route` (`BatchRoute`), и
   исполнитель резолвит соединение через `ManagerFor` уже на выполнение (батч внутри
   маршрутизированной транзакции присоединяется к её хосту). Два разных топологии или две области —
@@ -261,11 +261,18 @@ scope.
   маршрутизируется по сущностям её источника, а `BatchRunner` больше не держит соединение контекста;
 - материализация (`ToTable`/`ToTempTable`, `DropExisting`, шаг `CreateTempTable` батча) маршрутизируется
   по сущностям исходного запроса, а не по типу проекции: `MutationCommand.RouteSources` (у
-  `CreateTableAsCommand` — из `CommandRouteSources.Collect(Source)`), `MappingScope` берётся у источника,
+  `CreateTableAsCommand` — из `CommandRouteSources.Collect(Source)`), `MappingVariant` берётся у источника,
   `DropTableCommand` несёт те же scope/источники; раньше CTAS уходил на соединение контекста, хотя его
   SQL читал таблицу бакета (`tests/nextorm.core.tests/Routing/MaterializationRoutingTests.cs`);
+- бакет из одного контекста: `ShardDataContextExtensions.GetShardRouter()`/`TryGetShardRouter()`
+  (`IDataContext`-extension в слое шардинга, базовый `DataContext` тип фичи не публикует),
+  `IShardRouter.GetBucket(entityType, entity | keyValues)`/`GetScope(bucket)` как члены контракта и
+  `ShardRouterExtensions.GetBucket<TEntity>` — бакет и его область без запроса и без хранения топологии
+  (`tests/nextorm.core.tests/Sharding/ShardRouterTests.cs`);
 - публичный гайд `docs/guide/34-routing-data-to-topologies.md` (EN + RU), раздел «Sharding as data
-  routing» в гайде 35, «One batch, one topology» в гайде 34, записи в toc;
+  routing» в гайде 35, «One batch, one topology» в гайде 34, «The bucket of a row» в гайде 35 (порядок и
+  типы значений `WithShardKey`, `context.GetShardRouter()`/`GetBucket`/`Resolve`/`ResolveShard`/`GetShard`,
+  группировка по бакетам и шардам), записи в toc;
   `tests/nextorm.core.tests/Routing/BatchRoutingTests.cs`.
 
 Осталось (не входит в инкремент 2):
@@ -275,7 +282,7 @@ scope.
 - фабрика соединения вместо строки в `HostTarget` (провайдеры без connection string) — не в v1;
 - savepoints и вложенные транзакции на маршрутизированном хосте;
 - bulk-путь (`BulkInsertBuilder`) остаётся на соединении контекста и не знает бакета: у
-  `BulkInsertCommand` нет `MappingScope`, имя цели резолвится из метаданных дефолтной области;
+  `BulkInsertCommand` нет `MappingVariant`, имя цели резолвится из метаданных дефолтной области;
 - `ExecuteRaw`/`ExecuteProcedure` не несут scope и идут на соединение контекста (это описано в
   гайдах).
 
@@ -312,7 +319,7 @@ scope.
 
 ## Ссылки
 
-- Публичная документация: `docs/guide/33-runtime-mapping-scope.md` (слой имён),
+- Публичная документация: `docs/guide/33-runtime-mapping-variant.md` (слой имён),
   `docs/guide/35-sharding-and-horizontal-partitioning.md` (шардинг как роутинг по данным).
 - Решения по шардингу v2: `docs/specs/roadmap/todo_sharding.md`.
 - Сравнение с другими библиотеками: `docs/comparisons/capabilities.md`.

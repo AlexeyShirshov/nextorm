@@ -1,4 +1,4 @@
-# TODO: Шардирование (consistent hashing) поверх mapping scope
+# TODO: Шардирование (consistent hashing) поверх mapping variant
 > Tracking issue: [#69](https://github.com/AlexeyShirshov/nextorm/issues/69).
 > Шардирование — частный случай общего слоя роутинга данных, вынесенного в
 > [#394](https://github.com/AlexeyShirshov/nextorm/issues/394)
@@ -41,24 +41,25 @@
 - При `AddShard`/`RemoveShard` меняется только `bucket → shard`.
 - Ключ → бакет детерминирован между процессами и после перезапуска.
 - Значение ключа не сравнивается с id шарда; id шарда не попадает в имя схемы/таблицы.
-- Планы, метаданные и префикс параметров ключуются по бакету (mapping scope = bucket).
+- Планы, метаданные и префикс параметров ключуются по бакету (mapping variant = bucket).
 
 ## 4. Публичный API (как реализовано)
 
 ```csharp
-var topology = new ShardTopology(bucketCount: 4096);              // BucketPlacementMode.TableSuffix
+var topology = new ShardTopology(bucketCount: 4096);              // BucketPlacementMode.SchemaPerBucket
 topology.AddShard("server-eu-1", "Host=eu-1;Database=app");
 topology.AddShard("server-eu-2", "Host=eu-2;Database=app");
 
 // не адрес маршрутизации: только нешардированные сущности, сырой SQL и транзакции
-var nonRoutedDefaultConnectionString = "Host=eu-1;Database=app_master";
+var builder = new DataContextBuilder()
+    .UseSharding(topology)
+    .UseDataRouting(routing => routing.UseDefaultTopology("main", "Host=eu-1;Database=app_master"));
 
-var builder = new DataContextBuilder().UseSharding(topology);
-using var context = new PostgresDataContext(nonRoutedDefaultConnectionString, builder);
+using var context = new PostgresDataContext(builder);
 ```
 
 - `IShardTopology`: `Version`, `Ring`, `ShardIds`, `PlacementMode`, `GetConnectionString(shardId)`;
-  `ShardTopology(bucketCount, placementMode = TableSuffix)` + `AddShard(shardId, connectionString)` /
+  `ShardTopology(bucketCount, placementMode = SchemaPerBucket)` + `AddShard(shardId, connectionString)` /
   `RemoveShard(shardId)`. Число бакетов обязательно, значения по умолчанию нет.
 - `IConsistentHashRing` (без vnode): `GetBucket(keyBytes)` — стабильный номер бакета;
   `GetShard(bucket)` — владелец по rendezvous/HRW по `(bucket, shardId)`; добавление `(K+1)`-го
@@ -67,9 +68,9 @@ using var context = new PostgresDataContext(nonRoutedDefaultConnectionString, bu
   `IShardTopology`, поэтому своё кольцо подключается собственной топологией.
 - `BucketPlacementMode`: `TableSuffix` (`table = {mappedTable}_{bucket}`) либо `SchemaPerBucket`
   (`schema = {mappedSchema}_{bucket}`); имена зависят только от бакета.
-- `ShardRouter : IEntityScopeResolver` → `MappingScope(bucket.ToString())`.
+- `ShardRouter : IEntityVariantResolver` → `MappingVariant(bucket.ToString())`.
 - Исполнение: соединение на шард (`DataContext.ManagerFor(scope)`); команда выполняется на соединении
-  сервера-владельца бакета, DML несёт `MappingScope` в `MutationCommand`.
+  сервера-владельца бакета, DML несёт `MappingVariant` в `MutationCommand`.
 - Fan-out: `AcrossBuckets(int? parallelism = null)` → `ShardQuery<TEntity>` / `ShardQuery<TEntity,
   TResult>`. Результат — массив кардинальности «число бакетов», каждый элемент — вектор строк этого
   бакета (`List<T>[]`, `T[][]`); библиотека ничего не сливает. Скаляры — `int[] Count()`,

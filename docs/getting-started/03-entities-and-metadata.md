@@ -362,26 +362,26 @@ provider-side quoting instead.
 | ClickHouse | Names used as given; identifiers and aliases are backtick-quoted when the SQL is rendered. |
 | In-memory | Identical metadata, shared with the SQL contexts through [`DataContextCache`](xref:NextORM.Core.DataContextCache). |
 
-## Runtime mapping scope (one entity, several tables)
+## Runtime mapping variant (one entity, several tables)
 
-One entity class can address a different physical table, schema or column set per runtime *scope* - the
-mechanism behind multi-tenancy. Choose the scope with `IEntityScopeResolver`, map it with
-`IEntityMetadataProvider`, and override the choice for a single command with `WithScope(...)`:
+One entity class can address a different physical table, schema or column set per runtime *variant* — the
+mechanism behind multi-tenancy. Choose the variant with `IEntityVariantResolver`, map it with
+`IEntityMetadataProvider`, and override the choice for a single command with `WithVariant(...)`:
 
 ```csharp
 var builder = new DataContextBuilder()
-    .UseScopeResolver(new TenantScopeResolver())
+    .UseVariantResolver(new TenantScopeResolver())
     .UseEntityMetadataProvider(new TenantMetadataProvider());
 
 var rows = new SqliteDataContext(connectionString, builder)
     .From<Order>()
-    .WithScope(new MappingScope("acme"))
+    .WithVariant(new MappingVariant("acme"))
     .ToList();
 ```
 
-`MappingScope.Default` keeps the ordinary mapping. Plans, metadata and parameter names are isolated per
-scope, and the DML builders resolve the scope before they build their statement. Full guide:
-[Runtime mapping scope](../guide/33-runtime-mapping-scope.md).
+`MappingVariant.Default` keeps the ordinary mapping. Plans, metadata and parameter names are isolated per
+variant, and the DML builders resolve the variant before they build their statement. Full guide:
+[Runtime mapping variant](../guide/33-runtime-mapping-variant.md).
 
 ## See also
 

@@ -297,7 +297,7 @@ The capability is [`ISqlDialect.SupportsBatch`](xref:NextORM.Core.ISqlDialect.Su
 * Batch execution is **not** routed through the query interceptors: their events carry a `DbCommand`, while a `DbBatch` command is a `DbBatchCommand`.
 * `SqlFunctions.Parameter` runtime placeholders cannot be used in a batched query; capture the value in a local variable instead (as in any query rendered as a source). Captured variables become parameters automatically.
 * Batch plans are not cached: each terminal call re-renders the batch.
-* A batch is one session and one round trip, so it also runs on **one host**: the entity types of all its steps must resolve to one topology and one mapping scope. The first routed step selects the host, a step with no rule follows it, and a step that would need another topology or scope is rejected when the batch renders — see [One batch, one topology](34-routing-data-to-topologies.md#one-batch-one-topology).
+* A batch is one session and one round trip, so it also runs on **one host**: the entity types of all its steps must resolve to one topology and one mapping variant. The first routed step selects the host, a step with no rule follows it, and a step that would need another topology or variant is rejected when the batch renders — see [One batch, one topology](34-routing-data-to-topologies.md#one-batch-one-topology).
 
 ## See also
 

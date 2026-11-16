@@ -32,7 +32,7 @@ provider list is not scored). The per-engine API breadth is on [Provider feature
 | CTEs (recursive, typed `AsCte`/`AsRecursiveCte`; PostgreSQL data-modifying CTEs) | yes | yes (no data-modifying CTEs) | partial (no data-modifying CTEs) |
 | Extreme-row selection (`SelectWhereMax`/`SelectWhereMin`) | yes | partial (window functions + `OrderBy`/`Take`) | partial (`OrderBy`+`First`) |
 | Per-query source overrides (table/schema/database/server) | yes | partial | partial (model-level) |
-| Runtime mapping scope (per-command table/schema/column names and parameter prefix, chosen from a key) | yes (`IEntityScopeResolver` + `IEntityMetadataProvider`, `WithScope(...)`, metadata, plans and parameter prefixes isolated per scope) | partial (a per-connection `MappingSchema` renames tables and columns; no per-command scope and no per-scope plan isolation) | partial (database per tenant only by choosing the connection string per `DbContext` instance, and switching it needs a `Transient` lifetime; schema per tenant is documented as unsupported; no renaming at query time) |
+| Runtime mapping variant (per-command table/schema/column names and parameter prefix, chosen from a key) | yes (`IEntityVariantResolver` + `IEntityMetadataProvider`, `WithVariant(...)`, metadata, plans and parameter prefixes isolated per variant) | partial (a per-connection `MappingSchema` renames tables and columns; no per-command variant and no per-variant plan isolation) | partial (database per tenant only by choosing the connection string per `DbContext` instance, and switching it needs a `Transient` lifetime; schema per tenant is documented as unsupported; no renaming at query time) |
 | Routing a statement to a server by entity type (structure and data rules, host pinning, transactions on a routed host) | yes (`[RouteTo]`, `RouteNamespace`/`RouteAssembly`, a custom `IEntityRouteResolver`, `RoundRobinTopology`, `PinHost`, `IRoutedTransactionManager`) | no (the connection is fixed per `DataConnection` instance; no per-type rules) | partial (a connection string per `DbContext` instance; no per-entity rules and no routing inside one context) |
 | Sharding (bucket placement across servers and per-bucket fan-out) | yes (consistent-hash bucket ring over shards, a connection per shard, `AcrossBuckets()` returning one result vector per bucket with no client-side merge) | no | no (provider-level multi-host load balancing, e.g. Npgsql `Load Balance Hosts` / `Target Session Attributes`, picks a host when a connection opens and is not routing) |
 | Temporal tables (`FOR SYSTEM_TIME`) | yes (SQL Server, MariaDB) | no | partial (SQL Server only) |
@@ -111,12 +111,12 @@ Against the shared surface Nextorm matches or exceeds linq2db; on top of that it
 - Unmapped columns (`SqlFunctions.Column`), named join aliases (`Alias.<Name>`) and per-query source
   overrides — each folded into the plan key.
 
-- **Multi-tenancy and sharding without a second model.** A runtime mapping scope renames the table,
+- **Multi-tenancy and sharding without a second model.** A runtime mapping variant renames the table,
   schema, columns and parameter prefix for a key, with metadata, plans and parameter prefixes isolated per
-  scope (`WithScope(...)` on the builder, or a resolver on the context); sharding then places one entity
+  variant (`WithVariant(...)` on the builder, or a resolver on the context); sharding then places one entity
   type across servers on top of it. linq2db can rename through a per-connection `MappingSchema` and EF Core
   documents the tenant-column/`HasQueryFilter` and model-per-tenant patterns, but neither has a per-command
-  scope, and neither ships sharding.
+  variant, and neither ships sharding.
 - `SelectWhereMax`/`SelectWhereMin` as a dedicated extreme-row operator, lowered to the native strategy on
   PostgreSQL and ClickHouse; linq2db composes window functions plus `OrderBy`/`Take`.
 - `[JsonColumn]` with Auto/Native/Text storage — a mapping linq2db still lacks

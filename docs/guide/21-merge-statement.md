@@ -13,23 +13,23 @@ Two forms share the same builder:
 * **key upsert** — `OnKeys()` + `WhenMatchedUpdate()` + `WhenNotMatchedInsert()`. Every SQL provider expresses it in its native form, and it is the only form the in-memory provider applies (to the registered sequence).
 * **full `MERGE`** — `WhenMatched()`/`WhenNotMatched()`/`WhenNotMatchedBySource()`, each finished with `ThenUpdate`/`ThenInsert`/`ThenDelete`/`ThenDoNothing`. Native on SQL Server and PostgreSQL (an execution-time server prerequisite: the server must be 15+); the other providers reject it.
 
-## Runtime mapping scope
+## Runtime mapping variant
 
-Use `WithScope(MappingScope)` when the same entity mapping targets a tenant- or shard-specific table. The scope selects metadata for this command only; it does not change the context's default mapping. Entity, batch and query sources can use the same scope:
+Use `WithVariant(MappingVariant)` when the same entity mapping targets a tenant- or shard-specific table. The variant selects metadata for this command only; it does not change the context's default mapping. Entity, batch and query sources can use the same variant:
 
 ```csharp
-var scope = new MappingScope("tenant_a");
+var variant = new MappingVariant("tenant_a");
 ctx.CreateMergeBuilder<Order>()
     .Using(order)
     .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
-    .WithScope(scope)
+    .WithVariant(variant)
     .Merge();
 ```
 
-`CreateTruncateBuilder<TEntity>()` resolves the context's configured entity scope as well, so the truncate target uses the corresponding table and schema.
+`CreateTruncateBuilder<TEntity>()` resolves the context's configured entity variant as well, so the truncate target uses the corresponding table and schema.
 
-The scope itself — its resolver, the metadata provider that derives table/schema/column names and the
-isolation it guarantees — is described in [Runtime mapping scope](33-runtime-mapping-scope.md).
+The variant itself — its resolver, the metadata provider that derives table/schema/column names and the
+isolation it guarantees — is described in [Runtime mapping variant](33-runtime-mapping-variant.md).
 
 ## Upsert (key merge)
 
