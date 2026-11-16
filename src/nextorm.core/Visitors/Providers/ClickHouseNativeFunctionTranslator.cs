@@ -514,22 +514,6 @@ internal static class ClickHouseNativeFunctionTranslator
             "the bit pattern cannot be materialized into a fixed-width CLR integer."
     };
 
-    /// <summary>
-    /// The interval units <c>toStartOfInterval</c> accepts for a <see cref="DateTime"/> argument.
-    /// Sub-second units are not in the set: the server rejects them for a <c>DateTime</c> column.
-    /// </summary>
-    private static readonly Dictionary<string, string> IntervalUnits = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["second"] = "SECOND",
-        ["minute"] = "MINUTE",
-        ["hour"] = "HOUR",
-        ["day"] = "DAY",
-        ["week"] = "WEEK",
-        ["month"] = "MONTH",
-        ["quarter"] = "QUARTER",
-        ["year"] = "YEAR"
-    };
-
     private static readonly HashSet<string> ParamsArrayFunctions = new(StringComparer.Ordinal)
     {
         nameof(ClickHouseFunctions.array_concat), nameof(ClickHouseFunctions.array_intersect),
@@ -986,7 +970,7 @@ internal static class ClickHouseNativeFunctionTranslator
     {
         var arguments = node.Arguments;
         if (!SqlLiteral.TryGetConstantString(arguments[2], out var unit)
-            || !IntervalUnits.TryGetValue(unit, out var keyword))
+            || !ClickHouseIntervalUnits.TryGetKeyword(unit, out var keyword))
             throw new NotSupportedException(
                 "The to_start_of_interval unit must be a compile-time string literal naming second, " +
                 "minute, hour, day, week, month, quarter or year; ClickHouse rejects sub-second units " +

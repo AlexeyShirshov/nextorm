@@ -2608,22 +2608,9 @@ internal sealed class ClickHouseScalarFunctions : IScalarFunctions
             ["reinterpret_as_fixed_string"] = static args => $"reinterpretAsFixedString({args[0]})",
             ["reinterpret_as_uuid"] = static args => $"reinterpretAsUUID({args[0]})",
         }.ToFrozenDictionary(StringComparer.Ordinal);
-    /// <summary>The units <c>toStartOfInterval</c> accepts for a <see cref="DateTime"/> argument.</summary>
-    private static readonly Dictionary<string, string> IntervalUnits = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["second"] = "SECOND",
-        ["minute"] = "MINUTE",
-        ["hour"] = "HOUR",
-        ["day"] = "DAY",
-        ["week"] = "WEEK",
-        ["month"] = "MONTH",
-        ["quarter"] = "QUARTER",
-        ["year"] = "YEAR"
-    };
-
     private static string StartOfIntervalArm(IReadOnlyList<string> args)
     {
-        if (args.Count < 3 || !IntervalUnits.TryGetValue(args[2], out var unit))
+        if (args.Count < 3 || !ClickHouseIntervalUnits.TryGetKeyword(args[2], out var unit))
             throw new NotSupportedException(
                 "The to_start_of_interval unit must be second, minute, hour, day, week, month, quarter " +
                 "or year; ClickHouse rejects sub-second units for a DateTime argument.");
