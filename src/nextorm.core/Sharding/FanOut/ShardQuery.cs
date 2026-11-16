@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 
@@ -96,7 +95,8 @@ public sealed class ShardQuery<TEntity>
     {
         for (var position = 0; position < _buckets.Count; position++)
         {
-            var rows = await Scoped(_buckets[position]).ToListAsync(cancellationToken).ConfigureAwait(false);
+            var rows = await ShardQueryExecution.Scoped(_source, _buckets[position])
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
             yield return [.. rows];
         }
     }
@@ -117,77 +117,21 @@ public sealed class ShardQuery<TEntity>
     /// <returns>An array indexed by bucket number.</returns>
     public TEntity[] Single() => RunEach(static query => query.Single());
 
-    private EntityBuilder<TEntity> Scoped(int bucket)
-        => _source.WithVariant(new MappingVariant(bucket.ToString(CultureInfo.InvariantCulture)));
-
     private TResult[] RunEach<TResult>(Func<EntityBuilder<TEntity>, TResult> run)
-    {
-        var results = new TResult[_buckets.Count];
-        var groups = BucketsByShard();
-        var options = new ParallelOptions { MaxDegreeOfParallelism = DegreeOfParallelism(groups.Count) };
-        Parallel.ForEach(groups, options, group =>
-        {
-            foreach (var (bucket, position) in group)
-                results[position] = run(Scoped(bucket));
-        });
+        => ShardQueryExecution.RunEach(_source, _buckets, _bucketOwners, _parallelism, run);
 
-        return results;
-    }
-
-    private async Task RunEachAsync<TResult>(
+    private Task RunEachAsync<TResult>(
         Func<EntityBuilder<TEntity>, CancellationToken, Task<TResult>> run,
         Action<int, TResult> store,
         CancellationToken cancellationToken)
-    {
-        var groups = BucketsByShard();
-        using var gate = new SemaphoreSlim(DegreeOfParallelism(groups.Count));
-        var tasks = new List<Task>(groups.Count);
-        foreach (var group in groups)
-        {
-            tasks.Add(Task.Run(async () =>
-            {
-                await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-                try
-                {
-                    foreach (var (bucket, position) in group)
-                    {
-                        var value = await run(Scoped(bucket), cancellationToken).ConfigureAwait(false);
-                        store(position, value);
-                    }
-                }
-                finally
-                {
-                    gate.Release();
-                }
-            }, cancellationToken));
-        }
-
-        await Task.WhenAll(tasks).ConfigureAwait(false);
-    }
-
-    private int DegreeOfParallelism(int shardCount)
-        => Math.Clamp(_parallelism ?? shardCount, 1, Math.Max(1, shardCount));
-
-    private List<List<(int Bucket, int Position)>> BucketsByShard()
-    {
-        var groups = new List<List<(int Bucket, int Position)>>();
-        var shardIndex = new Dictionary<string, int>(StringComparer.Ordinal);
-        for (var position = 0; position < _buckets.Count; position++)
-        {
-            var bucket = _buckets[position];
-            var shardId = _bucketOwners[bucket];
-            if (!shardIndex.TryGetValue(shardId, out var groupIndex))
-            {
-                groupIndex = groups.Count;
-                shardIndex.Add(shardId, groupIndex);
-                groups.Add([]);
-            }
-
-            groups[groupIndex].Add((bucket, position));
-        }
-
-        return groups;
-    }
+        => ShardQueryExecution.RunEachAsync(
+            _source,
+            _buckets,
+            _bucketOwners,
+            _parallelism,
+            run,
+            store,
+            cancellationToken);
 }
 
 /// <summary>
@@ -258,7 +202,8 @@ public sealed class ShardQuery<TEntity, TResult>
     {
         for (var position = 0; position < _buckets.Count; position++)
         {
-            var rows = await Scoped(_buckets[position]).Select(_selector).ToListAsync(cancellationToken).ConfigureAwait(false);
+            var rows = await ShardQueryExecution.Scoped(_source, _buckets[position])
+                .Select(_selector).ToListAsync(cancellationToken).ConfigureAwait(false);
             yield return [.. rows];
         }
     }
@@ -271,75 +216,19 @@ public sealed class ShardQuery<TEntity, TResult>
     /// <returns>An array indexed by bucket number; the caller decides how to combine the values.</returns>
     public bool[] Any() => RunEach(static query => query.Any());
 
-    private EntityBuilder<TEntity> Scoped(int bucket)
-        => _source.WithVariant(new MappingVariant(bucket.ToString(CultureInfo.InvariantCulture)));
-
     private TValue[] RunEach<TValue>(Func<EntityBuilder<TEntity>, TValue> run)
-    {
-        var results = new TValue[_buckets.Count];
-        var groups = BucketsByShard();
-        var options = new ParallelOptions { MaxDegreeOfParallelism = DegreeOfParallelism(groups.Count) };
-        Parallel.ForEach(groups, options, group =>
-        {
-            foreach (var (bucket, position) in group)
-                results[position] = run(Scoped(bucket));
-        });
+        => ShardQueryExecution.RunEach(_source, _buckets, _bucketOwners, _parallelism, run);
 
-        return results;
-    }
-
-    private async Task RunEachAsync<TValue>(
+    private Task RunEachAsync<TValue>(
         Func<EntityBuilder<TEntity>, CancellationToken, Task<TValue>> run,
         Action<int, TValue> store,
         CancellationToken cancellationToken)
-    {
-        var groups = BucketsByShard();
-        using var gate = new SemaphoreSlim(DegreeOfParallelism(groups.Count));
-        var tasks = new List<Task>(groups.Count);
-        foreach (var group in groups)
-        {
-            tasks.Add(Task.Run(async () =>
-            {
-                await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-                try
-                {
-                    foreach (var (bucket, position) in group)
-                    {
-                        var value = await run(Scoped(bucket), cancellationToken).ConfigureAwait(false);
-                        store(position, value);
-                    }
-                }
-                finally
-                {
-                    gate.Release();
-                }
-            }, cancellationToken));
-        }
-
-        await Task.WhenAll(tasks).ConfigureAwait(false);
-    }
-
-    private int DegreeOfParallelism(int shardCount)
-        => Math.Clamp(_parallelism ?? shardCount, 1, Math.Max(1, shardCount));
-
-    private List<List<(int Bucket, int Position)>> BucketsByShard()
-    {
-        var groups = new List<List<(int Bucket, int Position)>>();
-        var shardIndex = new Dictionary<string, int>(StringComparer.Ordinal);
-        for (var position = 0; position < _buckets.Count; position++)
-        {
-            var bucket = _buckets[position];
-            var shardId = _bucketOwners[bucket];
-            if (!shardIndex.TryGetValue(shardId, out var groupIndex))
-            {
-                groupIndex = groups.Count;
-                shardIndex.Add(shardId, groupIndex);
-                groups.Add([]);
-            }
-
-            groups[groupIndex].Add((bucket, position));
-        }
-
-        return groups;
-    }
+        => ShardQueryExecution.RunEachAsync(
+            _source,
+            _buckets,
+            _bucketOwners,
+            _parallelism,
+            run,
+            store,
+            cancellationToken);
 }
