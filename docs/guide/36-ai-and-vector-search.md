@@ -60,14 +60,16 @@ dimension. The database may reject a query whose dimensions do not match its sto
 
 `Vector` uses exact value equality: two vectors are equal when they have the same dimension and each
 coordinate has the same `float` value in the same order. The comparison uses no tolerance or similarity
-metric; `+0f` and `-0f` compare equal. Use `VectorSearch` or `SqlFunctions.VectorDistance` when you need
+metric; `+0f` and `-0f` compare equal. Otherwise identical vectors with either value at the same
+coordinate have the same hash code. Use `VectorSearch` or `SqlFunctions.VectorDistance` when you need
 similarity or distance instead.
 
-This changes the previous reference-equality behavior: independently created vectors with identical
-coordinates now compare equal. `==`, `Equals`, `HashSet<Vector>`, `Dictionary<Vector, TValue>`, and LINQ
-`Distinct()` use this value equality. Use `object.ReferenceEquals(first, second)` when you need to check whether
-two references point to the same object. `GetHashCode()` supports hash-based collections; its result is
-process-local and isn't a persisted identifier or a measure of similarity.
+`vector.Equals(null)` returns `false`. The `==` operator returns `true` for two `null` operands and `false`
+for a `null`/non-null pair; `!=` returns the inverse. `==`, `Equals`, `HashSet<Vector>`,
+`Dictionary<Vector, TValue>`, and LINQ `Distinct()` use this value equality. Call
+`object.ReferenceEquals(first, second)` to check whether two references identify the same object.
+`GetHashCode()` supports hash-based collections; its result is process-local and isn't a persisted
+identifier or a measure of similarity.
 
 For example, the constructor and parser produce one set entry for equal coordinates:
 
