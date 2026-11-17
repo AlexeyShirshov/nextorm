@@ -1,6 +1,6 @@
 # Nextorm — MySQL provider
 
-[![NuGet](https://img.shields.io/nuget/vpre/nextorm.mysql?logo=nuget)](https://www.nuget.org/packages/nextorm.mysql)
+[![NuGet](https://img.shields.io/nuget/v/nextorm.mysql?logo=nuget)](https://www.nuget.org/packages/nextorm.mysql)
 
 `nextorm.mysql` adds MySQL support to [Nextorm](https://github.com/AlexeyShirshov/nextorm) — a zero-SQL
 object-relational mapper for .NET that turns typed C# queries into SQL and materializes rows without
@@ -9,15 +9,15 @@ change tracking. The package supplies the MySQL dialect and the `UseMySql` build
 
 ## Installation
 
-All current nextorm releases are prereleases, so `--prerelease` is required:
+Stable version `1.0.9` is available. Add the packages without prerelease flags:
 
 ```bash
-dotnet add package nextorm --prerelease
-dotnet add package nextorm.mysql --prerelease
+dotnet add package nextorm
+dotnet add package nextorm.mysql
 ```
 
-Package Manager Console: `Install-Package nextorm -Prerelease` and
-`Install-Package nextorm.mysql -Prerelease`.
+Package Manager Console: `Install-Package nextorm` and
+`Install-Package nextorm.mysql`.
 
 ## Usage
 
@@ -71,8 +71,8 @@ open `DbConnection`.
 
 ## Status
 
-Beta: every release so far is a prerelease, the public API still changes between them, and backward
-compatibility is not preserved yet. Release notes are on
+The public API may change between prereleases, and backward compatibility across prereleases is not
+guaranteed. Review the release notes before upgrading between prereleases:
 [GitHub Releases](https://github.com/AlexeyShirshov/nextorm/releases).
 
 ## License

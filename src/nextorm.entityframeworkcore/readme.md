@@ -1,6 +1,6 @@
 # Nextorm — Entity Framework Core integration
 
-[![NuGet](https://img.shields.io/nuget/vpre/nextorm.entityframeworkcore?logo=nuget)](https://www.nuget.org/packages/nextorm.entityframeworkcore)
+[![NuGet](https://img.shields.io/nuget/v/nextorm.entityframeworkcore?logo=nuget)](https://www.nuget.org/packages/nextorm.entityframeworkcore)
 
 Runs [Nextorm](https://github.com/AlexeyShirshov/nextorm) queries and commands over the connection and
 transaction of an existing EF Core `DbContext`, reusing the EF model mapping instead of declaring it
@@ -9,13 +9,13 @@ reads it is built for — windows, CTEs, aggregates — on the very same connect
 
 ## Installation
 
-All current nextorm releases are prereleases, so `--prerelease` is required:
+Stable version `1.0.9` is available. Add the package without a prerelease flag:
 
 ```bash
-dotnet add package nextorm.entityframeworkcore --prerelease
+dotnet add package nextorm.entityframeworkcore
 ```
 
-Package Manager Console: `Install-Package nextorm.entityframeworkcore -Prerelease`.
+Package Manager Console: `Install-Package nextorm.entityframeworkcore`.
 
 The package already references `nextorm.core` and the PostgreSQL, SQL Server, SQLite and MySQL
 providers, so no separate nextorm provider package is needed.
@@ -67,8 +67,8 @@ using var next = db.CreateNextOrmContext(builder => builder
 
 ## Status
 
-Beta: every release so far is a prerelease, the public API still changes between them, and backward
-compatibility is not preserved yet. Release notes are on
+The public API may change between prereleases, and backward compatibility across prereleases is not
+guaranteed. Review the release notes before upgrading between prereleases:
 [GitHub Releases](https://github.com/AlexeyShirshov/nextorm/releases).
 
 ## License

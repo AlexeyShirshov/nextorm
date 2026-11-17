@@ -48,7 +48,11 @@ For other kinds of extension, use the documented public hooks (SQL functions, va
 
 ## Build and test
 
-The repository uses **.NET 10**. From the repository root:
+Use the .NET 11 SDK pinned by `global.json` (`11.0.100`, with
+`rollForward: latestFeature`). A .NET 10 SDK alone does not satisfy this
+repository's SDK pin. Published packages target `net10.0` and `net11.0`;
+repository tests, benchmarks and examples use the host TFM `net11.0`. From the
+repository root:
 
 ```bash
 dotnet restore
@@ -79,7 +83,7 @@ Follow the existing test patterns, and include regression tests for bug fixes. N
 - Document a new operator's purpose, syntax, examples, supported providers, and rejection boundaries. Update the relevant source README and public guides.
 - Keep English and Russian documentation in sync when changing public APIs or examples (`docs/**` and `docs/ru/**`).
 - Respect existing formatting and code conventions. Package versions are managed centrally in `Directory.Packages.props`; do not add per-project package versions.
-- Nextorm is currently in beta, and public APIs may change between prereleases. Call out any breaking change explicitly in the pull request.
+- Prerelease versions may change public APIs. Call out any breaking change explicitly in the pull request.
 
 ## Submitting a pull request
 
