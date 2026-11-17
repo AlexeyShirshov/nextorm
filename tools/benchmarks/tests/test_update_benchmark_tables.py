@@ -9,10 +9,13 @@ Run with either::
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
+import json
 import os
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -31,6 +34,40 @@ def write_report(results_dir: Path, class_name: str, rows: list) -> None:
         HEADER + "".join(row + "\n" for row in rows), encoding="utf-8"
     )
     (results_dir / f"{stem}-report-github.md").write_text("stub\n", encoding="utf-8")
+
+
+def write_suite_run_date_metadata(
+    results_dir: Path,
+    dates: dict[str, str] | None = None,
+    source_evidence: str = "unit test run evidence",
+) -> None:
+    dates = dates or {}
+    suites = {}
+    for class_name in tables.SUITE_RUN_DATE_CLASSES:
+        csv_file = results_dir / f"NextORM.Benchmark.{class_name}-report.csv"
+        md_file = results_dir / f"NextORM.Benchmark.{class_name}-report-github.md"
+        if not csv_file.is_file() or not md_file.is_file():
+            write_report(results_dir, class_name, [])
+        csv_path, md_path = tables.report_paths(results_dir, class_name)
+        suites[class_name] = {
+            "asOfDate": dates.get(class_name, "2026-10-17"),
+            "sourceEvidence": source_evidence,
+            "reportsSha256": {
+                path.name: hashlib.sha256(
+                    path.read_bytes().replace(b"\r\n", b"\n")
+                ).hexdigest()
+                for path in (csv_path, md_path)
+            },
+        }
+    metadata = {
+        "schemaVersion": 1,
+        "dateBasis": "UTC suite-start date",
+        "suites": suites,
+    }
+    (results_dir / tables.SUITE_RUN_DATE_METADATA).write_text(
+        json.dumps(metadata, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 class NumberTests(unittest.TestCase):
@@ -160,20 +197,81 @@ class E2ETableTests(unittest.TestCase):
         with self.assertRaises(tables.TableError):
             tables.read_measurements(path)
 
-    def test_report_date_comes_from_the_report_mtime(self):
-        write_report(
+    def test_report_dates_are_pinned_per_suite_and_ignore_mtimes(self):
+        dates = {
+            "SqliteBenchmarkIteration": "2026-10-17",
+            tables.CATEGORY_A_CLASS: "2026-10-18",
+            tables.CATEGORY_B_CLASS: "2026-10-19",
+        }
+        write_suite_run_date_metadata(self.results, dates)
+        stamp = dt.datetime(2026, 10, 20, 12, 0, tzinfo=dt.timezone.utc).timestamp()
+        for class_name in dates:
+            csv_path, md_path = tables.report_paths(self.results, class_name)
+            os.utime(csv_path, (stamp, stamp))
+            os.utime(md_path, (stamp, stamp))
+
+        for class_name, expected_date in dates.items():
+            self.assertEqual(tables.report_date(self.results, class_name), expected_date)
+
+        if not hasattr(time, "tzset"):
+            self.skipTest("the platform cannot switch its process timezone")
+        original_timezone = os.environ.get("TZ")
+        try:
+            for timezone in ("UTC", "Pacific/Kiritimati", "America/Adak"):
+                os.environ["TZ"] = timezone
+                time.tzset()
+                for class_name, expected_date in dates.items():
+                    self.assertEqual(tables.report_date(self.results, class_name), expected_date)
+        finally:
+            if original_timezone is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = original_timezone
+            time.tzset()
+
+    def test_report_date_rejects_report_content_changed_after_metadata(self):
+        write_suite_run_date_metadata(self.results)
+        report = self.results / "NextORM.Benchmark.SqliteBenchmarkIteration-report.csv"
+        report.write_text(report.read_text(encoding="utf-8") + "Changed,1 μs,1 B,\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(tables.TableError, "SHA-256 differs from suite-run-dates.json"):
+            tables.report_date(self.results)
+
+    def test_recording_suite_date_rebinds_metadata_to_current_reports(self):
+        write_suite_run_date_metadata(self.results)
+        tables._record_suite_run_dates(
             self.results,
-            "SqliteBenchmarkIteration",
-            [
-                "Nextorm_Prepared,10.00 μs,800 B,",
-                "Dapper_Async,15.00 μs,1 KB,",
-                "Linq2Db_Compiled,17.00 μs,2 KB,",
-                "EFCore_Compiled,38.00 μs,10 KB,",
-            ],
+            {"SqliteBenchmarkIteration": "2026-10-18"},
+            "https://example.test/run/123",
         )
-        stamp = dt.datetime(2026, 10, 17, 12, 0).timestamp()
-        os.utime(self.results / "NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md", (stamp, stamp))
-        self.assertEqual(tables.report_date(self.results), "2026-10-17")
+
+        self.assertEqual(tables.report_date(self.results), "2026-10-18")
+        metadata = json.loads(
+            (self.results / tables.SUITE_RUN_DATE_METADATA).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            metadata["suites"]["SqliteBenchmarkIteration"]["sourceEvidence"],
+            "https://example.test/run/123",
+        )
+
+    def test_date_override_remains_effective_in_conditions(self):
+        target = next(target for target in tables.TARGETS if target.name == "docs")
+        conditions = {
+            "cpu": "Test CPU",
+            "logical": "8",
+            "physical": "4",
+            "runtime": "11.0.0",
+            "bdn": "0.15.8",
+            "job": "Job.Default",
+            "toolchain": "InProcessEmitToolchain",
+        }
+        with mock.patch.object(tables, "read_run_conditions", return_value=conditions), mock.patch.object(
+            tables, "report_date", return_value="2026-10-18"
+        ):
+            text = tables.build_conditions(target, self.results, "2026-10-17")
+
+        self.assertIn("As of **2026-10-17**", text)
+        self.assertIn("2026-10-18", text)
 
 
 class FeatureRowTests(unittest.TestCase):
@@ -197,6 +295,10 @@ class FeatureRowTests(unittest.TestCase):
                 "A_Linq2Db_Compiled_CaseWhen,150.0 μs,15.0 KB,A_CaseWhen",
                 "A_EFCore_Compiled_CaseWhen,350.0 μs,70.0 KB,A_CaseWhen",
             ],
+        )
+        write_suite_run_date_metadata(
+            self.results,
+            {tables.CATEGORY_A_CLASS: "2026-10-18"},
         )
 
     def test_per_query_values_come_from_the_category_a_report(self):

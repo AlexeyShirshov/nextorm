@@ -21,8 +21,11 @@ Usage::
 
     python3 tools/benchmarks/update_benchmark_tables.py                    # rewrite the tables
     python3 tools/benchmarks/update_benchmark_tables.py --check            # exit 1 if any table is stale
-    python3 tools/benchmarks/update_benchmark_tables.py --date 2026-10-17 # pin the "as of" date
+    python3 tools/benchmarks/update_benchmark_tables.py --date 2026-10-17 # override the conditions date
     python3 tools/benchmarks/update_benchmark_tables.py --check --date 2026-10-17
+    python3 tools/benchmarks/update_benchmark_tables.py \\
+        --record-run-date SqliteBenchmarkIteration=2026-10-17 \\
+        --run-evidence "local benchmark run evidence"
 
 Fail-closed rules (a table is never generated from a partial run):
 
@@ -69,6 +72,7 @@ TIER1_REPORTS = {
 }
 TIER1_RUN_REPORTS = TIER1_REPORTS
 TIER1_RUN_METADATA = "tier1-run.json"
+SUITE_RUN_DATE_METADATA = "suite-run-dates.json"
 TIER1_BLOCKS = (
     "tier1-run-info",
     "tier1-caveats",
@@ -229,6 +233,10 @@ FEATURE_CATEGORIES = (
 # (BDN category, display label EN, display label RU) in table order.
 CATEGORY_A = tuple((f"A_{key}", en, ru) for key, en, ru in FEATURE_CATEGORIES)
 CATEGORY_B = tuple((f"B_{key}", en, ru) for key, en, ru in FEATURE_CATEGORIES)
+SUITE_RUN_DATE_CLASSES = tuple(row.class_name for row in E2E_ROWS) + (
+    CATEGORY_A_CLASS,
+    CATEGORY_B_CLASS,
+)
 
 _BLOCK_RE = re.compile(
     r"(?ms)^<!-- benchmarks:(?P<name>[a-z0-9-]+):start -->\r?\n.*?^<!-- benchmarks:(?P=name):end -->"
@@ -358,6 +366,11 @@ def report_paths(results_dir: Path, class_name: str) -> tuple:
             f"under {results_dir} (run the benchmark first)"
         )
     return csv_path, md_path
+
+
+def _report_sha256(path: Path) -> str:
+    """Hash report text with CRLF normalized, independent of checkout line-ending settings."""
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
 def read_measurements(csv_path: Path) -> list:
@@ -769,14 +782,144 @@ def read_run_conditions(results_dir: Path) -> dict:
 
 
 def report_date(results_dir: Path, class_name: str = E2E_ROWS[0].class_name) -> str:
-    """Date of the benchmark run, taken from the report mtime.
+    """Return the persisted UTC run date after verifying it is bound to this suite's reports."""
+    metadata = _read_suite_run_date_metadata(results_dir)
+    try:
+        return metadata["suites"][class_name]["asOfDate"]
+    except KeyError as exc:
+        raise TableError(f"{class_name}: no persisted run date in {SUITE_RUN_DATE_METADATA}") from exc
 
-    Deriving it from the report (not from the clock) keeps ``--check`` stable on later days. Each
-    suite is dated by its own report, so a table that mixes two runs can print both dates instead
-    of pretending everything was measured on the same day.
-    """
-    _, md_path = report_paths(results_dir, class_name)
-    return dt.date.fromtimestamp(md_path.stat().st_mtime).isoformat()
+
+def _parse_run_date(value: str, label: str) -> str:
+    if not isinstance(value, str):
+        raise TableError(f"{label}: expected an ISO UTC date (YYYY-MM-DD)")
+    try:
+        parsed = dt.date.fromisoformat(value)
+    except ValueError as exc:
+        raise TableError(f"{label}: invalid ISO date {value!r}") from exc
+    if parsed.isoformat() != value:
+        raise TableError(f"{label}: invalid ISO date {value!r}")
+    return value
+
+
+def _validate_suite_run_date_record(
+    results_dir: Path,
+    class_name: str,
+    record: dict,
+    *,
+    verify_hashes: bool = True,
+) -> None:
+    required = {"asOfDate", "sourceEvidence", "reportsSha256"}
+    if not isinstance(record, dict) or set(record) != required:
+        raise TableError(
+            f"{class_name}: expected asOfDate, sourceEvidence, and reportsSha256 in "
+            f"{SUITE_RUN_DATE_METADATA}"
+        )
+    _parse_run_date(record["asOfDate"], f"{class_name}.asOfDate")
+    if not isinstance(record["sourceEvidence"], str) or not record["sourceEvidence"].strip():
+        raise TableError(f"{class_name}: missing source evidence in {SUITE_RUN_DATE_METADATA}")
+
+    csv_path, md_path = report_paths(results_dir, class_name)
+    hashes = record["reportsSha256"]
+    expected_files = {csv_path.name, md_path.name}
+    if not isinstance(hashes, dict) or set(hashes) != expected_files:
+        raise TableError(
+            f"{class_name}: report hash inventory mismatch in {SUITE_RUN_DATE_METADATA}"
+        )
+    for report_path in (csv_path, md_path):
+        expected_hash = hashes[report_path.name]
+        if not isinstance(expected_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", expected_hash):
+            raise TableError(f"{report_path.name}: invalid SHA-256 in {SUITE_RUN_DATE_METADATA}")
+        if verify_hashes and _report_sha256(report_path) != expected_hash:
+            raise TableError(
+                f"{report_path.name}: SHA-256 differs from {SUITE_RUN_DATE_METADATA}; "
+                "refresh the suite run metadata from matching run evidence"
+            )
+
+
+def _read_suite_run_date_metadata(
+    results_dir: Path,
+    *,
+    require_complete: bool = True,
+    replaced_classes: frozenset = frozenset(),
+) -> dict:
+    path = results_dir / SUITE_RUN_DATE_METADATA
+    if not path.is_file():
+        raise TableError(f"missing suite run date metadata: {path}")
+    try:
+        metadata = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise TableError(f"invalid suite run date metadata {path.name}: {exc}") from exc
+    suites = metadata.get("suites") if isinstance(metadata, dict) else None
+    if (
+        not isinstance(metadata, dict)
+        or metadata.get("schemaVersion") != 1
+        or metadata.get("dateBasis") != "UTC suite-start date"
+        or not isinstance(suites, dict)
+    ):
+        raise TableError(
+            f"{path.name}: expected schemaVersion 1, UTC suite-start date, and suites object"
+        )
+    unexpected = sorted(set(suites) - set(SUITE_RUN_DATE_CLASSES))
+    missing = sorted(set(SUITE_RUN_DATE_CLASSES) - set(suites))
+    if unexpected or (require_complete and missing):
+        raise TableError(
+            f"{path.name}: suite inventory mismatch; missing={missing}, unexpected={unexpected}"
+        )
+    for class_name, record in suites.items():
+        _validate_suite_run_date_record(
+            results_dir,
+            class_name,
+            record,
+            verify_hashes=class_name not in replaced_classes,
+        )
+    return metadata
+
+
+def _record_suite_run_dates(
+    results_dir: Path,
+    run_dates: dict[str, str],
+    source_evidence: str,
+) -> None:
+    if not run_dates:
+        raise TableError("no suite run dates were provided")
+    if not isinstance(source_evidence, str) or not source_evidence.strip():
+        raise TableError("run evidence must be a non-empty path or URL")
+    unexpected = sorted(set(run_dates) - set(SUITE_RUN_DATE_CLASSES))
+    if unexpected:
+        raise TableError(f"unknown benchmark suite classes in run dates: {unexpected}")
+    for class_name, run_date in run_dates.items():
+        _parse_run_date(run_date, f"{class_name}.asOfDate")
+
+    path = results_dir / SUITE_RUN_DATE_METADATA
+    if path.is_file():
+        metadata = _read_suite_run_date_metadata(
+            results_dir,
+            require_complete=False,
+            replaced_classes=frozenset(run_dates),
+        )
+    else:
+        metadata = {
+            "schemaVersion": 1,
+            "dateBasis": "UTC suite-start date",
+            "suites": {},
+        }
+
+    suites = metadata["suites"]
+    for class_name, run_date in run_dates.items():
+        csv_path, md_path = report_paths(results_dir, class_name)
+        suites[class_name] = {
+            "asOfDate": run_date,
+            "sourceEvidence": source_evidence,
+            "reportsSha256": {
+                report_path.name: _report_sha256(report_path)
+                for report_path in (csv_path, md_path)
+            },
+        }
+        _validate_suite_run_date_record(results_dir, class_name, suites[class_name])
+
+    serialized = json.dumps(metadata, indent=2, ensure_ascii=False).replace("\n", "\r\n") + "\r\n"
+    path.write_text(serialized, encoding="utf-8", newline="")
 
 
 def build_conditions(target: Target, results_dir: Path, date: str) -> str:
@@ -811,9 +954,9 @@ def build_conditions(target: Target, results_dir: Path, date: str) -> str:
             "queries; each cell is the **fastest method** for that library in the linked BenchmarkDotNet "
             f"report. Machine: {machine}, .NET {conditions['runtime']}, "
             f"BenchmarkDotNet {conditions['bdn']} (`{conditions['job']}` + "
-            f"`{conditions['toolchain']}`). As of **{date}** for the end-to-end, allocations and "
-            "Category B tables (the Category A table and the tier-1 section keep the date of their own "
-            "run). In each row the "
+            f"`{conditions['toolchain']}`). As of **{date}** for the end-to-end and allocations tables; "
+            f"Category B was run on **{report_date(results_dir, CATEGORY_B_CLASS)}**. Category A and "
+            "Tier-1 keep the dates of their own runs. In each row the "
             "leading cell is **bold** — the fastest in the time tables and the smallest allocation in the "
             "allocations table."
         )
@@ -823,9 +966,10 @@ def build_conditions(target: Target, results_dir: Path, date: str) -> str:
             "в ячейке — **самый быстрый метод** этой библиотеки в связанном отчёте BenchmarkDotNet. "
             f"Машина: {machine}, .NET {conditions['runtime']}, BenchmarkDotNet {conditions['bdn']} "
             f"(`{conditions['job']}` + `{conditions['toolchain']}`). На **{date}** для таблиц сквозных "
-            "сценариев, аллокаций и категории B (таблица категории A и раздел tier-1 сохраняют дату "
-            "своего прогона). В каждой строке лидирующая ячейка выделена **полужирным** — быстрейшая в таблицах "
-            "времени и с наименьшей аллокацией в таблице аллокаций."
+            f"сценариев и аллокаций; категория B запущена **{report_date(results_dir, CATEGORY_B_CLASS)}**. "
+            "Категория A и раздел tier-1 сохраняют даты своих прогонов. В каждой строке лидирующая ячейка "
+            "выделена **полужирным** — быстрейшая в таблицах времени и с наименьшей аллокацией в таблице "
+            "аллокаций."
         )
     return textwrap.fill(text, width=110)
 
@@ -951,10 +1095,7 @@ def _tier1_run_metadata(results_dir: Path, measurements: dict) -> dict:
         report_path = results_dir / filename
         if not report_path.is_file():
             raise TableError(f"missing Tier-1 report required by {path.name}: {filename}")
-        # Reports are text files; normalize CRLF so Git checkout settings do not
-        # invalidate their hashes. All other report bytes remain covered.
-        report_bytes = report_path.read_bytes().replace(b"\r\n", b"\n")
-        actual_hash = hashlib.sha256(report_bytes).hexdigest()
+        actual_hash = _report_sha256(report_path)
         if actual_hash != hashes[filename]:
             raise TableError(
                 f"{filename}: SHA-256 differs from {path.name}; refresh Tier-1 run metadata "
@@ -1416,9 +1557,21 @@ def main(argv=None) -> int:
         "--date",
         default=None,
         help=(
-            "'as of' date written into the conditions line "
-            "(default: the mtime date of the end-to-end report)"
+            "override the end-to-end date in the conditions line only "
+            "(default: the persisted UTC suite-start date)"
         ),
+    )
+    parser.add_argument(
+        "--record-run-date",
+        action="append",
+        default=[],
+        metavar="CLASS=YYYY-MM-DD",
+        help="record one completed suite's UTC start date (repeat for multiple suites)",
+    )
+    parser.add_argument(
+        "--run-evidence",
+        default=None,
+        help="source path or URL for dates recorded with --record-run-date",
     )
     parser.add_argument(
         "--check",
@@ -1430,7 +1583,28 @@ def main(argv=None) -> int:
     results_dir = args.results_dir.resolve()
     stale = []
     try:
-        date = args.date or report_date(results_dir)
+        if args.record_run_date:
+            if args.date is not None or args.check:
+                raise TableError("--record-run-date cannot be combined with --date or --check")
+            if not args.run_evidence:
+                raise TableError("--record-run-date requires --run-evidence")
+            run_dates = {}
+            for assignment in args.record_run_date:
+                class_name, separator, run_date = assignment.partition("=")
+                if not separator or not class_name:
+                    raise TableError(
+                        f"invalid --record-run-date {assignment!r}; expected CLASS=YYYY-MM-DD"
+                    )
+                if class_name in run_dates:
+                    raise TableError(f"duplicate --record-run-date for {class_name}")
+                run_dates[class_name] = run_date
+            _record_suite_run_dates(results_dir, run_dates, args.run_evidence)
+            print(f"recorded run dates for {len(run_dates)} benchmark suite(s)")
+            return 0
+        if args.run_evidence:
+            raise TableError("--run-evidence requires --record-run-date")
+
+        date = _parse_run_date(args.date, "--date") if args.date else report_date(results_dir)
         for target in TARGETS:
             current = read_text_preserving(target.path)
             updated = render_target(target, results_dir, date)

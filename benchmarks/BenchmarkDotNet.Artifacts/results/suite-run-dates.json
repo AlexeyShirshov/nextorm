@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "dateBasis": "UTC suite-start date",
+  "suites": {
+    "SqliteBenchmarkIteration": {
+      "asOfDate": "2026-11-16",
+      "sourceEvidence": "docs/specs/performance/benchmark-report.md#iteration-20",
+      "reportsSha256": {
+        "NextORM.Benchmark.SqliteBenchmarkIteration-report.csv": "4188e1b4a5cdc776671e1b40e91915c11fa310dde26a0af98a4760bc76303bed",
+        "NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md": "11e7fa4a7944cc9cb94cc7ccd6f3d2cdbbe988dcaa1fb543a4995486c8e704b2"
+      }
+    },
+    "SqliteBenchmarkLargeIteration": {
+      "asOfDate": "2026-11-16",
+      "sourceEvidence": "docs/specs/performance/benchmark-report.md#iteration-20",
+      "reportsSha256": {
+        "NextORM.Benchmark.SqliteBenchmarkLargeIteration-report.csv": "b80162f0a7925ef7f45ba78c17aeb1089eb56e730a67348bf2c541baab4ff6bf",
+        "NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md": "5ae692337f3a9163ba219c2727be720a083b8a82fdf1c453ed6bd78997cc07e5"
+      }
+    },
+    "SqliteBenchmarkWhere": {
+      "asOfDate": "2026-11-16",
+      "sourceEvidence": "docs/specs/performance/benchmark-report.md#iteration-20",
+      "reportsSha256": {
+        "NextORM.Benchmark.SqliteBenchmarkWhere-report.csv": "3d8574fb3525510b611b364c390736cdb495de07fd8df4e05c1b4d0b0cccdceb",
+        "NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md": "e2493d2a9cf63c997341c4d631c38bfdb1bf8c6b20724303c66da419a6cb5cc3"
+      }
+    },
+    "SqliteBenchmarkSimulateWork": {
+      "asOfDate": "2026-11-16",
+      "sourceEvidence": "docs/specs/performance/benchmark-report.md#iteration-20",
+      "reportsSha256": {
+        "NextORM.Benchmark.SqliteBenchmarkSimulateWork-report.csv": "6d3e0e725fdc3ebdb72a50ec076b8837adbd3a93c894af6a1913c33461497872",
+        "NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md": "283a406e59c471ff0070854e33a77a8a2bd141819a113091f8c9532c0f3b4f4b"
+      }
+    },
+    "SqliteBenchmarkAny": {
+      "asOfDate": "2026-11-16",
+      "sourceEvidence": "docs/specs/performance/benchmark-report.md#iteration-20",
+      "reportsSha256": {
+        "NextORM.Benchmark.SqliteBenchmarkAny-report.csv": "5fbf0a8e1bbbd13e327535b373735c27649a9c892aa23b29310dc70803ad22fc",
+        "NextORM.Benchmark.SqliteBenchmarkAny-report-github.md": "b16874e72137ac4afb31ce6bde60f677545102d934f3dbdf2f4daeba9ed0b25d"
+      }
+    },
+    "SqliteBenchmarkFirst": {
+      "asOfDate": "2026-11-16",
+      "sourceEvidence": "docs/specs/performance/benchmark-report.md#iteration-20",
+      "reportsSha256": {
+        "NextORM.Benchmark.SqliteBenchmarkFirst-report.csv": "f098fb40ed2aac433f381dbd203c48ac318e240b0faea7f7ecdbfc9f125f4f96",
+        "NextORM.Benchmark.SqliteBenchmarkFirst-report-github.md": "fdd10c50afb99fa26b0f7f9a81c2ebd06c7a58381f2da091ccdd9b47b0120993"
+      }
+    },
+    "SqliteBenchmarkSingle": {
+      "asOfDate": "2026-11-16",
+      "sourceEvidence": "docs/specs/performance/benchmark-report.md#iteration-20",
+      "reportsSha256": {
+        "NextORM.Benchmark.SqliteBenchmarkSingle-report.csv": "ebb1a109f05b0c7a0c3f8a3d715cb73f6d2268ad22b059217b420563bb9d5780",
+        "NextORM.Benchmark.SqliteBenchmarkSingle-report-github.md": "7caa574ac6b9caff8440e3094ea9563c92cb1acb4a7fbb2acd393dc5e305073f"
+      }
+    },
+    "SqliteBenchmarkFeaturesFair": {
+      "asOfDate": "2026-11-16",
+      "sourceEvidence": "docs/specs/performance/benchmark-report.md#iteration-20",
+      "reportsSha256": {
+        "NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report.csv": "406d9038c7621bda6d19ca1f77272c4b6040989634f1f7e059e9dc5f8f12f721",
+        "NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md": "fcfb0423825cb8e090cfc23318025ff5fe3e036c6aa582290bd0cf02824ada9a"
+      }
+    },
+    "SqliteBenchmarkFeaturesFairCached": {
+      "asOfDate": "2026-11-16",
+      "sourceEvidence": "docs/specs/performance/benchmark-report.md#iteration-20",
+      "reportsSha256": {
+        "NextORM.Benchmark.SqliteBenchmarkFeaturesFairCached-report.csv": "4ba75bca4c94f9240ecb3946f0b53100af884b4d5ff602ac7a62c86e89bf6adb",
+        "NextORM.Benchmark.SqliteBenchmarkFeaturesFairCached-report-github.md": "02e2fdbc9991fb9cc42b3c7f4705344a5967d004dd1062d0eddbb4abcb9e1f67"
+      }
+    }
+  }
+}

@@ -7,8 +7,8 @@ evidence for these scenarios, not a prediction for every provider, workload, or 
 Benchmark conditions: provider SQLite (`Microsoft.Data.Sqlite`) for every participant; async queries; each
 cell is the **fastest method** for that library in the linked BenchmarkDotNet report. Machine: AMD Ryzen 7
 5800HS with Radeon Graphics (8 logical / 4 physical cores), .NET 11.0.0, BenchmarkDotNet 0.15.8 (`Job.Default`
-+ `InProcessEmitToolchain`). As of **2026-11-16** for the end-to-end, allocations and Category B tables (the
-Category A table and the tier-1 section keep the date of their own run). In each row the leading cell is
++ `InProcessEmitToolchain`). As of **2026-11-16** for the end-to-end and allocations tables; Category B was
+run on **2026-11-16**. Category A and Tier-1 keep the dates of their own runs. In each row the leading cell is
 **bold** — the fastest in the time tables and the smallest allocation in the allocations table.
 <!-- benchmarks:conditions:end -->
 
@@ -390,6 +390,13 @@ refreshes the end-to-end tables and Category A/B; refresh Tier-1 after a separat
 and update the sidecar's run date and report hashes. Each report hash is computed after replacing CRLF
 line endings with LF, so checkout line-ending settings do not affect validation; all other report bytes
 remain covered by the hash.
+
+The generator reads each comparison suite's UTC start date and report hashes from
+`suite-run-dates.json`; report modification times are not measurement evidence. After a local run,
+record the UTC date captured immediately before each suite with `--record-run-date
+CLASS=YYYY-MM-DD --run-evidence SOURCE`, where `SOURCE` is that run's log path or URL. Repeat
+`--record-run-date` for every suite you refreshed. The workflow records each suite date and binds it
+to the generated CSV and Markdown reports before regenerating the tables.
 
 The same end-to-end refresh runs from `.github/workflows/benchmarks.yml` — automatically after every
 merge into `main` that touches the engine (`src/**`) or the benchmark project, and on demand from the
