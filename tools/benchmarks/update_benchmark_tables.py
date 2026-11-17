@@ -576,7 +576,7 @@ def build_category_b_table(results_dir: Path, lang: str) -> str:
 # Conditions paragraph
 # ------------------------------------------------------------------------------------------------
 def read_run_conditions(results_dir: Path) -> dict:
-    _, md_path = report_paths(results_dir, E2E_ROWS[0].class_name)
+    csv_path, md_path = report_paths(results_dir, E2E_ROWS[0].class_name)
     text = md_path.read_text(encoding="utf-8")
     bdn = re.search(r"BenchmarkDotNet v([\w.\-]+)", text)
     machine = re.search(
@@ -588,6 +588,48 @@ def read_run_conditions(results_dir: Path) -> dict:
     toolchain = re.search(r"Job=(\w+)(?:\s+Toolchain=(\w+))?", text)
     if not bdn or not machine or not runtime:
         raise TableError(f"{md_path.name}: cannot read the machine/runtime header")
+
+    with csv_path.open("r", encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        raise TableError(f"{csv_path.name}: no job metadata")
+    jobs = {(row.get("Job") or "").strip() for row in rows}
+    toolchains = {(row.get("Toolchain") or "").strip() for row in rows}
+    if len(jobs) != 1 or not next(iter(jobs)):
+        raise TableError(f"{csv_path.name}: cannot infer one job label from CSV metadata: {sorted(jobs)}")
+    if len(toolchains) != 1 or not next(iter(toolchains)):
+        raise TableError(
+            f"{csv_path.name}: cannot infer one toolchain from CSV metadata: {sorted(toolchains)}"
+        )
+
+    csv_job = next(iter(jobs))
+    csv_toolchain = next(iter(toolchains))
+    default_job_fields = (
+        "IterationCount",
+        "WarmupCount",
+        "MinWarmupIterationCount",
+        "MaxWarmupIterationCount",
+        "MinIterationCount",
+        "MaxIterationCount",
+        "MinIterationTime",
+        "IterationTime",
+        "LaunchCount",
+        "RunStrategy",
+        "InvocationCount",
+    )
+    # BenchmarkDotNet omits `Job=` from its Markdown header when the configured job matches the
+    # default display. In that case the CSV carries a hashed Job-* id, but its parameter columns
+    # distinguish Job.Default (all default values, UnrollFactor=16) from ShortRun (3 iterations).
+    # Do not silently call an unknown hashed job ShortRun: preserve its actual id instead.
+    if csv_job.startswith("Job-") and all(
+        all((row.get(field) or "").strip() == "Default" for field in default_job_fields)
+        and (row.get("UnrollFactor") or "").strip() == "16"
+        for row in rows
+    ):
+        inferred_job = "Job.Default"
+    else:
+        inferred_job = csv_job
+
     cpu = re.sub(r"\s+\d+(?:\.\d+)?GHz$", "", machine.group("cpu").strip())
     return {
         "cpu": cpu,
@@ -595,10 +637,8 @@ def read_run_conditions(results_dir: Path) -> dict:
         "physical": machine.group("physical"),
         "runtime": runtime.group(1),
         "bdn": bdn.group(1),
-        # BDN omits the job line when it matches the default display; every comparison class uses
-        # NextormConfig, which is ShortRun + InProcessEmitToolchain unless NEXTORM_BENCH_FULL=1.
-        "job": toolchain.group(1) if toolchain else "ShortRun",
-        "toolchain": toolchain.group(2) if toolchain and toolchain.group(2) else "InProcessEmitToolchain",
+        "job": toolchain.group(1) if toolchain else inferred_job,
+        "toolchain": toolchain.group(2) if toolchain and toolchain.group(2) else csv_toolchain,
     }
 
 

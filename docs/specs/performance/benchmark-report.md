@@ -3748,3 +3748,117 @@ dotnet run --project benchmarks/nextorm.benchmark.aot -c Release -- --filter '*'
 cd benchmarks/nextorm.benchmark
 NEXTORM_BENCH_FULL=1 dotnet run -c Release -- --filter '*SqliteBenchmarkCachedPlan*'
 ```
+
+# Итерация 20 — локальный полный сравнительный прогон и Tier-1 (2026-11-16)
+
+**Область и методика.** Измерения выполнены на текущем рабочем дереве, а не на опубликованном NuGet
+`1.0.9`: HEAD `ad2d0daeb6e34bcc5b094f0c9b0b1d1205fb8545`, tree `422cc645b20226c1c918d288ae8ec3b182861567`.
+При старте дерево было грязным: 216 изменённых отслеживаемых путей и 9 неотслеживаемых. В число изменений
+входила настройка целей этого запуска; это не снимок чистого HEAD. AMD Ryzen 7 5800HS (8 логических / 4
+физических ядра), Ubuntu 22.04.5 LTS, SDK 11.0.100 / .NET 11.0.0, BenchmarkDotNet 0.15.8, Release.
+SQLite-файл — изолированная копия `data/test.db` под каталогом запуска; SHA-256 совпадает с исходной БД:
+`32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295`.
+
+`NEXTORM_BENCH_FULL=1` выбрал настроенный в проекте `Job.Default.WithToolchain(InProcessEmitToolchain.Instance)`;
+это **полный Default job внутри процесса**, не out-of-process. Из 312 строк отчётов 303 имеют Job ID
+`Job-JWQWGO` / `UnrollFactor=16`; 9 raw-reader строк — специализированный `Job-VLPMSV` /
+`UnrollFactor=1`, их не следует называть неизменённым `Job.Default`. Все 312 строк использовали
+`InProcessEmitToolchain` и runtime .NET 11.0.
+
+- 16/16 групп завершились с exit 0: основной набор — девять групп / 182 строки; Tier-1 — шесть групп /
+  118 строк (`Projection` 7, `Aggregates` 21, `Paging` 7, `Streaming` 22, `WriteJson` 33, `Csv` 28);
+  acceptance — одна группа / 12 строк. Это число строк выгрузок по группам, не утверждение о 312
+  уникальных именованных сценариях. Измерения шли 2026-11-16 17:09:44–18:56:09 UTC (1:46:25).
+- Проверены свежие CSV и соответствующие Markdown-отчёты: все 312 строк имеют конечные `Mean`, `Error`,
+  `StdDev`, `Allocated`; 0 пустых/NA/failed ячеек и 0 проваленных сценариев. Сводка и проверки каждой
+  группы сохранены в `benchmarks/BenchmarkDotNet.Artifacts/iteration20-local-20261116T165837Z/validation.md`
+  и `validation.json`; полные логи — в `.../logs/`.
+- Build: restore exit 0; Release build exit 0, 0 warnings, 0 errors. Логи — `logs/02-restore-local-projects.log`
+  и `logs/03-build-release-local-projects.log`.
+- Предупреждения не скрывались и не считались ошибками: 312 отказов permission denied при попытке поднять
+  приоритет процесса до High; 10 предупреждений `MinIterationTime` (одно в SimulateWork и девять на
+  raw-reader, минимальная рекомендация BDN — 100 ms); 6 `MultimodalDistribution` в Streaming. В логах нет
+  маркеров ошибки/падения бенчмарка. Raw-reader и короткие итерации остаются ограничением точности.
+
+### Текущие результаты — сравнение только внутри одного запуска
+
+Сквозные строки ниже сопоставляют лучший метод каждой библиотеки из того же отчёта; в этих семи случаях
+лучшим co-measured reference ORM был Dapper. Отношение — `Nextorm Mean / Dapper Mean` (меньше 1 означает
+меньшее измеренное среднее в этом запуске), а не изменение относительно предыдущей итерации.
+
+| Сценарий | Nextorm: Mean / Allocated | Dapper: Mean / Allocated | Mean ratio |
+|---|---:|---:|---:|
+| Data fetch | 12.26 μs / 1,080 B | 16.55 μs / 1,848 B | 0.74× |
+| Wide data fetch | 7.921 ms / 2.14 MB | 8.528 ms / 2.59 MB | 0.93× |
+| Where | 1.063 ms / 102.9 KB | 1.503 ms / 179.23 KB | 0.71× |
+| Simulate work | 7.893 ms / 6.21 MB | 24.616 ms / 8.86 MB | 0.32× |
+| Any | 1.059 ms / 84.38 KB | 1.509 ms / 138.29 KB | 0.70× |
+| FirstOrDefault | 107.1 μs / 8.56 KB | 154.6 μs / 16.12 KB | 0.69× |
+| SingleOrDefault | 107.2 μs / 8.28 KB | 148.6 μs / 16.04 KB | 0.72× |
+
+В подготовленной Category A Nextorm был быстрее по Mean во всех 12 сценариях; минимальная разница среди
+них — IN-list: 14.11 μs против 19.66 μs у Dapper (0.72×). Аллокации ниже в 11/12 сценариях; исключение
+тоже IN-list — 1.55 KB у Nextorm против 1.26 KB у Dapper. В cached Category B Nextorm быстрее в 7/12 и
+нигде не имел наименьших аллокаций: крупнейший разрыв — IN-list, 43.73 μs против 19.82 μs (2.21×) и
+8.77 KB против 1.26 KB (6.98×); CTE — 32.56 μs против 22.91 μs (1.42×). Это результаты разных плеч
+Category A/B внутри одного прогона, а не чистая оценка изменения кода между версиями.
+
+Итерация 19 использовала `ShortRun` (3 warmup / 3 измерительных итерации), а эта — `Job.Default`;
+сопоставлять их абсолютные значения или выводить регрессию/улучшение по времени статистически некорректно.
+Поэтому здесь нет delta-таблицы против Итерации 19. Опубликованные таблицы отражают только текущие
+свежие результаты и co-measured сравнения.
+
+### Локальные ссылки проекта и provenance
+
+В `examples/nextorm.examples.postgres.aviasales/nextorm.examples.postgres.aviasales.csproj` параметр
+`NextormBenchmarkUseLocalProjects=true` отключает PackageReference на `nextorm` и `nextorm.postgres` и
+подключает локальные Core, PostgreSQL и source-generator проекты. Существующая ссылка на
+`nextorm.extensions` сохранена. Это позволяет измерять текущие исходники, а не NuGet `1.0.9`; изменение
+csproj и первоначальное грязное состояние зафиксированы в `manifest.md`.
+
+Provenance: 10 уникальных локальных NextORM project outputs в `ReferencePath` / `ReferenceCopyLocalPaths`,
+локальный source-generator analyzer и 11 сверенных строк runtime/generator SHA-256. Файлы:
+`logs/04-compiler-runtime-provenance.json`, `logs/06-runtime-loaded-assemblies.tsv`,
+`logs/07-runtime-copy-provenance.tsv`. Полные сырые отчёты и логи находятся в каталоге запуска и его
+`artifacts/{ci,tier1,acceptance}/results/`.
+
+### Публикация таблиц и воспроизведение
+
+Существующие 18 canonical CSV/Markdown-отчётов сохранены перед заменой в
+`logs/canonical-reports-before/` (манифест SHA-256 — `logs/canonical-reports-before.json`); соответствующие
+свежие девять пар основного набора скопированы в `benchmarks/BenchmarkDotNet.Artifacts/results/`, откуда
+строятся ссылки в таблицах. Генератор обновил только размеченные блоки в `readme.md`,
+`docs/comparisons/benchmarks.md` и `docs/ru/comparisons/benchmarks.md`. Его распознавание job исправлено:
+если BDN не выводит `Job=` в Markdown, `Job.Default` определяется по CSV-параметрам, а неизвестный hashed
+job не подменяется на `ShortRun`.
+
+Команды сборки:
+
+```bash
+dotnet restore benchmarks/nextorm.benchmark -p:NextormBenchmarkUseLocalProjects=true
+dotnet build benchmarks/nextorm.benchmark -c Release --no-restore -p:NextormBenchmarkUseLocalProjects=true
+```
+
+Все 16 фактических команд измерения и их exit code приведены в `manifest.md`; каждая имеет отдельный
+полный лог в `logs/bench-*.log`. Пример команды основного набора:
+
+```bash
+env NEXTORM_BENCH_FULL=1 \
+  NEXTORM_BENCH_DB=benchmarks/BenchmarkDotNet.Artifacts/iteration20-local-20261116T165837Z/db/test.db \
+  dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- \
+  --filter '*SqliteBenchmarkIteration*' \
+  --artifacts benchmarks/BenchmarkDotNet.Artifacts/iteration20-local-20261116T165837Z/artifacts/ci
+```
+
+Таблицы сформированы из явного каталога свежих отчётов и проверены повторным `--check`:
+
+```bash
+python3 tools/benchmarks/update_benchmark_tables.py \
+  --results-dir benchmarks/BenchmarkDotNet.Artifacts/iteration20-local-20261116T165837Z/artifacts/ci/results \
+  --date 2026-11-16
+python3 tools/benchmarks/update_benchmark_tables.py \
+  --results-dir benchmarks/BenchmarkDotNet.Artifacts/iteration20-local-20261116T165837Z/artifacts/ci/results \
+  --date 2026-11-16 --check
+```
+
+Обе команды завершились с exit 0; логи — `logs/11-update-tables.log` и `logs/12-check-tables.log`.
