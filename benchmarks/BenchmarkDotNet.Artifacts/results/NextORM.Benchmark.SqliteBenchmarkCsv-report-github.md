@@ -2,20 +2,19 @@
 
 BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
 AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
-.NET SDK 10.0.401
-  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+.NET SDK 11.0.100
+  [Host] : .NET 11.0.0 (11.0.0, 11.0.26.53018), X64 RyuJIT x86-64-v3
 
-Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3  
-LaunchCount=1  WarmupCount=3  Categories=csv  
+Job=Job-JWQWGO  Toolchain=InProcessEmitToolchain  Categories=csv  
 
 ```
 | Method                            | Mean      | Ratio | Gen0     | Gen1     | Gen2    | Allocated  | Alloc Ratio |
 |---------------------------------- |----------:|------:|---------:|---------:|--------:|-----------:|------------:|
-| Nextorm_StringProjection_ToList   |  2.799 ms |  0.34 | 121.0938 |  54.6875 |       - | 1019.05 KB |        0.45 |
-| Nextorm_StringProjection_WriteCsv |  3.423 ms |  0.41 | 113.2813 |        - |       - |  948.99 KB |        0.42 |
-| Nextorm_ToList                    |  8.278 ms |  1.00 | 265.6250 | 156.2500 |       - | 2267.52 KB |        1.00 |
-| Nextorm_ToList_ManualCsv          |  9.806 ms |  1.18 | 500.0000 | 468.7500 |       - | 4141.82 KB |        1.83 |
-| Nextorm_WriteCsv                  | 10.241 ms |  1.24 | 203.1250 |        - |       - | 1733.64 KB |        0.76 |
-| Dapper_ToList_ManualCsv           | 14.115 ms |  1.71 | 671.8750 | 281.2500 | 93.7500 | 4866.08 KB |        2.15 |
-| Linq2Db_ToList_ManualCsv          | 14.635 ms |  1.77 | 593.7500 | 296.8750 | 93.7500 | 4321.92 KB |        1.91 |
-| EFCore_ToList_ManualCsv           | 16.190 ms |  1.96 | 875.0000 | 343.7500 | 93.7500 | 6516.91 KB |        2.87 |
+| Nextorm_StringProjection_ToList   |  2.763 ms |  0.33 | 121.0938 |  70.3125 |       - | 1018.12 KB |        0.45 |
+| Nextorm_StringProjection_WriteCsv |  3.469 ms |  0.42 | 113.2813 |        - |       - |   949.1 KB |        0.42 |
+| Nextorm_ToList                    |  8.336 ms |  1.00 | 265.6250 | 156.2500 |       - | 2266.74 KB |        1.00 |
+| Nextorm_ToList_ManualCsv          |  9.694 ms |  1.16 | 531.2500 | 453.1250 |       - | 4375.43 KB |        1.93 |
+| Nextorm_WriteCsv                  | 10.095 ms |  1.21 | 203.1250 |        - |       - | 1733.92 KB |        0.76 |
+| Linq2Db_ToList_ManualCsv          | 12.945 ms |  1.55 | 562.5000 | 281.2500 | 78.1250 | 4087.58 KB |        1.80 |
+| Dapper_ToList_ManualCsv           | 13.250 ms |  1.59 | 687.5000 | 359.3750 | 93.7500 | 5100.61 KB |        2.25 |
+| EFCore_ToList_ManualCsv           | 14.824 ms |  1.78 | 890.6250 | 359.3750 | 93.7500 | 6751.01 KB |        2.98 |

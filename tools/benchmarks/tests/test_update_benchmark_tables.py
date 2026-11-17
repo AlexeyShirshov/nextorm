@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -331,6 +332,70 @@ class CategoryBTests(unittest.TestCase):
         )
         with self.assertRaises(tables.TableError):
             tables.build_category_b_table(self.results, "en")
+
+
+class Tier1TableTests(unittest.TestCase):
+    def test_article_targets_generate_fresh_tier1_tables(self):
+        article_targets = [target for target in tables.TARGETS if target.name in ("docs", "docs-ru")]
+        self.assertEqual(len(article_targets), 2)
+        for target in article_targets:
+            self.assertTrue(set(tables.TIER1_BLOCKS).issubset(target.blocks))
+            self.assertEqual(
+                tables.read_text_preserving(target.path),
+                tables.render_target(
+                    target,
+                    tables.DEFAULT_RESULTS_DIR,
+                    tables.report_date(tables.DEFAULT_RESULTS_DIR),
+                ),
+            )
+
+        blocks = tables.build_tier1_blocks(tables.DEFAULT_RESULTS_DIR, "en")
+        run_metadata = tables._tier1_run_metadata(
+            tables.DEFAULT_RESULTS_DIR,
+            {
+                key: tables._tier1_measurements(tables.DEFAULT_RESULTS_DIR, key)
+                for key in tables.TIER1_RUN_REPORTS
+            },
+        )
+        self.assertIn(run_metadata["asOfDate"], blocks["tier1-run-info"])
+        self.assertIn("Job.Default", blocks["tier1-run-info"])
+        self.assertIn("InProcessEmitToolchain", blocks["tier1-run-info"])
+        self.assertIn(run_metadata["run"]["sourceHead"], blocks["tier1-run-info"])
+        self.assertIn(str(run_metadata["run"]["localNextormProjects"]), blocks["tier1-run-info"])
+        self.assertEqual(len(run_metadata["run"]["runtimeAssemblySha256"]), 10)
+        self.assertEqual(run_metadata["run"]["matchedBuildRuntimeHashRows"], 11)
+        self.assertEqual(len(run_metadata["run"]["sourceGeneratorAnalyzerSha256"]), 64)
+        projection = tables._tier1_measurements(tables.DEFAULT_RESULTS_DIR, "projection")[0]
+        self.assertIn(projection.method, blocks["tier1-projection"])
+        self.assertIn(projection.mean, blocks["tier1-projection"])
+        self.assertIn("B_Nextorm_ToDataReader", blocks["tier1-streaming-readers"])
+        self.assertIn("Provider_Direct_ToDataReader_Empty", blocks["tier1-streaming-empty-readers"])
+        self.assertEqual(len(blocks["tier1-projection"].splitlines()), 9)
+        self.assertEqual(len(blocks["tier1-aggregates"].splitlines()), 23)
+        self.assertEqual(len(blocks["tier1-paging"].splitlines()), 9)
+        self.assertEqual(len(blocks["tier1-streaming-buffered"].splitlines()), 9)
+        self.assertEqual(len(blocks["tier1-streaming-unbuffered"].splitlines()), 8)
+        self.assertEqual(len(blocks["tier1-streaming-readers"].splitlines()), 7)
+        self.assertEqual(len(blocks["tier1-streaming-empty-readers"].splitlines()), 6)
+        self.assertEqual(len(blocks["tier1-write-json"].splitlines()), 13)
+        self.assertEqual(len(blocks["tier1-csv"].splitlines()), 10)
+
+    def test_tier1_hash_manifest_rejects_a_changed_report(self):
+        with tempfile.TemporaryDirectory() as temp:
+            results = Path(temp)
+            for filename in tables.TIER1_REQUIRED_REPORTS:
+                shutil.copy2(tables.DEFAULT_RESULTS_DIR / filename, results / filename)
+            shutil.copy2(
+                tables.DEFAULT_RESULTS_DIR / tables.TIER1_RUN_METADATA,
+                results / tables.TIER1_RUN_METADATA,
+            )
+            report = results / "NextORM.Benchmark.SqliteBenchmarkProjection-report.csv"
+            report.write_text(
+                report.read_text(encoding="utf-8").replace("3.923 ms", "3.924 ms"),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(tables.TableError, "SHA-256 differs"):
+                tables.build_tier1_blocks(results, "en")
 
 
 class BlockTests(unittest.TestCase):
