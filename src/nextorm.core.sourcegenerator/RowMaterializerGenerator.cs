@@ -162,6 +162,14 @@ internal sealed class RowMaterializerGenerator : IIncrementalGenerator
         source.AppendLine();
         source.AppendLine("        return null;");
         source.AppendLine("    }");
+        source.AppendLine();
+        source.AppendLine("    private static bool IsRuntimeWidenedNumeric(global::System.Type type)");
+        source.AppendLine("    {");
+        source.AppendLine("        type = global::System.Nullable.GetUnderlyingType(type) ?? type;");
+        source.AppendLine("        return type == typeof(byte) || type == typeof(short) || type == typeof(int)");
+        source.AppendLine("            || type == typeof(long) || type == typeof(float) || type == typeof(double)");
+        source.AppendLine("            || type == typeof(decimal);");
+        source.AppendLine("    }");
 
         for (var i = 0; i < covered.Count; i++)
         {
@@ -212,6 +220,18 @@ internal sealed class RowMaterializerGenerator : IIncrementalGenerator
         source.Append("    private static global::System.Delegate? Create").Append(index)
             .AppendLine("(global::System.ReadOnlySpan<global::NextORM.Core.RowMaterializerColumn> columns)");
         source.AppendLine("    {");
+
+        // Narrow JIT fallback, only for a type whose public constructors are all parameterless: the
+        // expression fallback then builds the shape through member-init. A type with an alternate
+        // (longer) public constructor keeps the generated route even for one column, because the core
+        // constructor resolver would select that longer constructor and fail on a one-column shape.
+        if (type.ParameterlessOnly && !type.IsValueType)
+        {
+            source.AppendLine("        if (global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported");
+            source.AppendLine("            && columns.Length == 1 && IsRuntimeWidenedNumeric(columns[0].Type))");
+            source.AppendLine("            return null;");
+            source.AppendLine();
+        }
 
         if (type.ConstructorParameters is { } parameters)
         {
@@ -571,7 +591,9 @@ internal sealed class RowMaterializerGenerator : IIncrementalGenerator
         if (parameters is null && !(propertiesUsable && hasParameterless))
             return null;
 
-        return new CoveredType(fullName, parameters, properties, propertiesUsable && hasParameterless);
+        var parameterlessOnly = constructors.Count > 0 && constructors.All(static c => c.Parameters.Length == 0);
+        return new CoveredType(fullName, parameters, properties, propertiesUsable && hasParameterless,
+            symbol.IsValueType, parameterlessOnly);
     }
 
     /// <summary>
@@ -661,7 +683,9 @@ internal sealed class RowMaterializerGenerator : IIncrementalGenerator
         string FullName,
         MemberShape[]? ConstructorParameters,
         List<MemberShape> Properties,
-        bool PropertiesUsable);
+        bool PropertiesUsable,
+        bool IsValueType,
+        bool ParameterlessOnly);
 
     private sealed record CoveredAnonymous(
         string Key,

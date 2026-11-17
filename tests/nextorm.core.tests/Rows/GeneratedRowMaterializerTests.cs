@@ -141,19 +141,60 @@ public sealed class GeneratedRowMaterializerTests : IDisposable
         // as int); a fixed GetInt64/GetInt32 threw InvalidCastException there, so the generated materializer
         // dispatches on the runtime field type and widens with the typed Convert.
         RowMaterializerRegistry.Register(NextORM.Core.Generated.__NextOrmRowMaterializerProvider.Instance);
-        var columns = name == "AutoWideId"
-            ? [new SelectExpression(declared) { Index = 0, PropertyName = name }]
-            : new[] { new SelectExpression(declared) { Index = 0, PropertyName = name } };
+        // Two columns keep this shape on the generated route on JIT (the single-column numeric shape is
+        // the narrow AOT-only route); the numeric column still exercises the per-row widening dispatch.
+        var label = name + "Label";
+        var columns = new[]
+        {
+            new SelectExpression(declared) { Index = 0, PropertyName = name },
+            new SelectExpression(typeof(string)) { Index = 1, PropertyName = label },
+        };
 
         var shape = name == "AutoWideId"
-            ? new { AutoWideId = 0L }.GetType()
-            : new { AutoNarrowId = 0 }.GetType();
+            ? new { AutoWideId = 0L, AutoWideLabel = "" }.GetType()
+            : new { AutoNarrowId = 0, AutoNarrowLabel = "" }.GetType();
 
         RowMaterializerRegistry.TryCreate(shape, columns, out var materializer).Should().BeTrue();
-        using var reader = Read((name, storage, value));
+        using var reader = Read((name, storage, value), (label, typeof(string), "x"));
         var row = ((Func<IDataRecord, object?>)materializer!)(reader);
 
         row!.GetType().GetProperty(name)!.GetValue(row).Should().Be(Convert.ChangeType(value, declared));
+    }
+
+    [Fact]
+    public void GeneratedProvider_ShouldKeepTheNarrowJitFallbackForSingleNumericColumnsOnly()
+    {
+        Assert.SkipUnless(System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported,
+            "the narrow fallback is the JIT route; NativeAOT always keeps the generated numeric materializer");
+        RowMaterializerRegistry.Register(NextORM.Core.Generated.__NextOrmRowMaterializerProvider.Instance);
+
+        var single = new[] { new SelectExpression(typeof(int)) { Index = 0, PropertyName = "Value" } };
+        RowMaterializerRegistry.TryCreate(typeof(SingleNumericClass), single, out var singleMaterializer)
+            .Should().BeFalse("a parameterless-only single-column numeric class is the narrow JIT expression-path route");
+        singleMaterializer.Should().BeNull();
+
+        RowMaterializerRegistry.TryCreate(new { Value = 0 }.GetType(), single, out var anonymousMaterializer)
+            .Should().BeTrue("an anonymous type is constructor-only and keeps the generated route");
+        anonymousMaterializer.Should().NotBeNull();
+
+        var multi = new[]
+        {
+            new SelectExpression(typeof(int)) { Index = 0, PropertyName = "A" },
+            new SelectExpression(typeof(int)) { Index = 1, PropertyName = "B" },
+        };
+        RowMaterializerRegistry.TryCreate(new { A = 0, B = 0 }.GetType(), multi, out var multiMaterializer)
+            .Should().BeTrue("multi-column numeric shapes keep the generated route on JIT");
+        multiMaterializer.Should().NotBeNull();
+
+        var text = new[] { new SelectExpression(typeof(string)) { Index = 0, PropertyName = "Text" } };
+        RowMaterializerRegistry.TryCreate(new { Text = "" }.GetType(), text, out var textMaterializer)
+            .Should().BeTrue("non-numeric single-column shapes keep the generated route on JIT");
+        textMaterializer.Should().NotBeNull();
+
+        var valueType = new[] { new SelectExpression(typeof(double)) { Index = 0, PropertyName = "Value" } };
+        RowMaterializerRegistry.TryCreate(typeof(SingleNumericStruct), valueType, out var valueTypeMaterializer)
+            .Should().BeTrue("a single numeric value-type DTO keeps the generated route; the expression path may not construct it");
+        valueTypeMaterializer.Should().NotBeNull();
     }
 
     [Fact]
@@ -168,6 +209,27 @@ public sealed class GeneratedRowMaterializerTests : IDisposable
         RowMaterializerRegistry.TryCreate(new { AutoCoveredBytes = Array.Empty<byte>() }.GetType(), columns, out var materializer)
             .Should().BeFalse("byte[] is outside the plain accessor set, so the shape stays on the expression path");
         materializer.Should().BeNull();
+    }
+
+    [Fact]
+    public void GeneratedProvider_ShouldKeepTheGeneratedRouteForAPartialEntityWithAlternateConstructors()
+    {
+        // The expression fallback resolves the longest constructor (id, other) and cannot build a
+        // one-column shape; the generated member-init branch can, so this type must not take the
+        // single-column JIT fallback.
+        RowMaterializerRegistry.Register(NextORM.Core.Generated.__NextOrmRowMaterializerProvider.Instance);
+        var columns = new[]
+        {
+            new SelectExpression(typeof(int)) { Index = 0, PropertyName = "Id", PropertyType = typeof(int) },
+        };
+
+        RowMaterializerRegistry.TryCreate(typeof(PartialCtorRow), columns, out var materializer)
+            .Should().BeTrue("a type with an alternate public constructor keeps the generated member-init route");
+
+        using var reader = Read(("Id", typeof(int), 7));
+        var row = ((Func<IDataRecord, PartialCtorRow>)materializer!)(reader);
+        row.Id.Should().Be(7);
+        row.Other.Should().Be(0);
     }
 
     private static DataTableReader Read(params (string Name, Type Type, object Value)[] values)
@@ -218,4 +280,31 @@ public sealed class GeneratedNote
     public int Id { get; set; }
 
     public string? Name { get; set; }
+}
+
+/// <summary>A value-type single numeric DTO: the narrow JIT fallback is reference-type only.</summary>
+public readonly record struct SingleNumericStruct(double Value);
+
+/// <summary>Parameterless plus a longer constructor: a one-column shape must use member-init.</summary>
+public sealed class PartialCtorRow
+{
+    public PartialCtorRow()
+    {
+    }
+
+    public PartialCtorRow(int id, int other)
+    {
+        Id = id;
+        Other = other;
+    }
+
+    public int Id { get; set; }
+
+    public int Other { get; set; }
+}
+
+/// <summary>A parameterless-only single numeric class: the narrow JIT fallback applies to this shape.</summary>
+public sealed class SingleNumericClass
+{
+    public int Value { get; set; }
 }
