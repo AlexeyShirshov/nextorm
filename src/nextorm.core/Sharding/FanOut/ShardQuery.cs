@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 namespace NextORM.Core;
 
 /// <summary>
-/// A bucket fan-out query: it runs the query once per bucket and returns one result vector per bucket.
+/// Runs the same query separately for each bucket and returns one result vector per bucket.
 /// </summary>
 /// <remarks>
 /// A shard (server) is a dynamic deployment detail and never appears here. Buckets are the stable unit:
@@ -61,12 +61,16 @@ public sealed class ShardQuery<TEntity>
         => new(_source.Distinct(), _buckets, _bucketOwners, _parallelism);
 
     /// <summary>Runs the query once per bucket and returns one vector per bucket.</summary>
-    /// <returns>An array indexed by bucket number; every element holds that bucket's rows.</returns>
+    /// <returns>
+    /// One element per bucket, in <see cref="Buckets"/> order; each element holds that bucket's rows.
+    /// </returns>
     public List<TEntity>[] ToList() => RunEach(static query => query.ToList());
 
     /// <summary>Runs the query once per bucket and returns one vector per bucket.</summary>
     /// <param name="cancellationToken">Cancels the fan-out.</param>
-    /// <returns>An array indexed by bucket number; every element holds that bucket's rows.</returns>
+    /// <returns>
+    /// One element per bucket, in <see cref="Buckets"/> order; each element holds that bucket's rows.
+    /// </returns>
     public async Task<List<TEntity>[]> ToListAsync(CancellationToken cancellationToken = default)
     {
         var results = new List<TEntity>[_buckets.Count];
@@ -79,12 +83,16 @@ public sealed class ShardQuery<TEntity>
     }
 
     /// <summary>Runs the query once per bucket and returns one vector per bucket.</summary>
-    /// <returns>An array indexed by bucket number; every element holds that bucket's rows (or is empty).</returns>
+    /// <returns>
+    /// One element per bucket, in <see cref="Buckets"/> order; each holds that bucket's rows or is empty.
+    /// </returns>
     public TEntity[][] ToArray() => [.. ToList().Select(static rows => rows.ToArray())];
 
     /// <summary>Runs the query once per bucket and returns one vector per bucket.</summary>
     /// <param name="cancellationToken">Cancels the fan-out.</param>
-    /// <returns>An array indexed by bucket number; every element holds that bucket's rows (or is empty).</returns>
+    /// <returns>
+    /// One element per bucket, in <see cref="Buckets"/> order; each holds that bucket's rows or is empty.
+    /// </returns>
     public async Task<TEntity[][]> ToArrayAsync(CancellationToken cancellationToken = default)
         => [.. (await ToListAsync(cancellationToken).ConfigureAwait(false)).Select(static rows => rows.ToArray())];
 
@@ -102,19 +110,23 @@ public sealed class ShardQuery<TEntity>
     }
 
     /// <summary>Returns one row count per bucket.</summary>
-    /// <returns>An array indexed by bucket number; the caller decides how to combine the values.</returns>
+    /// <returns>
+    /// One value per bucket, in <see cref="Buckets"/> order. The caller decides how to combine them.
+    /// </returns>
     public int[] Count() => RunEach(static query => query.Count());
 
     /// <summary>Returns one boolean per bucket: whether that bucket has any matching row.</summary>
-    /// <returns>An array indexed by bucket number; the caller decides how to combine the values.</returns>
+    /// <returns>
+    /// One value per bucket, in <see cref="Buckets"/> order. The caller decides how to combine them.
+    /// </returns>
     public bool[] Any() => RunEach(static query => query.Any());
 
     /// <summary>Returns the first row of every bucket.</summary>
-    /// <returns>An array indexed by bucket number.</returns>
+    /// <returns>One row per bucket, in <see cref="Buckets"/> order.</returns>
     public TEntity[] First() => RunEach(static query => query.First());
 
     /// <summary>Returns the single row of every bucket, if the bucket has exactly one.</summary>
-    /// <returns>An array indexed by bucket number.</returns>
+    /// <returns>One row per bucket, in <see cref="Buckets"/> order.</returns>
     public TEntity[] Single() => RunEach(static query => query.Single());
 
     private TResult[] RunEach<TResult>(Func<EntityBuilder<TEntity>, TResult> run)
@@ -135,7 +147,7 @@ public sealed class ShardQuery<TEntity>
 }
 
 /// <summary>
-/// A projected bucket fan-out query: it runs the projection once per bucket and returns one vector per bucket.
+/// Runs the projection separately for each bucket and returns one result vector per bucket.
 /// </summary>
 /// <typeparam name="TEntity">The mapped entity selected from every bucket.</typeparam>
 /// <typeparam name="TResult">The projected row type.</typeparam>
@@ -168,12 +180,18 @@ public sealed class ShardQuery<TEntity, TResult>
         => new(_source.Where(predicate), _selector, _buckets, _bucketOwners, _parallelism);
 
     /// <summary>Runs the projection once per bucket and returns one vector per bucket.</summary>
-    /// <returns>An array indexed by bucket number; every element holds that bucket's projected rows.</returns>
+    /// <returns>
+    /// One element per bucket, in <see cref="ShardQuery{TEntity}.Buckets"/> order; each holds that
+    /// bucket's projected rows.
+    /// </returns>
     public List<TResult>[] ToList() => RunEach(query => query.Select(_selector).ToList());
 
     /// <summary>Runs the projection once per bucket and returns one vector per bucket.</summary>
     /// <param name="cancellationToken">Cancels the fan-out.</param>
-    /// <returns>An array indexed by bucket number; every element holds that bucket's projected rows.</returns>
+    /// <returns>
+    /// One element per bucket, in <see cref="ShardQuery{TEntity}.Buckets"/> order; each holds that
+    /// bucket's projected rows.
+    /// </returns>
     public async Task<List<TResult>[]> ToListAsync(CancellationToken cancellationToken = default)
     {
         var results = new List<TResult>[_buckets.Count];
@@ -186,12 +204,18 @@ public sealed class ShardQuery<TEntity, TResult>
     }
 
     /// <summary>Runs the projection once per bucket and returns one vector per bucket.</summary>
-    /// <returns>An array indexed by bucket number; every element holds that bucket's projected rows.</returns>
+    /// <returns>
+    /// One element per bucket, in <see cref="ShardQuery{TEntity}.Buckets"/> order; each holds that
+    /// bucket's projected rows.
+    /// </returns>
     public TResult[][] ToArray() => [.. ToList().Select(static rows => rows.ToArray())];
 
     /// <summary>Runs the projection once per bucket and returns one vector per bucket.</summary>
     /// <param name="cancellationToken">Cancels the fan-out.</param>
-    /// <returns>An array indexed by bucket number; every element holds that bucket's projected rows.</returns>
+    /// <returns>
+    /// One element per bucket, in <see cref="ShardQuery{TEntity}.Buckets"/> order; each holds that
+    /// bucket's projected rows.
+    /// </returns>
     public async Task<TResult[][]> ToArrayAsync(CancellationToken cancellationToken = default)
         => [.. (await ToListAsync(cancellationToken).ConfigureAwait(false)).Select(static rows => rows.ToArray())];
 
@@ -209,11 +233,17 @@ public sealed class ShardQuery<TEntity, TResult>
     }
 
     /// <summary>Returns one row count per bucket.</summary>
-    /// <returns>An array indexed by bucket number; the caller decides how to combine the values.</returns>
+    /// <returns>
+    /// One value per bucket, in <see cref="ShardQuery{TEntity}.Buckets"/> order. The caller decides
+    /// how to combine them.
+    /// </returns>
     public int[] Count() => RunEach(static query => query.Count());
 
     /// <summary>Returns one boolean per bucket: whether that bucket has any matching row.</summary>
-    /// <returns>An array indexed by bucket number; the caller decides how to combine the values.</returns>
+    /// <returns>
+    /// One value per bucket, in <see cref="ShardQuery{TEntity}.Buckets"/> order. The caller decides
+    /// how to combine them.
+    /// </returns>
     public bool[] Any() => RunEach(static query => query.Any());
 
     private TValue[] RunEach<TValue>(Func<EntityBuilder<TEntity>, TValue> run)

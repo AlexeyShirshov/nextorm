@@ -1,63 +1,77 @@
 # Поддержка JSON в разных провайдерах
 
-> Единого переносимого API для JSON нет: PostgreSQL предоставляет нативную поверхность `json`/`jsonb`, SQL Server возвращает документ завершающим предложением `FOR JSON` и предлагает текстовые JSON-функции, MySQL/MariaDB предоставляют те же текстовые JSON-функции через семейство `JSON_EXTRACT`/`JSON_SET`, а остальные провайдеры отклоняют JSON-конструкции.
+> Выбирайте средства работы с JSON по задаче и провайдеру: записать результат запроса в поток, вернуть единый документ из SQL Server или читать и изменять JSON провайдерными функциями.
 
 **Предварительные требования:** [Запросы и проекции](../engine/index.md) · [Скалярные функции](../scalar-functions/07-json-and-xml.md#json-и-jsonb-postgresql) · [Табличные функции](13-table-valued-functions.md#встроенные-табличные-функции) · [Обзор провайдеров](../connecting-providers/overview.md)
 
+## Выберите задачу для JSON
+
+- Чтобы записать результат запроса как JSON-массив или поток NDJSON, используйте [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream)) или [`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken)); см. [Потоковое сохранение данных](30-streaming-data.md#json).
+- Чтобы вернуть весь результат запроса одним JSON-документом из SQL Server, используйте [`ForJson`](#вернуть-весь-набор-строк-одним-json-документом).
+- Чтобы читать или изменять JSON в текстовой колонке, используйте функции своего провайдера; см. [Читать JSON, хранящийся в текстовой колонке](#читать-json-хранящийся-в-текстовой-колонке).
+- Чтобы отобразить CLR-объект на JSON-колонку, см. [Отобразить CLR-объект на нативную JSON-колонку](#отобразить-clr-объект-на-нативную-json-колонку).
+- Чтобы сравнить возможности провайдеров, начните с [матрицы провайдеров](#матрица-провайдеров). Для создания, агрегации и чтения JSON в PostgreSQL см. раздел [PostgreSQL](#postgresql).
+
 ## Обзор
 
-В nextorm намеренно нет кросс-провайдерной поверхности JSON-функций. «Работа с JSON» означает разное у разных
-провайдеров, и движок держит эти механизмы раздельно, а не делает вид, что это одна функция:
+Поддержка JSON зависит от задачи и провайдера. nextorm разделяет провайдерные SQL-функции, а не
+представляет их как одну переносимую возможность. Основные варианты:
 
-* **SQL Server** имеет две независимые поверхности. [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[])) выполняет запрос и
-  возвращает весь набор строк одним JSON-документом (`FOR JSON PATH`/`FOR JSON AUTO`), а [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) предоставляет текстовые JSON-функции
-  (`json_value`, `json_query`, `json_modify`, `isjson`) и табличную функцию `openjson`. Кроме того, в
-  SQL Server 2025 (17.x) есть отдельный нативный тип колонки `json`, доступный для `[JsonColumn]` только
-  через явный гейт версии — см. [Нативный `json` в SQL Server 2025+](#нативный-json-в-sql-server-2025).
-* **PostgreSQL** имеет нативные типы `json`/`jsonb` и единственную поверхность функций/операторов
+* **SQL Server** предоставляет отдельные возможности для возврата результата одним документом и для
+  работы с текстовым JSON. [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[]))
+  выполняет запрос и возвращает весь набор строк одним JSON-документом (`FOR JSON PATH`/`FOR JSON AUTO`).
+  [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) предоставляет текстовые JSON-функции
+  (`json_value`, `json_query`, `json_modify`, `isjson`) и табличную функцию `openjson`.
+  В SQL Server 2025 (17.x) также есть отдельный нативный тип колонки `json`. `[JsonColumn]` может
+  использовать его только при явной проверке версии — см. [Нативный `json` в SQL Server 2025+](#нативный-json-в-sql-server-2025).
+* **PostgreSQL** имеет нативные типы `json`/`jsonb` и единый набор функций и операторов
   `json`/`jsonb` (`SqlFunctions.Postgres`): конструирование, агрегация, доступ, вложенность и
   JSONPath.
-* **MySQL и MariaDB** предоставляют ту же поверхность текстовых JSON-функций, что и SQL Server
-  ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)), через семейство
-  `JSON_EXTRACT`/`JSON_UNQUOTE`/`JSON_SET`. Их JSON-*колонки* — не одно и то же: в MySQL 8 есть
-  настоящий тип `json` (сервер валидирует, нормализует и сообщает его как `json`), а `JSON` в MariaDB —
-  это псевдоним `LONGTEXT` плюс CHECK `json_valid()` (сообщается как `longtext`). Обе используются через
-  **текстовый транспорт** — свойство `[JsonColumn]` сериализуется в текст, который разбирает сервер, —
-  потому что ни у одного из провайдеров нет привязываемого нативного представления JSON, и
-  `JsonColumnStorage.Native` для них отклоняется (см.
-  [Отобразить CLR-объект на нативную JSON-колонку](#отобразить-clr-объект-на-нативную-json-колонку)).
-* **ClickHouse** отображает извлекающие функции строкового JSON (`JSONExtractString`, `JSONExtractInt`,
-  `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `JSONLength`, `JSONType`) — плюс
-  возвращающие массивы `JSONExtractKeys`/`JSONExtractArrayRaw` (проецируются как `string[]`) и
-  `JSONExtractKeysAndValues` (проецируется как `Tuple<string, T>[]`) — и быстрый
-  разбор плоского JSON (`visitParamExtractString`/`Int`/`Float`/`Bool`/`Raw`) через
-  [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract), JSONPath-скаляры
-  `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (методы `json_value`/`json_query`/`json_exists`) и функции
-  нативного JSON `JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString` (методы `json_all_paths`/
-  `json_all_paths_with_types`/`to_json_string`) через тот же флаг. Они принимают нативное значение
-  `JSON` (`CAST(col AS JSON)` для колонки `String`); `JSONAllPaths` проецируется как `string[]`, а
-  `JSONAllPathsWithTypes` — как `Map(String, String)` → `Dictionary<string, string>`. У ClickHouse есть
-  и нативный *тип колонки* `JSON` (с корнем-объектом): свойство `[JsonColumn]` и «голые»
-  `JsonObject`/`JsonDocument`/`JsonElement` в проекции/параметре отображаются на него
-  (см. [Отобразить CLR-объект на нативную JSON-колонку](#отобразить-clr-объект-на-нативную-json-колонку)).
-* **SQLite** предоставляет поверхность JSON1 через провайдерную `SqlFunctions.Sqlite` (`json`/`jsonb`/
+* **MySQL и MariaDB** предоставляют те же текстовые JSON-функции, что и SQL Server, через семейство
+  `JSON_EXTRACT`/`JSON_UNQUOTE`/`JSON_SET`
+  ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)).
+  Их JSON-колонки различаются: в MySQL 8 есть настоящий тип `json`, который сервер проверяет,
+  нормализует и сообщает как `json`. `JSON` в MariaDB — псевдоним `LONGTEXT` с CHECK `json_valid()`;
+  сервер сообщает его как `longtext`.
+  Оба провайдера используют для `[JsonColumn]` **текстовый транспорт**: nextorm сериализует свойство в
+  текст, который разбирает сервер. У этих провайдеров нет привязываемого нативного представления JSON,
+  поэтому `JsonColumnStorage.Native` отклоняется. См. [Отобразить CLR-объект на нативную JSON-колонку](#отобразить-clr-объект-на-нативную-json-колонку).
+* **ClickHouse** поддерживает извлекающие функции для строкового JSON (`JSONExtractString`,
+  `JSONExtractInt`, `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `JSONLength`
+  и `JSONType`). `JSONExtractKeys` и `JSONExtractArrayRaw` возвращают массивы, проецируемые как
+  `string[]`; `JSONExtractKeysAndValues` проецируется как `Tuple<string, T>[]`.
+  Провайдер также поддерживает быстрый разбор плоского JSON (`visitParamExtractString`/`Int`/`Float`/
+  `Bool`/`Raw`), JSONPath-скаляры (`JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS`, методы `json_value`/
+  `json_query`/`json_exists`) и функции нативного JSON (`JSONAllPaths`/`JSONAllPathsWithTypes`/
+  `toJSONString`, методы `json_all_paths`/`json_all_paths_with_types`/`to_json_string`).
+  Эти функции используют [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract).
+  Функциям нативного JSON нужно значение типа `JSON`; колонку `String` приведите через
+  `CAST(col AS JSON)`. `JSONAllPaths` проецируется как `string[]`, а `JSONAllPathsWithTypes` —
+  как `Map(String, String)` или `Dictionary<string, string>` в C#.
+  У ClickHouse также есть нативная колонка `JSON` с корнем-объектом. На неё отображаются свойство
+  `[JsonColumn]` и «голая» проекция или параметр `JsonObject`/`JsonDocument`/`JsonElement`; см.
+  [Отобразить CLR-объект на нативную JSON-колонку](#отобразить-clr-объект-на-нативную-json-колонку).
+* **SQLite** предоставляет функции JSON1 через `SqlFunctions.Sqlite` (`json`/`jsonb`/
   `json_extract`, операторы `->`/`->>`, `json_set`/`json_patch` и табличные функции `json_each`/`json_tree`).
-  Кросс-провайдерный JSON-API на неё не отображён: нативный тип `json`/`jsonb` и текстовые имена
-  (`json_value`/`json_query`/`json_modify`/`isjson`) бросают `NotSupportedException`, поэтому используйте
-  члены JSON1 напрямую (см. [Провайдер SQLite](../connecting-providers/sqlite.md#функции-специфичные-для-sqlite)).
-* **Каждый SQL-провайдер** использует один общий JSON-*терминал*: [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream)) /
-  [`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken)) записывают проекцию запроса в принадлежащий вызывающему `Stream` как JSON-массив или
-  NDJSON, сериализуя на клиенте через `System.Text.Json` (см. [Потоковое сохранение данных](30-streaming-data.md#json)).
-  В SQL Server подходящую плоскую проекцию вместо этого обслуживает сама СУБД через завершающее
-  `FOR JSON PATH`, а единственная колонка-документ копируется в поток ограниченными чанками — это
-  внутренняя оптимизация с тем же контрактом вывода, не меняющая скалярный `ForJson` ниже (см.
-  [Нативный быстрый путь SQL Server](30-streaming-data.md#нативный-быстрый-путь-sql-server)).
-  Предварительная валидация использует единый контракт исключений — `NotSupportedException` с
-  соглашением о сообщении `JSON streaming validation [<token>]: <context>.` и фиксированными токенами
+   Общие JSON-функции nextorm не преобразуются в функции JSON1: использование нативных типов
+   `json`/`jsonb` и текстовых имён (`json_value`/`json_query`/`json_modify`/`isjson`) приводит к
+   `NotSupportedException`. Вызывайте функции JSON1 напрямую (см.
+   [Провайдер SQLite](../connecting-providers/sqlite.md#функции-специфичные-для-sqlite)).
+* **Все SQL-провайдеры** поддерживают общий JSON-терминал [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream)) /
+  [`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken)).
+  Он сериализует проекцию запроса на клиенте через `System.Text.Json` и записывает в принадлежащий
+  вызывающему `Stream` JSON-массив или NDJSON; см. [Потоковое сохранение данных](30-streaming-data.md#json).
+   Для подходящей плоской проекции SQL Server добавляет `FOR JSON PATH` в конец запроса и передаёт
+   единственный столбец-документ в поток частями.
+  Это внутренняя оптимизация с тем же контрактом вывода, она не меняет скалярный `ForJson`; см.
+  [Нативный быстрый путь SQL Server](30-streaming-data.md#нативный-быстрый-путь-sql-server).
+  Перед записью терминал проверяет опции и проекцию. Он выбрасывает `NotSupportedException` с
+  шаблоном сообщения `JSON streaming validation [<token>]: <context>.` и такими токенами:
   `mode-options`, `projection`, `names`, `unsupported-column`, `reader-binding`, `in-memory` и
-  `unsupported-execution-form` — а несовместимая схема reader'а отклоняется до любого вывода, включая
-  обрамление. Это терминал сериализации, а не SQL-функция JSON: он не меняет провайдерные
-  JSON-поверхности ниже.
+  `unsupported-execution-form`.
+   Если набор столбцов результата не соответствует проекции, терминал отклоняет запрос до записи
+   любых данных, включая обрамление. Он сериализует данные, а не выполняет SQL-функцию JSON, и не
+   меняет описанные ниже JSON-возможности провайдеров.
 
 Поскольку механизмы разные, один и тот же концептуальный результат записывается по-разному. Читайте
 раздел своего провайдера; в [матрице провайдеров](#матрица-провайдеров) и разделе
@@ -111,18 +125,23 @@ select id, somestring
 ```
 
 Необязательный `root` оборачивает документ в `ROOT('name')`, а `includeNullValues` добавляет
-`INCLUDE_NULL_VALUES`. `ForJson` возвращает `null`, если запрос не вернул строк (SQL Server отдаёт SQL
-NULL для пустого результата `FOR JSON`). Тот же серверный рендеринг `FOR JSON PATH` лежит и в основе
-нативного быстрого пути `WriteJson` для подходящей плоской проекции; этот путь — внутренняя
-оптимизация и не меняет сам `ForJson` (см.
-[Нативный быстрый путь SQL Server](30-streaming-data.md#нативный-быстрый-путь-sql-server)). Предложение размещается после `ORDER BY` и перед завершающим
-`OPTION (...)`, поэтому сочетается с [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])) (сначала хинт, затем
-терминал): запрос `for json path option (recompile)` корректен. Используйте
-[`WithForJson`](xref:NextORM.Core.QueryCommand`1.WithForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)), чтобы только присоединить предложение и сохранить
-команду композируемой. (Табличные хинты,
-[`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[])), прикрепляются к таблице `FROM` и не
-зависят от JSON-предложения.) Диалект без
-поддержки предложения отклоняет команду, а совмещение `ForJson` с `ForXml` бросает
+`INCLUDE_NULL_VALUES`. `ForJson` возвращает `null`, если запрос не вернул строк: для пустого результата
+`FOR JSON` SQL Server возвращает SQL `NULL`.
+
+Формирование `FOR JSON PATH` на стороне сервера также используется во внутреннем быстром пути
+`WriteJson` для подходящей плоской проекции. Эта оптимизация не меняет `ForJson`; см.
+[Нативный быстрый путь SQL Server](30-streaming-data.md#нативный-быстрый-путь-sql-server).
+
+Предложение размещается после `ORDER BY` и перед завершающим `OPTION (...)`. Оно сочетается с
+[`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])): сначала примените хинт, затем терминал.
+Например, запрос `for json path option (recompile)` корректен. Чтобы только присоединить предложение и
+сохранить команду композируемой, используйте
+[`WithForJson`](xref:NextORM.Core.QueryCommand`1.WithForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)).
+Табличные хинты, например
+[`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[])), прикрепляются к таблице
+`FROM` и не зависят от JSON-предложения.
+
+Диалект без поддержки этого предложения отклоняет команду. Совмещение `ForJson` с `ForXml` приводит к
 `NotSupportedException("FOR JSON and FOR XML cannot be combined.")`.
 
 ### Читать JSON, хранящийся в текстовой колонке
@@ -171,7 +190,7 @@ select id
 
 В SQL Server 2025 (17.x) есть **отдельный встроенный тип `json`** — не псевдоним `nvarchar` — и он же есть
 в движках Azure SQL, построенных на том же релизе. nextorm достигает его тем же отображением `[JsonColumn]`,
-но гейт — это **объявленное** состояние: контекст, построенный с `Version(17, 0)` или выше, **либо** с
+но nextorm разрешает его только при **явно объявленной версии**: контекст, построенный с `Version(17, 0)` или выше, **либо** с
 явной редакцией движка `SqlServerEngineEdition` — `SqlDatabase` (5), `AzureSqlManagedInstance` (8) или
 `MicrosoftFabricSqlDatabase` (12). Конструктор по умолчанию (без версии) остаётся текстовым, поэтому уже
 существующее отображение на `nvarchar` не меняется незаметно для вас:
@@ -188,7 +207,7 @@ public Address Address { get; set; } = new();
 ```
 
 Представление остаётся обычной CLR-строкой `string`: параметры выводятся как `nvarchar`, DOM-параметра нет,
-`SqlDbType.Json` не выставляется, двойной сериализации нет. В контексте с открытым гейтом `Auto`, `Text` и
+`SqlDbType.Json` не выставляется, двойной сериализации нет. В контексте с объявленной поддержкой нативного JSON `Auto`, `Text` и
 `Native` разрешаются в один и тот же текстовый конвертер, поэтому сохраняемые байты идентичны текстовому
 хранению — различается тип колонки, а не конвертер. Нативная колонка добавляет ограничение **сервера**: она
 хранит только документы-объекты и массивы, а скалярные корни (строка, число, булево) и документ JSON `null`
@@ -253,14 +272,18 @@ select id
  from complex_entity where ((@norm_p0 ->> 'name') = 'Alice')
 ```
 
-Привязка параметров провайдером: обычная строка с JSON привязывается как `text`.
-Исключение — шесть аксессоров `json_get`, `json_get_text`, `json_get_path` и `json_get_path_text` (обе
-перегрузки: по строковому ключу и по целочисленному индексу): они применяют **контекстную SQL-типизацию** —
-сырое клиентское значение документа (литерал, захваченное значение или явный параметр) разбирается как
-`jsonb` в сгенерированном SQL, а правый операнд типизируется по перегрузке (`text` для строкового ключа,
-`integer` для индекса, `text[]` для пути). Нативные колонки `json`/`jsonb` и серверные JSON-выражения
-**не** приводятся и сохраняют типы операнда и результата. Для всех остальных JSON-функций разбирайте
-строку явно через `SqlFunctions.Postgres.json_cast(value)` (`cast(value as jsonb)`).
+PostgreSQL привязывает обычный строковый параметр JSON как `text`. Шесть аксессоров `json_get`,
+`json_get_text`, `json_get_path` и `json_get_path_text` (с перегрузками для строкового ключа и
+целочисленного индекса) обрабатывают сырое клиентское значение документа иначе: они применяют
+**контекстную SQL-типизацию**.
+
+Для этих аксессоров сгенерированный SQL разбирает сырое клиентское значение документа (литерал,
+захваченное значение или явный параметр) как `jsonb`. Тип правого операнда зависит от перегрузки:
+`text` для строкового ключа, `integer` для индекса и `text[]` для пути. Нативные колонки `json`/`jsonb`
+и серверные JSON-выражения не приводятся, поэтому их типы операнда и результата сохраняются.
+
+Для остальных JSON-функций явно разбирайте строку через
+`SqlFunctions.Postgres.json_cast(value)` (`cast(value as jsonb)`).
 
 ### Отобразить CLR-объект на нативную JSON-колонку
 
@@ -490,25 +513,25 @@ select json_value(jsonb_build_object('a', 1), cast('$.a' as jsonpath)) as "Value
 
 ## Ограничения
 
-* Переносимой абстракции JSON нет. Код, написанный для JSON-поверхности одного провайдера, бросает
+* Переносимой абстракции JSON нет. Код, написанный для JSON-функций одного провайдера, бросает
   `NotSupportedException` на другом; если нужно ветвление, используйте флаги возможностей
   `ISqlDialect`.
-* Терминал потоковой JSON-записи валидирует свои опции и проекцию заранее и падает с
+* Терминал потоковой записи JSON заранее проверяет опции и проекцию и выбрасывает
   `NotSupportedException` по стабильному соглашению `JSON streaming validation [<token>]: <context>.`
   (токены `mode-options`, `projection`, `names`, `unsupported-column`, `reader-binding`, `in-memory`,
-  `unsupported-execution-form`); несовместимая схема reader'а отклоняется до любого вывода, включая
-  обрамление массива/`Root`. Ошибки жизненного цикла остаются
+  `unsupported-execution-form`). Если столбцы результата не соответствуют проекции, запрос отклоняется
+  до записи каких-либо данных, включая обрамление массива или `Root`. Ошибки жизненного цикла остаются
   `InvalidOperationException`/`ObjectDisposedException`, а ошибки приёмника/провайдера и отмена
   сохраняют свою категорию. См.
   [Исключения валидации и ошибки времени выполнения](30-streaming-data.md#исключения-валидации-и-ошибки-времени-выполнения).
 * `ForJson`/`ForXml` есть только в SQL Server ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson) /
   [`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml)), и они взаимоисключающи в одной команде.
-* Поверхность `json`/`jsonb` PostgreSQL (`SqlFunctions.Postgres`) требует
+* Функции и операторы `json`/`jsonb` PostgreSQL (`SqlFunctions.Postgres`) требуют
   [`SupportsPostgresJsonSql`](xref:NextORM.Core.ISqlDialect.SupportsPostgresJsonSql) (только PostgreSQL);
   текстовые функции SQL Server и MySQL/MariaDB требуют
   [`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson). Каждая бросает исключение на
   чужом провайдере.
-* JSON-поверхность ClickHouse (`JSONExtract*`/`visitParamExtract*`, JSONPath-скаляры и функции нативного
+* Набор функций ClickHouse (`JSONExtract*`/`visitParamExtract*`, JSONPath-скаляры и функции нативного
   JSON `JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`) требует
   [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract); она не пересекается с
   набором `SupportsTextJson`. Функции нативного JSON принимают нативное значение `JSON` (колонку
@@ -521,11 +544,11 @@ select json_value(jsonb_build_object('a', 1), cast('$.a' as jsonpath)) as "Value
   массивы/скалярные корни, «голая» `string` и легаси-алиас `Object('json')` не поддерживаются, а
   «голый» скаляр верхнего уровня `Select(x => x.Doc)` не обрабатывается ядровым классификатором
   проекции.
-* Расширение JSON1 в SQLite отображается только через провайдерную поверхность `SqlFunctions.Sqlite`
-  (`json_extract`, `->`/`->>`, `json_each`/`json_tree`, ...); кросс-провайдерный native/`json_*` API на неё
-  не отображён, поэтому эти имена бросают `NotSupportedException`.
+* Расширение JSON1 в SQLite доступно через функции провайдера `SqlFunctions.Sqlite`
+  (`json_extract`, `->`/`->>`, `json_each`/`json_tree` и другие). Общие JSON-методы nextorm здесь не
+  поддерживаются: вызовы `json`/`jsonb` и имена `json_*` приводят к `NotSupportedException`.
 * Провайдер in-memory не генерирует SQL, поэтому `ForJson`/`ForXml` бросают `NotSupportedException`, а
-  JSON-поверхности к нему не применимы.
+  SQL-функции JSON к нему неприменимы.
 * PostgreSQL отображает свойство `[JsonColumn]` на нативную колонку `jsonb` (`Auto` storage) на чтение
   и запись (insert, update и `RETURNING`), а параметр `JsonDocument`/`JsonElement`/`JsonNode`
   привязывается как `jsonb`. ClickHouse отображает `[JsonColumn]` `Auto`/`Native` и «голые»
@@ -541,7 +564,7 @@ select json_value(jsonb_build_object('a', 1), cast('$.a' as jsonpath)) as "Value
 ## См. также
 
 - [Запросы и проекции](../engine/index.md) — `ForJson`/`ForXml` для SQL Server.
-- [Скалярные функции](../scalar-functions/07-json-and-xml.md#json-и-jsonb-postgresql) — полная поверхность JSON/JSONB в PostgreSQL и текстовые JSON-функции SQL Server и MySQL/MariaDB.
+- [Скалярные функции](../scalar-functions/07-json-and-xml.md#json-и-jsonb-postgresql) — полный набор функций JSON/JSONB в PostgreSQL и текстовые JSON-функции SQL Server и MySQL/MariaDB.
 - [Табличные функции](13-table-valued-functions.md#встроенные-табличные-функции) — `openjson` и `string_split`.
 - [Провайдер PostgreSQL](../connecting-providers/postgres.md) — JSON-колонки, привязка параметров и массивы.
 - [Провайдер SQL Server](../connecting-providers/sqlserver.md) — `FOR JSON`, `FOR XML` и текстовый JSON.

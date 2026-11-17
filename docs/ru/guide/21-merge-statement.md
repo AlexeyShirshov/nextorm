@@ -1,6 +1,13 @@
 # Слияние данных (`MERGE` / upsert)
 
-> nextorm строит `MERGE` (upsert) через [`CreateMergeBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateMergeBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})): одна точка входа покрывает и переносимый **key upsert** (`INSERT ... ON CONFLICT` / `ON DUPLICATE KEY` / `MERGE`), и общий много-веточный **полный `MERGE`** с ветками `WHEN MATCHED`/`WHEN NOT MATCHED`. Изменения не отслеживаются, `SaveChanges` нет: каждый терминал выполняет ровно одну команду.
+> Используйте upsert по ключу, чтобы вставить строку, если такого ключа ещё
+> нет, или обновить её, если строка уже существует. Полный `MERGE` подходит,
+> когда нужны несколько условных веток, например удаление совпавших строк. Обе
+> формы используют
+> [`CreateMergeBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateMergeBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
+> и выполняют явную команду; nextorm не отслеживает изменения и не
+> предоставляет `SaveChanges`. Набор поддерживаемых провайдеров зависит от
+> формы.
 
 **Предварительно:** [Изменение данных (INSERT)](17-insert-statement.md) · [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Обзор провайдеров](../connecting-providers/overview.md)
 
@@ -12,43 +19,6 @@
 
 * **key upsert** — `OnKeys()` + `WhenMatchedUpdate()` + `WhenNotMatchedInsert()`. Каждый SQL-провайдер выражает её нативно, и только она применяется in-memory-провайдером (к зарегистрированной последовательности).
 * **полный `MERGE`** — `WhenMatched()`/`WhenNotMatched()`/`WhenNotMatchedBySource()`, каждая завершается `ThenUpdate`/`ThenInsert`/`ThenDelete`/`ThenDoNothing`. Нативно на SQL Server и PostgreSQL (предпосылка времени выполнения: сервер 15+); остальные провайдеры его отклоняют.
-
-## Вариант маппинга во время выполнения
-
-Используйте `WithVariant(MappingVariant)`, когда один и тот же маппинг сущности должен обращаться к таблице конкретного tenant или шарда. Вариант выбирает метаданные только для этой команды и не меняет маппинг контекста по умолчанию. Один и тот же вариант можно применять к источнику-сущности, батчу или запросу:
-
-```csharp
-var variant = new MappingVariant("tenant_a");
-ctx.CreateMergeBuilder<Order>()
-    .Using(order)
-    .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
-    .WithVariant(variant)
-    .Merge();
-```
-
-Шардированный merge обязан передать вариант явно: билдер получает область только по типу сущности и
-никогда — по значениям источника, поэтому merge без `WithVariant(...)` падает, вместо того чтобы писать
-в таблицу по умолчанию. Вариант — это бакет, поэтому merge идёт по одному бакету за раз:
-
-```csharp
-foreach (var entitiesPerBucket in ctx.GroupByBucket(orders))
-{
-    ctx.CreateMergeBuilder<Order>()
-        .Using(entitiesPerBucket.Rows)
-        .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
-        .WithVariant(entitiesPerBucket.Variant)   // таблица этого бакета на его шарде
-        .Merge();
-}
-```
-
-Бакеты, их физические имена и правила shard key описаны в разделе
-[«Шардирование и горизонтальное партиционирование»](35-sharding-and-horizontal-partitioning.md).
-
-`CreateTruncateBuilder<TEntity>()` также разрешает настроенный для контекста вариант сущности, поэтому `TRUNCATE` использует соответствующую таблицу и схему.
-
-Сам механизм варианта — резолвер, провайдер метаданных, выводящий имена таблицы/схемы/колонок, и
-гарантии изоляции — описан в разделе
-[Вариант сопоставления времени выполнения](33-runtime-mapping-variant.md).
 
 ## Upsert (key merge)
 
@@ -295,6 +265,40 @@ var sql = ctx.CreateMergeBuilder<ISimpleEntity>()
 -- PostgreSQL
 insert into simple_entity (id, name) values (@p0, @p1) on conflict (id) do update set name = excluded.name
 ```
+
+## Вариант маппинга во время выполнения
+
+Используйте `WithVariant(MappingVariant)`, если один маппинг сущности должен обращаться к таблице конкретного tenant или шарда. Вариант выбирает метаданные только для этой команды и не меняет маппинг контекста по умолчанию. Его можно применять к источнику-сущности, батчу или запросу:
+
+```csharp
+var variant = new MappingVariant("tenant_a");
+ctx.CreateMergeBuilder<Order>()
+    .Using(order)
+    .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
+    .WithVariant(variant)
+    .Merge();
+```
+
+Для **шардированного** merge вариант нужно передать явно: билдер определяет область по типу сущности, а не по значениям источника. Без `WithVariant(...)` он выдаёт ошибку, а не записывает данные в таблицу по умолчанию. Вариант задаёт бакет, поэтому обрабатывайте по одному бакету за раз:
+
+```csharp
+foreach (var entitiesPerBucket in ctx.GroupByBucket(orders))
+{
+    ctx.CreateMergeBuilder<Order>()
+        .Using(entitiesPerBucket.Rows)
+        .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
+        .WithVariant(entitiesPerBucket.Variant)   // таблица этого бакета на его шарде
+        .Merge();
+}
+```
+
+Бакеты, их физические имена и правила shard key описаны в разделе
+[«Шардирование и горизонтальное партиционирование»](35-sharding-and-horizontal-partitioning.md).
+
+`CreateTruncateBuilder<TEntity>()` также выбирает настроенный для контекста вариант сущности, поэтому `TRUNCATE` использует соответствующую таблицу и схему.
+
+Сам вариант — его резолвер, провайдер метаданных для имён таблиц, схем и колонок, а также гарантии изоляции — описан в разделе
+[Вариант сопоставления времени выполнения](33-runtime-mapping-variant.md).
 
 ## Сводка по провайдерам
 

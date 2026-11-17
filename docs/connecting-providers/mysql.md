@@ -4,45 +4,6 @@
 
 **Prerequisites:** [Provider overview](overview.md) · [Quickstart](../getting-started/02-quickstart.md)
 
-## Overview
-
-[`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext) (`src/nextorm.mysql/MySqlDataContext.cs`) wraps `MySqlConnector`. It creates a
-`MySqlConnection` from the connection string and returns [`Instance`](xref:NextORM.MySql.MySqlDialect.Instance) from its `Dialect`
-property. [`MySqlDialect`](xref:NextORM.MySql.MySqlDialect) (`src/nextorm.mysql/MySqlDialect.cs`) is the dialect:
-
-- parameter placeholder `@name`;
-- identifiers and aliases are quoted with backticks;
-- string concatenation uses the `concat(a, b, ...)` function — MySQL's infix `||` is a logical OR
-  unless the `PIPES_AS_CONCAT` SQL mode is set, so the dialect never emits it;
-- [`MakeCoalesce`](xref:NextORM.Core.ISqlDialect.MakeCoalesce(System.String,System.String)) renders `coalesce(a, b)`;
-- [`MakeStringLength`](xref:NextORM.Core.ISqlDialect.MakeStringLength(System.String)) renders `char_length(x)` (MySQL's `length()` counts bytes);
-- [`MakeNow`](xref:NextORM.Core.ISqlDialect.MakeNow(System.Boolean)) renders `now()` for local time and `utc_timestamp()` for UTC;
-- `stdev`/`stdevp`/`var`/`varp` map to `stddev_samp`/`stddev_pop`/`var_samp`/`var_pop` (`stddev` and
-  `variance` are the *population* synonyms in MySQL);
-- a CLR conversion is rendered with a MySQL `CAST` target (`signed`/`unsigned` for the integer types,
-  `double`, `decimal`, `char`, `datetime`) rather than the ANSI `bigint`/`integer`;
-- the integer ones-complement renders as `(-(x) - 1)`, because MySQL's `~` yields an unsigned 64-bit
-  value that overflows the signed CLR integer;
-- the `ESCAPE` character of a `LIKE` predicate is emitted as the mode-independent `_utf8mb4 X'5c'`
-  token, so `NO_BACKSLASH_ESCAPES`, `ANSI_QUOTES` and the driver's `NoBackslashEscapes` cannot
-  change its meaning;
-- paging is `limit n` / `limit n offset m`; an offset without a limit becomes
-  `limit 18446744073709551615 offset m`, because MySQL only accepts `offset` together with `limit`;
-- the session/information family ([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions)) renders
-  `SqlFunctions.Sql.current_user`/`session_user`/`current_database`/`version` as `current_user()`/`session_user()`/
-  `database()`/`version()` and `current_schema` as `schema()`;
-- the arbitrary-value aggregate [`SqlFunctions.Sql.any_agg`](xref:NextORM.Core.CommonFunctions.any_agg``1(``0)) renders as
-  `ANY_VALUE(x)` ([`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate), MySQL 5.7+);
-- the portable conditional [`SqlFunctions.Sql.iif`](xref:NextORM.Core.CommonFunctions.iif``1(System.Boolean,``0,``0)) renders as
-  `if(condition, a, b)` ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String))).
-
-The variability aggregates follow the shared cardinality contract: `Stdev`/`Var` are `null` for zero or
-one contributing value, `Stdevp`/`Varp` are `null` for zero and `0.0` for one. One provider limitation is
-independent of the nullable result: MySQL 8.4 rejects `DISTINCT` inside
-`STDDEV_SAMP`/`STDDEV_POP`/`VAR_SAMP`/`VAR_POP` (`stddev_samp(distinct x)` fails with a syntax error).
-The renderer keeps emitting that spelling for the `*_distinct` forms, so only the SQL text is guaranteed
-and a live distinct variance query is not claimed as supported on MySQL 8.4.
-
 ## Registering the provider
 
 Two overloads are available on [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder)
@@ -75,9 +36,13 @@ using IDataContext ctx = new MySqlDataContext(
 
 ## String concatenation
 
+The dialect translates C# string addition to `concat(...)`:
+
 ```csharp
 var query = ctx.From<ISimpleEntity>().Select(x => new { Label = "id:" + x.Id });
 ```
+
+The generated SQL is:
 
 ```sql
 select concat('id:', id) as `Label`
@@ -86,22 +51,68 @@ select concat('id:', id) as `Label`
 
 ## Paging
 
+Use `Page` to set both the limit and offset, or `Offset` when you need an offset without a limit:
+
 ```csharp
 ctx.From<ISimpleEntity>().Page(5, 10).Select(x => x.Id);   // limit 5 offset 10
 ctx.From<ISimpleEntity>().Offset(10).Select(x => x.Id);    // limit 18446744073709551615 offset 10
 ```
 
+## Overview
+
+[`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext) (`src/nextorm.mysql/MySqlDataContext.cs`) wraps `MySqlConnector`. It creates a
+`MySqlConnection` from the connection string and returns [`Instance`](xref:NextORM.MySql.MySqlDialect.Instance) from its `Dialect`
+property. [`MySqlDialect`](xref:NextORM.MySql.MySqlDialect) (`src/nextorm.mysql/MySqlDialect.cs`) is the dialect:
+
+### SQL syntax and functions
+
+- parameter placeholder `@name`;
+- identifiers and aliases are quoted with backticks;
+- string concatenation uses the `concat(a, b, ...)` function — MySQL's infix `||` is a logical OR
+  unless the `PIPES_AS_CONCAT` SQL mode is set, so the dialect never emits it;
+- [`MakeCoalesce`](xref:NextORM.Core.ISqlDialect.MakeCoalesce(System.String,System.String)) renders `coalesce(a, b)`;
+- [`MakeStringLength`](xref:NextORM.Core.ISqlDialect.MakeStringLength(System.String)) renders `char_length(x)` (MySQL's `length()` counts bytes);
+- [`MakeNow`](xref:NextORM.Core.ISqlDialect.MakeNow(System.Boolean)) renders `now()` for local time and `utc_timestamp()` for UTC;
+- `stdev`/`stdevp`/`var`/`varp` map to `stddev_samp`/`stddev_pop`/`var_samp`/`var_pop` (`stddev` and
+  `variance` are the *population* synonyms in MySQL);
+- a CLR conversion is rendered with a MySQL `CAST` target (`signed`/`unsigned` for the integer types,
+  `double`, `decimal`, `char`, `datetime`) rather than the ANSI `bigint`/`integer`;
+- the integer ones-complement renders as `(-(x) - 1)`, because MySQL's `~` yields an unsigned 64-bit
+  value that overflows the signed CLR integer;
+- the `ESCAPE` character of a `LIKE` predicate is emitted as the mode-independent `_utf8mb4 X'5c'`
+  token, so `NO_BACKSLASH_ESCAPES`, `ANSI_QUOTES` and the driver's `NoBackslashEscapes` cannot
+  change its meaning;
+- paging is `limit n` / `limit n offset m`; an offset without a limit becomes
+  `limit 18446744073709551615 offset m`, because MySQL only accepts `offset` together with `limit`;
+- the session/information family ([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions)) renders
+  `SqlFunctions.Sql.current_user`/`session_user`/`current_database`/`version` as `current_user()`/`session_user()`/
+  `database()`/`version()` and `current_schema` as `schema()`;
+- the arbitrary-value aggregate [`SqlFunctions.Sql.any_agg`](xref:NextORM.Core.CommonFunctions.any_agg``1(``0)) renders as
+  `ANY_VALUE(x)` ([`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate), MySQL 5.7+);
+- the portable conditional [`SqlFunctions.Sql.iif`](xref:NextORM.Core.CommonFunctions.iif``1(System.Boolean,``0,``0)) renders as
+  `if(condition, a, b)` ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String))).
+
+### Aggregate semantics
+
+The variability aggregates follow the shared cardinality contract: `Stdev`/`Var` are `null` for zero or
+one contributing value, `Stdevp`/`Varp` are `null` for zero and `0.0` for one. One provider limitation is
+independent of the nullable result: MySQL 8.4 rejects `DISTINCT` inside
+`STDDEV_SAMP`/`STDDEV_POP`/`VAR_SAMP`/`VAR_POP` (`stddev_samp(distinct x)` fails with a syntax error).
+The renderer keeps emitting that spelling for the `*_distinct` forms, so only the SQL text is guaranteed
+and a live distinct variance query is not claimed as supported on MySQL 8.4.
+
 ## String literals and parameters
 
-Every inline text value — including an operand in a position where the grammar accepts only a
-literal — is rendered as the mode-independent `_utf8mb4 X'…'` form, an uppercase UTF-8 hex string,
-so neither `sql_mode` nor `ANSI_QUOTES`, `NO_BACKSLASH_ESCAPES` or the driver's
-`NoBackslashEscapes` can change its meaning. An ORM-owned text **parameter slot** in a read query
-keeps its `@name` placeholder in the cached command and is lowered to the same `_utf8mb4 X'…'`
-literal at execution time: the driver parameter is omitted for that execution, and the command is
-restored to its canonical text and bindings before the next one. Mutations
-(`INSERT`/`UPDATE`/`DELETE`) are never prepared, so their text values are lowered at render time and
-no template is kept.
+Every inline text value uses the mode-independent `_utf8mb4 X'…'` form, an uppercase UTF-8 hex
+literal. This includes operands in grammar positions that accept only a literal, and makes the
+meaning independent of `sql_mode`, `ANSI_QUOTES`, `NO_BACKSLASH_ESCAPES`, and the driver's
+`NoBackslashEscapes` setting.
+
+For an ORM-owned text **parameter slot** in a read query, the cached command keeps its `@name`
+placeholder. At execution time, nextorm lowers that slot to the same `_utf8mb4 X'…'` literal and
+omits the driver parameter for that execution. Before the next execution, it restores the command's
+canonical text and bindings. Mutations (`INSERT`/`UPDATE`/`DELETE`) are never prepared, so nextorm
+lowers their text values while rendering SQL and keeps no template.
 
 `GROUP_CONCAT ... SEPARATOR` is a grammar-token position where the engine accepts only a text
 literal. A **constant** separator is rendered as a bare apostrophe-doubled literal from the accepted
@@ -153,6 +164,8 @@ whole request and `Native` refuses by name; a runtime `LOAD` failure is never re
 See [Bulk insert](../guide/22-bulk-insert.md).
 
 ## Provider differences
+
+The following table summarizes MySQL's provider-specific behavior:
 
 | Aspect | MySQL |
 |---|---|

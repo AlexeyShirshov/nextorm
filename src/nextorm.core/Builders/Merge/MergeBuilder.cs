@@ -13,7 +13,8 @@ namespace NextORM.Core;
 /// (SQL Server).
 /// <para>
 /// There is deliberately no change tracking: every terminal (<see cref="Merge"/>, <see cref="MergeAsync"/>)
-/// issues one explicit command, as with the insert builder. The builder is single-use.
+/// issues one explicit command, as with the insert builder. The builder retains its source and branch state,
+/// so calling a terminal again executes the merge again.
 /// </para>
 /// </summary>
 /// <typeparam name="TEntity">The mapped entity type upserted.</typeparam>

@@ -1,71 +1,73 @@
 # Установка
 
-> Добавьте основной пакет `nextorm` и один пакет провайдера базы данных в проект, нацеленный на `net10.0` или `net11.0`, затем используйте типы `nextorm.core` из кода.
+Установите NextORM и пакеты провайдеров баз данных, которые нужны вашему приложению, а затем подготовьтесь к [быстрому старту](02-quickstart.md). В быстром старте используется SQLite. На этой странице описана установка пакетов; подключение к реальной базе данных и синтаксис запросов здесь не рассматриваются.
 
-**Предварительные требования:** проект, нацеленный на `net10.0` или `net11.0`.
+## Перед началом
 
-## Обзор
-
-NextORM разделён на небольшой основной пакет, не зависящий от драйвера, и по одному пакету на каждый реляционный провайдер:
-
-* `nextorm` (сборка `nextorm.core`) содержит построитель и компилятор запросов, метаданные сущностей,
-  вспомогательные методы внедрения зависимостей, кэш планов **и провайдер in-memory** ([`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext)). Он
-  ссылается на `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Logging` и
-  `Microsoft.Extensions.ObjectPool`, но не на драйвер базы данных.
-* `nextorm.sqlite`, `nextorm.sqlserver`, `nextorm.postgres`, `nextorm.mysql`, `nextorm.mariadb` и
-  `nextorm.clickhouse` добавляют каждый свой конкретный контекст
-  ([`SqliteDataContext`](xref:NextORM.Sqlite.SqliteDataContext), [`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext), [`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext), [`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext), [`MariaDbDataContext`](xref:NextORM.MariaDb.MariaDbDataContext),
-  [`ClickHouseDataContext`](xref:NextORM.ClickHouse.ClickHouseDataContext)) и расширение регистрации `Use…`.
-  Пакеты провайдеров транзитивно зависят от `nextorm`.
-* `nextorm.extensions` — необязательный продуктовый пакет, который добавляет операторы-компоненты
-  запроса `SelectWhereMin` / `SelectWhereMax` и `SelectGroup` / `SelectGroupHaving` поверх публичного
-  слоя компонентов запроса. Он ссылается только на `nextorm.core`, не требует собственного пакета
-  провайдера и работает с любым провайдером; см. [Пакет расширений](../advanced/extensions-package.md).
-* `nextorm.entityframeworkcore` — необязательный пакет-мост, который выполняет запросы и команды
-  nextorm поверх существующего соединения и транзакции EF Core `DbContext`, переиспользуя маппинг
-  модели EF (`db.CreateNextOrmContext()`); см. [Интеграция с EF Core](../advanced/integration-efcore.md).
-
-1.0.9 — первый стабильный релиз, поэтому в командах установки ниже флаг `--prerelease` больше не
-нужен. Для пререлизных сборок (`1.0.10-a.x` и новее) он по-прежнему обязателен.
+- Проект, нацеленный на `net10.0` или `net11.0`.
+- Терминал, открытый в каталоге с файлом проекта.
 
 ## Установка основного пакета
+
+Из каталога проекта добавьте основной пакет:
 
 ```bash
 dotnet add package nextorm
 ```
 
-Затем добавьте ровно один пакет провайдера для целевой базы данных:
+Добавьте пакет провайдера для нужной базы данных. В быстром старте используется SQLite:
 
 ```bash
 dotnet add package nextorm.sqlite
-dotnet add package nextorm.sqlserver
-dotnet add package nextorm.postgres
-dotnet add package nextorm.mysql
-dotnet add package nextorm.mariadb
-dotnet add package nextorm.clickhouse
 ```
 
-Пакет `nextorm.extensions` необязателен. Добавляйте его, когда нужны компонентные
-`SelectWhereMin` / `SelectWhereMax` или группировка, выведенная из проекции, — `SelectGroup` /
-`SelectGroupHaving`; пакет работает с любым провайдером:
+Чтобы выполнить быстрый старт, в файле проекта должны быть ссылки на `nextorm` и `nextorm.sqlite`.
+Если приложение работает с другими базами данных, добавьте соответствующие пакеты провайдеров. Их
+идентификаторы приведены в [справочнике пакетов](#ссылка-на-пакет).
 
-```bash
-dotnet add package nextorm.extensions
-```
-
-Пакет `nextorm.entityframeworkcore` тоже необязателен — он нужен, когда в приложении уже есть
-`DbContext` EF Core и запросы nextorm должны идти по тому же соединению:
-
-```bash
-dotnet add package nextorm.entityframeworkcore
-```
-
-Эквивалент в консоли диспетчера пакетов:
+Если вы используете консоль диспетчера пакетов Visual Studio, выберите проект приложения и
+выполните команды:
 
 ```powershell
 Install-Package nextorm
 Install-Package nextorm.sqlite
 ```
+
+## Необязательные пакеты
+
+Для быстрого старта достаточно основного пакета и пакета провайдера. Добавьте `nextorm.extensions`,
+только если вам нужны его операторы-компоненты запроса:
+
+```bash
+dotnet add package nextorm.extensions
+```
+
+Пакет добавляет `SelectWhereMin` / `SelectWhereMax` и `SelectGroup` / `SelectGroupHaving`. Он работает
+со всеми провайдерами; см. [Пакет расширений](../advanced/extensions-package.md).
+
+Если приложение уже использует `DbContext` Entity Framework Core и запросам NextORM нужно то же
+соединение и транзакция, добавьте необязательный пакет-мост:
+
+```bash
+dotnet add package nextorm.entityframeworkcore
+```
+
+Подробности приведены в разделе [Интеграция с EF Core](../advanced/integration-efcore.md).
+
+## Обзор
+
+NextORM отделяет движок запросов от драйверов баз данных:
+
+* `nextorm` (сборка `nextorm.core`) содержит построитель и компилятор запросов, метаданные сущностей,
+  средства внедрения зависимостей, кэш планов и провайдер in-memory
+  ([`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext)). Пакет ссылается на
+  `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Logging` и
+  `Microsoft.Extensions.ObjectPool`, но не на драйвер базы данных.
+* Каждый пакет провайдера добавляет контекст и расширение регистрации `Use…`. Пакет провайдера
+  транзитивно зависит от `nextorm`.
+
+Версия `1.0.9` — первый стабильный выпуск, поэтому для стабильных пакетов не нужен флаг
+`--prerelease`. Для пререлизных сборок (`1.0.10-a.x` и новее) он по-прежнему нужен.
 
 ## Ссылка на пакет
 
@@ -85,7 +87,18 @@ Install-Package nextorm.sqlite
 
 ## Целевая платформа
 
-Пакеты мультитаргетят `net10.0` и `net11.0`, поэтому NuGet сам подбирает ассет под целевую платформу потребляющего проекта, и включают неявные using-директивы (implicit usings) и nullable reference types. `PackageReference` выглядит так:
+Пакеты поддерживают `net10.0` и `net11.0`; NuGet выбирает сборку для целевой платформы проекта.
+Примеры предполагают, что включены неявные using-директивы и nullable reference types. Если эти
+свойства ещё не заданы, добавьте в `.csproj` следующий блок:
+
+```xml
+<PropertyGroup>
+  <ImplicitUsings>enable</ImplicitUsings>
+  <Nullable>enable</Nullable>
+</PropertyGroup>
+```
+
+Ссылка на пакет через `PackageReference` выглядит так:
 
 ```xml
 <ItemGroup>

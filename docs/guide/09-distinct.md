@@ -1,12 +1,13 @@
 # SELECT DISTINCT
 
-> Remove duplicate rows with [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) on an entity builder or on a projected query, including over joins, paging and set operations.
+> Remove duplicate projected rows with [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct). `DISTINCT` compares the complete projected row, not just one column.
 
 **Prerequisites:** [Querying and projections](../engine/index.md) · [Sorting and paging](06-sorting-and-paging.md) · [Set operations](08-set-operations.md)
 
 ## Overview
 
-nextorm exposes two entry points for `SELECT DISTINCT`:
+`DISTINCT` removes duplicate projected tuples: two rows are duplicates only when all projected values
+match. nextorm exposes two entry points for `SELECT DISTINCT`:
 
 * [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) — sets the flag on the builder, before [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})):
 
@@ -20,10 +21,12 @@ nextorm exposes two entry points for `SELECT DISTINCT`:
   dataContext.From<IComplexEntity>().Select(x => new { x.Int }).Distinct()
   ```
 
-Both produce the same SQL. `DISTINCT` applies to the whole select list, so the duplicates that are
-removed are duplicates of the projected tuple, not of a single column.
+Both forms produce the same SQL. Choose either form based on whether you call `Distinct` before or
+after `Select`.
 
 ## Basic distinct
+
+This example projects one column and removes repeated values from that result:
 
 ```csharp
 // complex_entity stores nullableint values null, 1, 1 so DISTINCT must collapse the two 1s.
@@ -54,7 +57,7 @@ Output:
 
 ## Distinct over a join
 
-A projected join can contain duplicate rows; [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) collapses them:
+A join can return repeated values in its projection. [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) removes those repeated projected rows:
 
 ```csharp
 // complex_entity booleans are true, false, false, so the projected join has duplicate rows.
@@ -95,8 +98,11 @@ select distinct t2.id
 
 ## Distinct and paging
 
-Paging is applied to the distinct result. The [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)) call is placed before [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), and the
-double-checked shape ([`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) then [`Limit`](xref:NextORM.Core.Paging.Limit)) is governed by the provider's keyword order:
+Apply paging to the distinct result: first remove duplicate projected rows, then take the requested
+page. In the builder chain, call [`Limit`](xref:NextORM.Core.Paging.Limit) or
+[`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)) before
+[`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})).
+The provider determines the SQL keyword order:
 
 ```csharp
 var distinct = dataContext.From<IComplexEntity>()
@@ -123,14 +129,14 @@ select distinct top(1) b as 'Boolean'
  from complex_entity
 ```
 
-On SQL Server, `select top(1) distinct ...` is invalid T-SQL, so the dialect emits `distinct` before
-`top(n)` (the SQL-generation test pins the order with `e.Distinct().Limit(5).Select(x => x.Id)` →
-`select distinct top(5) id from simple_entity`).
+On SQL Server, `select top(1) distinct ...` is invalid T-SQL. The dialect emits `distinct` before
+`top(n)`. The SQL-generation test pins the order with
+`e.Distinct().Limit(5).Select(x => x.Id)` → `select distinct top(5) id from simple_entity`.
 
 ## Distinct and set operations
 
-[`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) is a property of its own command, not of the whole chain, so it only deduplicates the
-branch it is attached to:
+[`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) applies to its own command, not to the whole
+set-operation chain. It removes duplicates only from the branch where you call it:
 
 ```csharp
 var cmd = dataContext.From<IComplexEntity>().Select(it => it.Int)
@@ -149,8 +155,9 @@ select nullableint
  from complex_entity
 ```
 
-With [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})) the branches are concatenated without an extra deduplication, so the left branch is
-distinct but the right one is not:
+With [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})), the
+branches are concatenated without another deduplication step. The left branch is distinct, but the
+right branch is not:
 
 ```csharp
 var cmd = dataContext.From<IComplexEntity>().Select(it => it.Int)
@@ -171,10 +178,10 @@ select nullableint
 
 ## `DISTINCT ON` (PostgreSQL)
 
-PostgreSQL also supports `DISTINCT ON (expr, ...)`, which keeps the first row of each distinct key
-according to the `ORDER BY` (the leading sort expressions must match the key). Use
-[`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})) instead of `Distinct`; combining the two
-throws, because PostgreSQL treats them as mutually exclusive.
+PostgreSQL also supports `DISTINCT ON (expr, ...)`. It keeps the first row for each key according to
+`ORDER BY`, whose leading sort expressions must match that key. Use
+[`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}}))
+instead of `Distinct`. PostgreSQL treats the two forms as mutually exclusive, so combining them throws.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()

@@ -1,6 +1,6 @@
 # Extensibility
 
-> nextorm exposes a small set of public hooks an external assembly can use without friend access: declare application-wide data rules, map custom CLR storage, build reusable query operators, and observe execution. This page explains which hook to choose, who calls it and when, and gives a short working example for each.
+> nextorm exposes a small public extension surface that external assemblies can use without friend access. Use it to declare application-wide data rules, map custom CLR storage, build reusable query operators, or observe execution. This page explains which hook fits each task, who calls it and when, and gives a short working example for each.
 
 **Prerequisites:** [Provider overview](../connecting-providers/overview.md) · [API quick reference](api-reference.md)
 

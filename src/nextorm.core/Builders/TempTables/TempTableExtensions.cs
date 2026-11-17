@@ -5,8 +5,8 @@ namespace NextORM.Core;
 /// <c>SELECT ... INTO</c> (SQL Server) or <c>CREATE TABLE ... ENGINE = MergeTree ... AS SELECT</c>
 /// (ClickHouse). The row shape is taken from the query's projection; the created table is addressed later
 /// with <see cref="DataContextExtensions.From(IDataContext, string)"/>. Unlike a common table expression,
-/// which is reusable only within one statement, the materialised table is reusable across subsequent
-/// queries on the same connection.
+/// which is reusable only within one statement, the created table can be reused by later
+/// queries. Temporary tables remain session-scoped, as described below.
 /// <para>
 /// The temporary form (<c>ToTempTable</c>) is session-scoped: create and read it on one context (one
 /// connection). It is available on PostgreSQL, SQLite, MySQL and MariaDB only — SQL Server has no

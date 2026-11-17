@@ -1333,9 +1333,8 @@ public interface ISqlDialect
     string MakeDatePart(string part, string value);
     /// <summary>
     /// True when the provider accepts <paramref name="part"/> as an <c>extract</c>/<c>date_part</c>
-    /// date part. The ANSI parts are accepted by default; a dialect adds the parts it can express
-    /// natively (<c>quarter</c>, <c>week</c>, <c>dow</c>, <c>isodow</c>, <c>epoch</c>) by overriding
-    /// this together with <see cref="MakeDatePart(string, string)"/>.
+    /// date part. Keep this predicate consistent with the parts that
+    /// <see cref="MakeDatePart(string, string)"/> can render.
     /// </summary>
     bool SupportsDatePart(string part);
     /// <summary>Renders the current local or UTC date/time.</summary>
@@ -2155,9 +2154,9 @@ public interface ISqlDialect
         => MakeReturning(columns, keywordCase);
 
     /// <summary>
-    /// Whether the dialect can execute a <c>DELETE</c> and report the affected-row count. Declared as a
-    /// default interface method returning <c>true</c>; the native statement is rendered by
-    /// <see cref="MakeDeleteHead"/> (ClickHouse renders its <c>ALTER TABLE ... DELETE</c> mutation).
+    /// Whether the provider has a synchronous, single-statement <c>DELETE</c> form the core can render.
+    /// Defaults to <see langword="true"/>; the dialect supplies the form through
+    /// <see cref="MakeDeleteHead"/> (ClickHouse uses its <c>ALTER TABLE ... DELETE</c> mutation).
     /// </summary>
     bool SupportsDelete => true;
 
@@ -2244,11 +2243,10 @@ public interface ISqlDialect
     bool DeleteJoinRequiresUsing => false;
 
     /// <summary>
-    /// Whether the dialect can execute an <c>UPDATE</c> and report the affected-row count. Declared as a
-    /// default interface method returning <c>true</c>; ClickHouse keeps it <c>true</c> but renders its
-    /// <c>ALTER TABLE ... UPDATE</c> mutation, which waits for the mutation
-    /// (<c>SETTINGS mutations_sync = 1</c>) yet reports no affected-row count. The native head is rendered
-    /// by <see cref="MakeUpdateHead"/>.
+    /// Whether the provider has a synchronous, single-statement <c>UPDATE</c> form the core can render.
+    /// Defaults to <see langword="true"/>; the dialect supplies the form through
+    /// <see cref="MakeUpdateHead"/>. ClickHouse uses its <c>ALTER TABLE ... UPDATE</c> mutation, which
+    /// waits for completion (<c>SETTINGS mutations_sync = 1</c>) but does not report an affected-row count.
     /// </summary>
     bool SupportsUpdate => true;
 

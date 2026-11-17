@@ -83,9 +83,9 @@ public sealed record BulkInsertOptions
     /// Whether CHECK and FOREIGN KEY constraints are checked by the destination while the rows are
     /// written. <see langword="true"/> is honoured everywhere: a path that always checks constraints
     /// accepts it by its default behaviour, and SQL Server maps it to
-    /// <c>SqlBulkCopyOptions.CheckConstraints</c>. <see langword="false"/> asks for unchecked rows,
-    /// which only the SQL Server native path can express (MariaDB and SQLite honour it through their
-    /// scoped session controls); every other path always checks and rejects it with
+    /// <c>SqlBulkCopyOptions.CheckConstraints</c>. <see langword="false"/> asks to disable constraint
+    /// checking. The SQL Server native path and the MariaDB and SQLite paths can express that request
+    /// (the latter through scoped session controls); every other path always checks and rejects it with
     /// <see cref="NotSupportedException"/>. Defaults to <see langword="null"/> (the provider default).
     /// </summary>
     public bool? CheckConstraints { get; init; }
@@ -481,8 +481,9 @@ internal static class BulkInsertProviders
 }
 
 /// <summary>
-/// Fluent builder for <see cref="BulkInsertOptions"/>. Every setter validates immediately and returns the
-/// builder, so an invalid option fails at the call site rather than at execution.
+/// Fluent builder for <see cref="BulkInsertOptions"/>. Setters return the builder. Arguments with
+/// setter-level validation fail at the call site; the remaining options are validated when attached to
+/// a bulk-insert builder, with provider- and path-dependent requests checked when that context is known.
 /// </summary>
 public sealed class BulkInsertOptionsBuilder
 {
@@ -600,7 +601,11 @@ public sealed class BulkInsertOptionsBuilder
         return this;
     }
 
-    /// <summary>Checks CHECK and FOREIGN KEY constraints during the write (SQL Server native path only).</summary>
+    /// <summary>
+    /// Requests constraint checking during the write. <see langword="true"/> is honored by every path;
+    /// <see langword="false"/> requests unchecked rows and is supported by the SQL Server native, MariaDB
+    /// and SQLite paths.
+    /// </summary>
     /// <param name="value">Whether constraints are checked; defaults to <see langword="true"/>.</param>
     /// <returns>This builder, for chaining.</returns>
     public BulkInsertOptionsBuilder CheckConstraints(bool value = true)
@@ -609,7 +614,10 @@ public sealed class BulkInsertOptionsBuilder
         return this;
     }
 
-    /// <summary>Takes a table-level bulk-update lock for the duration of the write (SQL Server native path only).</summary>
+    /// <summary>
+    /// Requests a table-level bulk-update lock for the duration of the write. <see langword="true"/> is
+    /// supported only by the SQL Server native path; <see langword="false"/> requests no such lock.
+    /// </summary>
     /// <param name="value">Whether the table is locked; defaults to <see langword="true"/>.</param>
     /// <returns>This builder, for chaining.</returns>
     public BulkInsertOptionsBuilder TableLock(bool value = true)
@@ -618,7 +626,11 @@ public sealed class BulkInsertOptionsBuilder
         return this;
     }
 
-    /// <summary>Writes explicit null values instead of the destination DEFAULT (SQL Server native path only).</summary>
+    /// <summary>
+    /// Requests that explicit nulls be written instead of the destination DEFAULT. <see langword="true"/>
+    /// is honored by every path; <see langword="false"/> is accepted only when the written shape is
+    /// default-equivalent.
+    /// </summary>
     /// <param name="value">Whether nulls are kept; defaults to <see langword="true"/>.</param>
     /// <returns>This builder, for chaining.</returns>
     public BulkInsertOptionsBuilder KeepNulls(bool value = true)
@@ -627,7 +639,10 @@ public sealed class BulkInsertOptionsBuilder
         return this;
     }
 
-    /// <summary>Fires INSERT triggers for the written rows (SQL Server native path only).</summary>
+    /// <summary>
+    /// Requests that INSERT triggers fire for the written rows. <see langword="true"/> is supported only
+    /// by the SQL Server native path; <see langword="false"/> requests no trigger firing.
+    /// </summary>
     /// <param name="value">Whether triggers fire; defaults to <see langword="true"/>.</param>
     /// <returns>This builder, for chaining.</returns>
     public BulkInsertOptionsBuilder FireTriggers(bool value = true)

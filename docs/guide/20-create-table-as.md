@@ -1,6 +1,13 @@
 # Materializing a query into a table (`CREATE TABLE ... AS SELECT`)
 
-> nextorm can run a normal query and materialize its rows into a table in one command with [`ToTempTable(name)`](xref:NextORM.Core.TempTableExtensions) / `ToTable(name)`, or turn it into a lazy source with `AsTempTable()` that is materialised on every read. Unlike a [common table expression](10-cte.md), which is reusable only inside one statement, the materialized table is reusable by later queries on the same connection. There is no change tracking and no `SaveChanges`: each terminal issues exactly one command (or one batch).
+> Use a temporary table when a later query on the same connection needs the rows
+> from a query. `ToTempTable(name)` creates it immediately, while `AsTempTable()`
+> creates a fresh table when a later query reads the source. Use `ToTable(name)`
+> for a persistent table; provider-specific temporary-table forms are covered
+> later. Unlike a
+> [common table expression](10-cte.md), a materialized table is available to
+> later queries on the connection. nextorm does not track changes or provide
+> `SaveChanges`; each terminal issues one command or batch.
 
 **Prerequisites:** [Common table expressions](10-cte.md) · [Data modification (INSERT)](17-insert-statement.md) · [Raw SQL](14-raw-sql.md) · [Provider overview](../connecting-providers/overview.md)
 
@@ -31,16 +38,6 @@ var orders = ctx.From("recent_orders")
 ```
 
 `ToTempTableSql(name)` renders the statement without opening a connection; `ToTempTable` / `ToTempTableAsync` execute it.
-
-## Placement and routing
-
-The target name is literal, so a materialisation is routed by the entities its **source query** reads, not
-by the row type it projects: `ToTable`/`ToTempTable` on a routed entity creates the table on that entity's
-topology host, and on a bucket-scoped query it creates it on that bucket's shard, rendered under the same
-scope as the query. With `DropExisting` the `DROP` follows the create to the same host, so a
-materialisation never drops a table on one server and creates it on another. The lazy `AsTempTable` read is
-one batch (drop, create, read) and obeys the same rule — see
-[One batch, one topology](34-routing-data-to-topologies.md#one-batch-one-topology).
 
 ## Session affinity and connection poolers
 
@@ -183,6 +180,16 @@ ctx.From<IOrder>().Select(x => new { x.Id, x.Total })
 ```
 
 This runs `DROP TABLE IF EXISTS order_archive` followed by the create, so the table always reflects the current query. It is only valid for a persistent `ToTable` (a temporary table is session-scoped) and cannot be combined with `IfNotExists`; a contradictory or provider-unsupported combination is rejected before the drop runs, so the target is never left missing.
+
+## Placement and routing
+
+The target name is literal, so a materialisation is routed by the entities its **source query** reads, not
+by the row type it projects: `ToTable`/`ToTempTable` on a routed entity creates the table on that entity's
+topology host, and on a bucket-scoped query it creates it on that bucket's shard, rendered under the same
+scope as the query. With `DropExisting` the `DROP` follows the create to the same host, so a
+materialisation never drops a table on one server and creates it on another. The lazy `AsTempTable` read is
+one batch (drop, create, read) and obeys the same rule — see
+[One batch, one topology](34-routing-data-to-topologies.md#one-batch-one-topology).
 
 ## Provider support
 

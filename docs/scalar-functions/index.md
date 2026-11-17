@@ -7,10 +7,22 @@
 
 ## Overview
 
-nextorm recognises a fixed set of CLR members and rewrites them to SQL inside any query expression.
-The dispatch lives in [`BaseExpressionVisitor`](xref:NextORM.Core.BaseExpressionVisitor): `string` methods, `Math` methods, `DateTime` members,
-`SqlFunctions.Sql.like`, the `??` operator and numeric conversions. Everything provider-specific is delegated to
-[`ISqlDialect`](xref:NextORM.Core.ISqlDialect), so the same C# code renders the correct function on every provider.
+nextorm translates recognized CLR expressions to SQL inside database-backed query expressions. The
+database evaluates the generated expression; the same C# call outside the query runs locally in the CLR.
+Recognized forms include `string`, `Math` and `DateTime` members, `SqlFunctions.Sql.like`, `??` and numeric
+conversions. The dispatch lives in [`BaseExpressionVisitor`](xref:NextORM.Core.BaseExpressionVisitor);
+provider-specific SQL rendering is delegated to [`ISqlDialect`](xref:NextORM.Core.ISqlDialect).
+
+Choose the expression surface by portability:
+
+* Use a listed CLR member or operator when nextorm has a built-in translation for it.
+* Use [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) for a SQL function without a suitable CLR
+  counterpart. The surface is shared, but support can still be gated by provider; check the function's
+  capability notes.
+* Use a provider-specific `SqlFunctions` surface only when you intend to rely on that provider's API.
+  Other providers reject unsupported calls rather than emulate them.
+
+Treat `SqlFunctions` calls as SQL-expression APIs for query expressions, not as local C# calculations.
 
 Two rules apply throughout:
 

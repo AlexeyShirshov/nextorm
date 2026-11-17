@@ -4,7 +4,7 @@
 
 **Prerequisites:** [Filtering (WHERE)](03-filtering-where.md) · [Value converters and JSON columns](../infrastructure/03-value-converters.md) · [PostgreSQL-specific SQL](provider-specific-sql/postgresql.md) · [Limitations](../advanced/limitations.md)
 
-PostgreSQL has [native range types](provider-specific-sql/postgresql.md#range-types) (`int4range`…`daterange`), so a `Range<T>` property maps directly to a range column there. The other providers have no range type; nextorm bridges the gap by letting you map the two bounds to two scalar columns and translating the range operators over them.
+PostgreSQL provides [native range types](provider-specific-sql/postgresql.md#range-types) (`int4range`…`daterange`), so a `Range<T>` property maps directly to a range column there. Other providers have no range type. For those providers, map the lower and upper bounds to separate scalar columns; nextorm translates range operators into comparisons over that pair.
 
 ## Storage model
 
@@ -17,7 +17,7 @@ PostgreSQL has [native range types](provider-specific-sql/postgresql.md#range-ty
 | ClickHouse | a pair of scalar columns |
 | In-memory | the CLR `Range<T>` value |
 
-The pair is **two nullable columns**: the lower bound and the upper bound. A `NULL` column means that side is unbounded (`LowerInfinite` / `UpperInfinite`). The bound **inclusivity is part of the mapping**, not of the stored value — it is declared once with the attribute and reapplied on every read, because a plain scalar column cannot carry it.
+The pair consists of **two nullable columns**, one for each bound. A `NULL` value marks that side as unbounded (`LowerInfinite` / `UpperInfinite`). Inclusivity belongs to the **mapping**, not the stored values: declare it with the attribute, and nextorm reapplies it on every read because scalar columns do not store that information.
 
 The surface is gated by [`SupportsRangeColumns`](xref:NextORM.Core.ISqlDialect.SupportsRangeColumns), which is enabled on PostgreSQL, SQL Server, MySQL/MariaDB, SQLite and ClickHouse.
 
@@ -78,7 +78,7 @@ Writes go through the entity-value forms (`Values(entity)` / `Set(entity)`); see
 
 ## Filtering and inspection
 
-The PostgreSQL range operators are translated into comparisons between the two bounds. A constant `Range<T>` argument is folded into parameters, and an unbounded bound short-circuits the corresponding side.
+PostgreSQL range operators are translated into comparisons over the two mapped columns. For a constant `Range<T>` argument, nextorm binds the bounds as parameters; an unbounded bound short-circuits its corresponding comparison.
 
 ```csharp
 var overlapping = ctx.From<Reservation>()
@@ -87,7 +87,7 @@ var overlapping = ctx.From<Reservation>()
     .ToList();
 ```
 
-The constant range is folded into parameters (SQLite renders the query above as):
+nextorm folds the constant range into parameters. SQLite renders the query above as:
 
 ```sql
 select id
@@ -97,6 +97,10 @@ select id
 -- $p0 = 5, $p1 = 15
 ```
 
+### Test range relationships
+
+The range predicates compare the stored bounds to test how two ranges relate:
+
 | Function | Translated over the pair |
 |---|---|
 | `overlaps(a, b)` | the two ranges share a point |
@@ -105,16 +109,23 @@ select id
 | `range_adjacent(a, b)` | the ranges touch but do not overlap |
 | `range_strictly_left_of(a, b)` / `range_strictly_right_of(a, b)` | ordered with no touching |
 | `range_not_extend_right_of(a, b)` / `range_not_extend_left_of(a, b)` | `a` does not extend past `b` on that side |
+
+### Inspect bounds and mapping
+
+Use these functions to inspect a stored bound, its configured inclusivity, or whether it is unbounded:
+
+| Function | Translated over the pair |
+|---|---|
 | `lower(range)` / `upper(range)` | the bound column itself |
 | `lower_inc` / `upper_inc` | the mapping's inclusivity, `false` when the bound is unbounded |
 | `lower_inf` / `upper_inf` | the bound column `is null` |
 | `isempty(range)` | always `false` (a pair is never empty) |
 
-The semantics match PostgreSQL and the in-memory provider, including the boundary cases (equal values with differing inclusivity).
+Both groups follow PostgreSQL and in-memory semantics, including boundary cases where equal values have different inclusivity.
 
 ### Generated predicates
 
-For a default `[)` mapping the pair columns are `a = [al, au)` and a constant `b = [bl, bu)`; an unbounded bound makes the matching term true. SQLite renders:
+For the default `[)` mapping, the pair columns represent `a = [al, au)` and a constant represents `b = [bl, bu)`. An unbounded bound makes the matching predicate term true. SQLite renders:
 
 | Call | Predicate |
 |---|---|

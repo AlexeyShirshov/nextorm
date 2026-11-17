@@ -6,11 +6,17 @@
 
 ## Overview
 
-The SQL providers ([`SqliteDataContext`](xref:NextORM.Sqlite.SqliteDataContext), [`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext), [`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext)) all derive from [`DataContext`](xref:NextORM.Core.DataContext), which implements both [`IDataContext`](xref:NextORM.Core.IDataContext) and [`IConnectionManager`](xref:NextORM.Core.IConnectionManager). A context is built either from a connection string (the context creates and owns the connection) or from an already-built `DbConnection` (the caller owns it). The in-memory provider implements only [`IDataContext`](xref:NextORM.Core.IDataContext) - it has no connection at all.
+The SQL providers ([`SqliteDataContext`](xref:NextORM.Sqlite.SqliteDataContext), [`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext), and [`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext)) derive from [`DataContext`](xref:NextORM.Core.DataContext). `DataContext` implements both [`IDataContext`](xref:NextORM.Core.IDataContext) and [`IConnectionManager`](xref:NextORM.Core.IConnectionManager).
+
+Choose how the context gets its connection based on ownership: when you pass a connection string, the
+context creates and owns the connection; when you pass a `DbConnection`, you own it. The in-memory
+provider implements only [`IDataContext`](xref:NextORM.Core.IDataContext) because it has no connection.
 
 ## Connection string vs supplied connection
 
-Every SQL provider exposes two constructors, and the `Use…` builder extensions wrap them:
+Choose a connection string when the context should create and own the connection. Supply a
+`DbConnection` when your code should own and manage it. Each SQL provider exposes both constructors,
+and the `Use…` builder extensions wrap them:
 
 ```csharp
 // A: the context creates and owns the connection from the string.
@@ -38,7 +44,7 @@ ctx2.ConnectionString; // supplied.ConnectionString
 
 ## Connection reuse
 
-[`GetConnection`](xref:NextORM.Core.DataContext.GetConnection) creates the connection on first access and returns the **same** instance on every subsequent call. [`EnsureConnectionOpen`](xref:NextORM.Core.DataContext.EnsureConnectionOpen) opens it if it is closed; `EnsureConnectionOpenAsync(CancellationToken)` is the cancellable asynchronous form.
+[`GetConnection`](xref:NextORM.Core.DataContext.GetConnection) creates the connection on first access and returns the **same** instance on every subsequent call. [`EnsureConnectionOpen`](xref:NextORM.Core.DataContext.EnsureConnectionOpen) opens it if it is closed; `EnsureConnectionOpenAsync(CancellationToken)` is the cancellable asynchronous form. For example, repeated calls return the same instance:
 
 ```csharp
 using var ctx = new SqliteDataContext("Data Source=app.db", new DataContextBuilder());
@@ -69,6 +75,8 @@ var rows = ctx.From<ISimpleEntity>().Select(x => x.Id).ToList(); // [42]
 
 * An **owned** connection (created from a connection string) is disposed by `Dispose()` / `DisposeAsync()`. Cached prepared commands that were bound to it are reset so they rebind on the next use.
 * A **supplied** connection is never disposed by the context - it is left in whatever state it was in. The caller owns it.
+
+These examples show the disposal behavior for each ownership model:
 
 ```csharp
 var owned = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
@@ -155,6 +163,8 @@ Notes:
 * Provider caveat: `ClickHouse.Driver` 1.4.0 exposes the inherited property, but an HTTP request is bounded by the connection `Timeout` (default two minutes), not `CommandTimeout`; the value has no effect there. See [Limitations](../advanced/limitations.md).
 
 ## Provider differences
+
+The following table summarizes the connection type and provider-specific behavior:
 
 | Provider | Connection type | Notes |
 |---|---|---|

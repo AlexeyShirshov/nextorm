@@ -3,15 +3,16 @@ using System.Linq.Expressions;
 namespace NextORM.Core;
 
 /// <summary>
-/// Replaces the query parameters referenced inside an expression.
+/// Replaces each parameter expression whose type matches the replacement expression's type with the
+/// replacement expression.
 /// </summary>
 public class ReplaceParameterExpressionVisitor : ExpressionVisitor
 {
     private readonly Expression _parameter;
 
     /// <summary>
-    /// Creates a visitor that replaces any parameter whose type matches
-    /// <paramref name="parameter"/>'s type with <paramref name="parameter"/> itself.
+    /// Creates a visitor that replaces each <see cref="ParameterExpression"/> whose type matches
+    /// <paramref name="parameter"/>'s type with <paramref name="parameter"/>.
     /// </summary>
     /// <param name="parameter">The replacement expression.</param>
     public ReplaceParameterExpressionVisitor(Expression parameter)
@@ -28,7 +29,8 @@ public class ReplaceParameterExpressionVisitor : ExpressionVisitor
     }
 }
 /// <summary>
-/// Replaces constant nodes inside an expression.
+/// Replaces each constant expression whose type matches the replacement expression's type with the
+/// replacement expression.
 /// </summary>
 /// <remarks>
 /// Renamed from <c>ReplaceConstantVisitor</c> so the suffix is <c>ExpressionVisitor</c>; the singular
@@ -40,8 +42,8 @@ public class ReplaceConstantExpressionVisitor : ExpressionVisitor
     private readonly Expression _parameter;
 
     /// <summary>
-    /// Creates a visitor that replaces any constant whose type matches
-    /// <paramref name="parameter"/>'s type with <paramref name="parameter"/> itself.
+    /// Creates a visitor that replaces each <see cref="ConstantExpression"/> whose type matches
+    /// <paramref name="parameter"/>'s type with <paramref name="parameter"/>.
     /// </summary>
     /// <param name="parameter">The replacement expression.</param>
     public ReplaceConstantExpressionVisitor(Expression parameter)

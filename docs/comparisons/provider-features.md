@@ -1,9 +1,9 @@
 # Provider features: Nextorm vs linq2db
 
-A dated, per-engine comparison of the **provider-specific API surface**: for each SQL engine both libraries
-support, how much of that engine's own feature set is exposed through a dedicated API wired to the query
-builder. Marks are judgement calls against the public documentation and source of both libraries, as of
-**2026-10-04**.
+Use this page when you need a database-specific feature exposed through a named API that is
+integrated with the query builder. For each SQL engine both libraries support, the table compares
+the breadth of that **dedicated provider API**—not every possible way to express the same SQL. Marks
+are judgements based on both libraries' public documentation and source, as of **2026-10-04**.
 
 The unified vector-search rows are a later Nextorm update; linq2db is marked **not assessed** for those
 rows, and those cells are excluded from the totals.
@@ -25,6 +25,8 @@ Each table ends with a **Total** row: the yes / partial / no counts per library 
 
 ## Provider footprint
 
+This table counts supported database engines, not the depth of each engine's feature API.
+
 | Engine | Nextorm | linq2db |
 |---|---|---|
 | SQLite | yes | yes |
@@ -42,18 +44,19 @@ linq2db models MariaDB as a MySQL version.
 
 ## Key finding
 
-**Nextorm covers provider-specific features more broadly.** Across the six SQL engines both libraries
-support, Nextorm exposes a dedicated provider-specific API on a wider set of surfaces than linq2db: a
-per-provider scalar-function library for every engine, the ClickHouse
-clause/aggregate/table-function/tuple/native-JSON surface, PostgreSQL
-full-text/regex/`jsonb_path_*`/range/data-modifying CTE/table functions, SQL Server sequences and row locking,
-MySQL/MariaDB JSON/regex/sequences, and SQLite JSON1/regex/aggregates/LOB/FTS5 maintenance — all wired to the
-query builder rather than raw SQL.
+**Across the six shared SQL engines, Nextorm exposes dedicated APIs for more of the listed
+provider-specific features.** Examples include a scalar-function library for each engine; ClickHouse
+clauses, aggregates, table functions, tuples, and native JSON; PostgreSQL full-text search, regex,
+`jsonb_path_*`, range operations, data-modifying CTEs, and table functions; SQL Server sequences and
+row locking; MySQL/MariaDB JSON, regex, and sequences; and SQLite JSON1, regex, aggregates, LOB
+streaming, and FTS5 maintenance. These APIs connect to the query builder rather than requiring raw
+SQL.
 
-This is a statement about **per-engine feature depth, not the number of engines**: linq2db connects to more
-database products (Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, Access, SQL CE, DuckDB, Ydb), while
-Nextorm adds an in-memory object context and splits MySQL/MariaDB into separate providers. linq2db remains
-wider on SQL Server scalar-function breadth and hint variety (issue [#182](https://github.com/AlexeyShirshov/nextorm/issues/182)).
+This describes **feature depth per engine, not the number of engines**. linq2db connects to more
+database products (Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, Access, SQL CE, DuckDB, Ydb).
+Nextorm adds an in-memory object context and treats MySQL and MariaDB as separate providers. linq2db
+still has broader SQL Server scalar-function coverage and more hint varieties (issue
+[#182](https://github.com/AlexeyShirshov/nextorm/issues/182)).
 
 ## PostgreSQL
 

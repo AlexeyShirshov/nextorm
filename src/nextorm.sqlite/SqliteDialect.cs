@@ -131,7 +131,7 @@ public sealed class SqliteDialect : SqlDialectBase
     /// <summary>SQLite exposes its core scalars, JSON1, date helpers and math-extension functions through <see cref="SqliteFunctions"/>.</summary>
     public override ISqliteFunctions SqliteFunctions => SqliteFunctionRenderer.Instance;
 
-    /// <summary>SQLite's built-in JSON table-valued functions <c>json_each</c>/<c>json_tree</c> and the FTS5 table-valued search placeholder.</summary>
+    /// <summary>SQLite supports the built-in <c>json_each</c> and <c>json_tree</c> table-valued functions, plus the FTS5 table-valued search placeholder.</summary>
     public override bool SupportsTableFunction(string name) => name is "json_each" or "json_tree" or "fts5";
 
     // The FTS5 table-valued search is rendered by the generic TvfEntityBuilder<T> factory pipeline as

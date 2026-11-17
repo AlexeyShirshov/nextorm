@@ -1,13 +1,12 @@
 # Специфичные для провайдеров возможности
 
-> Эта страница описывает поведение, которое **зависит от провайдера и не является переносимым**:
-> активный диалект должен объявлять соответствующую возможность `Supports*`, а провайдеры, которые её
-> не включают, отклоняют конструкцию через `NotSupportedException` (`FOR JSON`/`FOR XML` в SQL Server,
-> блокировка строк в PostgreSQL/MySQL/MariaDB/SQL Server). Возможности, которые реализуют **все**
-> провайдеры — даже если хранение или написание различаются, — документированы на тематических
-> страницах, например [range-колонки](27-range-columns.md) (нативный range-тип на PostgreSQL, пара
-> скалярных колонок на остальных) или [поддержка JSON в разных провайдерах](16-json.md). Завершающая
-> таблица перечисляет различия в написании, которые вообще не гейтят возможность.
+> На этой странице описаны возможности, доступность которых зависит от провайдера. Активный диалект
+> должен объявлять соответствующую возможность `Supports*`; иначе конструкция отклоняется через
+> `NotSupportedException`. Примеры — `FOR JSON`/`FOR XML` в SQL Server и блокировка строк в
+> PostgreSQL, MySQL, MariaDB и SQL Server. Возможности, реализованные всеми провайдерами, описаны на
+> тематических страницах, даже если различаются хранение или синтаксис: например, [range-колонки](27-range-columns.md)
+> (нативный range-тип в PostgreSQL и пара скалярных колонок в остальных) и [поддержка JSON в разных
+> провайдерах](16-json.md). В заключительной таблице перечислены различия синтаксиса, не влияющие на поддержку.
 
 ## JSON-вывод (SQL Server)
 
@@ -59,10 +58,11 @@ select id
 
 [`ForUpdate`](xref:NextORM.Core.EntityBuilder`1.ForUpdate) и
 [`ForShare`](xref:NextORM.Core.EntityBuilder`1.ForShare) блокируют выбранные строки до конца
-окружающей транзакции. PostgreSQL, MySQL и MariaDB генерируют завершающее предложение, которое
-ставится последним — после `WHERE`, `ORDER BY` и запроса страницы; SQL Server вместо этого
-привязывает табличный хинт `WITH (updlock)`/`WITH (holdlock)` к каждому физическому источнику
-инструкции:
+окружающей транзакции.
+
+PostgreSQL, MySQL и MariaDB добавляют предложение блокировки после `WHERE`, `ORDER BY` и постраничной
+выборки. SQL Server вместо этого добавляет табличный хинт `WITH (updlock)` или `WITH (holdlock)` к
+каждому физическому источнику:
 
 ```csharp
 var rows = await dataContext.From<SimpleEntity>()
@@ -143,10 +143,11 @@ PostgreSQL и MySQL генерируют по одному адресному п
 > (`for update`, `lock in share mode`).
 
 
-Режим ожидания задаётся [`LockWaitMode`](xref:NextORM.Core.LockWaitMode): если строку уже удерживает
-другая транзакция, [`NoWait`](xref:NextORM.Core.LockWaitMode.NoWait) падает немедленно вместо
-ожидания, а [`SkipLocked`](xref:NextORM.Core.LockWaitMode.SkipLocked) исключает занятые строки из
-результата — стандартный приём для очередей и пулов воркеров:
+### Выберите режим ожидания
+
+Передайте [`LockWaitMode`](xref:NextORM.Core.LockWaitMode), чтобы задать поведение при блокировке строки
+другой транзакцией. `NoWait` немедленно завершает операцию ошибкой, а `SkipLocked` исключает занятые
+строки из результата — это удобно, когда обработчики забирают задания из очереди:
 
 ```csharp
 var claimed = await dataContext.From<Job>()
@@ -165,15 +166,16 @@ select id
  from job with (updlock, readpast) where (state = 'pending')
 ```
 
-PostgreSQL и MySQL дописывают `nowait`/`skip locked` в конец
-(`FOR UPDATE`/`FOR SHARE [NOWAIT | SKIP LOCKED]`); разделяемая блокировка с режимом переключает MySQL
-с `lock in share mode` на `for share`, потому что `LOCK IN SHARE MODE` не принимает lock-option.
-MariaDB дописывает режим и к `for update`, и к `lock in share mode` (`NOWAIT` с 10.3+, `SKIP LOCKED`
-с 10.6+). SQL Server добавляет `nowait` или `readpast` в тот же табличный хинт
-(`with (updlock, nowait)` / `with (updlock, readpast)`); `readpast` пропускает любую заблокированную
-строку, а не только строку, удержанную другим писателем, поэтому он приближает, а не в точности
-повторяет `SKIP LOCKED`. По умолчанию [`Wait`](xref:NextORM.Core.LockWaitMode.Wait) сохраняет
-блокирующее поведение.
+PostgreSQL и MySQL добавляют `nowait` или `skip locked` к предложению блокировки. Для разделяемой
+блокировки с режимом ожидания MySQL переключается с `lock in share mode` на `for share`, потому что
+первый синтаксис не принимает параметр ожидания. MariaDB добавляет режим и к `for update`, и к
+`lock in share mode` (`NOWAIT` с 10.3+, `SKIP LOCKED` с 10.6+).
+
+SQL Server добавляет `nowait` или `readpast` к табличному хинту (`with (updlock, nowait)` либо
+`with (updlock, readpast)`). `readpast` пропускает любую заблокированную строку, а не только строку,
+удерживаемую другим писателем, поэтому он приближает, но не точно повторяет `SKIP LOCKED`.
+[`Wait`](xref:NextORM.Core.LockWaitMode.Wait) используется по умолчанию и сохраняет ожидание снятия
+блокировки.
 
 ## Различия провайдеров
 

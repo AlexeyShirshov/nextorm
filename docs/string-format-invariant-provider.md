@@ -6,11 +6,15 @@
 
 ## Overview
 
-The `string.Format` translator emits native SQL instead of evaluating the call in memory, so a culture that has no portable SQL form cannot be honoured: a database locale would silently change the result. `CultureInfo.InvariantCulture` is therefore the only accepted provider, and every other culture is refused.
+The `string.Format` translator emits native SQL instead of evaluating the call in memory. A culture
+without a portable SQL form cannot be honoured because the database locale could silently change the
+result. `CultureInfo.InvariantCulture` is the only accepted provider; every other culture is refused.
 
 The provider argument may be written in the natural C# way, `CultureInfo.InvariantCulture`, or as an explicit constant. Both are recognised without executing anything.
 
 ## What is accepted
+
+The following example shows the accepted overload forms:
 
 ```csharp
 var rows = ctx.From<Order>()
@@ -38,7 +42,9 @@ var rows = ctx.From<Order>()
 | a captured or instance provider (`var c = CultureInfo.InvariantCulture; ... string.Format(c, ...)`) | Refused — only a static member access qualifies |
 | a member named `InvariantCulture` on another type, or a property/method returning the invariant singleton | Refused — the declaring type and the member identity must be `System.Globalization.CultureInfo.InvariantCulture` |
 
-Recognition is purely structural: the expression tree node is inspected for its declaring type and member identity. The getter is never invoked, no expression is compiled and no value is evaluated, so a lookalike property whose getter throws is refused without the getter running.
+Recognition is purely structural: the translator inspects the expression-tree node for its declaring
+type and member identity. It never invokes the getter, compiles the expression or evaluates a value.
+Therefore, it refuses a lookalike property whose getter throws without running that getter.
 
 ## Supported formats
 
@@ -54,6 +60,8 @@ Accepting the provider does not widen the format surface. Only the formats the t
 A format specifier that the provider cannot render exactly, a non-constant format string, and overloads that take a `CompositeFormat` are still refused — with their own messages, unchanged by the provider acceptance.
 
 ## Provider support
+
+The following table lists the rendering used for each provider:
 
 | Provider | `N` | `F` | `D` | `X` | date tokens |
 |---|---|---|---|---|---|

@@ -106,7 +106,7 @@ public sealed class FromOptions
     /// <see cref="NotSupportedException"/>. The names are emitted verbatim, so only use trusted values.
     /// Use the overload taking an <see cref="IndexHintKind"/> to force or ignore the indexes.
     /// </summary>
-    /// <param name="indexes">The index names to hint; never empty.</param>
+    /// <param name="indexes">The index names to hint. Null or blank entries are ignored; an empty list leaves this instance unchanged.</param>
     /// <returns>This instance, to allow chaining.</returns>
     public FromOptions WithIndex(params string[] indexes)
         => WithIndex(IndexHintKind.Use, indexes);

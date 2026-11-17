@@ -9,17 +9,19 @@
 
 ## Overview
 
-A normal nextorm entity maps a fixed set of CLR properties to a fixed set of columns. When the same
-table carries columns a given model does not declare (an extensible attribute table, a sparse set of
-optional columns, a schema shared by several models), the unmapped columns are simply not read.
+A normal nextorm entity maps a fixed set of CLR properties to a fixed set of columns. If a table also contains columns that a particular model does not declare—for example, extensible attributes or optional fields—nextorm normally skips those columns when it reads the entity.
 
-A **dynamic-columns store** is a writable property marked with
-[`DynamicColumnsAttribute`](xref:NextORM.Core.DynamicColumnsAttribute) (or the fluent
-[`EntityPropertyBuilder<T>.DynamicColumnsStore`](xref:NextORM.Core.EntityPropertyBuilder`1.DynamicColumnsStore)).
-When the entity is queried **as a whole**, the generated `SELECT` appends the source's `*` after the
-mapped columns and the store is materialised with every returned column whose name is not one of the
-mapped columns. The store type must be assignable from `Dictionary<string, object?>` — typically
-`Dictionary<string, object?>`, `IDictionary<string, object?>` or `IReadOnlyDictionary<string, object?>`.
+To collect those extra columns, add a writable **dynamic-columns store** marked with
+[`DynamicColumnsAttribute`](xref:NextORM.Core.DynamicColumnsAttribute) or configured through
+[`EntityPropertyBuilder<T>.DynamicColumnsStore`](xref:NextORM.Core.EntityPropertyBuilder`1.DynamicColumnsStore).
+When you query the entity **as a whole**, the generated `SELECT` appends the source's `*` after the
+mapped columns. nextorm puts each returned column that is not mapped into the store. Its type must accept
+a `Dictionary<string, object?>`; common choices are `Dictionary<string, object?>`,
+`IDictionary<string, object?>`, and `IReadOnlyDictionary<string, object?>`.
+
+### Map the store
+
+Mark a writable property to collect the columns the entity does not map:
 
 ```csharp
 [SqlTable("product")]
@@ -34,6 +36,10 @@ public class Product
     public Dictionary<string, object?> Attributes { get; set; } = new();
 }
 ```
+
+### Read the extra columns
+
+Query the whole entity, then enumerate the populated dictionary:
 
 ```csharp
 var products = ctx.From<Product>().ToList();
@@ -54,18 +60,18 @@ select Id, Name, *
  from product
 ```
 
-The mapped columns are read by ordinal as usual; the store reads the fields after them through
-`IDataRecord.GetName`/`GetValue`, skipping any field whose name matches a mapped column (compared
-case-insensitively and after dropping underscores/lower-casing, so a snake-case physical name matches
-its PascalCase property name). The store keys preserve the database column name exactly (the dictionary
-is ordinal); only the skip matching against mapped columns is case-insensitive.
+nextorm reads mapped columns by ordinal as usual, then reads the remaining fields through
+`IDataRecord.GetName`/`GetValue`. It skips any field whose name matches a mapped column, comparing names
+case-insensitively after removing underscores and lowercasing; this lets a snake-case column match a
+PascalCase property. Dictionary keys retain the database column names exactly (the dictionary uses
+ordinal comparison); only the mapped-column check ignores case.
 
 ## Writing dynamic columns
 
-The same store is written back on `INSERT`, `UPDATE` and `MERGE`: the dictionary keys become physical
-column names and their values become bound parameters. The store is read from the entity (or from every
-row of a batch) at execution time, so an open-ended set of columns is persisted without a mapped
-property per column:
+The store also supplies columns for `INSERT`, `UPDATE`, and `MERGE`: its keys become physical column
+names, and its values become bound parameters. nextorm reads the store from the entity—or from each row
+in a batch—at execution time. You can therefore persist an open-ended set of columns without declaring
+a mapped property for each one:
 
 ```csharp
 var product = new Product
@@ -141,23 +147,27 @@ makes the statement alias-qualify the mapped columns and the star.
 
 ## Constraints
 
-The store only applies to a query over a **single physical source** read as a whole
-(`ctx.From<TEntity>()` and its terminals). It is not applied to an explicit projection
-(`Select(x => new { ... })`), and a query with joins is rejected with `NotSupportedException` because
-the appended `*` would also pull in the joined table's columns. A correlated subquery over the entity
-likewise does not collect the store.
+### Query shape
 
-On the read side the keys are only as trustworthy as the schema they come from: the store never
-renders a key into SQL, so it cannot introduce an injection through the column names — the names are
-produced by the database, not by the caller. On the write side the caller supplies the keys, so each one
-is validated (see [Writing dynamic columns](#writing-dynamic-columns)) and quoted with the dialect's
-identifier quoting.
+The store applies only when you query a **single physical source** as a whole
+(`ctx.From<TEntity>()` and its terminals). It does not apply to an explicit projection
+(`Select(x => new { ... })`). A query with joins throws `NotSupportedException`, because the appended
+`*` would also include columns from joined tables. A correlated subquery over the entity does not collect
+the store either.
 
-Two entity-shape rules apply to the store. The entity must be a **reference type**: a value-type
-(`struct`) entity that declares a store is rejected with `InvalidOperationException` when its metadata
-is built, rather than boxing silently - use a class. It must also expose a **public parameterless
-constructor**, because the store is materialised with member-init; a store-bearing entity without one
-is rejected during preparation with `QueryPreparationException`.
+### Read and write trust boundaries
+
+On reads, the database supplies column names and the store never renders them into SQL, so those names
+cannot introduce injection through this feature. On writes, the caller supplies the keys; nextorm
+validates each one (see [Writing dynamic columns](#writing-dynamic-columns)) and quotes it with the
+dialect's identifier rules.
+
+### Entity requirements
+
+The store-bearing entity must be a **reference type**. A value-type (`struct`) entity is rejected with
+`InvalidOperationException` while nextorm builds its metadata, rather than being boxed silently. The entity
+must also have a **public parameterless constructor** because nextorm materializes the store with
+member-init; otherwise, preparation throws `QueryPreparationException`.
 
 ## Limitations
 

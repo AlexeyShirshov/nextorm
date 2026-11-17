@@ -12,9 +12,9 @@ namespace NextORM.Core;
 /// through the provider's native bulk API where one exists, and through a chunked parameterised
 /// <c>INSERT ... VALUES</c> otherwise; the write shape is configured through <see cref="BulkInsertOptions"/>.
 /// <para>
-/// There is deliberately no change tracking: every terminal issues one explicit bulk write, as with
-/// linq2db <c>BulkCopy</c>. The builder is single-use and the source is read once. Unlike
-/// <see cref="InsertBuilder{TEntity}"/>, the native path does not return generated keys — request
+/// There is deliberately no change tracking: each terminal submits one explicit bulk operation, as with
+/// linq2db <c>BulkCopy</c>. The builder retains its source; calling a terminal again runs another operation
+/// from that source. Unlike <see cref="InsertBuilder{TEntity}"/>, the native path does not return generated keys — request
 /// <see cref="ReturningKey{TKey}"/> or <see cref="Returning{TResult}"/> for that (it forces the
 /// portable, <c>RETURNING</c>/<c>OUTPUT</c>-capable path).
 /// </para>
@@ -129,8 +129,8 @@ public sealed class BulkInsertBuilder<TEntity>
     internal IAsyncEnumerable<TEntity>? AsyncSource => _asyncSource;
 
     /// <summary>
-    /// Sets the entities to write from a synchronous sequence. The sequence is iterated once; an empty
-    /// sequence writes nothing and returns 0.
+    /// Sets the entities to write from a synchronous sequence. Each terminal iterates the sequence once;
+    /// an empty sequence writes nothing and returns 0.
     /// </summary>
     /// <param name="entities">The entities to write.</param>
     /// <returns>This builder, for chaining.</returns>
@@ -146,7 +146,7 @@ public sealed class BulkInsertBuilder<TEntity>
     }
 
     /// <summary>
-    /// Sets the entities to write from an asynchronous sequence. The sequence is streamed once.
+    /// Sets the entities to write from an asynchronous sequence. Each terminal streams the sequence once.
     /// </summary>
     /// <param name="entities">The entities to write.</param>
     /// <returns>This builder, for chaining.</returns>

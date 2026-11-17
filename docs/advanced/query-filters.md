@@ -1,6 +1,6 @@
 # Global query filters
 
-> A query filter is a predicate bound to an entity type in the mapping metadata; nextorm `and`s it into every query in which the entity participates — the primary `FROM`, join sources, subqueries and eagerly-loaded children — unless the query calls `IgnoreFilters()`.
+> A query filter is a predicate bound to an entity type in the mapping metadata. nextorm combines it with every query in which that entity participates: the primary `FROM`, join sources, subqueries, and eagerly loaded children. Call `IgnoreFilters()` to disable filters for a query.
 
 **Prerequisites:** [Quickstart](../getting-started/02-quickstart.md) · [Provider overview](../connecting-providers/overview.md) · [Filtering (`Where`)](../guide/03-filtering-where.md)
 
@@ -182,7 +182,11 @@ select id
  where (id = 10 and tenant_id = @p0)
 ```
 
-The original builder is unchanged; only the returned copy ignores the filters. **Repeated calls accumulate (union), they do not replace**: `IgnoreFilters(["a"]).IgnoreFilters(["b"])` disables both `a` and `b`, and the order of calls and duplicate keys do not matter. Type-only and key-only selectors also accumulate independently, while a single `IgnoreFilters(keys, types)` call is an **intersection** — each of its keys applies only to the listed types. A combined call is never folded into another selector's union. A scope that is empty (an empty or `null` key/type list) disables nothing, and an all-or-nothing `IgnoreFilters()` dominates any selective scope combined with it.
+The original builder stays unchanged; only the returned copy carries the filter scope:
+
+- Repeated calls accumulate (union), rather than replace, their scopes. For example, `IgnoreFilters(["a"]).IgnoreFilters(["b"])` disables both keys, regardless of call order or duplicate keys.
+- Type-only and key-only selectors accumulate independently. A single `IgnoreFilters(keys, types)` call instead uses an **intersection**: each key applies only to the listed types, and that combined scope is not folded into another selector's union.
+- An empty or `null` key/type list disables nothing. The all-or-nothing `IgnoreFilters()` call dominates any selective scope combined with it.
 
 Once the query command exists, [`QueryCommand.IgnoreFilters`](xref:NextORM.Core.QueryCommand.IgnoreFilters) reads back the result: it is `true` when **any** filter is disabled — whether by the all-or-nothing form or by a selective scope — and `false` when none is. Its setter is all-or-nothing (`true` disables every filter, `false` clears the scope) because a `bool` cannot express a selective disable; the selective scope itself is the authoritative state.
 
@@ -526,7 +530,11 @@ For each active filter on `TEntity`:
 - if a required column is missing, the filter is **skipped** (no exception) and a `RawSourceFilterSkipped` warning is logged on the `NextORM.QueryFilters` logger category with reason `MissingColumns` and the missing names — the **physical mapped column names** the filter reads, not the caller's declared output names;
 - **with an empty declared-column list**, a filter with a proven zero-column dependency (a predicate that reads no mapped column, such as a constant) is applied; a column-dependent or undetermined filter is skipped with a warning (reason `UndeterminedColumns`).
 
-Filters are evaluated independently — one skipped filter does not stop the others — and [`IgnoreFilters`](#disabling-filters-for-one-query) disables the selected filters before this analysis, so an ignored filter is never reported. The warning is emitted once per skipped filter while the query plan is prepared (a cache miss); a plan-cache hit does not re-emit it. The message carries only the entity type name, the source ordinal, the filter key, the reason and the missing column names (physical mapped column names only) — never SQL text, table names, parameter values or captured values. Wire an `ILoggerFactory` and enable the `NextORM.QueryFilters` category at `Warning` to see it (categories are topic-based, so filtering that category is enough):
+Filters are evaluated independently, so skipping one filter does not stop the others. [`IgnoreFilters`](#disabling-filters-for-one-query) removes selected filters before this analysis; nextorm does not report an ignored filter.
+
+Nextorm emits one warning per skipped filter during plan preparation on a cache miss. A plan-cache hit does not emit the warning again. The message contains only the entity type name, source ordinal, filter key, reason, and missing physical mapped column names. It never includes SQL text, table names, parameter values, or captured values.
+
+To see these warnings, configure an `ILoggerFactory` to include the `NextORM.QueryFilters` category at `Warning` level. Categories are topic-based, so filtering on this category is sufficient:
 
 ```csharp
 using var loggerFactory = LoggerFactory.Create(builder => builder

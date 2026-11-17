@@ -74,15 +74,10 @@ public sealed class MariaDbDialect : MySqlDialect
         $"regexp_replace({value}, {QuoteStringLiteral((ignoreCase ? "(?i)" : "(?-i)") + pattern, escapeBackslash: true)}, {QuoteStringLiteral(replacement, escapeBackslash: true)})";
 
     /// <summary>
-    /// MariaDB has <b>no</b> native JSON storage type, so this is overridden to stay <c>false</c> on
-    /// purpose. Its <c>JSON</c> type is an alias for <c>LONGTEXT CHARACTER SET utf8mb4 COLLATE
-    /// utf8mb4_bin</c> plus a column-level <c>CHECK (json_valid(col))</c>;
-    /// <c>information_schema.COLUMNS.DATA_TYPE</c> reports <c>longtext</c> and the server stores the
-    /// caller's text verbatim (no normalisation, no binary document type). Exposing that as native
-    /// storage would misrepresent the storage and change the binding contract, so <c>Auto</c> stays text,
-    /// an explicit <see cref="JsonColumnStorage.Text"/> stays text, and an explicit
-    /// <see cref="JsonColumnStorage.Native"/> is refused with the named
-    /// <see cref="NotSupportedException"/> before any SQL runs.
+    /// MariaDB's <c>JSON</c> type is an alias for <c>LONGTEXT</c> with a JSON validity check, not native
+    /// JSON storage. Automatic and explicit <see cref="JsonColumnStorage.Text"/> mappings use text
+    /// storage. An explicit <see cref="JsonColumnStorage.Native"/> mapping throws
+    /// <see cref="NotSupportedException"/> before running SQL.
     /// </summary>
     public override bool SupportsJson => false;
 

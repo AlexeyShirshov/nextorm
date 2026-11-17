@@ -19,10 +19,10 @@ namespace NextORM.ClickHouse;
 /// and parameters and renders SQL through <c>ClickHouseDialect</c>.
 /// </summary>
 /// <remarks>
-/// The bulk-insert executor is re-implemented here (the base hook cannot carry the whole-invocation
-/// budget or the explicit option presence) so <see cref="BulkInsertMode"/> resolves against the native
-/// <c>InsertBinaryAsync</c> prerequisites, the session/parallelism request is validated before a row is
-/// read, and the portable path is entered only for the equivalent single-stream request.
+/// Native bulk inserts use <c>InsertBinaryAsync</c> when a ClickHouse client is available. If it is not,
+/// <see cref="BulkInsertMode.Auto"/> can use portable <c>INSERT ... VALUES</c> statements when the
+/// request is compatible with a single stream on the context connection. Unsupported session or
+/// parallelism requests are rejected before the source is read.
 /// </remarks>
 public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInsertNativeOptions, IBulkInsertPortableScope
 {
@@ -72,8 +72,8 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
     /// <summary>
     /// Creates a ClickHouse context bound to an explicitly declared server version that owns a
     /// connection built lazily from <paramref name="connectionString"/>. The version is a caller
-    /// declaration (there is no server probing): it enables the capabilities introduced after the
-    /// pinned baseline (currently the native <c>arrayExcept</c>, ClickHouse 25.9).
+    /// declaration (there is no server probing): it enables capabilities introduced after the pinned
+    /// baseline, such as the native <c>arrayExcept</c> function in ClickHouse 25.9.
     /// </summary>
     /// <param name="serverVersion">The ClickHouse server version this context declares.</param>
     /// <param name="connectionString">The connection string used to create the <c>ClickHouseConnection</c>.</param>
@@ -236,14 +236,13 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
         "TimeOnly projection refused for ClickHouse: there is no native time-of-day type and TimeOnly is bound as String; use an explicit value converter.";
 
     /// <summary>
-    /// Materializes a projected native ClickHouse <c>JSON</c> column. A bare <see cref="JsonObject"/> is
-    /// read as-is; a bare <see cref="JsonDocument"/>/<see cref="JsonElement"/> is adapted from the driver's
-    /// object-root <see cref="JsonObject"/> transport. A SQL <c>NULL</c> becomes a null reference (or
-    /// <see langword="default"/> for the value-type <see cref="JsonElement"/>), which stays distinct from an
-    /// empty object. A <see cref="DateTimeOffset"/> projection is adapted from the driver's
-    /// <see cref="DateTime"/> transport (see <see cref="MapDateTimeOffsetColumn"/>). Every other column is
-    /// mapped by the base implementation, which also resolves a <c>[JsonColumn]</c> converter (its provider
-    /// type is <see cref="JsonObject"/> on ClickHouse).
+    /// Builds an expression to read a projected native ClickHouse <c>JSON</c> column. Bare
+    /// <see cref="JsonObject"/> values are read as-is; <see cref="JsonDocument"/> and
+    /// <see cref="JsonElement"/> values are adapted from the driver's object-root <see cref="JsonObject"/>.
+    /// SQL <c>NULL</c> maps to a null reference, a null nullable <see cref="JsonElement"/>, or
+    /// <see langword="default"/> for a non-nullable <see cref="JsonElement"/>. A
+    /// <see cref="DateTimeOffset"/> projection is adapted from the driver's <see cref="DateTime"/> value.
+    /// Other columns use the base implementation, including its <c>[JsonColumn]</c> converter handling.
     /// </summary>
     /// <param name="column">The projected column being read.</param>
     /// <param name="param">The data-reader expression the accessor is built from.</param>
@@ -400,14 +399,11 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
     private static JsonElement ToJsonElement(JsonObject value) => JsonSerializer.SerializeToElement(value);
 
     /// <summary>
-    /// Creates a <c>ClickHouseDbParameter</c>. The driver rewrites the ADO-style <c>@name</c>
-    /// placeholder to <c>{name:Type}</c> and infers the ClickHouse type from the CLR value, so the
-    /// stored name omits the <c>@</c> prefix. A <see cref="JsonObject"/>, and an object-root
-    /// <see cref="JsonElement"/>/<see cref="JsonDocument"/>, are bound as the native ClickHouse
-    /// <c>JSON</c> type; a rank-1 CLR array whose declared element type is nullable
-    /// (<see cref="Nullable{T}"/> or <see cref="string"/>) is bound as <c>Array(Nullable(T))</c> so its
-    /// null elements survive the driver's non-nullable inference. Any other value keeps its existing
-    /// binding.
+    /// Creates a ClickHouse parameter. The driver stores its name without the <c>@</c> prefix and
+    /// infers the ClickHouse type from the CLR value. <see cref="JsonObject"/> and object-root
+    /// <see cref="JsonElement"/> or <see cref="JsonDocument"/> values bind as native <c>JSON</c>.
+    /// One-dimensional arrays with supported nullable element types bind as
+    /// <c>Array(Nullable(T))</c>, preserving null elements. Other values keep their existing binding.
     /// </summary>
     /// <param name="name">The parameter name, without the provider prefix.</param>
     /// <param name="value">The parameter value, or <see langword="null"/>.</param>
@@ -503,11 +499,10 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
 
 
     /// <summary>
-    /// Creates a <c>ClickHouseDbParameter</c> for a descriptor. A <see cref="TableParameterValue"/> is
-    /// emulated with a native array expanded server-side with <c>arrayJoin(@p)</c>: a scalar row type
-    /// binds as an <c>Array(T)</c> and an entity row type as an <c>Array(Tuple(...))</c> whose tuple
-    /// elements follow the resolved column order. A <see cref="ProcedureParameter.TypeName"/> is SQL
-    /// Server only and is rejected.
+    /// Creates a ClickHouse parameter from a descriptor. A <see cref="TableParameterValue"/> is
+    /// represented by a native array expanded with <c>arrayJoin(@p)</c>: scalar rows bind as
+    /// <c>Array(T)</c>, and entity rows bind as <c>Array(Tuple(...))</c> in resolved column order.
+    /// <see cref="ProcedureParameter.TypeName"/> is SQL Server only and is rejected.
     /// </summary>
     /// <param name="parameter">The parameter descriptor.</param>
     /// <returns>A new ClickHouse parameter configured from <paramref name="parameter"/>.</returns>

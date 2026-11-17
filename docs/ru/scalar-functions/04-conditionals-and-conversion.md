@@ -1,8 +1,10 @@
 # COALESCE (`??`) и CAST
 
-`a ?? b` отображается на двухаргументную замену null у провайдера. Числовое преобразование числового
-операнда — приведение C#, такое как `(double)e.Id`, или вызов `Convert.ToXxx(value)` — отображается на
-`cast(x as <type>)`:
+`a ?? b` отображается на двухаргументную замену NULL у провайдера. Приведение одного числового типа к
+другому — например, `(double)e.Id` — или вызов `Convert.ToXxx(value)` отображается на
+`cast(x as <type>)`. В запросе к базе данных nextorm генерирует для этих выражений SQL, который
+вычисляет база; вне запроса соответствующие операции выполняет локально C#. Помощники `SqlFunctions`
+ниже задают SQL-операции для выражений запросов, а не локальные вычисления. Например:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -48,8 +50,14 @@ select (cast(id as double precision) / 2)
 
 ## Условные функции
 
-`SqlFunctions.Sql.nullif` — ANSI и работает на всех SQL-провайдерах; `greatest`/`least` включаются флагом
-[`SupportsGreatestLeast`](xref:NextORM.Core.ISqlDialect.SupportsGreatestLeast) (его включают PostgreSQL, MySQL/MariaDB, ClickHouse, SQL Server 2022+ и SQLite; SQLite рендерит `max`/`min`). Обработка NULL зависит от провайдера: PostgreSQL, SQL Server 2022+ и ClickHouse 24.12+ игнорируют NULL-аргументы и возвращают NULL, только если все аргументы NULL, тогда как MySQL/MariaDB и SQLite возвращают NULL, если хотя бы один аргумент NULL:
+Используйте `SqlFunctions.Sql.nullif` для SQL-операции `NULLIF`; она работает на всех SQL-провайдерах.
+`greatest`/`least` доступны только если диалект включает
+[`SupportsGreatestLeast`](xref:NextORM.Core.ISqlDialect.SupportsGreatestLeast) (его включают PostgreSQL,
+MySQL/MariaDB, ClickHouse, SQL Server 2022+ и SQLite; SQLite рендерит `max`/`min`). Прежде чем
+использовать их в переносимом между провайдерами запросе, проверьте и поддержку, и политику NULL.
+PostgreSQL, SQL Server 2022+ и ClickHouse 24.12+ игнорируют аргументы NULL и возвращают NULL, только если
+все аргументы равны NULL; MySQL/MariaDB и SQLite возвращают NULL, если хотя бы один аргумент NULL.
+Например, `greatest(NULL, 10)` возвращает `10` в первой группе и `NULL` во второй:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -66,6 +74,11 @@ var rows = dataContext.From<IComplexEntity>()
 select nullif(nullableint, 0) as "NoZero", greatest(id, 10) as "Hi", least(id, 10) as "Lo"
  from complex_entity
 ```
+
+Для выбора между двумя ветвями используйте C#-тернарник (`condition ? a : b`), если подходит его
+переносимая трансляция в `CASE`; используйте `SqlFunctions.Sql.iif`, если нужен помощник в форме функции
+с написанием, выбранным диалектом. `multi_if` предназначен для нативной многоветвевой формы ClickHouse;
+`choose` остаётся только для SQL Server. В таблице перечислены эти варианты и другие условные помощники:
 
 | C# | SQL |
 |---|---|
@@ -84,7 +97,11 @@ select nullif(nullableint, 0) as "NoZero", greatest(id, 10) as "Hi", least(id, 1
 нативное написание через [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String)); `choose` остаётся только для
 SQL Server ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)). Вызов `iif` через
 специализированную поверхность `SqlFunctions.SqlServer` по-прежнему работает по наследованию.
-C#-тернарник `condition ? a : b` отдельный и всегда рендерит переносимый `case when ... end`.
+C#-тернарник `condition ? a : b` отдельный и всегда рендерит переносимый `case when ... end`. В запросе
+к базе данных SQL-условие со значением UNKNOWN (например, сравнение с NULL) не совпадает с `WHEN`, и
+выбирается ветвь `ELSE`. Выбранное значение не коалесцируется: если ветвь возвращает NULL, результат
+остаётся NULL. Поскольку `iif` использует нативное написание диалекта, проверьте поведение целевого
+провайдера, если условие может быть NULL.
 
 Помимо этого ClickHouse предоставляет многоветвевную поверхность `multiIf`
 ([`MultiIf`](xref:NextORM.Core.ISqlDialect.MultiIf),

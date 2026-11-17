@@ -174,7 +174,11 @@ outcomes, not gaps left for a later slice.
 
 ## MariaDB
 
-`nextorm.mariadb` derives `MariaDbDialect` from `MySqlDialect`, so it inherits the whole surface above.
+Both providers expose family-specific calls through `SqlFunctions.MySql`, but that does not make every
+member available on both. If a query must run on both servers, check each member's provider and
+server-version notes; for cross-provider behavior, use `SqlFunctions.Sql` where it provides the operation,
+such as the null-safe comparison below. `nextorm.mariadb` derives `MariaDbDialect` from `MySqlDialect`, so
+it inherits the surface above subject to its own capability and server-version checks.
 The three names it has never supported stay excluded: `uuid_to_bin`/`bin_to_uuid` and
 `json_storage_free`. MariaDB has no such functions (`uuid_to_bin`/`bin_to_uuid` convert through
 `CAST(... AS BINARY(16))`/`CAST(... AS UUID)`, and MariaDB does not implement MySQL's binary-JSON

@@ -365,12 +365,13 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
     }
 
     /// <summary>
-    /// Creates a <c>SqlParameter</c> from a descriptor, additionally applying a structured parameter
-    /// type name. When <see cref="ProcedureParameter.TypeName"/> is set the parameter is marked
-    /// <see cref="SqlDbType.Structured"/> (SqlClient rejects a type name on a non-structured parameter)
-    /// — a structured parameter is <b>input only</b>, so any other <see cref="ParameterDirection"/> is
-    /// rejected. <see cref="SqlDbType.Structured"/> overrides <see cref="ProcedureParameter.DbType"/>
-    /// for that parameter; the legacy value must be a <c>DataTable</c>/<c>IEnumerable&lt;SqlDataRecord&gt;</c>.
+    /// Creates a <c>SqlParameter</c> from the descriptor. If
+    /// <see cref="ProcedureParameter.TypeName"/> is set, the parameter's
+    /// <see cref="SqlParameter.SqlDbType"/> is set to <see cref="SqlDbType.Structured"/>, which SqlClient
+    /// requires for a table type name. Structured parameters are input-only, so this method rejects any
+    /// other <see cref="ParameterDirection"/>. The structured type takes precedence over
+    /// <see cref="ProcedureParameter.DbType"/>. For the legacy path, the value must be a
+    /// <c>DataTable</c> or <c>IEnumerable&lt;SqlDataRecord&gt;</c>.
     /// <para>
     /// When <see cref="ProcedureParameter.Value"/> is a <see cref="TableParameterValue"/> (built with
     /// <see cref="ProcedureParameter.Table{T}(string, string, IEnumerable{T})"/>) the rows are streamed

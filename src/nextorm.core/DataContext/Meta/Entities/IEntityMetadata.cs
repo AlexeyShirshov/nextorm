@@ -3,10 +3,6 @@ namespace NextORM.Core;
 /// <summary>
 /// Read-only mapping metadata for an entity type: the mapped table and its properties.
 /// </summary>
-/// <remarks>
-/// Renamed from <c>IEntityMeta</c> (formerly inconsistent with <see cref="EntityMetadataBuilder{T}"/>).
-/// See <c>docs/specs/design/API-NAMING-REVIEW.md</c> finding P1-11.
-/// </remarks>
 public interface IEntityMetadata
 {
     /// <summary>

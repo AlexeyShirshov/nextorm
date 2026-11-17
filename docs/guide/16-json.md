@@ -1,64 +1,54 @@
 # JSON support across providers
 
-> There is no single portable JSON API: PostgreSQL exposes a native `json`/`jsonb` surface, SQL Server returns a document with a trailing `FOR JSON` clause and offers JSON-as-text functions, MySQL/MariaDB offer the same JSON-as-text functions over the `JSON_EXTRACT`/`JSON_SET` family, and the remaining providers reject JSON constructs.
+> Choose JSON features by task and provider: stream a query result, return one document from SQL Server, or read and modify JSON with provider-specific functions.
 
 **Prerequisites:** [Querying and projections](../engine/index.md) · [Scalar functions](../scalar-functions/07-json-and-xml.md#json-and-jsonb-postgresql) · [Table-valued functions](13-table-valued-functions.md#built-in-table-functions) · [Provider overview](../connecting-providers/overview.md)
 
+## Choose your JSON task
+
+- To serialize a query result as a JSON array or NDJSON stream, use [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream)) or [`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken)); see [Streaming data to a Stream](30-streaming-data.md#json).
+- To return the whole result set as one JSON document from SQL Server, use [`ForJson`](#return-the-whole-result-set-as-one-json-document).
+- To read or modify JSON stored in a text column, use the functions for your provider; see [Read JSON stored in a text column](#read-json-stored-in-a-text-column).
+- To map a CLR object to a JSON column, see [Map a CLR object to a native JSON column](#map-a-clr-object-to-a-native-json-column).
+- To compare provider capabilities, start with the [provider matrix](#provider-matrix). For PostgreSQL construction, aggregation, and access, see the [PostgreSQL section](#postgresql).
+
 ## Overview
 
-nextorm deliberately has no cross-provider JSON function surface. "Working with JSON" means different things on
-different providers, and the engine keeps those mechanisms separate instead of pretending they are one
-feature:
+JSON support depends on the task and provider. nextorm keeps provider-specific SQL functions separate
+rather than presenting them as one portable feature. The main options are:
 
-* **SQL Server** has two independent surfaces. [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[])) executes the query and returns the
-  whole result set as one JSON document (`FOR JSON PATH`/`FOR JSON AUTO`), and [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) provides the JSON-as-text scalar functions
-  (`json_value`, `json_query`, `json_modify`, `isjson`) plus the `openjson` table function. SQL Server
-  2025 (17.x) additionally has a distinct native `json` column type, reachable for `[JsonColumn]` only
-  through an explicit version gate — see
-  [Native `json` on SQL Server 2025+](#native-json-on-sql-server-2025).
+* **SQL Server** has separate features for returning a result set as one document and for working with JSON text.
+  [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[])) executes the query and returns the whole result set as one JSON document (`FOR JSON PATH`/`FOR JSON AUTO`).
+  [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) provides the JSON-as-text scalar functions (`json_value`, `json_query`, `json_modify`, `isjson`) and the `openjson` table function.
+  SQL Server 2025 (17.x) also has a distinct native `json` column type. `[JsonColumn]` can use it only through an explicit version gate; see [Native `json` on SQL Server 2025+](#native-json-on-sql-server-2025).
 * **PostgreSQL** has native `json`/`jsonb` types and exposes the only `json`/`jsonb` function/operator
   surface (`SqlFunctions.Postgres`): construction, aggregation, access, containment and JSONPath.
-* **MySQL and MariaDB** expose the same JSON-as-text surface as SQL Server
-  ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) over the
-  `JSON_EXTRACT`/`JSON_UNQUOTE`/`JSON_SET` family. Their JSON *columns* are not the same thing: MySQL 8
-  has a real `json` type (the server validates, normalises and reports it as `json`), while MariaDB's
-  `JSON` is an alias for `LONGTEXT` plus a `json_valid()` CHECK (reported as `longtext`). Both are used
-  through the **text transport** — a `[JsonColumn]` property serializes to text that the server parses —
-  because neither provider has a bindable native JSON representation, so
-  `JsonColumnStorage.Native` is refused there (see
-  [Map a CLR object to a native JSON column](#map-a-clr-object-to-a-native-json-column)).
-* **ClickHouse** maps its string-JSON extractors (`JSONExtractString`, `JSONExtractInt`,
-  `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `JSONLength`, `JSONType`) — plus
-  the array-returning `JSONExtractKeys`/`JSONExtractArrayRaw` (projecting as `string[]`) and
-  `JSONExtractKeysAndValues` (projecting as `Tuple<string, T>[]`) — and the
-  flat-JSON fast path (`visitParamExtractString`/`Int`/`Float`/`Bool`/`Raw`) through
-  [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract), its JSONPath scalars
-  `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (written as `json_value`/`json_query`/`json_exists`) and its
-  native-JSON functions `JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString` (written as
-  `json_all_paths`/`json_all_paths_with_types`/`to_json_string`) through the same flag. These take a
-  native `JSON` value (`CAST(col AS JSON)` for a `String` column); `JSONAllPaths` projects as `string[]`
-  and `JSONAllPathsWithTypes` as `Map(String, String)` → `Dictionary<string, string>`. ClickHouse also
-  has a native `JSON` *column* type (object-rooted): a `[JsonColumn]` property and a bare
-  `JsonObject`/`JsonDocument`/`JsonElement` projection/parameter map to it
-  (see [Map a CLR object to a native JSON column](#map-a-clr-object-to-a-native-json-column)).
+* **MySQL and MariaDB** expose the same JSON-as-text functions as SQL Server through the
+  `JSON_EXTRACT`/`JSON_UNQUOTE`/`JSON_SET` family
+  ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)).
+  Their JSON columns differ: MySQL 8 has a real `json` type, which the server validates, normalizes, and reports as `json`.
+  MariaDB's `JSON` is an alias for `LONGTEXT` with a `json_valid()` CHECK, and the server reports it as `longtext`.
+  Both providers use **text transport** for `[JsonColumn]`: nextorm serializes the property to text for the server to parse.
+  Neither provider has a bindable native JSON representation, so `JsonColumnStorage.Native` is refused; see [Map a CLR object to a native JSON column](#map-a-clr-object-to-a-native-json-column).
+* **ClickHouse** supports string-JSON extractors (`JSONExtractString`, `JSONExtractInt`,
+  `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `JSONLength`, and `JSONType`).
+  `JSONExtractKeys` and `JSONExtractArrayRaw` return arrays projected as `string[]`; `JSONExtractKeysAndValues` projects as `Tuple<string, T>[]`.
+  The provider also supports the flat-JSON fast path (`visitParamExtractString`/`Int`/`Float`/`Bool`/`Raw`), JSONPath scalars (`JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS`, written as `json_value`/`json_query`/`json_exists`), and native-JSON functions (`JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`, written as `json_all_paths`/`json_all_paths_with_types`/`to_json_string`).
+  These functions use [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract). The native-JSON functions take a native `JSON` value; cast a `String` column with `CAST(col AS JSON)`.
+  `JSONAllPaths` projects as `string[]`; `JSONAllPathsWithTypes` projects as `Map(String, String)`, or `Dictionary<string, string>` in C#.
+  ClickHouse also has a native, object-rooted `JSON` column type. A `[JsonColumn]` property and bare `JsonObject`/`JsonDocument`/`JsonElement` projection or parameter map to it; see [Map a CLR object to a native JSON column](#map-a-clr-object-to-a-native-json-column).
 * **SQLite** exposes the JSON1 surface through the provider-specific `SqlFunctions.Sqlite` (`json`/`jsonb`/
   `json_extract`, the `->`/`->>` operators, `json_set`/`json_patch`, and the `json_each`/`json_tree` table
   functions). The *cross-provider* JSON API is not mapped to it: the native `json`/`jsonb` type and the
   text-JSON names (`json_value`/`json_query`/`json_modify`/`isjson`) throw `NotSupportedException`, so use
   the JSON1 members directly (see the [SQLite provider](../connecting-providers/sqlite.md#sqlite-only-functions)).
-* **Every SQL provider** shares one JSON *terminal*: [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream)) /
-  [`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken)) stream the query's projection to a caller-owned `Stream` as a JSON array or
-  NDJSON, serialized client-side with `System.Text.Json` (see [Streaming data to a Stream](30-streaming-data.md#json)).
-  On SQL Server an eligible flat projection is instead served by the database through a trailing
-  `FOR JSON PATH`, whose single document column is copied to the stream in bounded chunks — an internal
-  optimization with the same output contract, not a change to the scalar `ForJson` below (see
-  [SQL Server native fast-path](30-streaming-data.md#sql-server-native-fast-path)).
-  Preflight validation uses a single exception contract — `NotSupportedException` with the message
-  convention `JSON streaming validation [<token>]: <context>.` and the fixed tokens `mode-options`,
-  `projection`, `names`, `unsupported-column`, `reader-binding`, `in-memory` and
-  `unsupported-execution-form` — and an incompatible reader schema is rejected before any output,
-  framing included. This is a serialization terminal, not a SQL JSON function: it does not change the
-  per-provider JSON surfaces below.
+* **Every SQL provider** shares the JSON terminal [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream)) /
+  [`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken)).
+  It serializes the query projection client-side with `System.Text.Json` and writes a JSON array or NDJSON to a caller-owned `Stream`; see [Streaming data to a Stream](30-streaming-data.md#json).
+  For an eligible flat projection on SQL Server, the database instead uses a trailing `FOR JSON PATH` and copies the single document column to the stream in bounded chunks.
+  This internal optimization has the same output contract and does not change the scalar `ForJson` operator; see [SQL Server native fast-path](30-streaming-data.md#sql-server-native-fast-path).
+  Before writing, the terminal validates options and the projection. It reports `NotSupportedException` using the message pattern `JSON streaming validation [<token>]: <context>.` and these tokens: `mode-options`, `projection`, `names`, `unsupported-column`, `reader-binding`, `in-memory`, and `unsupported-execution-form`.
+  An incompatible reader schema is rejected before nextorm writes any output, including framing. This serialization terminal is not a SQL JSON function and does not change the provider-specific JSON features below.
 
 Because the mechanisms are different, the same conceptual result is written in different ways. Read the
 section for your provider; the [provider matrix](#provider-matrix) and
@@ -111,18 +101,25 @@ select id, somestring
  from complex_entity for json auto
 ```
 
-The optional `root` wraps the document in `ROOT('name')` and `includeNullValues` adds
-`INCLUDE_NULL_VALUES`. `ForJson` returns `null` when the query produces no rows (SQL Server returns SQL
-NULL for an empty `FOR JSON` result). The same server-side `FOR JSON PATH` rendering also backs the
-`WriteJson` native fast-path for an eligible flat projection; that path is an internal optimization and
-does not change `ForJson` itself (see
-[SQL Server native fast-path](30-streaming-data.md#sql-server-native-fast-path)). The clause is placed after `ORDER BY` and before a trailing
-`OPTION (...)`, so it composes with [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])) (apply the hint first, then the
-terminal): a `for json path option (recompile)` query is valid. Use
-[`WithForJson`](xref:NextORM.Core.QueryCommand`1.WithForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)) to only attach the clause and keep the command composable. (Table hints,
-[`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[])), attach to the `FROM` table and are independent of the
-JSON clause.) A dialect that does not support the clause rejects the command, and combining `ForJson`
-with `ForXml` throws `NotSupportedException("FOR JSON and FOR XML cannot be combined.")`.
+The optional `root` wraps the document in `ROOT('name')`, and `includeNullValues` adds
+`INCLUDE_NULL_VALUES`. `ForJson` returns `null` when the query produces no rows because SQL Server returns
+SQL `NULL` for an empty `FOR JSON` result.
+
+The server-side `FOR JSON PATH` rendering also backs the `WriteJson` native fast path for an eligible flat
+projection. This internal optimization does not change `ForJson`; see
+[SQL Server native fast-path](30-streaming-data.md#sql-server-native-fast-path).
+
+The clause appears after `ORDER BY` and before a trailing `OPTION (...)`. It composes with
+[`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])); apply the hint before the terminal. For
+example, `for json path option (recompile)` is valid. To attach the clause and keep the command
+composable, use
+[`WithForJson`](xref:NextORM.Core.QueryCommand`1.WithForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)).
+Table hints such as
+[`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[])) attach to the `FROM` table
+and do not depend on the JSON clause.
+
+A dialect that does not support the clause rejects the command. Combining `ForJson` with `ForXml` throws
+`NotSupportedException("FOR JSON and FOR XML cannot be combined.")`.
 
 ### Read JSON stored in a text column
 
@@ -254,13 +251,16 @@ select id
  from complex_entity where ((@norm_p0 ->> 'name') = 'Alice')
 ```
 
-Provider parameter binding: a plain JSON string parameter is bound as `text`. The six
-accessors `json_get`, `json_get_text`, `json_get_path` and `json_get_path_text` (both the string-key and
-the integer-index overloads) are the exception — they apply **contextual SQL typing**: a raw client
-document value (a literal, a captured value or an explicit parameter) is parsed as `jsonb` in the generated
-SQL, and the right operand is typed per overload (`text` for a string key, `integer` for an index, `text[]`
-for a path). Native `json`/`jsonb` columns and server-side JSON expressions are **not** cast and keep their
-operand and result types. For every other JSON function, parse a plain string explicitly with
+PostgreSQL binds a plain JSON string parameter as `text`. The six accessors `json_get`, `json_get_text`,
+`json_get_path`, and `json_get_path_text` (with both string-key and integer-index overloads) handle raw
+client document values differently: they apply **contextual SQL typing**.
+
+For these accessors, generated SQL parses a raw client document value (a literal, captured value, or
+explicit parameter) as `jsonb`. It types the right operand by overload: `text` for a string key,
+`integer` for an index, and `text[]` for a path. Native `json`/`jsonb` columns and server-side JSON
+expressions are not cast, so they keep their operand and result types.
+
+For every other JSON function, parse a plain string explicitly with
 `SqlFunctions.Postgres.json_cast(value)` (`cast(value as jsonb)`).
 
 ### Map a CLR object to a native JSON column

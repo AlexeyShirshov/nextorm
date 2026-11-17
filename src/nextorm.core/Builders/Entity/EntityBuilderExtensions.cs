@@ -5,45 +5,40 @@ using System.Runtime.CompilerServices;
 namespace NextORM.Core;
 
 /// <summary>
-/// Terminal operators for <see cref="EntityBuilder{TEntity}"/>. They are extension methods so the
-/// builder itself stays a focused query-shaping type; each one simply forwards to the command it
-/// builds. Call sites are unchanged (instance-style invocation still resolves here).
+/// Extension methods for <see cref="EntityBuilder{TEntity}"/> that bind raw sources to mapped entity
+/// types and execute query terminals.
 /// </summary>
 public static class EntityBuilderExtensions
 {
     /// <summary>
     /// Binds a direct raw source (<see cref="DataContextExtensions.FromSql"/> or
-    /// <see cref="DataContextExtensions.From(IDataContext, string)"/>) to an entity type so its global
-    /// query filters may be applied to the source. <typeparamref name="TEntity"/> selects the effective
-    /// metadata (a configured mapping wins over the auto mapping).
+    /// <see cref="DataContextExtensions.From(IDataContext, string)"/>) to
+    /// <typeparamref name="TEntity"/> so its global query filters can be applied. A configured mapping
+    /// takes precedence over the auto mapping.
     /// <para>
-    /// The caller also declares the output columns the raw SQL exposes; each filter is applied
-    /// best-effort against that list, and a filter whose columns are missing is skipped rather than
-    /// failing the query. Binding neither adds nor renames output columns and is <b>not</b> a security
-    /// guarantee: a skipped filter means its predicate does not run.
+    /// Declare the output columns exposed by the raw SQL. Binding does not add or rename columns and
+    /// does not guarantee that every filter runs, so it is not a security boundary.
     /// </para>
     /// <para>
     /// Only direct named/raw sources qualify, and the call must be the first operation after the source
-    /// is created (before predicates, projection or joins). The receiver is not mutated; a new typed
-    /// builder is returned.
+    /// is created (before predicates, projection or joins). The receiver is not mutated.
     /// </para>
     /// <para>
     /// Binding is self-sufficient: it registers <typeparamref name="TEntity"/>'s mapping on the context
     /// through the same path as <c>From&lt;TEntity&gt;()</c>, so typed member projections and entity
-    /// materialization work with no prior <c>From&lt;TEntity&gt;</c>. The registration is process-wide,
-    /// exactly like <c>From&lt;TEntity&gt;()</c>; a repeated bind is a no-op. A mapping already
-    /// configured with <c>From&lt;TEntity&gt;(cfg)</c> is preserved (the configured mapping wins over
-    /// the auto mapping), so register a custom mapping <b>before</b> binding when one is needed.
+    /// materialization work with no prior <c>From&lt;TEntity&gt;</c>. Registration is process-wide, as
+    /// it is for <c>From&lt;TEntity&gt;()</c>; a repeated bind is a no-op. Register a custom mapping with
+    /// <c>From&lt;TEntity&gt;(cfg)</c> before binding when needed.
     /// </para>
     /// <para>
     /// A filter whose declared columns are all present is injected; a filter with missing columns is
     /// skipped rather than failing the query. With an empty declared-column list, a filter with a proven
-    /// zero-column dependency is applied, while a column-dependent or undetermined filter is skipped.
-    /// One <c>RawSourceFilterSkipped</c> warning is logged per skipped filter on the
-    /// <c>NextORM.QueryFilters</c> category (level <c>Warning</c>, reasons <c>MissingColumns</c> /
-    /// <c>UndeterminedColumns</c>; the missing names are the physical mapped column names) while a plan is
-    /// prepared on a cache miss; a cache hit does not re-emit it. The message carries no SQL text, table
-    /// names, parameter or captured values.
+    /// zero-column dependency is applied; column-dependent or undetermined filters are skipped. Each
+    /// skipped filter emits one <c>RawSourceFilterSkipped</c> warning on the
+    /// <c>NextORM.QueryFilters</c> category while a plan is prepared on a cache miss. The reason is
+    /// <c>MissingColumns</c> or <c>UndeterminedColumns</c>; missing names are physical mapped columns.
+    /// Cache hits do not re-emit the warning, and its message contains no SQL text, table names,
+    /// parameter names, or captured values.
     /// </para>
     /// </summary>
     /// <typeparam name="TEntity">The mapped entity type whose metadata and filters are used.</typeparam>
@@ -173,7 +168,11 @@ public static class EntityBuilderExtensions
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
-    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
+    /// <param name="destination">
+    /// The caller-owned output stream; it remains open. On a read, serialization, output, or cancellation
+    /// error, the operation stops and propagates the original exception. Bytes already written remain;
+    /// the writer does not roll back, append a recovery tail, or call <c>Stream.Flush</c>.
+    /// </param>
     /// <exception cref="NotSupportedException">The query runs on the in-memory provider.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void WriteJson<TEntity>(this EntityBuilder<TEntity> builder, Stream destination)
@@ -186,7 +185,11 @@ public static class EntityBuilderExtensions
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
-    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
+    /// <param name="destination">
+    /// The caller-owned output stream; it remains open. On a read, serialization, output, or cancellation
+    /// error, the operation stops and propagates the original exception. Bytes already written remain;
+    /// the writer does not roll back, append a recovery tail, or call <c>Stream.Flush</c>.
+    /// </param>
     /// <param name="options">The JSON container and shaping options.</param>
     /// <exception cref="NotSupportedException">The query runs on the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -200,7 +203,11 @@ public static class EntityBuilderExtensions
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
-    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
+    /// <param name="destination">
+    /// The caller-owned output stream; it remains open. On a read, serialization, output, or cancellation
+    /// error, the operation stops and propagates the original exception. Bytes already written remain;
+    /// the writer does not roll back, append a recovery tail, or call <c>Stream.Flush</c>.
+    /// </param>
     /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
     /// <returns>A task that completes when the whole document has been written.</returns>
     /// <exception cref="NotSupportedException">The query runs on the in-memory provider.</exception>
@@ -215,7 +222,11 @@ public static class EntityBuilderExtensions
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
-    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
+    /// <param name="destination">
+    /// The caller-owned output stream; it remains open. On a read, serialization, output, or cancellation
+    /// error, the operation stops and propagates the original exception. Bytes already written remain;
+    /// the writer does not roll back, append a recovery tail, or call <c>Stream.Flush</c>.
+    /// </param>
     /// <param name="options">The JSON container and shaping options.</param>
     /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
     /// <returns>A task that completes when the whole document has been written.</returns>
@@ -232,7 +243,11 @@ public static class EntityBuilderExtensions
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
-    /// <param name="stream">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
+    /// <param name="stream">
+    /// The caller-owned output stream; it remains open. On a read, serialization, output, or cancellation
+    /// error, the operation stops and propagates the original exception. Bytes already written remain;
+    /// the writer does not roll back, append a recovery tail, or call <c>Stream.Flush</c>.
+    /// </param>
     /// <param name="options">The JSON container and shaping options.</param>
     /// <param name="cancellationToken">A token observed while preparing, reading rows and writing to the stream.</param>
     /// <param name="params">
@@ -256,7 +271,11 @@ public static class EntityBuilderExtensions
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
-    /// <param name="stream">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
+    /// <param name="stream">
+    /// The caller-owned output stream; it remains open. On a read, serialization, output, or cancellation
+    /// error, the operation stops and propagates the original exception. Bytes already written remain;
+    /// the writer does not roll back, append a recovery tail, or call <c>Stream.Flush</c>.
+    /// </param>
     /// <param name="options">The JSON container and shaping options.</param>
     /// <param name="cancellationToken">A token observed while preparing, reading rows and writing to the stream.</param>
     /// <param name="params">
@@ -1042,7 +1061,7 @@ public static class EntityBuilderExtensions
     }
 
     /// <summary>
-    /// Counts the matching rows by emitting a SQL <c>COUNT(*)</c>.
+    /// Counts the matching rows; database providers translate this aggregate to <c>COUNT(*)</c>.
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
@@ -1050,7 +1069,7 @@ public static class EntityBuilderExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int Count<TEntity>(this EntityBuilder<TEntity> builder) => CountCore(builder, ReadOnlySpan<object?>.Empty);
     /// <summary>
-    /// Counts the matching rows by emitting a SQL <c>COUNT(*)</c>.
+    /// Counts the matching rows; database providers translate this aggregate to <c>COUNT(*)</c>.
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
@@ -1059,7 +1078,7 @@ public static class EntityBuilderExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int Count<TEntity>(this EntityBuilder<TEntity> builder, params ReadOnlySpan<object?> @params) => CountCore(builder, @params);
     /// <summary>
-    /// Counts the matching rows asynchronously by emitting a SQL <c>COUNT(*)</c>.
+    /// Counts the matching rows asynchronously; database providers translate this aggregate to <c>COUNT(*)</c>.
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
@@ -1068,7 +1087,7 @@ public static class EntityBuilderExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Task<int> CountAsync<TEntity>(this EntityBuilder<TEntity> builder, params object[] @params) => CountAsync(builder, CancellationToken.None, @params);
     /// <summary>
-    /// Counts the matching rows asynchronously by emitting a SQL <c>COUNT(*)</c>.
+    /// Counts the matching rows asynchronously; database providers translate this aggregate to <c>COUNT(*)</c>.
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
@@ -1083,8 +1102,8 @@ public static class EntityBuilderExtensions
     }
 
     /// <summary>
-    /// Counts the matching rows as a 64-bit value by emitting a SQL <c>COUNT_BIG(*)</c> (<c>COUNT(*)</c>
-    /// surfaced as <see cref="long"/> on providers without a separate 64-bit count function).
+    /// Counts the matching rows as a 64-bit value. Database providers use <c>COUNT_BIG(*)</c> where
+    /// available, and surface <c>COUNT(*)</c> as <see cref="long"/> otherwise.
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
@@ -1092,7 +1111,8 @@ public static class EntityBuilderExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static long LongCount<TEntity>(this EntityBuilder<TEntity> builder) => LongCountCore(builder, ReadOnlySpan<object?>.Empty);
     /// <summary>
-    /// Counts the matching rows as a 64-bit value by emitting a SQL <c>COUNT_BIG(*)</c>.
+    /// Counts the matching rows as a 64-bit value. Database providers use <c>COUNT_BIG(*)</c> where
+    /// available, and surface <c>COUNT(*)</c> as <see cref="long"/> otherwise.
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
@@ -1101,7 +1121,8 @@ public static class EntityBuilderExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static long LongCount<TEntity>(this EntityBuilder<TEntity> builder, params ReadOnlySpan<object?> @params) => LongCountCore(builder, @params);
     /// <summary>
-    /// Counts the matching rows as a 64-bit value asynchronously by emitting a SQL <c>COUNT_BIG(*)</c>.
+    /// Counts the matching rows asynchronously as a 64-bit value. Database providers use
+    /// <c>COUNT_BIG(*)</c> where available, and surface <c>COUNT(*)</c> as <see cref="long"/> otherwise.
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
@@ -1110,7 +1131,8 @@ public static class EntityBuilderExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Task<long> LongCountAsync<TEntity>(this EntityBuilder<TEntity> builder, params object[] @params) => LongCountAsync(builder, CancellationToken.None, @params);
     /// <summary>
-    /// Counts the matching rows as a 64-bit value asynchronously by emitting a SQL <c>COUNT_BIG(*)</c>.
+    /// Counts the matching rows asynchronously as a 64-bit value. Database providers use
+    /// <c>COUNT_BIG(*)</c> where available, and surface <c>COUNT(*)</c> as <see cref="long"/> otherwise.
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>

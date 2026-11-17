@@ -1,13 +1,18 @@
 # Массовая вставка (bulk)
 
-`CreateBulkInsertBuilder<TEntity>()` записывает весь набор одним явным вызовом, без change tracking. Где у
-провайдера есть нативный bulk API, он может использоваться — бинарный `COPY` в PostgreSQL, `SqlBulkCopy` в
-SQL Server, `MySqlBulkCopy` в MySQL/MariaDB и `InsertBinaryAsync` в ClickHouse; иначе набор пишется
-параметризованным `INSERT ... VALUES`, при необходимости — чанками. Какой путь выполняется, выбирает
-[режим выполнения](#режимы-выполнения), а не один только провайдер.
+`CreateBulkInsertBuilder<TEntity>()` записывает набор отображённых сущностей
+одним явным вызовом, без change tracking. Для обычной вставки передайте набор в
+`Values(...)` и вызовите `BulkInsert()`; для асинхронного источника используйте
+`BulkInsertAsync()`. Режим выполнения выбирает нативный bulk API провайдера или
+параметризованный `INSERT ... VALUES`; выбор описан в разделе
+[Режимы выполнения](#режимы-выполнения).
 
 Массовая вставка работает поверх обычного маппинга; объявление ключа, identity и computed-колонок — в
 [Изменении данных (INSERT)](17-insert-statement.md).
+
+## Запись набора
+
+В примере ниже сущность сопоставлена с таблицей `orders`. Значение identity генерирует база данных:
 
 ```csharp
 using System.ComponentModel.DataAnnotations;
@@ -34,8 +39,6 @@ public sealed class Order : IOrder
     public decimal Total { get; set; }
 }
 ```
-
-## Запись набора
 
 Identity- и computed-колонки исключаются автоматически, поэтому указываются только записываемые.
 

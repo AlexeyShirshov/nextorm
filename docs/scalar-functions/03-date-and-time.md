@@ -25,7 +25,7 @@ select cast(strftime('%Y', dt) as integer) as 'Year', cast(strftime('%m', dt) as
 ... extract(year from dt) ... extract(month from dt) ... extract(day from dt) ...
 ```
 
-Output:
+The query returns this row:
 
 | Year | Month | Day |
 |------|-------|-----|
@@ -55,8 +55,9 @@ session `DATEFIRST`); use `extract("dow", value)` or `extract("isodow", value)` 
 
 ## DateTimeOffset
 
-`DateTimeOffset` is a supported column and scalar type on every provider: the driver reads it back
-without a value converter. The declared/stored SQL type is provider-specific:
+`DateTimeOffset` is supported as a column and scalar on every provider, and the driver reads it without a
+value converter. The SQL type differs by provider, which determines whether the database retains the
+original offset or only the represented time value:
 
 | Provider | Type |
 |---|---|
@@ -68,9 +69,8 @@ without a value converter. The declared/stored SQL type is provider-specific:
 
 ### Server-side translation
 
-The supported `DateTimeOffset` operations are rendered as SQL and evaluated **on the server** — the
-client clock and the client's local time zone are never captured, and no operation is silently computed
-as a client parameter:
+Supported `DateTimeOffset` operations become SQL and run **on the server**. In particular, `Now` and
+`UtcNow` use the database clock, not the client clock or the client's local time zone:
 
 | C# | SQL |
 |---|---|
@@ -82,43 +82,44 @@ as a client parameter:
 Nullable values and a `DateTimeOffset?` in `Where`/`Select`/`OrderBy` follow the ordinary rules: SQL
 `NULL` stays `null`, and `HasValue`/`Value` are transparent.
 
-Members with **no** SQL translation **fail closed** with `NotSupportedException` while the query is
-built, before any client evaluation or constant folding:
+The following members have no SQL translation and are rejected with `NotSupportedException` while the
+query is prepared. nextorm does not fall back to evaluating them on the client or folding them as
+constants:
 
-* `.Offset`, `.UtcDateTime`, `.LocalDateTime`, `.Date`, `.Ticks` and `.DayOfWeek` — including as the
-  receiver of a further access (`e.Value.Offset.TotalMinutes`, `e.Value.UtcDateTime.Year`,
-  `e.Value.Date.AddDays(1)`);
-* `.ToOffset(...)`, whether the argument is a constant or dynamic;
-* `.AddTicks(...)` and `.Add(TimeSpan)` — guarded now; their server translation is deferred to a later
-  release;
-* a fractional `.AddYears`/`.AddMonths` — the CLR amount is an `int`.
+* **Properties:** `.Offset`, `.UtcDateTime`, `.LocalDateTime`, `.Date`, `.Ticks` and `.DayOfWeek`,
+  including when used as the receiver of another access (`e.Value.Offset.TotalMinutes`,
+  `e.Value.UtcDateTime.Year`, `e.Value.Date.AddDays(1)`).
+* **Offset conversion:** `.ToOffset(...)`, whether its argument is constant or dynamic.
+* **Arithmetic without a supported SQL form:** `.AddTicks(...)` and `.Add(TimeSpan)`; server translation
+  is deferred to a later release. Fractional `.AddYears(...)` and `.AddMonths(...)` are also unsupported
+  because the CLR amount is an `int`.
 
 The refusal does not depend on the projection form: an anonymous projection, a DTO, a predicate and a
-bare scalar (`Select(e => e.Value.DayOfWeek)`, including `.First()`/`.Single()` over it) all report the
-same message during preparation, before any SQL is sent. It is also limited to row-mapping providers
-(`IContextEnvironment.NeedMapping`); the in-memory provider keeps evaluating those members client-side.
-Members that do have a translation (`.Year` … `.DayOfYear`, the `Add*` family, `Now`/`UtcNow`) keep
-working in every projection form.
+bare scalar (`Select(e => e.Value.DayOfWeek)`, including `.First()`/`.Single()` over it) all fail during
+preparation with the same message, before SQL is sent. This guard applies to row-mapping providers
+(`IContextEnvironment.NeedMapping`); the in-memory provider continues to evaluate these members on the
+client. Translated members (`.Year` … `.DayOfYear`, the `Add*` family, `Now`/`UtcNow`) work in every
+projection form.
 
-`value.ToString(format)` and `string.Format` are still translated (see
+`value.ToString(format)` and `string.Format` remain translated (see
 [Formatting dates and numbers to strings](#formatting-dates-and-numbers-to-strings)). A
-`DateTimeOffset` table-valued-parameter column and a PostgreSQL array element map to the
+`DateTimeOffset` table-valued parameter column and a PostgreSQL array element map to the
 timestamp-with-time-zone form.
 
 ### Per-provider zone and precision limits
 
-Only SQL Server keeps the offset as part of the value; every other provider stores an instant (or a
-wall time) and materialises an offset-zero `DateTimeOffset` (a canonical `+00:00`):
+Only SQL Server retains the original offset. The other providers materialize an offset-zero
+`DateTimeOffset` (`+00:00`); MySQL/MariaDB additionally store a wall-clock value without the offset:
 
 | Provider | Clock and offset | Parts and arithmetic |
 |---|---|---|
 | SQL Server | `datetimeoffset` preserves the value's offset; `Now` is `sysdatetimeoffset()`, `UtcNow` is `todatetimeoffset(sysutcdatetime(), '+00:00')`. | Native `datepart` (per the value's offset) and native `dateadd`, which preserves the offset; a fractional day/hour/minute/second/millisecond amount is scaled to a finer `dateadd` unit so it is not truncated. |
-| PostgreSQL | `now()` returns an instant independent of the session time zone; `timestamp with time zone` stores an instant, so the materialised value is offset-zero. | Parts and `Add*` run on the UTC wall time (`at time zone 'UTC'`) and `Add*` is re-typed to `timestamptz`, so the result does not depend on the session `TimeZone` or DST. |
+| PostgreSQL | `now()` returns an instant independent of the session time zone; `timestamp with time zone` stores an instant, so the materialized value is offset-zero. | Parts and `Add*` run on the UTC wall time (`at time zone 'UTC'`) and `Add*` is re-typed to `timestamptz`, so the result does not depend on the session `TimeZone` or DST. |
 | MySQL / MariaDB | `utc_timestamp(6)`; a `datetime` column stores a wall time and **does not** keep the offset, so the original offset is not restored. | Native date parts of the stored wall time and native `date_add`; a fractional day/hour/minute amount is scaled to a finer unit. |
-| ClickHouse | `now64(6, 'UTC')`; `DateTime64(6)` does **not** store the offset. Microsecond precision is preserved on materialisation. | Parts and `Add*` normalise to UTC (`toTimeZone(value, 'UTC')`); a coarse-unit fractional amount is scaled to `addMicroseconds` so the fraction survives. |
-| SQLite | `strftime('%Y-%m-%d %H:%M:%f','now') \|\| '+00:00'`; dynamic typing stores a UTC instant as text, at millisecond precision. | The `strftime`/date-modifier parts and arithmetic of the UTC text; an offset-bearing text is treated as an instant. |
+| ClickHouse | `now64(6, 'UTC')`; `DateTime64(6)` does **not** store the offset. Microsecond precision is preserved on materialization. | Parts and `Add*` normalize to UTC (`toTimeZone(value, 'UTC')`); a coarse-unit fractional amount is scaled to `addMicroseconds` so the fraction survives. |
+| SQLite | `strftime('%Y-%m-%d %H:%M:%f','now') \|\| '+00:00'`; dynamic typing stores a UTC instant as text, at millisecond precision. | The `strftime`/date-modifier parts and arithmetic of the UTC text; offset-bearing text is treated as an instant. |
 
-On ClickHouse the value is materialised through a reader adaptation that reads the driver's `DateTime`
+On ClickHouse the value is materialized through a reader adaptation that reads the driver's `DateTime`
 (the driver surfaces `DateTime64` as `System.DateTime`) and reinterprets it as an offset-zero
 `DateTimeOffset`, retaining microseconds.
 
@@ -166,12 +167,12 @@ the family flag:
 is fixed at the start of the statement and `transaction_timestamp()` at the start of the transaction.
 Both `date_subtract` forms return `timestamp with time zone` (the shipped signatures return
 `DateTime?`, not `interval`), and `justify_interval` returns an `interval`, so it is mapped through the
-provider's interval handling: a returned interval carrying a non-zero month component is rejected with
-`InvalidCastException` on the mapped-column path. A NULL argument yields NULL, and every name is gated
-individually, so a provider without `IScalarFunctions` fails closed with `NotSupportedException`.
+provider's interval handling: a returned interval with a non-zero month component is rejected with
+`InvalidCastException` on the mapped-column path. A NULL argument yields NULL. Each name is gated
+individually, so a provider without `IScalarFunctions` rejects the call with `NotSupportedException`.
 
 Three members are refused while the query is prepared, because each returns `void` and the expression
-model has no `void`-typed projection, so no faithful CLR result exists and no SQL is emitted:
+model has no `void`-typed projection. No faithful CLR result can be represented, so nextorm emits no SQL:
 
 | Refused member | Tested reason |
 |---|---|
@@ -388,7 +389,7 @@ select sysdatetime() as [Now], sysdatetimeoffset() as [NowOffset], sysutcdatetim
 `timefromparts`, `datetime2fromparts` and `datetimeoffsetfromparts` require the trailing precision to
 be a **constant integer in `0..7`**: a non-constant, `null` or out-of-range value throws
 `NotSupportedException` before any SQL is emitted. A `null` in any other part yields a `null` result,
-like the native function. `timefromparts` materialises as a `TimeSpan`, the `smalldatetime`/`datetime`/
+like the native function. `timefromparts` materializes as a `TimeSpan`, the `smalldatetime`/`datetime`/
 `datetime2` builders as a `DateTime`, and the clock- and offset-returning functions as a `DateTime` /
 `DateTimeOffset` matching the T-SQL result type. This is the date half of the SQL Server-only scalar
 surface; the other T-SQL scalars are documented on the matching category pages.
@@ -396,21 +397,23 @@ surface; the other T-SQL scalars are documented on the matching category pages.
 Reading a native `time` does not change the mapped storage type. A computed `timefromparts`/`cast`
 result and a physical `time`, `time(3)` or `time(7)` column are read as a `TimeSpan` per row, keeping
 the precision the value carries. A mapped **duration property** — a `TimeSpan` property with
-`[Duration(...)]` or the fluent `Duration(...)` — still stores `bigint` on SQL Server and still scales
-through its `DurationUnit`; it can hold negative values and values of 24 h or more, neither of which a
-native `time` can represent. A mapped `TimeOnly` projection keeps the native time-of-day value and its exact
-ticks on **SQL Server** (`time`, read through the driver's `TimeSpan`, 100 ns) and **PostgreSQL** (`time`,
-microseconds); a returned value outside `[00:00:00, 24:00:00)` is refused with `NotSupportedException`
-instead of being wrapped or truncated. **MySQL** and **MariaDB** refuse the projection because `TIME` is a
-duration that can be negative or 24 h or more, and **SQLite** and **ClickHouse** refuse it because there is
-no native time-of-day type (ClickHouse binds `TimeOnly` as `String`). A **declared** value converter takes
-precedence over that policy: the mapper's `TimeOnly` arm is applied only when the column has **no** converter,
-so with an explicit converter the converter owns the mapping on **every** provider. This was observed reading
-`TIME` into `TimeOnly` on **MySQL** and **MariaDB**; on **SQLite** (integer ticks or text) and **ClickHouse**
-(`String`) such a converter has to reinterpret or parse the stored value, which is the caller's explicit
-decision and therefore not refused — the policy refusal applies to **unconverted** projections only. JSON streaming shapes and the CSV terminal still reject `TimeOnly`,
-each with its own `NotSupportedException` raised while the shape is planned, and
-`TimeSpan`/`DateTime`/`DateOnly` behaviour is unchanged.
+`[Duration(...)]` or the fluent `Duration(...)` — still stores `bigint` on SQL Server and scales through
+its `DurationUnit`. Unlike a time of day, a duration can be negative or 24 hours or longer.
+
+**`TimeOnly` projections.** A mapped projection keeps the time-of-day value and its exact ticks on
+**SQL Server** (`time`, read through the driver's `TimeSpan`, 100 ns) and **PostgreSQL** (`time`,
+microseconds). A result outside `[00:00:00, 24:00:00)` is rejected with `NotSupportedException`, not
+wrapped or truncated. **MySQL** and **MariaDB** reject an unconverted projection because `TIME` is a
+duration and can be negative or 24 hours or longer. **SQLite** and **ClickHouse** reject it because they
+have no native time-of-day type; ClickHouse binds `TimeOnly` as `String`.
+
+**Explicit converters and other shapes.** A declared value converter takes precedence: the mapper's
+`TimeOnly` arm applies only when the column has **no** converter, so an explicit converter owns the
+mapping on every provider. This was observed when reading `TIME` as `TimeOnly` on **MySQL** and
+**MariaDB**. On **SQLite** (integer ticks or text) and **ClickHouse** (`String`), the converter must
+reinterpret or parse the stored value; that is the caller's choice, so the unconverted-projection refusal
+does not apply. JSON streaming shapes and the CSV terminal still reject `TimeOnly`, each with its own
+`NotSupportedException` during shape planning. `TimeSpan`/`DateTime`/`DateOnly` behaviour is unchanged.
 
 ## Date conversion and parts (ClickHouse)
 

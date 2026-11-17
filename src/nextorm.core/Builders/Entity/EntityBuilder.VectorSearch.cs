@@ -37,7 +37,7 @@ public partial class EntityBuilder<TEntity>
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="vectorSelector"/> or <paramref name="queryVector"/> is null.</exception>
     /// <exception cref="ArgumentException">The query vector has no dimensions, or an enum value is invalid.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="topK"/> is not positive.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="topK"/> is not positive in exact mode; approximate mode reports this condition as <see cref="InvalidOperationException"/>.</exception>
     public QueryCommand<VectorSearchResult<TEntity>> VectorSearch<TVector>(
         Expression<Func<TEntity, TVector>> vectorSelector,
         TVector queryVector,

@@ -54,7 +54,7 @@ public sealed partial class InsertBuilder<TEntity>
     /// </summary>
     /// <typeparam name="TValue">The column's CLR type.</typeparam>
     /// <param name="column">Selects the mapped column to write.</param>
-    /// <param name="value">Selects the mapped column to read the value from.</param>
+    /// <param name="value">Selects the mapped column to copy, or a parameter-free expression folded into a bound value.</param>
     /// <returns>This builder, for chaining.</returns>
     /// <exception cref="InvalidOperationException">The builder already uses <see cref="Values(TEntity)"/>.</exception>
     /// <exception cref="NotSupportedException">The value expression is neither a mapped property nor a constant.</exception>

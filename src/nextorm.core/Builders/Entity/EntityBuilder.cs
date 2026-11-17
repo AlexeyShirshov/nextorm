@@ -1043,8 +1043,9 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
     }
     /// <summary>
     /// Declares a split-query eager load for <paramref name="collection"/>: after the parent query is
-    /// materialized, one extra child query per key chunk is executed to fetch the children, and they are
-    /// stitched onto the parents in memory (two round trips, never N+1). Only the stitching terminals
+    /// materialized, the loader fetches children with one query per key chunk and stitches them onto the
+    /// parents in memory, rather than running one child query per parent.
+    /// Only the stitching terminals
     /// (<c>ToList</c>/<c>ToListAsync</c> and <c>ToArray</c>/<c>ToArrayAsync</c>) honor the declaration;
     /// <c>ToHashSet</c>, <c>ToDictionary</c>, <c>First</c>, <c>FirstOrDefault</c>, <c>Single*</c>,
     /// <c>ToEnumerable</c>, <c>ToAsyncEnumerable</c> and <see cref="ToCommand"/> run the parent only and
@@ -6366,9 +6367,10 @@ public class EntityBuilder : ICloneable
     }
 
     /// <summary>
-    /// Overrides identifier quoting for the commands this builder creates (see
-    /// <see cref="EntityBuilder{TEntity}.WithQuotedIdentifiers"/>).
+    /// Sets whether commands created by this builder quote physical table and column names.
     /// </summary>
+    /// <param name="value"><see langword="true"/> to quote identifiers; otherwise, <see langword="false"/>.</param>
+    /// <returns>A new builder with the override; this builder is unchanged.</returns>
     public EntityBuilder WithQuotedIdentifiers(bool value = true)
     {
         var b = Clone();
@@ -6378,9 +6380,11 @@ public class EntityBuilder : ICloneable
         return b;
     }
     /// <summary>
-    /// Overrides the naming convention for the commands this builder creates (see
-    /// <see cref="EntityBuilder{TEntity}.WithNamingConvention"/>).
+    /// Sets the naming convention for commands created by this builder. Pass <see langword="null"/>
+    /// to use the context's default convention.
     /// </summary>
+    /// <param name="convention">The convention to use, or <see langword="null"/> to inherit the context default.</param>
+    /// <returns>A new builder with the override; this builder is unchanged.</returns>
     public EntityBuilder WithNamingConvention(INamingConvention? convention)
     {
         var b = Clone();

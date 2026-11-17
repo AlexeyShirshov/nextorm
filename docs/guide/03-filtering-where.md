@@ -1,27 +1,52 @@
 # Filtering (WHERE)
 
-> Build SQL `WHERE` predicates from C# operators, null tests, conditionals and parameterised value lists.
+Use `Where` to keep only the rows that match a C# condition. This page starts with the `orders` table
+from the [quickstart](../getting-started/02-quickstart.md). The opening example uses its `dataContext`
+and `IOrder` entity; later reference examples use test entities and seed data noted near their results.
 
-**Prerequisites:** [Querying and projections](../engine/index.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md)
+**Before you begin:** Complete the [quickstart](../getting-started/02-quickstart.md).
 
 ## Overview
 
-[`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) takes a boolean expression and returns a new [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1); like every builder method it
-is immutable, so the original is unchanged. Repeating [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) combines the predicates with `and`:
+[`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) keeps rows whose condition is true. Add it after
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
+and before the query's terminal method. The query runs when you call a terminal such as
+[`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])).
+Each `Where` call returns a new query builder, leaving the original unchanged. Multiple `Where` calls
+combine their conditions with `and`; use `&&` or `||` to combine conditions in one call.
+
+The same condition can run against a database or the in-memory provider. The in-memory provider
+compiles the expression and evaluates it against its data.
+
+## Find orders by status
+
+Use a local variable for a status that can change between calls. This query returns the IDs and totals
+for paid orders:
 
 ```csharp
-public EntityBuilder<TEntity> Where(Expression<Func<TEntity, bool>> condition)
+var status = "Paid";
+var rows = await dataContext.From<IOrder>()
+    .Where(order => order.Status == status)
+    .OrderBy(order => order.Id)
+    .Select(order => new { order.Id, order.TotalCents })
+    .ToListAsync();
 ```
 
-The lambda is translated into the `WHERE` clause and nothing is executed until a terminal such as
-[`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) is called. The same expression tree is also what the in-memory provider compiles and
-runs, so a query that works against a real database can be exercised in memory.
+The query returns:
 
-Two kinds of values reach the database differently:
+| Id | TotalCents |
+|---:|-----------:|
+| 1 | 2550 |
+| 3 | 4250 |
 
-* A **captured local** (a variable from the enclosing scope) and [`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32)) become command
-  parameters, so the plan can be reused across executions with different values.
-* A **literal constant** written directly in the lambda is rendered inline in the SQL text.
+The example uses the sample rows created in the [quickstart](../getting-started/02-quickstart.md).
+See [Captured parameters and `Parameter`](#captured-parameters-and-parameter) for how NextORM sends
+`status` to the database.
+
+The reference examples below switch to the separate `SimpleEntity` and `ComplexEntity` test model;
+they don't use the quickstart's `IOrder` entity. Their output tables use integration-test seed data.
+For information about mapping your own entities, see
+[Entities and metadata](../getting-started/03-entities-and-metadata.md).
 
 ## Comparison operators
 
@@ -340,7 +365,9 @@ compiler uses for some string patterns) is not supported and throws `NotSupporte
 
 ## Captured parameters and [`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32))
 
-A captured local is extracted as a named command parameter:
+A captured local is extracted as a named command parameter. A constant written directly in the
+lambda stays inline in the SQL text. Captured values and [`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32))
+let the database reuse the query plan with different values:
 
 ```csharp
 var threshold = 5L;
@@ -619,6 +646,11 @@ array is bound as one parameter; see [Arrays](../scalar-functions/06-arrays.md#a
 | MariaDB | Same as MySQL: `@` parameters, `coalesce`, `1` / `0` booleans, no `any` / `all`. |
 | ClickHouse | Parameters use `@` (the driver rewrites them to `{name:Type}`); `??` is `coalesce`; boolean literals are `true` / `false`; `any` / `all` are not available; `global_in` adds the distributed `GLOBAL IN` predicate. |
 | In-memory | Predicates are compiled as .NET delegates; there is no parameter prefix or SQL rendering. |
+
+## What's next
+
+Continue with [projections](02-projections.md) to choose which fields the query returns, or see
+[joins](04-joins.md) to combine rows from related tables.
 
 ## See also
 

@@ -10,9 +10,10 @@ namespace NextORM.Core;
 /// <see cref="DataContextExtensions.CreateInsertBuilder{TEntity}"/>. It collects the columns and values, renders
 /// them as a parameterised statement through the active dialect and executes it on the context.
 /// <para>
-/// There is deliberately no change tracking: every terminal (<see cref="Insert"/>, <see cref="Returning()"/>,
-/// <see cref="ReturningIdentity{TKey}()"/>, <see cref="ReturningKey{TKey}()"/>) issues one explicit command, as
-/// with linq2db or <c>ExecuteNonQuery</c>. The builder is single-use: values accumulate until a terminal runs.
+/// There is deliberately no change tracking: each execution terminal issues an explicit command, as with
+/// linq2db or <c>ExecuteNonQuery</c>. <see cref="Returning()"/>, <see cref="ReturningIdentity{TKey}()"/> and
+/// <see cref="ReturningKey{TKey}()"/> select a returning terminal but do not execute the insert. A terminal
+/// does not consume or reset the builder's accumulated values, so calling one again submits the insert again.
 /// </para>
 /// </summary>
 /// <typeparam name="TEntity">The mapped entity type inserted.</typeparam>

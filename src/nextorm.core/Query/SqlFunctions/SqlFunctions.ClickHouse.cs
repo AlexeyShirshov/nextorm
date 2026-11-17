@@ -3,57 +3,18 @@ using System.Linq.Expressions;
 namespace NextORM.Core;
 
 /// <summary>
-/// ClickHouse-only SQL surface: the <c>argMin</c>/<c>argMax</c> aggregates, the distinct-count
-/// <c>uniq</c>/<c>uniqExact</c>/<c>uniqCombined</c>/<c>uniqHLL12</c> aggregates, the parameterised
-/// <c>quantile(level)(value)</c>/<c>quantiles(level...)(value)</c> family with <c>median</c>, the
-/// <c>topK(k)(value)</c>/<c>topKWeighted(k)(value, weight)</c> aggregates, the <c>anyLast</c> row-picking
-/// aggregate, the sequence/funnel aggregates <c>windowFunnel</c>/<c>retention</c>/<c>sequenceMatch</c>,
-/// the frame-respecting <c>lagInFrame</c>/<c>leadInFrame</c> window functions, the multi-branch
-/// <c>multiIf</c> conditional (through <see cref="when{T}(bool, T)"/>/<see cref="otherwise{T}(T)"/>),
-/// the string-JSON <c>JSONExtract*</c>/<c>JSONHas</c> and <c>visitParamExtract*</c> families
-/// plus the JSONPath <c>json_value</c>/<c>json_query</c>/<c>json_exists</c> scalars and the native-JSON
-/// <c>JSONAllPaths</c>/<c>JSONAllPathsWithTypes</c>/<c>toJSONString</c> functions, the merge-patch,
-/// validation and typed-extraction additions (<c>JSONMergePatch</c>, <c>JSONArrayLength</c>,
-/// <c>JSONDynamicPaths</c>/<c>JSONSharedDataPaths</c> with their <c>WithTypes</c> siblings,
-/// <c>JSONKey</c>, <c>JSONExtractKeysAndValuesRaw</c>, <c>JSONExtractUInt</c>, <c>isValidJSON</c> and
-/// the <c>simpleJSONExtract*</c> family),
-/// the dictionary functions, the <c>-If</c> aggregate combinator, the distributed <c>global_in</c>
-/// predicate, the <c>numbers</c>/<c>numbers_mt</c> and <c>zeros</c>/<c>zeros_mt</c> table functions
-/// (plus <c>generateRandom</c>) and the server/cluster table functions
-/// (<c>url</c>/<c>s3</c>/<c>file</c>/<c>remote</c>/<c>remoteSecure</c>/<c>cluster</c>/<c>clusterAllReplicas</c>),
-/// the date conversion/part surface (<c>toDate</c>/<c>toDateTime</c>/<c>toDate32</c>, the
-/// <c>toYear</c>/... accessors, <c>toStartOf*</c>, <c>toMonday</c>, <c>toYYYYMM</c>/<c>toYYYYMMDD</c>,
-/// <c>toUnixTimestamp</c>),
-/// and the array functions over array columns and expressions (<c>arrayJoin</c>, <c>length</c>,
-/// <c>has</c>, <c>indexOf</c>, <c>hasAny</c>/<c>hasAll</c>, <c>startsWith</c>/<c>endsWith</c>/<c>hasSubstr</c>,
-/// <c>arrayStringConcat</c>,
-/// <c>splitByChar</c>, <c>arraySort</c>, <c>arrayReverse</c>, <c>arrayDistinct</c>, <c>range</c>,
-/// <c>arrayEnumerate</c>, <c>arrayCumSum</c>, <c>arraySlice</c>, <c>arrayPushBack</c>), the
-/// higher-order (lambda) array functions (<c>arrayMap</c>, <c>arrayFilter</c>, <c>arrayExists</c>,
-/// <c>arrayAll</c>, <c>arrayCount</c>, <c>arrayFirst*</c>, <c>arrayLast*</c>) plus the
-/// array-returning aggregates <c>groupArray</c>/<c>groupUniqArray</c>, the string search/edit-distance
-/// surface (<c>overlay</c>, <c>initcap</c>, <c>soundex</c>, the <c>base64Encode</c>/<c>base64Decode</c>
-/// and <c>hex</c>/<c>unhex</c> pairs, <c>editDistance</c>/<c>jaroSimilarity</c>/<c>byteHammingDistance</c>,
-/// <c>substringIndex</c>, <c>countSubstrings</c>, <c>extractGroups</c> and the four
-/// <c>normalizeUTF8*</c> forms), and the numeric functions
-/// <c>log2</c>/<c>cbrt</c>/<c>exp2</c>/<c>exp10</c>, the special-function surface
-/// <c>erf</c>/<c>erfc</c>/<c>lgamma</c>/<c>tgamma</c>/<c>sigmoid</c>/<c>sqr</c>/<c>hypot</c>, the
-/// integral helpers <c>gcd</c>/<c>lcm</c>/<c>intDiv</c>/<c>intExp2</c>/<c>intExp10</c> and the
-/// <c>isFinite</c>/<c>isInfinite</c>/<c>isNaN</c> predicates, and the rounding family
-/// (<c>roundBankers</c>, <c>roundDown</c>, <c>roundDuration</c>, <c>roundAge</c>, <c>roundToExp2</c>)
-/// with its vendor bucket tables and half-to-even rule, and the date/time family
-/// (<c>makeDate</c>/<c>makeDate32</c>/<c>makeDateTime</c>, <c>now64</c>/<c>nowInBlock</c>,
-/// <c>timeSlot</c>/<c>timeSlots</c>, the sub-hour <c>toStartOf*</c> truncations and
-/// <c>toStartOfInterval</c>, the ISO/week/year-week accessors, <c>toModifiedJulianDay</c>,
-/// <c>age</c>/<c>dateName</c>, <c>serverTimezone</c>/<c>timezoneOf</c>/<c>timezoneOffset</c>,
-/// <c>toTime</c>, <c>timestamp</c> and the <c>fromUnixTimestamp*</c> forms), with three tested
-/// CLR-shape refusals (<c>fromUTCTimestamp</c>, <c>toTime64</c>, <c>fromUnixTimestamp64Nano</c>).
-/// The catalog's numeric operator forms
-/// (<c>plus</c>/<c>minus</c>/<c>multiply</c>/<c>divide</c>/<c>negate</c>) and the constant <c>e</c> are
-/// deliberately *not* members: they are the portable CLR operators and the <see cref="Math.E"/>
-/// constant, which the shared translator renders as the identical ClickHouse function/expression.
-/// Exposed through <see cref="SqlFunctions.ClickHouse"/>; every member is gated by a capability flag
-/// and rejected by providers that do not opt in.
+/// ClickHouse-specific SQL functions for aggregates, windows, sequences, JSON, dictionaries, arrays,
+/// table-valued sources, strings, numbers, and date/time operations. Examples include
+/// <c>argMin</c>/<c>argMax</c>, <c>multiIf</c>, <c>JSONExtract*</c>, and <c>arrayJoin</c>.
+/// <para>
+/// Three forms are deliberately refused for CLR-shape reasons:
+/// <c>fromUTCTimestamp</c>, <c>toTime64</c>, and <c>fromUnixTimestamp64Nano</c>. The numeric operator
+/// forms and <see cref="Math.E"/> use the shared translator rather than members of this class.
+/// </para>
+/// <para>
+/// Access these functions through <see cref="SqlFunctions.ClickHouse"/>. Every member is gated by a
+/// capability flag and rejected by providers that do not opt in.
+/// </para>
 /// </summary>
     public class ClickHouseFunctions : CommonFunctions
     {
@@ -2695,7 +2656,7 @@ namespace NextORM.Core;
 
         /// <summary>
         /// <c>arrayPushFront(array, element)</c>: the array with <paramref name="element"/> prepended.
-        /// A NULL element is appended as NULL and widens the element type to <c>Nullable(T)</c>; it
+        /// A NULL element is prepended as NULL and widens the element type to <c>Nullable(T)</c>; it
         /// is never replaced by a default. Requires a provider that supports array functions
         /// (ClickHouse).
         /// </summary>

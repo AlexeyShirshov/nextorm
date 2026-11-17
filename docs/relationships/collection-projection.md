@@ -1,13 +1,13 @@
 # Collection-valued projection slots (`Select`)
 
-> A projection may name a **declared** collection navigation as one of its members: the direct form
-> `Select(p => new { p.Id, p.Comments })` and the adapter form
-> `p.Comments.AsEntityBuilder<Comment>().Where(..).OrderBy(..).Limit(..).Select(..).ToList()` both project a
-> **per-parent collection** into the result type you declare. The engine materializes the entity graph through the
-> existing eager-loading route — split by default, one denormalized statement in single-query mode — and then
-> applies the adapter pipeline and builds the projected shape **in memory**. The statement count is the eager
-> loading's: it does not grow with the number of parents, and no correlation column is added to the SQL. This page
-> documents the delivered v1 surface and its limits.
+> A projection can include a **declared** collection navigation. Use the direct form
+> `Select(p => new { p.Id, p.Comments })` or the adapter form
+> `p.Comments.AsEntityBuilder<Comment>().Where(..).OrderBy(..).Limit(..).Select(..).ToList()` to project a
+> **per-parent collection** into the result type you declare. nextorm materializes the entity graph through
+> eager loading (split by default, one denormalized statement in single-query mode), then applies the
+> adapter pipeline and builds the projected shape **in memory**. The statement count follows eager loading,
+> does not grow with the number of parents, and adds no correlation column to SQL. This page documents the
+> delivered v1 surface and its limits.
 
 **Prerequisites:** [Relationships and single-query loading (`JoinInto`)](relationships.md) · [Eager loading child collections (`LoadWith`)](eager-loading.md) · [Projections](../guide/02-projections.md)
 
@@ -41,6 +41,18 @@ Three things define the surface:
 
 The public result type is exactly the type you declare: `Select` still returns
 [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1), and `TResult` carries the collection member as written.
+
+### Choose a slot form
+
+Use the direct form to include the declared collection as-is. Use the adapter when each parent needs its own
+filter, ordering, limit or element projection:
+
+| Form | What you write | What it returns |
+|---|---|---|
+| Direct slot | The navigation member, such as `p.Comments`. | The declared collection for each parent. |
+| Adapter slot | A per-parent pipeline through `AsEntityBuilder<T>()`. | A filtered, ordered, limited or projected collection for each parent. |
+
+Both forms use eager loading to fetch the entity rows first; the projection shape is then built in memory.
 
 ## Declaring the entities
 

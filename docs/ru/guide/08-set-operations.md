@@ -1,13 +1,18 @@
 # Операции над множествами
 
-> Объединяйте два набора результатов с помощью [`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})), [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})), [`Intersect`](xref:NextORM.Core.QueryCommand`1.Intersect``1(NextORM.Core.QueryCommand{``0})), [`IntersectAll`](xref:NextORM.Core.QueryCommand`1.IntersectAll``1(NextORM.Core.QueryCommand{``0})), [`Except`](xref:NextORM.Core.QueryCommand`1.Except``1(NextORM.Core.QueryCommand{``0})) и [`ExceptAll`](xref:NextORM.Core.QueryCommand`1.ExceptAll``1(NextORM.Core.QueryCommand{``0})) и выстраивайте их в цепочку слева направо.
+> Объединяйте результаты двух запросов. Выбирайте операцию по тому, нужно ли удалить дубликаты, оставить общие строки или исключить строки правой стороны.
 
 **Предварительные требования:** [Запросы и проекции](../engine/index.md) · [Подзапросы](07-subqueries.md) · [SELECT DISTINCT](09-distinct.md)
 
 ## Обзор
 
-Каждый [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) предоставляет шесть методов операций над множествами, которые
-принимают другой запрос и возвращают новый запрос:
+У каждого [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) есть шесть методов, которые
+сочетают его результат с другим запросом и возвращают новый запрос. Выберите операцию по нужному
+результату:
+
+* `Union` объединяет результаты и удаляет дубликаты, а `UnionAll` сохраняет их.
+* `Intersect` оставляет строки, присутствующие с обеих сторон, а `Except` — только строки левой стороны.
+* Варианты `IntersectAll` и `ExceptAll` сохраняют количество повторений.
 
 | Метод | Ключевое слово SQL | Сохраняет дубликаты | Правая сторона по селектору |
 |---|---|---|---|
@@ -18,12 +23,13 @@
 | `Except(query)` / `Except<TEntity>(selector)` | `except` | нет | `Except<TEntity>(selector)` |
 | `ExceptAll(query)` / `ExceptAll<TEntity>(selector)` | `except all` | да | `ExceptAll<TEntity>(selector)` |
 
-Правый запрос может проецировать другой тип элемента: метод является обобщённым по другой стороне
-(`Union<T>(QueryCommand<T>)`), поэтому
-`SimpleEntity.Select(it => it.Id).Union(ComplexEntity.Select(it => (int)it.Id))`
-допустим, пока формы совпадают. Селекторная форма (`Union<TEntity>(selector)` и аналоги) фиксирует тип
-элемента правой стороны как `TResult` левой стороны и проецирует `TEntity` в `TResult` через селектор;
-явную форму `Union<T>(QueryCommand<T>)` используйте, когда правая сторона имеет другой тип CLR.
+Правый запрос может проецировать другой тип элемента, если формы результатов совпадают. Например,
+`SimpleEntity.Select(it => it.Id).Union(ComplexEntity.Select(it => (int)it.Id))` объединяет две проекции
+идентификаторов.
+
+Перегрузка с селектором (`Union<TEntity>(selector)` и аналоги) преобразует `TEntity` правой стороны в
+`TResult` левой. Если справа нужен другой тип CLR, используйте явную перегрузку
+`Union<T>(QueryCommand<T>)`.
 
 Результат сам является [`QueryCommand`](xref:NextORM.Core.QueryCommand), поэтому его можно выполнить через `From(result)` или
 применить к нему ещё одну операцию над множествами. **Цепочка применяется слева направо**: каждая
@@ -78,6 +84,9 @@ var allCount = dataContext.From(
 
 ## Intersect и Except
 
+`Intersect` возвращает значения, присутствующие с обеих сторон. `Except` оставляет значения, которые
+есть только слева.
+
 ```csharp
 var common = dataContext.From<ISimpleEntity>().Select(it => it.Id)
     .Intersect(dataContext.From<ISimpleEntity>().Select(it => it.Id));
@@ -118,6 +127,9 @@ var count = dataContext.From(cmd).Count(); // 7
 
 ## IntersectAll и ExceptAll
 
+Варианты `All` сохраняют количество дубликатов. Они доступны только у провайдеров, чьи диалекты
+поддерживают соответствующие операции `INTERSECT ALL` и `EXCEPT ALL`.
+
 ```csharp
 var cmd = dataContext.From<ISimpleEntity>().Select(it => it.Id)
     .IntersectAll(dataContext.From<IComplexEntity>().Select(it => (int)it.Id));
@@ -141,13 +153,13 @@ var cmd = dataContext.From<ISimpleEntity>().Select(it => it.Id)
 dataContext.From(cmd).Count();
 ```
 
-Когда диалект не поддерживает операцию, подготовка запроса выбрасывает `NotSupportedException` с
-именем операции в сообщении (`"The IntersectAll set operation is not supported by this SQL
-dialect"`).
+Если диалект не поддерживает операцию, подготовка запроса выбрасывает `NotSupportedException`. В
+сообщении указано её имя (`"The IntersectAll set operation is not supported by this SQL dialect"`).
 
 ## Запрос результата операции над множествами
 
-Операция над множествами возвращает запрос, поэтому вы делаете запрос к нему через [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)):
+Операция над множествами возвращает запрос. Чтобы продолжить работу с результатом, передайте его в
+[`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)):
 
 ```csharp
 var cmd = dataContext.From<IComplexEntity>().Select(it => it.Int)
@@ -168,8 +180,8 @@ var count = dataContext.From(
 
 ### Прямое чтение одного скалярного столбца
 
-Когда обе стороны проецируют один скалярный столбец, `From(cmd)` материализует строки напрямую, а не
-объекты, и `UnionAll` сохраняет дубликаты:
+Если обе стороны проецируют один скалярный столбец, `From(cmd)` сразу материализует строки, а не
+объекты. `UnionAll` при этом сохраняет дубликаты:
 
 ```csharp
 var left = dataContext.From<ISimpleEntity>().Where(it => it.Id <= 2).Select(it => it.Id);
@@ -178,10 +190,10 @@ var right = dataContext.From<ISimpleEntity>().Where(it => it.Id >= 2 && it.Id <=
 var rows = dataContext.From(left.UnionAll(right)).ToList(); // 1, 2, 2, 3
 ```
 
-Результат одинаков независимо от того, пуст ли process-wide кэш select-list для типа или он уже был
-заполнен более ранним скалярным чтением: производное чтение строит собственную одностолбцовую форму и
-не читает и не перезаписывает эту запись кэша. Производный источник более чем с одним столбцом
-по-прежнему требует явного внешнего `Select` (см.
+Результат не зависит от состояния общего кэша списка выборки для этого типа: пуст ли он или заполнен
+предыдущим чтением скаляра. Производное чтение строит собственную форму из одного столбца и не
+использует и не перезаписывает запись кэша. Для производного источника с несколькими столбцами
+по-прежнему нужен внешний `Select` (см.
 [Подзапросы](07-subqueries.md#подзапрос-как-источник-from)).
 
 ## Различия между провайдерами

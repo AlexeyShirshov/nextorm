@@ -1,12 +1,13 @@
 # SELECT DISTINCT
 
-> Удаляйте дубликаты строк с помощью [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) в построителе сущности или в спроецированном запросе, в том числе поверх соединений, постраничного вывода и операций над множествами.
+> Удаляйте дубликаты строк проекции с помощью [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct). `DISTINCT` сравнивает всю строку, а не отдельный столбец.
 
 **Предварительные требования:** [Запросы и проекции](../engine/index.md) · [Сортировка и постраничный вывод](06-sorting-and-paging.md) · [Операции над множествами](08-set-operations.md)
 
 ## Обзор
 
-nextorm предоставляет две точки входа для `SELECT DISTINCT`:
+`DISTINCT` удаляет повторяющиеся строки проекции: строки считаются одинаковыми, только если
+совпадают все выбранные значения. В nextorm есть два способа добавить `SELECT DISTINCT`:
 
 * [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) — устанавливает флаг в построителе, до [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})):
 
@@ -20,10 +21,11 @@ nextorm предоставляет две точки входа для `SELECT D
   dataContext.From<IComplexEntity>().Select(x => new { x.Int }).Distinct()
   ```
 
-Оба варианта дают один и тот же SQL. `DISTINCT` применяется ко всему списку выборки, поэтому
-удаляемые дубликаты — это дубликаты проецируемого кортежа, а не отдельного столбца.
+Оба способа дают один и тот же SQL. Выберите любой: `Distinct` можно вызвать до или после `Select`.
 
 ## Базовый distinct
+
+В этом примере выбирается один столбец, а повторяющиеся значения в результате удаляются:
 
 ```csharp
 // complex_entity stores nullableint values null, 1, 1 so DISTINCT must collapse the two 1s.
@@ -54,7 +56,7 @@ select distinct nullableint as 'Int'
 
 ## Distinct поверх соединения
 
-Спроецированное соединение может содержать дублирующиеся строки; [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) сворачивает их:
+В результатах соединения могут повторяться значения проекции. [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) удаляет такие повторяющиеся строки:
 
 ```csharp
 // complex_entity booleans are true, false, false, so the projected join has duplicate rows.
@@ -95,8 +97,11 @@ select distinct t2.id
 
 ## Distinct и постраничный вывод
 
-Постраничный вывод применяется к результату distinct. Вызов [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)) размещается до [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})),
-а проверенная форма ([`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct), затем [`Limit`](xref:NextORM.Core.Paging.Limit)) определяется порядком ключевых слов провайдера:
+Сначала удаляются дубликаты, затем к результату применяется постраничный вывод. В цепочке
+построителя вызовите [`Limit`](xref:NextORM.Core.Paging.Limit) или
+[`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)) перед
+[`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})).
+Порядок ключевых слов в SQL зависит от провайдера:
 
 ```csharp
 var distinct = dataContext.From<IComplexEntity>()
@@ -123,14 +128,14 @@ select distinct top(1) b as 'Boolean'
  from complex_entity
 ```
 
-В SQL Server конструкция `select top(1) distinct ...` недопустима в T-SQL, поэтому диалект
-генерирует `distinct` перед `top(n)` (тест генерации SQL фиксирует порядок с помощью
-`e.Distinct().Limit(5).Select(x => x.Id)` → `select distinct top(5) id from simple_entity`).
+В SQL Server конструкция `select top(1) distinct ...` недопустима в T-SQL. Поэтому диалект ставит
+`distinct` перед `top(n)`. Тест генерации SQL фиксирует порядок на примере
+`e.Distinct().Limit(5).Select(x => x.Id)` → `select distinct top(5) id from simple_entity`.
 
 ## Distinct и операции над множествами
 
-[`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) — это свойство отдельного запроса, а не всей цепочки, поэтому он устраняет дубликаты
-только в той ветви, к которой привязан:
+[`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) относится к отдельному запросу, а не ко
+всей цепочке операций над множествами. Он удаляет дубликаты только в той ветви, где его вызвали:
 
 ```csharp
 var cmd = dataContext.From<IComplexEntity>().Select(it => it.Int)
@@ -149,8 +154,8 @@ select nullableint
  from complex_entity
 ```
 
-При [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})) ветви конкатенируются без дополнительного устранения дубликатов, поэтому левая ветвь
-содержит distinct, а правая — нет:
+При [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})) ветви
+соединяются без дополнительного удаления дубликатов. Левая ветвь уже distinct, а правая — нет:
 
 ```csharp
 var cmd = dataContext.From<IComplexEntity>().Select(it => it.Int)
@@ -171,11 +176,11 @@ select nullableint
 
 ## `DISTINCT ON` (PostgreSQL)
 
-PostgreSQL дополнительно поддерживает `DISTINCT ON (expr, ...)`, который оставляет первую строку
-каждого уникального ключа согласно `ORDER BY` (ведущие выражения сортировки должны совпадать с
-ключом). Вместо `Distinct` используйте
-[`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})); их сочетание бросает исключение,
-поскольку PostgreSQL считает их взаимоисключающими.
+PostgreSQL также поддерживает `DISTINCT ON (expr, ...)`: эта форма оставляет первую строку для
+каждого ключа согласно `ORDER BY`. Начальные выражения сортировки должны совпадать с ключом.
+Используйте [`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}}))
+вместо `Distinct`. PostgreSQL считает эти формы взаимоисключающими, поэтому их сочетание вызывает
+исключение.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -190,8 +195,8 @@ select distinct on (somestring) id, somestring
  from complex_entity order by somestring
 ```
 
-Ключом может быть анонимный тип для составного ключа. `DISTINCT ON` реализован только в PostgreSQL;
-остальные провайдеры отклоняют его на этапе построения SQL.
+Для составного ключа можно использовать анонимный тип. `DISTINCT ON` поддерживает только PostgreSQL;
+остальные провайдеры отклоняют его при построении SQL.
 
 ## Различия между провайдерами
 

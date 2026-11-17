@@ -7,8 +7,7 @@ namespace NextORM.Core;
 public readonly record struct RouteTarget(string Topology);
 
 /// <summary>
-/// A custom routing rule: decides the topology of an entity type, optionally by the mapping variant
-/// (which is how a data rule such as sharding reads the entity's key values).
+/// Selects the topology for an entity type, optionally using the command's mapping variant.
 /// </summary>
 public interface IEntityRouteResolver
 {
@@ -21,9 +20,9 @@ public interface IEntityRouteResolver
 }
 
 /// <summary>
-/// Declares the topology an entity type (or a whole assembly) belongs to. The structural rule with the
-/// highest priority: a type-level attribute wins over assembly-, namespace- and custom rules, and a
-/// conflicting target is an error rather than a silent preference.
+/// Declares the topology for an entity type or an entire assembly. A type-level attribute takes
+/// precedence over an assembly-level attribute. If matching rules select different topologies, routing
+/// fails instead of choosing one silently.
 /// </summary>
 [AttributeUsage(
     AttributeTargets.Class | AttributeTargets.Interface | AttributeTargets.Assembly,

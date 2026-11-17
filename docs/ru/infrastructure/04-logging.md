@@ -2,7 +2,7 @@
 
 > Подключите `ILoggerFactory` к [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder), чтобы захватывать выполняемый SQL, значения параметров и сообщения жизненного цикла соединения.
 
-**Предварительные требования:** [Соединения](01-connections.md) · [Dependency injection](../getting-started/04-dependency-injection.md) · [Query reuse](../engine/03-plan-cache-and-reuse.md).
+**Предварительные требования:** [Соединения](01-connections.md) · [Внедрение зависимостей](../getting-started/04-dependency-injection.md) · [Переиспользование запросов](../engine/03-plan-cache-and-reuse.md).
 
 ## Обзор
 
@@ -30,7 +30,7 @@ using var ctx = builder.CreateDataContext();
 
 ## Три логгера
 
-Из фабрики создаются три логгера:
+Фабрика создаёт три логгера. В таблице указаны категория и назначение каждого:
 
 | Член | Категория | Назначение |
 |---|---|---|
@@ -56,7 +56,7 @@ using var ctx = builder.CreateDataContext();
 var builder = new DataContextBuilder()
     .UseSqlServer(connectionString)
     .UseLoggerFactory(loggerFactory)
-    .LogSensitiveData(true); // includes parameter values in the output
+    .LogSensitiveData(true); // включает значения параметров в вывод
 ```
 
 ## Различия провайдеров
@@ -66,9 +66,9 @@ var builder = new DataContextBuilder()
 ## См. также
 
 * [Соединения](01-connections.md)
-* [Dependency injection](../getting-started/04-dependency-injection.md)
-* [Query reuse: plan cache and `Prepare`](../engine/03-plan-cache-and-reuse.md)
-* [Documentation index](../index.md)
+* [Внедрение зависимостей](../getting-started/04-dependency-injection.md)
+* [Переиспользование запросов: кэш планов и `Prepare`](../engine/03-plan-cache-and-reuse.md)
+* [Указатель документации](../index.md)
 
 ---
 

@@ -40,6 +40,7 @@
           "_template.md",
           "README.md",
           "specs/**",
+          "superpowers/**",
           "docfx.json"
         ]
       }

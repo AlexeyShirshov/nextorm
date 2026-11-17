@@ -1,26 +1,18 @@
 # Quickstart
 
-> Define an entity, create a SQLite context, run a typed query and print the rows - the smallest end-to-end NextORM program.
+Run a typed query against an in-memory SQLite database and print its results. This page is for .NET developers who have installed NextORM and want to see a complete query before learning its options.
 
 **Prerequisites:** [Installation](01-installation.md).
 
-## Overview
-
-A NextORM query always has four parts:
-
-1. an **entity** (a class or an interface) whose properties map to columns;
-2. a **context** ([`IDataContext`](xref:NextORM.Core.IDataContext)) built from a connection or a connection string;
-3. a **query** built with [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)), [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})), and so on;
-4. a **terminal** such as [`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})), [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})), [`Any`](xref:NextORM.Core.EntityBuilderExtensions.Any``1(NextORM.Core.EntityBuilder{``0})) or [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])) that executes it.
-
-[`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) also registers `T`'s metadata the first time it is seen. The context is disposable: a
-context created from a connection string owns and closes the connection, while a context created from a
-supplied `DbConnection` leaves that connection open.
-
 ## Complete minimal program
 
-The following program is self-contained. It creates an in-memory SQLite database, seeds one table,
-builds a context with [`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions.UseSqlite(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)), and streams the rows back as an anonymous type.
+Create a .NET console project, then replace the contents of its `Program.cs` file with this code. Keep
+the entity interface declarations after the top-level statements, as shown; C# requires top-level
+statements to precede type declarations.
+
+The program creates `orders` and `customers` tables, adds three sample orders, and reads each order's
+ID and status. It uses an in-memory database, so it doesn't need a database server. Install `nextorm`
+and `nextorm.sqlite` in the console project first:
 
 ```csharp
 using System.ComponentModel.DataAnnotations;
@@ -29,52 +21,98 @@ using Microsoft.Data.Sqlite;
 using NextORM.Core;
 using NextORM.Sqlite;
 
-var connection = new SqliteConnection("Data Source=:memory:");
+using var connection = new SqliteConnection("Data Source=:memory:");
 connection.Open();
 
 using (var setup = connection.CreateCommand())
 {
     setup.CommandText =
-        "create table simple_entity (id integer primary key);" +
-        "insert into simple_entity (id) values (1), (2), (3);";
+        "create table customers (id integer primary key, name text not null);" +
+        "create table orders (id integer primary key, customer_id integer not null, " +
+        "status text not null, total_cents integer not null);" +
+        "insert into customers (id, name) values (1, 'Amina'), (2, 'Ravi');" +
+        "insert into orders (id, customer_id, status, total_cents) values " +
+        "(1, 1, 'Paid', 2550), (2, 2, 'Pending', 1800), (3, 1, 'Paid', 4250);";
     setup.ExecuteNonQuery();
 }
 
 var builder = new DataContextBuilder().UseSqlite(connection);
 using var dataContext = builder.CreateDataContext();
 
-await foreach (var row in dataContext.From<ISimpleEntity>()
-                                   .Select(entity => new { Id = (long)entity.Id })
-                                   .ToAsyncEnumerable())
+var orders = await dataContext.From<IOrder>()
+    .OrderBy(order => order.Id)
+    .Select(order => new { order.Id, order.Status })
+    .ToListAsync();
+
+foreach (var order in orders)
 {
-    Console.WriteLine($"Id = {row.Id}");
+    Console.WriteLine($"Order {order.Id}: {order.Status}");
 }
 
-// The entity can live in its own file. In a single-file top-level program the type
-// declaration must come after the top-level statements.
-[SqlTable("simple_entity")]
-public interface ISimpleEntity
+[SqlTable("orders")]
+public interface IOrder
 {
     [Key]
     [Column("id")]
     int Id { get; set; }
+
+    [Column("customer_id")]
+    int CustomerId { get; set; }
+
+    [Column("status")]
+    string Status { get; set; }
+
+    [Column("total_cents")]
+    int TotalCents { get; set; }
+}
+
+[SqlTable("customers")]
+public interface ICustomer
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+
+    [Column("name")]
+    string Name { get; set; }
 }
 ```
 
-Output:
+From the project directory, run the program:
+
+```bash
+dotnet run
+```
+
+The program prints:
 
 ```text
-Id = 1
-Id = 2
-Id = 3
+Order 1: Paid
+Order 2: Pending
+Order 3: Paid
 ```
 
-The generated SQL is a plain `select` over the mapped table and column:
+The query selects two mapped columns from `orders`:
 
 ```sql
-select id
- from simple_entity
+select id, status
+ from orders
+ order by id
 ```
+
+## Overview
+
+A query uses a mapped entity, a context, and a sequence of query operations. In this example,
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
+chooses the `orders` source, [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}}))
+chooses which values to return, and [`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[]))
+executes the query and returns a list.
+
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
+also registers the entity's metadata the first time it is used. The context is disposable. A context
+created from a connection string owns and closes its connection; a context created from a supplied
+`DbConnection` leaves that connection open. This example supplies a connection and disposes it
+separately.
 
 ## Using a connection string
 
@@ -93,7 +131,9 @@ using var dataContext = builder.CreateDataContext();
 
 ## Reading the data
 
-The query above uses [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])). The other common terminals are:
+The example uses `ToListAsync` to collect the rows in a list. Use
+[`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[]))
+to stream results instead. Other common terminal methods include:
 
 | Terminal | Result |
 |---|---|
@@ -108,6 +148,9 @@ Every terminal has a synchronous and an async form; prefer the async form in app
 
 ## See also
 
+* [Filter rows](../guide/03-filtering-where.md) - add conditions before selecting the result.
+* [Select the fields you need](../guide/02-projections.md) - shape the returned rows.
+* [Join tables](../guide/04-joins.md) - combine orders with customer details.
 * [Entities and metadata](03-entities-and-metadata.md) - attributes, interface/class mapping, the
   entity-free [`TableAlias`](xref:NextORM.Core.TableAlias) mode and fluent configuration.
 * [Dependency injection](04-dependency-injection.md) - register the context instead of constructing it
@@ -115,9 +158,7 @@ Every terminal has a synchronous and an async form; prefer the async form in app
 
 ---
 
-Source: `tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:9`,
-`tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:20`,
-`tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:37`;
-`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs:32`;
-`tests/nextorm.sqlite.tests/Raw/ConnectionManagementTests.cs:115`;
-generated SQL: `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:111`.
+The quickstart uses the documented SQLite connection and query APIs. See
+[`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions.UseSqlite(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection))
+and the query examples in [Filtering](../guide/03-filtering-where.md),
+[Projections](../guide/02-projections.md), and [Joins](../guide/04-joins.md).

@@ -2,7 +2,37 @@
 
 > [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) выполняет запросы по внутрипроцессным коллекциям CLR; используйте его для модульных тестов и тестов формы запросов/кэша планов, где запускать базу данных не нужно.
 
-**Предварительные требования:** [Provider overview](overview.md) · [Dependency injection](../getting-started/04-dependency-injection.md)
+**Предварительные требования:** [Обзор провайдеров](overview.md) · [Внедрение зависимостей](../getting-started/04-dependency-injection.md)
+
+## Регистрация и использование
+
+Регистрация через dependency injection:
+
+```csharp
+using NextORM.Core;
+
+services.AddNextOrmContext<InMemoryDataContext>();
+```
+
+Чтобы выполнить запрос, добавьте данные в контекст:
+
+```csharp
+using NextORM.Core;
+
+using var ctx = new InMemoryDataContext();
+ctx.From<SimpleEntity>().WithData(new[]
+{
+    new SimpleEntity { Id = 1 },
+    new SimpleEntity { Id = 2 },
+});
+
+var ids = ctx.From<SimpleEntity>()
+    .Where(it => it.Id == 1)
+    .Select(it => new { it.Id })
+    .SingleOrDefault();
+
+// ids.Id == 1
+```
 
 ## Обзор
 
@@ -23,34 +53,6 @@
 
 Это не SQL-движок: он не проверяет, что запрос выполнился бы на реальном провайдере, и несколько
 возможностей намеренно не поддерживаются (см. ниже).
-
-## Регистрация и использование
-
-С внедрением зависимостей:
-
-```csharp
-using NextORM.Core;
-
-services.AddNextOrmContext<InMemoryDataContext>();
-```
-
-```csharp
-using NextORM.Core;
-
-using var ctx = new InMemoryDataContext();
-ctx.From<SimpleEntity>().WithData(new[]
-{
-    new SimpleEntity { Id = 1 },
-    new SimpleEntity { Id = 2 },
-});
-
-var ids = ctx.From<SimpleEntity>()
-    .Where(it => it.Id == 1)
-    .Select(it => new { it.Id })
-    .SingleOrDefault();
-
-// ids.Id == 1
-```
 
 [`WithData`](xref:NextORM.Core.InMemoryCommandBuilderExtensions.WithData``1(NextORM.Core.EntityBuilder{``0},System.Collections.Generic.IEnumerable{``0})) и [`WithAsyncData`](xref:NextORM.Core.InMemoryCommandBuilderExtensions.WithAsyncData``1(NextORM.Core.EntityBuilder{``0},System.Collections.Generic.IAsyncEnumerable{``0})) (`src/nextorm.core/Builders/InMemoryCommandBuilder.cs`) присоединяют
 коллекцию к словарю `Data` контекста с ключом по типу сущности; [`WithData`](xref:NextORM.Core.InMemoryCommandBuilderExtensions.WithData``1(NextORM.Core.EntityBuilder{``0},System.Collections.Generic.IEnumerable{``0})) принимает `IEnumerable<T>`,
@@ -109,7 +111,7 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 
 ## Не поддерживается
 
-Провайдер громко падает вместо возврата неверных результатов:
+Провайдер выбрасывает исключения вместо возврата неверных результатов:
 
 - **Табличные функции** бросают `NotSupportedException` с сообщением, упоминающим провайдер in-memory.
   Табличную функцию базы данных нельзя вычислить в процессе.
@@ -150,12 +152,14 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 
 ## Различия провайдеров
 
+В таблице показаны отличия этого провайдера от SQL-провайдеров:
+
 | Аспект | In-memory |
 |---|---|
 | Пакет | ядро `nextorm` |
 | Соединение | нет |
 | SQL-текст | нет (дерево выражений вычисляется в процессе) |
-| Плейсхолдеры параметров | не применимо |
+| Маркеры параметров | не применимо |
 | Источники TVF | `NotSupportedException` |
 | Raw SQL | `NotSupportedException` |
 | Потоковое чтение LOB (`ToStream`/`ToTextReader`) | поддерживается (`MemoryStream`/`StringReader` над единственным материализованным значением; `ToDataReader` остаётся `NotSupportedException`) |
@@ -165,12 +169,12 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 
 ## См. также
 
-- [Provider overview](overview.md)
+- [Обзор провайдеров](overview.md)
 - [SQLite](sqlite.md)
 - [SQL Server](sqlserver.md)
 - [PostgreSQL](postgres.md)
-- [Query reuse: cache vs Prepare](../engine/03-plan-cache-and-reuse.md)
-- [Limitations and out-of-scope features](../advanced/limitations.md)
+- [Переиспользование запросов: кэш или `Prepare`](../engine/03-plan-cache-and-reuse.md)
+- [Ограничения и функции вне области поддержки](../advanced/limitations.md)
 
 ---
 

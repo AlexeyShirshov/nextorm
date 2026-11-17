@@ -1,5 +1,10 @@
 # Provider mapping table
 
+Use this matrix as a quick comparison of selected SQL translations for SQLite, SQL Server, and
+PostgreSQL, not as a complete provider-support inventory. It omits MySQL and MariaDB; ClickHouse is
+summarized separately after the matrix. The sections below cover provider-specific and version-gated
+APIs, including the MySQL and MariaDB catalogues and their refusals.
+
 | Feature | SQLite | SQL Server | PostgreSQL |
 |---|---|---|---|
 | `ToUpper` / `ToLower` | `upper` / `lower` | `upper` / `lower` | `upper` / `lower` |
@@ -42,9 +47,9 @@
 | JSONPath (`jsonb_path_*`) | `NotSupportedException` | `NotSupportedException` | `cast(path as jsonpath)` |
 | Built-in table functions | `NotSupportedException` | `string_split(...)`, `openjson(...)`, `regexp_split_to_table(...)` (2025+) | `generate_series(...)`, `unnest(...)` |
 
-The in-memory provider does not render SQL: it compiles and evaluates the expression against in-memory
-rows, so the .NET method itself runs. The SQL matrix above applies to the SQLite, SQL Server and
-PostgreSQL providers.
+The in-memory provider is outside this SQL matrix. It compiles and evaluates the .NET expression
+against in-memory rows, so the .NET method itself runs; do not infer in-memory behavior from SQL
+mappings, or SQL support from in-memory evaluation.
 
 ClickHouse renders `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`addSeconds` (and a scaled
 `addYears` over a `DateTime64(6)` operand for `year`/`decade`/`century`, whose SQL result type is

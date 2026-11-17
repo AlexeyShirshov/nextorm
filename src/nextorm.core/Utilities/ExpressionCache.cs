@@ -14,9 +14,9 @@ public class ExpressionCache<T> : ConcurrentDictionary<ExpressionKey, T>
 
 /// <summary>
 /// Equality wrapper around an <see cref="Expression"/> that uses the query registry's
-/// <c>ExpressionPlanEqualityComparer</c>, so two expressions that describe the same query plan hash and
-/// compare equal even when they are different object instances. The hash is computed once at
-/// construction because both inputs are immutable.
+/// <c>ExpressionPlanEqualityComparer</c>. Structurally equivalent expressions compare equal even when
+/// they are different object instances. The hash is computed once at construction because both inputs
+/// are immutable.
 /// </summary>
 public sealed class ExpressionKey : IEquatable<ExpressionKey>
 {

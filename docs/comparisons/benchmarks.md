@@ -1,12 +1,15 @@
 # Benchmarks: Nextorm vs Dapper, linq2db and EF Core
 
+Use these results to compare the listed query shapes under the stated SQLite setup. They are
+evidence for these scenarios, not a prediction for every provider, workload, or machine.
+
 <!-- benchmarks:conditions:start -->
 Benchmark conditions: provider SQLite (`Microsoft.Data.Sqlite`) for every participant; async queries; each
-cell is the **fastest method** for that library in the linked BenchmarkDotNet report. Machine: AMD EPYC 7763
-(4 logical / 2 physical cores), .NET 11.0.0, BenchmarkDotNet 0.15.8 (`ShortRun` + `InProcessEmitToolchain`).
-As of **2026-11-11** for the end-to-end, allocations and Category B tables (the Category A table and the
-tier-1 section keep the date of their own run). In each row the leading cell is **bold** — the fastest in the
-time tables and the smallest allocation in the allocations table.
+cell is the **fastest method** for that library in the linked BenchmarkDotNet report. Machine: AMD Ryzen 7
+5800HS with Radeon Graphics (8 logical / 4 physical cores), .NET 11.0.0, BenchmarkDotNet 0.15.8 (`Job.Default`
++ `InProcessEmitToolchain`). As of **2026-11-16** for the end-to-end, allocations and Category B tables (the
+Category A table and the tier-1 section keep the date of their own run). In each row the leading cell is
+**bold** — the fastest in the time tables and the smallest allocation in the allocations table.
 <!-- benchmarks:conditions:end -->
 
 > **Feature-level view:** a per-feature, tiered comparison — no `Prepare()` arms, one table per tier,
@@ -17,13 +20,13 @@ time tables and the smallest allocation in the allocations table.
 <!-- benchmarks:e2e:start -->
 | Method | Nextorm | Dapper | linq2db | EF Core |
 |---|:---:|:---:|:---:|:---:|
-| [Data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md) | **10.75 μs** | 15.80 μs | 16.50 μs | 38.46 μs |
-| [Wide data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md) | **9.135 ms** | 9.883 ms | 10.594 ms | 10.998 ms |
-| [Where](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md) | **915.0 μs** | 1,378.8 μs | 1,432.3 μs | 3,540.1 μs |
-| [Simulate work](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md) | **8.610 ms** | 27.766 ms | 418.616 ms | 109.613 ms |
-| [Any](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md) | **923.5 μs** | 1,421.9 μs | 1,523.8 μs | 3,742.6 μs |
-| [FirstOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFirst-report-github.md) | **93.64 μs** | 148.96 μs | 363.31 μs | 368.44 μs |
-| [SingleOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSingle-report-github.md) | **92.38 μs** | 142.69 μs | 372.78 μs | 369.31 μs |
+| [Data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md) | **12.26 μs** | 16.55 μs | 17.17 μs | 38.08 μs |
+| [Wide data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md) | **7.921 ms** | 8.528 ms | 8.647 ms | 9.152 ms |
+| [Where](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md) | **1.063 ms** | 1.503 ms | 1.553 ms | 3.386 ms |
+| [Simulate work](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md) | **7.893 ms** | 24.616 ms | 364.543 ms | 108.639 ms |
+| [Any](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md) | **1.059 ms** | 1.509 ms | 1.663 ms | 3.660 ms |
+| [FirstOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFirst-report-github.md) | **107.1 μs** | 154.6 μs | 366.3 μs | 355.7 μs |
+| [SingleOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSingle-report-github.md) | **107.2 μs** | 148.6 μs | 370.8 μs | 337.2 μs |
 <!-- benchmarks:e2e:end -->
 
 ### Allocations
@@ -33,10 +36,10 @@ Allocations for the same fastest method per library (BenchmarkDotNet `Allocated`
 <!-- benchmarks:allocations:start -->
 | Method | Nextorm | Dapper | linq2db | EF Core |
 |---|:---:|:---:|:---:|:---:|
-| Data fetch | **968 B** | 1,848 B | 2,080 B | 9,776 B |
+| Data fetch | **1,080 B** | 1,848 B | 2,080 B | 9,776 B |
 | Wide data fetch | **2.14 MB** | 2.59 MB | **2.14 MB** | 4.28 MB |
-| Where | **102.58 KB** | 179.23 KB | 252.74 KB | 745.41 KB |
-| Simulate work | **6.21 MB** | 8.86 MB | 107.45 MB | 13.57 MB |
+| Where | **102.90 KB** | 179.23 KB | 252.74 KB | 745.41 KB |
+| Simulate work | **6.21 MB** | 8.86 MB | 108.02 MB | 13.57 MB |
 | Any | **84.38 KB** | 138.29 KB | 232.82 KB | 763.30 KB |
 | FirstOrDefault | **8.56 KB** | 16.12 KB | 159.77 KB | 76.03 KB |
 | SingleOrDefault | **8.28 KB** | 16.04 KB | 159.77 KB | 76.03 KB |
@@ -44,40 +47,41 @@ Allocations for the same fastest method per library (BenchmarkDotNet `Allocated`
 
 ## Feature-level comparison (fair)
 
-The end-to-end table mixes reuse strategies. To make the comparison symmetric, features are split into two
-categories:
+The end-to-end table reports the fastest method for each library, but those methods use different
+query-reuse strategies. The feature comparison separates them into two categories:
 
-- **Category A — prepared / compiled / raw:** Nextorm through `Prepare()` against the closest *compiled* form
-  of the same query (`EF.CompileAsyncQuery`, `LinqToDB.CompiledQuery.Compile`) and raw Dapper (whose IL is
-  cached by SQL text). This is "compiled vs compiled".
-- **Category B — warm cached vs regular:** Nextorm through the implicit plan cache (a fresh fluent command
-  with constants on every call, so the cached plan is the only reusable part) against regular (non-compiled)
-  EF Core and linq2db and raw Dapper.
+- **Category A — prepared / compiled / raw:** Nextorm through `Prepare()` against the closest
+  *compiled* form of the same query (`EF.CompileAsyncQuery`, `LinqToDB.CompiledQuery.Compile`) and
+  raw Dapper, whose IL is cached by SQL text. This compares reusable query forms: compiled against
+  compiled, with Dapper's raw-SQL path as its available arm.
+- **Category B — warm cached vs regular:** Nextorm through the implicit plan cache. Each call
+  creates a fresh fluent command with constants, so the cached plan is the only reusable part. This
+  is compared with regular (non-compiled) EF Core and linq2db, and raw Dapper.
 
-Each feature method runs **10 queries**; every cell is the **per-query** mean and allocation (the
-BenchmarkDotNet `Mean` and `Allocated` divided by 10). Source reports:
+Each feature method runs **10 queries**. The tables show per-query mean time and allocated memory:
+BenchmarkDotNet `Mean` and `Allocated` divided by 10. See the source reports:
 [Category A](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md) ·
 [Category B](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFairCached-report-github.md).
 
 ### Category A — prepared vs compiled vs raw
 
 <!-- benchmarks:category-a:start -->
-As of **2026-11-11**.
+As of **2026-11-16**.
 
 | Feature | Nextorm (prepared) | Dapper | linq2db (compiled) | EF Core (compiled) |
 |---|---|---|---|---|
-| `CASE WHEN` | **9.45 μs / 664 B** | 14.64 μs / 1.34 KB | 15.43 μs / 1.59 KB | 36.91 μs / 7.46 KB |
-| CTE | **9.89 μs / 712 B** | 22.25 μs / 1.56 KB | 23.75 μs / 1.77 KB | — |
-| `SELECT DISTINCT` | **11.44 μs / 665 B** | 18.27 μs / 1.44 KB | 18.36 μs / 1.59 KB | 42.53 μs / 7.23 KB |
-| `EXCEPT` | **11.41 μs / 680 B** | 18.13 μs / 1.43 KB | 21.57 μs / 1.67 KB | 46.40 μs / 8.38 KB |
-| IN-list | **12.79 μs / 1.55 KB** | 18.55 μs / 1.26 KB | 47.92 μs / 13.63 KB | 66.24 μs / 14.34 KB |
-| `INTERSECT` | **10.59 μs / 665 B** | 16.64 μs / 1.28 KB | 20.33 μs / 1.62 KB | 44.07 μs / 7.50 KB |
-| 4-table join | **13.27 μs / 1,000 B** | 27.17 μs / 2.02 KB | 24.65 μs / 2.06 KB | 50.99 μs / 8.05 KB |
-| `LEFT JOIN` | **12.65 μs / 1.12 KB** | 21.22 μs / 2.21 KB | 21.63 μs / 2.31 KB | 45.27 μs / 9.48 KB |
-| Recursive CTE | **12.95 μs / 672 B** | 26.02 μs / 1.52 KB | 28.50 μs / 1.77 KB | — |
-| String functions | **9.33 μs / 656 B** | 14.22 μs / 1.27 KB | 15.25 μs / 1.63 KB | 36.89 μs / 7.05 KB |
-| UDF | **9.43 μs / 688 B** | 14.28 μs / 1.27 KB | 15.31 μs / 1.63 KB | 36.24 μs / 7.05 KB |
-| Window functions | **14.99 μs / 768 B** | 31.84 μs / 1.53 KB | 34.65 μs / 1.73 KB | — |
+| `CASE WHEN` | **10.79 μs / 664 B** | 15.22 μs / 1.34 KB | 16.10 μs / 1.59 KB | 35.25 μs / 7.46 KB |
+| CTE | **11.35 μs / 752 B** | 23.01 μs / 1.56 KB | 23.50 μs / 1.77 KB | — |
+| `SELECT DISTINCT` | **12.66 μs / 665 B** | 18.81 μs / 1.44 KB | 18.85 μs / 1.59 KB | 40.43 μs / 7.23 KB |
+| `EXCEPT` | **12.56 μs / 680 B** | 18.52 μs / 1.43 KB | 21.50 μs / 1.67 KB | 42.52 μs / 8.38 KB |
+| IN-list | **14.11 μs / 1.55 KB** | 19.66 μs / 1.26 KB | 45.78 μs / 13.63 KB | 62.91 μs / 14.34 KB |
+| `INTERSECT` | **12.13 μs / 665 B** | 17.51 μs / 1.28 KB | 20.79 μs / 1.62 KB | 42.32 μs / 7.50 KB |
+| 4-table join | **14.58 μs / 1.03 KB** | 27.04 μs / 2.02 KB | 24.96 μs / 2.06 KB | 48.61 μs / 8.05 KB |
+| `LEFT JOIN` | **14.15 μs / 1.16 KB** | 21.17 μs / 2.21 KB | 21.46 μs / 2.31 KB | 41.92 μs / 9.48 KB |
+| Recursive CTE | **14.06 μs / 672 B** | 25.65 μs / 1.52 KB | 26.92 μs / 1.77 KB | — |
+| String functions | **10.81 μs / 656 B** | 15.30 μs / 1.27 KB | 15.85 μs / 1.63 KB | 34.86 μs / 7.05 KB |
+| UDF | **10.84 μs / 688 B** | 15.78 μs / 1.27 KB | 15.53 μs / 1.63 KB | 34.45 μs / 7.05 KB |
+| Window functions | **15.75 μs / 793 B** | 30.19 μs / 1.54 KB | 32.76 μs / 1.74 KB | — |
 <!-- benchmarks:category-a:end -->
 
 Nextorm prepared is the fastest on **every** feature and has the smallest allocation on 11 of 12 — IN-list is
@@ -89,26 +93,28 @@ with the runner, so treat deltas below ~20 % as noise.
 <!-- benchmarks:category-b:start -->
 | Feature | Nextorm (cached) | Dapper | linq2db | EF Core |
 |---|---|---|---|---|
-| `CASE WHEN` | **12.69 μs / 2.04 KB** | 14.89 μs / 1.34 KB | 24.93 μs / 3.77 KB | 60.62 μs / 11.46 KB |
-| CTE | 31.54 μs / 9.27 KB | **22.60 μs / 1.56 KB** | 60.15 μs / 9.02 KB | — |
-| `SELECT DISTINCT` | **15.56 μs / 2.98 KB** | 17.90 μs / 1.44 KB | 30.64 μs / 3.88 KB | 68.58 μs / 11.70 KB |
-| `EXCEPT` | **17.38 μs / 4.12 KB** | 18.59 μs / 1.43 KB | 40.69 μs / 5.01 KB | 80.83 μs / 14.73 KB |
-| IN-list | 43.85 μs / 8.59 KB | **19.46 μs / 1.26 KB** | 74.64 μs / 17.28 KB | 116.25 μs / 22.05 KB |
-| `INTERSECT` | **16.31 μs / 4.10 KB** | 17.14 μs / 1.28 KB | 39.33 μs / 4.96 KB | 78.83 μs / 13.81 KB |
-| 4-table join | 35.21 μs / 9.92 KB | **28.06 μs / 2.02 KB** | 70.15 μs / 14.15 KB | 127.10 μs / 23.97 KB |
-| `LEFT JOIN` | 23.83 μs / 5.49 KB | **21.60 μs / 2.21 KB** | 76.56 μs / 9.02 KB | 104.27 μs / 19.66 KB |
-| Recursive CTE | 33.93 μs / 9.84 KB | **26.32 μs / 1.52 KB** | 67.39 μs / 8.62 KB | — |
-| String functions | **13.45 μs / 2.78 KB** | 14.73 μs / 1.27 KB | 31.63 μs / 4.74 KB | 70.22 μs / 12.74 KB |
-| UDF | **13.86 μs / 2.87 KB** | 14.67 μs / 1.27 KB | 50.31 μs / 6.63 KB | 70.22 μs / 12.74 KB |
-| Window functions | **29.80 μs / 4.16 KB** | 32.83 μs / 1.54 KB | 67.61 μs / 5.79 KB | — |
+| `CASE WHEN` | **13.63 μs / 2.06 KB** | 15.59 μs / 1.34 KB | 25.31 μs / 3.77 KB | 57.41 μs / 11.46 KB |
+| CTE | 32.56 μs / 9.49 KB | **22.91 μs / 1.56 KB** | 56.53 μs / 9.37 KB | — |
+| `SELECT DISTINCT` | **17.52 μs / 3.06 KB** | 18.67 μs / 1.44 KB | 30.84 μs / 3.88 KB | 63.18 μs / 11.70 KB |
+| `EXCEPT` | **18.34 μs / 4.23 KB** | 18.92 μs / 1.43 KB | 38.30 μs / 5.01 KB | 71.39 μs / 14.73 KB |
+| IN-list | 43.73 μs / 8.77 KB | **19.82 μs / 1.26 KB** | 68.29 μs / 17.28 KB | 102.95 μs / 22.05 KB |
+| `INTERSECT` | **17.51 μs / 4.22 KB** | 18.01 μs / 1.28 KB | 39.05 μs / 4.96 KB | 70.88 μs / 13.81 KB |
+| 4-table join | 35.68 μs / 10.02 KB | **27.48 μs / 2.02 KB** | 65.00 μs / 14.14 KB | 114.91 μs / 23.90 KB |
+| `LEFT JOIN` | 26.32 μs / 5.74 KB | **21.79 μs / 2.21 KB** | 69.49 μs / 8.94 KB | 98.61 μs / 19.77 KB |
+| Recursive CTE | 36.53 μs / 10.10 KB | **26.70 μs / 1.52 KB** | 63.08 μs / 8.43 KB | — |
+| String functions | **15.34 μs / 2.81 KB** | 16.34 μs / 1.27 KB | 31.89 μs / 4.74 KB | 66.92 μs / 12.74 KB |
+| UDF | **15.71 μs / 2.90 KB** | 16.26 μs / 1.27 KB | 50.07 μs / 6.75 KB | 66.85 μs / 12.74 KB |
+| Window functions | **31.01 μs / 4.09 KB** | 31.99 μs / 1.53 KB | 61.46 μs / 5.79 KB | — |
 <!-- benchmarks:category-b:end -->
 
-In the warm path Nextorm beats Dapper on `CASE WHEN` and `SELECT DISTINCT` and is level on `INTERSECT`;
-it trails Dapper by about 1.06–1.20× on string functions, `EXCEPT`, UDF and window functions, by 1.38× on
-`LEFT JOIN`, and by 1.56–1.82× on 4-table join, CTE, recursive CTE and IN-list — while staying well ahead
-of regular linq2db and EF Core on time. Warm-path allocations are higher than the prepared path (the plan
-key is rebuilt per call); they stay far below regular EF Core and below linq2db on most features, but
-exceed linq2db on CTE, recursive CTE, `EXCEPT` and `INTERSECT`.
+In the warm path Nextorm beats Dapper on `CASE WHEN` and `SELECT DISTINCT`, and is level on
+`INTERSECT`. It trails Dapper by about 1.06–1.20× on string functions, `EXCEPT`, UDF, and window
+functions; by 1.38× on `LEFT JOIN`; and by 1.56–1.82× on a 4-table join, CTE, recursive CTE, and
+IN-list. It remains ahead of regular linq2db and EF Core on time.
+
+Warm-path allocations exceed the prepared path because the plan key is rebuilt on each call. They
+remain far below regular EF Core and below linq2db on most features, but exceed linq2db on CTE,
+recursive CTE, `EXCEPT`, and `INTERSECT`.
 
 > **IN-list, Category B.** A captured collection disables the plan cache by design (each call re-renders the
 > SQL), so the captured variants pay a full build; the inline variants hit the cache. The four Nextorm
@@ -116,29 +122,35 @@ exceed linq2db on CTE, recursive CTE, `EXCEPT` and `INTERSECT`.
 
 ## Tier-1 query-shape scenarios
 
-Added in #188 to cover query shapes the two tables above do not exercise: projection into a fresh DTO,
-SQL-side aggregates, ordered paging, streaming (buffered/unbuffered DTO vs. zero-materialization raw
-readers) and cross-library JSON/CSV output. Data size: `large_table` (10,000 rows) for
-projection/aggregates/paging/streaming; the JSON class seeds its own `json_bench` table and the CSV
-class slices `large_table` (10,000 rows). The fair-comparison fixture invariants stay `simple_entity`=10
-and `complex_entity`=3 — the "10,000 rows" above is `large_table`, not those fixtures. As of **2026-11-07**.
+Issue #188 added these query shapes, which the first two tables do not cover: projection into a
+fresh DTO (data transfer object), SQL-side aggregates, ordered paging, streaming DTO results in
+buffered or unbuffered form, zero-materialization raw readers, and JSON/CSV output across libraries.
 
-Reuse categories are the same as the feature comparison: **Category A** — Nextorm `Prepare()` against the
-closest *compiled* form (`EF.CompileAsyncQuery`, `LinqToDB.CompiledQuery.Compile`) plus raw Dapper;
-**Category B** — Nextorm's implicit plan cache against regular (non-compiled) EF Core/linq2db and raw
-Dapper. Dapper has no compiled query/reader form, so its arms carry both categories.
+The data comes from `large_table` (10,000 rows) for projection, aggregates, paging, and streaming.
+The JSON class seeds its own `json_bench` table; the CSV class reads a slice of `large_table`
+(10,000 rows). The fair-comparison fixture invariants remain `simple_entity`=10 and
+`complex_entity`=3; the 10,000 rows refer to `large_table`, not those fixtures. Snapshot date:
+**2026-11-07**.
+
+The reuse categories match the feature comparison: **Category A** compares Nextorm `Prepare()` with
+the closest *compiled* form (`EF.CompileAsyncQuery`, `LinqToDB.CompiledQuery.Compile`) and raw
+Dapper. **Category B** compares Nextorm's implicit plan cache with regular (non-compiled) EF Core
+and linq2db, and raw Dapper. Dapper has no separate compiled-query or compiled-reader variant in
+this comparison, so its raw-SQL arms appear in both categories. The reader scenario still uses
+Dapper's `ExecuteReader` API.
 
 **Streaming has three groups:** buffered DTO materialization, unbuffered DTO enumeration, and a
-**zero-materialization** raw-reader subgroup. The zero subgroup is synchronous only (async reader arms are
-deferred): Nextorm `ToDataReader`, Dapper `ExecuteReader` and linq2db `ExecuteReader` (its `DataReaderAsync.Reader`)
-all read the same `id, someString` projection through **one shared non-retaining sink**. EF Core is
-explicitly **not** in the zero subgroup — it has no LINQ raw-reader counterpart. "Zero-materialization"
-means no entity/DTO construction, **not** zero allocations: the reader path still allocates its per-call
-command/reader.
+**zero-materialization** raw-reader group. The zero-materialization group is synchronous only; async
+reader arms are deferred. Nextorm `ToDataReader`, Dapper `ExecuteReader`, and linq2db
+`ExecuteReader` (its `DataReaderAsync.Reader`) read the same `id, someString` projection through
+**one shared non-retaining sink**. The sink does not retain the rows. EF Core is **not** included in
+this group because it has no LINQ raw-reader counterpart. Here, zero-materialization means no entity
+or DTO construction, **not** zero allocations: each reader call still allocates its command and
+reader.
 
-For JSON/CSV the competitor arms are a **closest equivalent**: neither Dapper, linq2db nor EF Core has a
-non-materialising output terminal, so their arm is materialize → manual serializer. This is not a
-zero-materialization claim.
+For JSON/CSV, the competitor arms are the **closest equivalent**: Dapper, linq2db, and EF Core have
+no non-materializing output terminal, so their arms materialize the rows and then serialize them
+manually. These rows do not claim zero materialization.
 
 > **Reading these numbers.** `ShortRun` + `InProcessEmitToolchain` is exploratory: treat deltas below ~20%
 > as noise and read the full report (error, standard deviation, allocations) before drawing conclusions.
@@ -288,15 +300,16 @@ see the [NativeAOT guide](../infrastructure/05-nativeaot.md).
 
 ## Reading the numbers
 
-- Every participant uses the same ADO.NET provider (`Microsoft.Data.Sqlite`), so the comparison is
-  apples-to-apples; the SQLite database lives on tmpfs so storage I/O does not mask the ORM.
-- Nextorm reports both of its reuse paths — the implicit plan cache and explicit `Prepare()` — and the
-  end-to-end cell is the fastest of them. See [Query reuse: cache vs Prepare](../engine/03-plan-cache-and-reuse.md).
-- `ShortRun` + `InProcessEmitToolchain` is a quick mode: it is stable enough for a signal, but treat small
-  differences as noise and read the full report (mean, error, standard deviation and allocations) before
-  drawing conclusions.
-- This is one machine, one provider (SQLite) and a fixed set of scenarios. It is not a claim about every
-  workload — reproduce it with your own data and hardware.
+- Every participant uses the same ADO.NET provider (`Microsoft.Data.Sqlite`), which controls for
+  provider differences. The SQLite database runs on tmpfs, so storage I/O does not mask the ORM.
+- Nextorm reports both reuse paths: the implicit plan cache and explicit `Prepare()`. For Nextorm,
+  the end-to-end table shows the faster of its two reuse paths. See [Query reuse: cache vs
+  Prepare](../engine/03-plan-cache-and-reuse.md).
+- `ShortRun` + `InProcessEmitToolchain` is an exploratory mode. Treat small differences as noise and
+  read the full report—including mean, error, standard deviation, and allocations—before drawing
+  conclusions.
+- These results cover one machine, SQLite, and a fixed set of scenarios. They do not establish
+  performance for every workload; reproduce them with your own data and hardware.
 
 ## Reproducing
 

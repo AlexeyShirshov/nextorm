@@ -4,15 +4,14 @@ using System.Threading;
 namespace NextORM.Core;
 
 /// <summary>
-/// A topology over several plain connections that the engine picks from in turn, one host per command.
-/// It is the reference implementation of routing without sharding: the connection strings are the
-/// user's, the engine never interprets them, and the only state is the rotation counter.
+/// Chooses one connection per command from a set of hosts in round-robin order. This is the reference
+/// topology for routing without sharding: connection strings are opaque to the engine, and the topology
+/// keeps only a rotation counter.
 /// </summary>
 /// <remarks>
-/// Load, health and read/write preferences are not modelled here: a topology whose picker depends on them
-/// implements <see cref="IHostTopology"/> itself and decides inside <see cref="TryGetHost"/>. Pinning
-/// (<see cref="DataContext.PinHost"/>) overrides the rotation, and so does a routed transaction, which
-/// binds the topology to one host while it is open.
+/// This topology does not model load, health, or read/write preferences. Implement <see cref="IHostTopology"/>
+/// when host selection depends on them. <see cref="DataContext.PinHost"/> and routed transactions override
+/// rotation and bind commands to one host.
 /// </remarks>
 public sealed class RoundRobinTopology : IHostTopology
 {

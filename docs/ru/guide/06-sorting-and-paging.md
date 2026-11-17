@@ -1,29 +1,24 @@
 # Сортировка и постраничная выборка
 
-> Упорядочивайте строки с помощью [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32))/[`OrderByDescending`](xref:NextORM.Core.EntityBuilder`1.OrderByDescending(System.Int32)), разбивайте их на страницы с помощью [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Offset`](xref:NextORM.Core.Paging.Offset)/[`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)) и читайте одну строку или логическое значение терминальными методами для одной строки.
+> Упорядочивайте строки с помощью [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32))/[`OrderByDescending`](xref:NextORM.Core.EntityBuilder`1.OrderByDescending(System.Int32)); чтобы выбрать часть результата, используйте [`Limit`](xref:NextORM.Core.Paging.Limit), [`Offset`](xref:NextORM.Core.Paging.Offset) или [`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)). Чтобы получить одну строку, используйте `First` или `Single`; чтобы проверить наличие подходящих строк — [`Any`](xref:NextORM.Core.EntityBuilderExtensions.Any``1(NextORM.Core.EntityBuilder{``0})).
 
 **Предварительные требования:** [Запросы и проекции](../engine/index.md) · [Фильтрация (WHERE)](03-filtering-where.md)
 
 ## Обзор
 
-Упорядочивание и постраничная выборка применяются к команде до её выполнения, поэтому они становятся
-частью генерируемого оператора, а не клиентской операцией:
+Сортировка и постраничная выборка задаются до выполнения запроса, поэтому базу данных ограничивают
+генерируемые условия, а не клиентская обработка уже полученной коллекции.
 
-* [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) предоставляет `OrderBy(Expression<Func<TEntity, object?>>, OrderDirection)`,
-  `OrderBy(expr)`, `OrderByDescending(expr)` и перегрузки с порядковым номером `OrderBy(int)`,
-  `OrderBy(int, OrderDirection)`, `OrderByDescending(int)`, а также перегрузки с явным размещением NULL
-  `OrderBy(expr, NullsPosition)` / `OrderBy(expr, OrderDirection, NullsPosition)` /
-  `OrderByDescending(expr, NullsPosition)` и семейство `ThenBy`/`ThenByDescending` (см.
-  [Упорядочивание NULL и размещение](#упорядочивание-null-и-размещение)).
-* [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) также предоставляет `Limit(int)`, `Offset(int)` и `Page(int limit, int offset)`.
-* После [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) возвращаемый [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) повторяет поверхность построителя: перегрузки по выражению
-  `OrderBy(expr)`, `OrderBy(expr, OrderDirection)` и `OrderByDescending(expr)`, перегрузки с порядковым номером
-  `OrderBy(int columnIndex, OrderDirection direction)`, `OrderBy(int)` и `OrderByDescending(int)`, а также
-  `Limit(int)`, `Offset(int)` и `Page(int limit, int offset)` (см. [Сортировка и пейджинг спроецированной команды](#сортировка-и-пейджинг-спроецированной-команды)).
+Выберите раздел по нужному результату:
 
-Каждый вызов добавляется к неизменяемому построителю, поэтому второй [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) добавляет ключ
-дополнительной сортировки и оставляет первый на месте. Терминальный метод ([`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])),
-[`AnyAsync`](xref:NextORM.Core.EntityBuilderExtensions.AnyAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), ...) выполняет команду.
+- Чтобы сортировать строки по свойству, начните с раздела
+  [«Сортировка по выражению»](#упорядочивание-по-выражению).
+- Чтобы сортировать по столбцу проекции, см.
+  [«Сортировка по порядковому номеру проецируемой колонки»](#упорядочивание-по-порядковому-номеру-проецируемой-колонки).
+- Чтобы получить страницу строк, используйте [Limit и Offset](#limit-и-offset) или [Page](#page).
+- Чтобы получить одну строку, см. раздел
+  [First, FirstOrDefault, Single и SingleOrDefault](#first-firstordefault-single-singleordefault).
+- Чтобы проверить, существует ли подходящая строка, используйте [`Any`](#any).
 
 ## Упорядочивание по выражению
 
@@ -39,6 +34,8 @@ var last = await dataContext.From<SimpleEntity>()
 select id
  from simple_entity order by id desc limit 1
 ```
+
+`OrderByDescending` ставит наибольший `Id` первым, а `FirstAsync` возвращает это значение.
 
 Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
@@ -63,7 +60,8 @@ select id
  from complex_entity order by nullableint, id desc
 ```
 
-Ключи генерируются в порядке выполнения вызовов и разделяются запятыми.
+Первый ключ сортирует по `Int` по возрастанию. Второй сортирует по `Id` по убыванию среди строк с
+одинаковым `Int`.
 
 Составной селектор принимается методами `OrderBy`, `OrderByDescending`, `ThenBy` и
 `ThenByDescending`. Формы `OrderBy(p => new { p.A, p.B })`,
@@ -137,6 +135,65 @@ limit 10 offset 0
 те же, что и у методов построителя (неотрицательные). `OrderBy(int)`/`OrderByDescending(int)` по-прежнему
 принимают порядковый номер выходной колонки (счёт с 1), поэтому `.Select(it => it.Id).OrderByDescending(1)`
 продолжает работать. Член сортировки, отсутствующий в проекции, отклоняется на этапе подготовки запроса.
+
+## Limit и Offset
+
+`Limit(int)` ограничивает число строк, а `Offset(int)` пропускает строки перед результатом:
+
+```csharp
+var page = await dataContext.From<SimpleEntity>()
+    .Offset(1)
+    .Select(it => it.Id)
+    .FirstAsync();
+```
+
+```sql
+-- SQLite
+select id
+ from simple_entity limit 1 offset 1
+```
+
+Вывод:
+
+| Id |
+|----|
+| 2 |
+
+[`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) применяет свой лимит постраничной выборки для одной строки (`limit 1` в SQLite и
+PostgreSQL, `top(1)` в SQL Server; см. ниже). Обычный `Limit(5).Select(it => it.Id)` даёт
+`select id from simple_entity limit 5` в SQLite и PostgreSQL, и
+`select top(5) id from simple_entity` в SQL Server.
+
+## Page
+
+`Page(limit, offset)` задаёт обе границы одним вызовом:
+
+```csharp
+var page = await dataContext.From<SimpleEntity>()
+    .Page(5, 10)
+    .Select(it => it.Id)
+    .ToListAsync();
+```
+
+| Провайдер | SQL для `Page(5, 10)` |
+|---|---|
+| SQLite | `select id from simple_entity limit 5 offset 10` |
+| PostgreSQL | `select id from simple_entity limit 5 offset 10` |
+| SQL Server | `select id from simple_entity order by (select null as anyorder) offset 10 rows fetch next 5 rows only` |
+
+SQL Server отклоняет `OFFSET ... FETCH` без `ORDER BY`, поэтому провайдер подставляет
+`order by (select null as anyorder)` при постраничной выборке без явной сортировки. Когда [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32))
+присутствует, используется он, и ничего не подставляется.
+
+Генерация offset/limit по провайдерам:
+
+| Провайдер | `Limit(5)` | `Offset(10)` | `Page(5, 10)` |
+|---|---|---|---|
+| SQLite | `limit 5` | `limit -1 offset 10` | `limit 5 offset 10` |
+| SQL Server | `select top(5) ...` | `offset 10 rows` (плюс подставленный `ORDER BY`) | `offset 10 rows fetch next 5 rows only` (плюс подставленный `ORDER BY`) |
+| PostgreSQL | `limit 5` | `offset 10` | `limit 5 offset 10` |
+
+В SQLite нет `OFFSET` без `LIMIT`, поэтому запрос только с `Offset` включает `limit -1`.
 
 ## Упорядочивание NULL и размещение
 
@@ -255,66 +312,6 @@ Server.
 результата ячейка в ячейку. Он сравнивает компаратором CLR по умолчанию, поэтому строки подчиняются
 сравнению CLR (`Comparer<string>.Default`), а **не** коллации базы данных.
 
-## Limit и Offset
-
-`Limit(int)` ограничивает число строк, а `Offset(int)` пропускает строки перед результатом:
-
-```csharp
-var page = await dataContext.From<SimpleEntity>()
-    .Offset(1)
-    .Select(it => it.Id)
-    .FirstAsync();
-```
-
-```sql
--- SQLite
-select id
- from simple_entity limit 1 offset 1
-```
-
-Вывод:
-
-| Id |
-|----|
-| 2 |
-
-[`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) применяет свой лимит постраничной выборки для одной строки (`limit 1` в SQLite и
-PostgreSQL, `top(1)` в SQL Server; см. ниже). Обычный `Limit(5).Select(it => it.Id)` даёт
-`select id from simple_entity limit 5` в SQLite и PostgreSQL, и
-`select top(5) id from simple_entity` в SQL Server.
-
-## Page
-
-`Page(limit, offset)` задаёт обе границы одним вызовом:
-
-```csharp
-var page = await dataContext.From<SimpleEntity>()
-    .Page(5, 10)
-    .Select(it => it.Id)
-    .ToListAsync();
-```
-
-| Провайдер | SQL для `Page(5, 10)` |
-|---|---|
-| SQLite | `select id from simple_entity limit 5 offset 10` |
-| PostgreSQL | `select id from simple_entity limit 5 offset 10` |
-| SQL Server | `select id from simple_entity order by (select null as anyorder) offset 10 rows fetch next 5 rows only` |
-
-SQL Server отклоняет `OFFSET ... FETCH` без `ORDER BY`, поэтому провайдер подставляет
-`order by (select null as anyorder)` при постраничной выборке без явной сортировки. Когда [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32))
-присутствует, используется он, и ничего не подставляется.
-
-Генерация offset/limit по провайдерам:
-
-| Провайдер | `Limit(5)` | `Offset(10)` | `Page(5, 10)` |
-|---|---|---|---|
-| SQLite | `limit 5` | `limit -1 offset 10` | `limit 5 offset 10` |
-| SQL Server | `select top(5) ...` | `offset 10 rows` (плюс подставленный `ORDER BY`) | `offset 10 rows fetch next 5 rows only` (плюс подставленный `ORDER BY`) |
-| PostgreSQL | `limit 5` | `offset 10` | `limit 5 offset 10` |
-
-В SQLite нет `OFFSET` без `LIMIT`, поэтому запрос только с offset генерирует сигнальное значение
-`limit -1`.
-
 ## Limit By (ClickHouse)
 
 `LimitBy(limit, expr)` генерирует ClickHouse [`LIMIT n BY expr`](xref:NextORM.Core.ISqlDialect.LimitBy):
@@ -432,7 +429,7 @@ select id
   результатов.
 
 Эти лимиты являются частью формы команды и ключа кэша плана запроса, и они применяются независимо от
-того, были ли уже у запроса [`Limit`](xref:NextORM.Core.Paging.Limit)/``
+того, были ли уже у запроса [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Offset`](xref:NextORM.Core.Paging.Offset).
 
 ## Any
 
@@ -454,6 +451,25 @@ select exists(select *
 В SQL Server нет логического скаляра, поэтому он генерирует тот же предикат как
 `select cast(case when exists(...) then 1 else 0 end as bit)`. В отличие от [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})), [`Any`](xref:NextORM.Core.EntityBuilderExtensions.Any``1(NextORM.Core.EntityBuilder{``0})) не нужны
 данные строки, поэтому проекция отбрасывается и проверяется только существование.
+
+## Перегрузки построителя и команды
+
+У [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) есть перегрузки `OrderBy` и
+`OrderByDescending` по выражению и порядковому номеру, явное размещение NULL, а также семейство
+`ThenBy`/`ThenByDescending`. Полный список перегрузок и поведение провайдеров см. в разделе
+[«Упорядочивание NULL и размещение»](#упорядочивание-null-и-размещение). Построитель также поддерживает
+`Limit(int)`, `Offset(int)` и `Page(int limit, int offset)`.
+
+После [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) возвращаемый
+[`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) также поддерживает сортировку по выражению или
+порядковому номеру, `Limit(int)`, `Offset(int)` и `Page(int limit, int offset)`. Пример приведён в
+разделе [«Сортировка и пейджинг спроецированной команды»](#сортировка-и-пейджинг-спроецированной-команды).
+
+Каждый вызов возвращает новый неизменяемый построитель. Повторный вызов
+[`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) добавляет ключ для разрешения равенства вместо замены первого
+ключа. Запрос выполняется при вызове метода, который возвращает результат, например
+[`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])),
+[`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) или [`AnyAsync`](xref:NextORM.Core.EntityBuilderExtensions.AnyAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])).
 
 ## Различия провайдеров
 

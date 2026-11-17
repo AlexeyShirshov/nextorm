@@ -34,6 +34,9 @@ See [Arrays (PostgreSQL)](../../scalar-functions/06-arrays.md#arrays-postgresql)
 can be used inside a query or projected directly: the row reader materialises an `Array(T)` result as
 a CLR `T[]`.
 
+Keep an array as a value when you need `any`/`all` or an array operator. If you need one result row per
+element, expand the array with `unnest` in [Set-returning functions](#set-returning-functions).
+
 ## Range types
 
 PostgreSQL has native range types (`int4range`, `int8range`, `numrange`, `tsrange`, `tstzrange`,
@@ -45,7 +48,9 @@ surface is gated by [`SupportsRanges`](xref:NextORM.Core.ISqlDialect.SupportsRan
 [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres). The operators are exposed as static methods named
 after the SQL tokens, so no range member collides with a CLR operator or the full-text `Contains`:
 
-On a database without a native range type, map a `Range<T>` property to a pair of scalar columns with [`RangeColumns`](../27-range-columns.md); the same operators are then translated over the pair.
+Use PostgreSQL's native range column for a single database range value. On a database without a native
+range type, map a `Range<T>` property to a pair of scalar columns with
+[`RangeColumns`](../27-range-columns.md); the same operators are then translated over the pair.
 
 | Member | SQL |
 |---|---|
@@ -109,15 +114,15 @@ var rows = dataContext.From<IReservation>()
 
 ## `json` and `jsonb`
 
-PostgreSQL is the only provider with native `json`/`jsonb` types. JSON operands are native JSON columns
-(a `[JsonColumn]` property maps a CLR object to `jsonb` on read and write), other JSON functions, or
-parameters whose runtime value is a `JsonDocument`/`JsonElement`/`JsonNode` (which Npgsql binds as
-`jsonb`). A bare `JsonNode`/`JsonNode?` property (declared exactly `JsonNode`, not `JsonObject`/`JsonArray`)
-reads a native `json`/`jsonb` column for object, array and scalar roots, in scalar and composite
-projections; SQL `NULL` and a JSON literal `null` both become CLR `null`. Declared `JsonObject`/`JsonArray`
-properties and a bare `JsonDocument`/`JsonElement` *scalar* projection remain outside this support. The
-`jsonb_*` family covers construction, extraction, containment and
-aggregation, for example `jsonb_build_object`, `jsonb_agg`, `json_get_text`, `json_cast`, `->`, `->>`.
+PostgreSQL is the only provider with native `json`/`jsonb` types. For a mapped CLR object, use
+`[JsonColumn]` to read and write it as `jsonb`. For a runtime JSON parameter, pass a
+`JsonDocument`/`JsonElement`/`JsonNode`; Npgsql binds it as `jsonb`. To materialise a native `json`/`jsonb`
+column, declare the property exactly as `JsonNode` or `JsonNode?` (not `JsonObject`/`JsonArray`); this
+supports object, array and scalar roots in scalar and composite projections. SQL `NULL` and a JSON literal
+`null` both become CLR `null`. Declared `JsonObject`/`JsonArray` properties and a bare
+`JsonDocument`/`JsonElement` *scalar* projection remain outside this support. The `jsonb_*` family covers
+construction, extraction, containment and aggregation, for example `jsonb_build_object`, `jsonb_agg`,
+`json_get_text`, `json_cast`, `->`, `->>`.
 
 The four accessors `json_get`, `json_get_text`, `json_get_path` and `json_get_path_text` (string-key and
 integer-index overloads) apply **contextual SQL typing**: a raw client document value (literal, captured
@@ -335,7 +340,7 @@ See [Distinct](../09-distinct.md).
 
 ## Set-returning functions
 
-PostgreSQL's set-returning functions are exposed as table-valued functions through
+PostgreSQL's set-returning functions—functions that produce rows—are exposed as table-valued functions through
 [`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) with a runtime-factory call:
 
 | `SqlFunctions.Postgres.*` | SQL output columns | Row shape |
@@ -349,6 +354,9 @@ PostgreSQL's set-returning functions are exposed as table-valued functions throu
 | `jsonb_object_keys(json)` | `jsonb_object_keys` | `IJsonObjectKeysRow` |
 | `jsonb_path_query(json, jsonpath)` | `jsonb_path_query` | `IJsonPathQueryRow` |
 | `ts_stat(query)` | `word`, `ndoc`, `nentry` | `ITsStatRow` |
+
+Use `generate_series` to produce rows from a sequence; use `unnest` when you want one row for each
+element of an existing array. The JSON functions in the table expand JSON values or objects into rows.
 
 A JSONPath operand is passed as text through `SqlFunctions.Postgres.jsonpath(path)`, which renders
 `cast(path as jsonpath)`.

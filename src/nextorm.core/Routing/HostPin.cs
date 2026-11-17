@@ -1,14 +1,14 @@
 namespace NextORM.Core;
 
 /// <summary>
-/// A host pin created by <see cref="DataContext.PinHost"/>: while it is alive, every command routed to
-/// <see cref="Topology"/> runs on <see cref="HostId"/>. Disposing the handle releases the pin, so a pin
-/// can be scoped with <c>using</c> instead of being tracked by hand.
+/// A handle for a host pin created by <see cref="DataContext.PinHost"/>. While the handle is alive, every
+/// command routed to <see cref="Topology"/> runs on <see cref="HostId"/>. Dispose the handle to release
+/// the pin, or scope it with <c>using</c>.
 /// </summary>
 /// <remarks>
-/// A pin belongs to the topology, not to the handle: pinning the same topology again replaces the pin,
-/// and disposing the older handle then does nothing. Disposing twice is harmless. Like the context, the
-/// handle is not thread-safe for concurrent disposal and pinning.
+/// A pin belongs to a topology, not to an individual handle. Pinning the same topology again replaces its
+/// pin, so disposing the older handle has no effect. Disposing this handle twice also has no effect. As
+/// with <see cref="DataContext"/>, do not pin and dispose concurrently from multiple threads.
 /// </remarks>
 public sealed class HostPin : IDisposable
 {

@@ -1,11 +1,14 @@
 # Изменение данных (UPDATE)
 
-> nextorm изменяет строки по той же модели явных команд, что `INSERT` и `DELETE`:
+> Используйте `UPDATE`, когда нужно выбрать, какие колонки и строки изменить.
+> Форма
 > [`CreateUpdateBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateUpdateBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
-> строит параметризованный `UPDATE <table> SET ... [WHERE ...]`, а расширение контекста
+> задаёт колонки через `Set` и при необходимости отбирает строки через `Where`;
+> расширение контекста
 > [`Update<TEntity>(entity)`](xref:NextORM.Core.DataContextExtensions.Update``1(NextORM.Core.IDataContext,``0))
-> обновляет по объявленному ключу сущности. Отслеживания изменений и `SaveChanges` нет: каждый терминал
-> выполняет ровно одну команду.
+> обновляет строку по объявленному ключу сущности. nextorm не отслеживает
+> изменения и не предоставляет `SaveChanges`: каждый терминал выполняет одну
+> команду.
 
 **Что нужно знать:** [Изменение данных (INSERT)](17-insert-statement.md) · [Изменение данных (DELETE)](18-delete-statement.md) · [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Обзор провайдеров](../connecting-providers/overview.md)
 
@@ -15,6 +18,10 @@
 возвращает [`UpdateBuilder<TEntity>`](xref:NextORM.Core.UpdateBuilder`1). Добавьте по одному `Set` на
 записываемую колонку, затем `Where`, и завершите `Update()`/`UpdateAsync()`, чтобы получить число
 затронутых строк:
+
+Добавляйте `Where`, если нужно обновить только подходящие строки. Без этого условия обновляются все строки,
+которые пропускают глобальные фильтры сущности (если они объявлены); используйте такой вызов, только если
+действительно нужно обновить всю таблицу.
 
 ```csharp
 var updated = ctx.CreateUpdateBuilder<ISimpleEntity>()

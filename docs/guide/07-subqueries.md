@@ -1,23 +1,26 @@
 # Subqueries
 
-> Use a `QueryCommand<T>` as a `FROM` source, as a scalar value in a projection, `WHERE`, `ORDER BY` or `HAVING`, or as a correlated `EXISTS` / `IN` / `ANY` / `ALL` predicate.
+> Use a query inside another query: read its rows through `FROM`, use one value as a scalar subquery, or test its results with `EXISTS` or `IN`.
 
 **Prerequisites:** [Querying and projections](../engine/index.md) · [Filtering (WHERE)](03-filtering-where.md) · [Joins](04-joins.md)
 
 ## Overview
 
-Any `QueryCommand<T>` — the object you get back from `EntityBuilder<T>.Select(...)` — can be embedded in
-another query in four ways:
+Choose a subquery form based on what the outer query needs from the inner query:
 
-* as a **derived table** in `FROM`, through [`From`](xref:NextORM.Core.DataContext.From(System.String));
-* as a **scalar subquery** in a projection, `WHERE`, `ORDER BY` or `HAVING`, by calling a single-row terminal
-  such as [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})) or [`Single`](xref:NextORM.Core.EntityBuilderExtensions.Single``1(NextORM.Core.EntityBuilder{``0})) inside the outer expression;
-* as a **correlated predicate** with `SqlFunctions.Sql.exists(...)`, `SqlFunctions.Sql.@in(column, query)`,
+* Use a **derived table** when the outer query needs the inner query's rows as a source. Pass the command
+  to [`From`](xref:NextORM.Core.DataContext.From(System.String)).
+* Use a **scalar subquery** when the outer query needs one value in a projection, `WHERE`, `ORDER BY` or
+  `HAVING`. Call a single-row method such as
+  [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})) or
+  [`Single`](xref:NextORM.Core.EntityBuilderExtensions.Single``1(NextORM.Core.EntityBuilder{``0})) inside
+  the outer expression.
+* Use a **predicate** when you need to test the inner query's results. Choose
+  `SqlFunctions.Sql.exists(...)`, `SqlFunctions.Sql.@in(column, query)`,
   `SqlFunctions.Sql.any(query)` or `SqlFunctions.Sql.all(query)`.
 
-The nested command is prepared independently and rendered in parentheses. A correlated subquery may
-reference the outer query's parameter; nextorm tracks those outer references and qualifies them with
-the outer table alias.
+nextorm prepares the inner command independently and renders it in parentheses. A correlated subquery
+also reads a value from the outer query; nextorm qualifies that reference with the outer table alias.
 
 One provider limitation is worth knowing up front: `SqlFunctions.Sql.any` and `SqlFunctions.Sql.all` are valid SQL
 only on SQL Server and PostgreSQL. SQLite has neither operator, so the query reaches the database and
@@ -60,34 +63,39 @@ var nested = dataContext.From<IComplexEntity>().Select(x => new { x.Id, Calc = x
 var rows = dataContext.From(nested).Select(t => new { t.Id, t.Calc }).ToList();
 ```
 
-Building the derived source and reading its rows are separate steps: `From(nested)` composes the
-derived table, while materializing it needs an explicit outer `Select`, since the enclosing query can
-only address the output columns the derived `SELECT` declares. A bare `From(nested).ToList()` works
-only when the inner projection is already a set of resolved column references (a mapped column, the
-renamed `Calc` above, or a computed scalar addressed by its output name). A projection built from
-row-member expressions — an anonymous `new { x.Id }` or a DTO `new Dto { Id = x.Id }` — would have to
-be re-translated against the derived source, so preparation refuses it with a
-`QueryPreparationException`. That restriction is about the **expression shape**, not about anonymous
-types: DTO projections are fully supported for a direct read (see [Projections](02-projections.md)),
-which does not make a bare derived read of the same DTO reusable. Add the outer `Select`
-(`From(nested).Select(t => t.Id)`) to read such a source. This rewrite works with member-init DTO and
-positional-record projections; the tested constructor-only class projection has a known pre-existing
-failure (`Cannot find inner column Id`), so use one of those supported forms instead.
+`From(nested)` creates the derived source; reading it is a separate step. In the common case, add an
+outer `Select` to name the output columns that you want to read. The outer query can address only
+columns declared by the inner `SELECT`.
 
-A **single-column scalar** derived source — a member projection or a set-operation command such as
-`left.UnionAll(right)` — has no row shape to build, so it materialises directly to `List<T>` regardless
-of whether the type's process-wide select-list cache is cold or was already populated by an earlier
-scalar read. The derived read builds its own one-column shape; it does not reuse or overwrite the cached
-entry. Before the fix the warm path reused the cached object-materialisation list and threw
-`QueryPreparationException: Cannot get ctor from T`, while the cold path succeeded.
+A bare `From(nested).ToList()` works only when the inner projection already contains resolved column
+references, such as a mapped column, the renamed `Calc` above, or a computed scalar addressed by its
+output name. A projection built from row-member expressions—an anonymous `new { x.Id }` or a DTO
+`new Dto { Id = x.Id }`—would need to be translated again against the derived source. Preparation
+therefore rejects it with `QueryPreparationException`.
 
-Two different aliases appear in these examples. The **table alias** (`t1`, `t2`, ...) names the derived
-source in `FROM` and qualifies every reference to it (`t1.id`); the provider generates it, you never
-write it. The **output-column alias** is what the derived `SELECT` itself declares: a projected member's
-name (`Calc`, `requiredstring as 'String'`), or — for an unaliased computed scalar — the generated output
-name that the enclosing query references. That generated name keeps the provider's own quoting
-(`'c0'`, `"c0"`, `[c0]`, `` `c0` ``); the spelling is an internal detail of the rendered statement, not a
-public naming guarantee. Read such a value through the builder, never by hard-coding the name:
+This restriction is about the **expression shape**, not anonymous types. DTO projections work for a
+direct read (see [Projections](02-projections.md)), but that does not make a bare derived read of the
+same DTO reusable. Add an outer `Select` (`From(nested).Select(t => t.Id)`) to read such a source.
+This form works with member-init DTOs and positional records. A tested constructor-only class
+projection has a known pre-existing failure (`Cannot find inner column Id`), so use one of those
+supported forms instead.
+
+A **single-column scalar** derived source—such as a member projection or a set-operation command such
+as `left.UnionAll(right)`—has no row shape to build, so it materializes directly to `List<T>`. This is
+true whether the type's process-wide select-list cache is cold or was populated by an earlier scalar
+read. The derived read builds its own one-column shape and does not reuse or overwrite the cached
+entry. Before the fix, the warm path reused the cached object-materialization list and threw
+`QueryPreparationException: Cannot get ctor from T`; the cold path succeeded.
+
+These examples use two kinds of aliases. The **table alias** (`t1`, `t2`, ...) names the derived source
+in `FROM` and qualifies its references (`t1.id`). The provider generates this alias; you don't write
+it. The **output-column alias** is declared by the derived `SELECT`: it is either a projected member's
+name (`Calc`, `requiredstring as 'String'`) or, for an unaliased computed scalar, a generated name
+referenced by the outer query.
+
+The provider also chooses how to quote a generated name (`'c0'`, `"c0"`, `[c0]`, `` `c0` ``). Its
+spelling is an internal detail of the rendered statement, not a public naming guarantee. Read the
+value through the builder rather than hard-coding the name:
 
 ```csharp
 var inner = dataContext.From<IComplexEntity>().Where(x => x.Id <= 2).Select(x => x.Id * 2);
@@ -116,9 +124,12 @@ for the full operator.
 
 ## Scalar subquery in SELECT
 
-Calling a single-row terminal ([`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})), [`FirstOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.FirstOrDefault``1(NextORM.Core.EntityBuilder{``0})), [`Single`](xref:NextORM.Core.EntityBuilderExtensions.Single``1(NextORM.Core.EntityBuilder{``0})), [`SingleOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.SingleOrDefault``1(NextORM.Core.EntityBuilder{``0}))) inside the
-projection embeds the inner query as a scalar column. The scalar projection is aliased with the
-outer property name:
+Call a single-row method inside the projection to embed the inner query as a scalar column. The method
+can be [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})),
+[`FirstOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.FirstOrDefault``1(NextORM.Core.EntityBuilder{``0})),
+[`Single`](xref:NextORM.Core.EntityBuilderExtensions.Single``1(NextORM.Core.EntityBuilder{``0})) or
+[`SingleOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.SingleOrDefault``1(NextORM.Core.EntityBuilder{``0})).
+nextorm gives the scalar column the outer property name:
 
 ```csharp
 var rows = await dataContext.From<IComplexEntity>()
@@ -252,12 +263,14 @@ The outer reference may be wrapped in a scalar function over the outer column (f
 `e.String.ToUpper()`); the function is rendered around the qualified outer alias just like any other
 expression.
 
-In correlated **projections**, the supported builder aggregate terminals
+### Project a correlated aggregate
+
+In correlated **projections**, the supported builder aggregate methods
 ([`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0})), `LongCount`,
 `Sum`, `Min`, `Max`, `Avg`, `Stdev`, `Stdevp`, `Var` and `Varp`) are translated to aggregate scalar
-subqueries, so they can be used directly with an outer reference. `LongCount()` returns the per-outer-row
-`long` count, including `0` when no rows match. This projection support does not by itself extend
-aggregate-terminal support in `WHERE` predicates:
+subqueries, so you can use them with an outer reference. `LongCount()` returns a `long` count for each
+outer row, including `0` when no inner rows match. Projection support does not by itself extend
+aggregate-method support in `WHERE` predicates:
 
 ```csharp
 var rows = await dataContext.From<IComplexEntity>()
@@ -273,8 +286,8 @@ limit 1) as 'cnt'
  from complex_entity as 't1'
 ```
 
-The ordered result makes the wide count explicit: `LongCount()` returns the same sequence as `Count()`
-converted to `long`, and `0L` for an outer row whose inner predicate matches nothing.
+The ordered result makes the wider count explicit: `LongCount()` returns the same sequence as `Count()`
+converted to `long`. It returns `0L` for an outer row whose inner predicate matches no rows.
 
 ```csharp
 var rows = await dataContext.From<IComplexEntity>()
@@ -291,8 +304,10 @@ var rows = await dataContext.From<IComplexEntity>()
 ```
 
 
-The same aggregate terminal may stand on the left of a comparison in the filter, where it becomes a
-correlated scalar subquery evaluated once per outer row:
+### Filter by a correlated aggregate
+
+You can also put a supported aggregate method on the left side of a filter comparison. It becomes a
+correlated scalar subquery evaluated for each outer row:
 
 ```csharp
 var rows = await dataContext.From<IComplexEntity>()
@@ -310,15 +325,16 @@ select t1.id
 limit 1) > 6)
 ```
 
-`Count`, `Sum`, `Min`, `Max` and `Avg` compose this way with the ordered comparisons, `==`/`!=`,
-arithmetic and the logical operators. The comparison stays outside the inner `select`, and SQL NULL
-semantics apply: a sum over no rows or over only `NULL` values is `NULL`, and a row whose aggregate is
-`NULL` never satisfies the comparison - it is not treated as zero. On the reported data (parent `8001`
-with child amounts 5 and 7, `8002` with only a `NULL` amount, `8003` with no children) the predicate
-returns `[8001]` only.
+`Count`, `Sum`, `Min`, `Max` and `Avg` compose this way with ordered comparisons, `==`/`!=`,
+arithmetic and logical operators. The comparison stays outside the inner `select`.
 
-`LongCount` composes here as well: it carries its own 64-bit artifact (`count_big(*)` where the provider
-has it, `count(*)` otherwise). A builder terminal outside the supported aggregate list (a scalar
+SQL `NULL` semantics still apply. A sum over no rows or only `NULL` values is `NULL`; a row whose
+aggregate is `NULL` doesn't satisfy the comparison and isn't treated as zero. In the reported data,
+parent `8001` has child amounts 5 and 7, `8002` has only a `NULL` amount, and `8003` has no children.
+The predicate returns only `[8001]`.
+
+`LongCount` composes here too. It uses a 64-bit result (`count_big(*)` where the provider has it,
+`count(*)` otherwise). A builder method outside the supported aggregate list (a scalar
 `First`/`Single`, for example) cannot take part in such a comparison: preparation fails closed with
 `QueryPreparationException` naming the terminal and the operator, instead of raising an internal
 expression-tree error.

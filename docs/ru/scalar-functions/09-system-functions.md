@@ -1,7 +1,8 @@
 # Системные функции
 
-Кросс-провайдерные функции, сообщающие состояние текущей сессии или сервера, и провайдерные аналоги
-того же рода сведений.
+Используйте эту страницу, чтобы найти системные значения и провайдерные функции, прежде всего связанные
+с состоянием сессии, сервера или каталога. Таблицы сопоставляют имена API с SQL-представлением;
+одинаковые имена не гарантируют одинаковый смысл или степень доверия в разных СУБД.
 
 ## Информация о сессии и сервере (кросс-провайдерная)
 
@@ -21,14 +22,14 @@
 
 ## Идентичность сессии и сервера
 
-Общая поверхность `SqlFunctions.Sql` несёт функции идентичности, гейтящиеся **по имени** через ту же
-возможность session-info ([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions),
-[`ISessionInfoFunctions.Supports`](xref:NextORM.Core.ISessionInfoFunctions.Supports(System.String))): сведения
-PostgreSQL о backend/сети (`pg_backend_pid`, `inet_server_addr`, `inet_server_port`, `inet_client_addr`,
-`inet_client_port`), id соединения (`connection_id`) и сообщённая клиентом учётная запись (`user`).
-Провайдерные члены живут на `SqlFunctions.SqlServer` (гейт
-[`ISqlServerFunctions.SupportsSessionIdentity`](xref:NextORM.Core.ISqlServerFunctions.SupportsSessionIdentity))
-и `SqlFunctions.ClickHouse`:
+Общая поверхность `SqlFunctions.Sql` предоставляет сведения PostgreSQL о backend/сети
+(`pg_backend_pid`, `inet_server_addr`, `inet_server_port`, `inet_client_addr`, `inet_client_port`),
+id соединения (`connection_id`) и сообщённую клиентом учётную запись (`user`). Каждый общий член
+гейтится **по имени** через [`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions)
+и [`ISessionInfoFunctions.Supports`](xref:NextORM.Core.ISessionInfoFunctions.Supports(System.String)).
+Члены идентичности SQL Server находятся на `SqlFunctions.SqlServer` и гейтятся через
+[`ISqlServerFunctions.SupportsSessionIdentity`](xref:NextORM.Core.ISqlServerFunctions.SupportsSessionIdentity);
+члены ClickHouse находятся на `SqlFunctions.ClickHouse`:
 
 | C# | CLR | PostgreSQL | SQL Server | MySQL/MariaDB | ClickHouse | SQLite |
 |---|---|---|---|---|---|---|
@@ -51,17 +52,17 @@ PostgreSQL о backend/сети (`pg_backend_pid`, `inet_server_addr`, `inet_serv
 Все пятнадцать — без аргументов. `—` означает `NotSupportedException` при трансляции: SQL-фолбэка нет,
 и провайдер, не включивший функцию, падает безопасно (SQLite не поддерживает ни одну из них).
 
-**Сервер, клиент и учётная запись.** `server_name()` сообщает экземпляр сервера, к которому подключён
-клиент. NextORM рендерит документированный `@@SERVERNAME`; нативной функции `SERVER_NAME()` в SQL Server
-нет, поэтому такое имя не эмитится никогда. `host_id()`, `host_name()` и `app_name()` описывают
-**клиентский** хост и приложение, которые клиент сам сообщил при подключении. В ClickHouse, наоборот,
-`host_name()` — **серверный** хост, ответивший на запрос, а `tcp_port()` — его порт прослушивания,
-поэтому SQL Server `host_name()` и ClickHouse `host_name()` — разные факты. `user()` — пара
-`user@host` подключающегося клиента MySQL/MariaDB, и она **не** заменяет `current_user()`, который
-остаётся эффективной аутентифицированной учётной записью; на серверной стороне
-`current_user()`/`session_user()` — это идентичность безопасности, а пара SQL Server
-`suser_name()`/`original_login()` вычисляется из токена безопасности (`original_login()` переживает
-переключение контекста `EXECUTE AS`).
+**Определяйте источник каждого значения.** SQL Server `server_name()` сообщает экземпляр сервера, к
+которому подключён клиент; NextORM рендерит документированный `@@SERVERNAME`, потому что нативной
+функции `SERVER_NAME()` в SQL Server нет. SQL Server `host_id()`, `host_name()` и `app_name()`
+описывают **клиентский** хост и приложение, сообщённые клиентом при подключении. В ClickHouse
+`host_name()` вместо этого обозначает
+**сервер**, ответивший на запрос, а `tcp_port()` сообщает его порт прослушивания; значения
+`host_name()` у двух провайдеров — разные факты. `user()` в MySQL/MariaDB сообщает пару `user@host`
+подключающегося клиента, а не эффективную аутентифицированную учётную запись `current_user()`. На стороне
+сервера `current_user()`/`session_user()` обозначают субъект безопасности, а
+`suser_name()`/`original_login()` SQL Server вычисляются из токена безопасности
+(`original_login()` сохраняется при переключении контекста `EXECUTE AS`).
 
 **Семантика NULL.** `server_name()`, `host_id()`, `host_name()`, `app_name()`, `suser_name()` и
 `original_login()` — `string?`, потому что SQL Server может вернуть SQL NULL (экземпляр без
@@ -71,10 +72,13 @@ PostgreSQL о backend/сети (`pg_backend_pid`, `inet_server_addr`, `inet_serv
 — `int?`; `pg_backend_pid()` — ненулевой `int`. `connection_id()` — ненулевой `ulong`: id соединения
 на серверной стороне (не id пользователя), расширенный до 64 бит в MySQL/MariaDB и ClickHouse.
 
-**Оговорка по безопасности.** `host_id()`, `host_name()` и `app_name()` возвращают **сообщённые
-клиентом, недоверенные** значения: это диагностические факты сессии, а не идентичность безопасности.
-Для авторизации надёжна только аутентифицированная идентичность (`current_user()`, `session_user()` и
-производные от токена `suser_name()`/`original_login()`).
+**Оговорка по безопасности.** Не используйте SQL Server `host_id()`, `host_name()` или `app_name()`
+для авторизации: клиент сообщает эти недоверенные значения, поэтому они являются диагностическими
+фактами сессии, а не идентичностью безопасности. `host_name()` в ClickHouse сообщает сервер, но
+обозначает хост, обслуживший запрос, а не аутентифицированную учётную запись. `user()` в MySQL/MariaDB
+также не является идентичностью для авторизации: он сообщает пару `user@host` подключающегося клиента,
+а не эффективную учётную запись. Для авторизации используйте аутентифицированную идентичность
+(`current_user()`, `session_user()` и производные от токена SQL Server `suser_name()`/`original_login()`).
 
 ## Провайдерная информация о сессии и сервере
 
@@ -102,24 +106,28 @@ PostgreSQL о backend/сети (`pg_backend_pid`, `inet_server_addr`, `inet_serv
 множественный читатель — через `SupportsTableFunction`, а любой другой провайдер отклоняет вызов
 `NotSupportedException`. Она покрывает 79 имён `pg_*` из расширения системной информации PostgreSQL 17:
 56 поставленных скалярных функций, 2 проверенных отказа, уже покрытый `pg_backend_pid` и 20
-множественных читателей.
+множественных читателей. Гейт трансляции по имени не отменяет нативных требований к настройкам,
+привилегиям или состоянию сессии: они по-прежнему могут повлиять на результат или вызвать ошибку сервера.
 
-**Семантика, измеренная на PostgreSQL 17.11.** Результаты типов-алиасов OID и транзакционных типов,
-для которых у Npgsql нет CLR-отображения — `oid`, `regclass`, `regtype`, `xid8` и `pg_lsn` — переводятся
-в `text` на стороне сервера (`cast(... as text)` или `::text` внутри проекции строки), а текстовый
-OID-аргумент приводится обратно к `oid`/`regclass`/`regtype`/`regrole`, потому что текстовый параметр не
-разрешает такие перегрузки. `pg_current_logfile()` возвращает NULL, когда ни одно место назначения
-журнала не является файловым (`logging_collector` выключен или журнал пишется в `syslog`), а не пустую
-строку; именованная форма принимает `stderr`, `csvlog` или `jsonlog`, а любое другое значение выдаёт
-ошибку на сервере. `pg_xact_commit_timestamp` выдаёт SQLSTATE `55000` (`could not get commit timestamp data`),
+**Мост типов (семантика измерена на PostgreSQL 17.11).** Результаты типов-алиасов OID и транзакционных
+типов, для которых у Npgsql нет CLR-отображения — `oid`, `regclass`, `regtype`, `xid8` и `pg_lsn` —
+переводятся в `text` на стороне сервера (`cast(... as text)` или `::text` внутри проекции строки).
+Текстовый OID-аргумент приводится обратно к `oid`/`regclass`/`regtype`/`regrole`, потому что текстовый
+параметр не разрешает такие перегрузки.
+
+**Рантайм-условия.** `pg_current_logfile()` возвращает NULL, когда ни одно место назначения журнала не
+является файловым (`logging_collector` выключен или журнал пишется в `syslog`), а не пустую строку.
+Именованная форма принимает `stderr`, `csvlog` или `jsonlog`; любое другое значение выдаёт ошибку на
+сервере. `pg_xact_commit_timestamp` выдаёт SQLSTATE `55000` (`could not get commit timestamp data`),
 когда `track_commit_timestamp` выключен — он не возвращает NULL. Помощники определения объектов
 возвращают NULL для аргумента, не называющего объект, вместо ошибки (`pg_get_indexdef`,
 `pg_get_viewdef`, `pg_get_ruledef`, `pg_get_triggerdef`, `pg_get_partkeydef`,
-`pg_get_partition_constraintdef`, `pg_get_statisticsobjdef`). Семейство только читающее: разрушительные
-или меняющие состояние элементы управления сервером (`pg_terminate_backend`, `pg_cancel_backend`,
-`pg_switch_wal`, `pg_promote`, `pg_create_restore_point`, `pg_reload_conf`, `pg_rotate_logfile`) не
-выставлены, а два помощника блокировок только сообщают id процессов — они никогда не действуют на
-сессию.
+`pg_get_partition_constraintdef`, `pg_get_statisticsobjdef`).
+
+Семейство только читающее: разрушительные или меняющие состояние элементы управления сервером
+(`pg_terminate_backend`, `pg_cancel_backend`, `pg_switch_wal`, `pg_promote`, `pg_create_restore_point`,
+`pg_reload_conf`, `pg_rotate_logfile`) не выставлены, а два помощника блокировок только сообщают id
+процессов — они никогда не действуют на сессию.
 
 #### Идентичность сессии и сервера
 
@@ -404,11 +412,11 @@ ClickHouse, SQLite и in-memory провайдер отклоняют член �
 
 ## Живое состояние (SQL Server)
 
-**Живое изменяемое состояние не является критерием исключения.** Имена T-SQL, сообщающие текущее
-состояние соединения, транзакции, сессии или инструкции, открыты как есть, с нативной семантикой SQL
-Server; nextorm **не гарантирует** построчную стабильность, непрерывность соединения между запросами
-или получение identity. Каждое значение — нативный снимок момента выполнения инструкции, и клиент не
-изобретает вокруг него защиту. Для ключа последней вставки используйте `ReturningIdentity<TKey>()`.
+**Живое изменяемое состояние не является критерием исключения.** Эти имена T-SQL отдают нативное
+состояние соединения, транзакции, сессии или инструкции в момент выполнения инструкции. Не считайте
+значение стабильным для каждой строки и не предполагайте, что следующий запрос использует то же
+соединение: nextorm этого не гарантирует. Для ключа последней вставки используйте
+`ReturningIdentity<TKey>()`, а не отдельный запрос `scope_identity()`.
 
 | C# | CLR | Оговорка |
 |---|---|---|

@@ -1,7 +1,7 @@
 namespace NextORM.Core;
 
 /// <summary>
-/// Fluent terminal for a full <c>MERGE</c> that returns the merged rows through the provider's
+/// Fluent terminal for a full <c>MERGE</c> or key upsert that returns the affected rows through the provider's
 /// <c>OUTPUT</c>/<c>RETURNING</c> form, started with
 /// <see cref="MergeBuilder{TEntity}.Returning()"/> or
 /// <see cref="MergeBuilder{TEntity}.Returning{TResult}(System.Linq.Expressions.Expression{System.Func{TEntity,TResult}})"/>.

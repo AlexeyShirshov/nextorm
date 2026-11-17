@@ -1,14 +1,22 @@
 # Data modification (INSERT)
 
-> nextorm adds a small, explicit DML surface: [`CreateInsertBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateInsertBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) builds a parameterised `INSERT ... VALUES` and returns the affected-row count, the generated key or the inserted rows. There is no change tracking or unit of work: every terminal issues exactly one command.
+> Use [`CreateInsertBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateInsertBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) to insert one row, a batch, or rows selected by a query. Choose the terminal for the result you need: an affected-row count, a generated key, or the inserted rows.
 
 **Prerequisites:** [Querying and projections](../engine/index.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Provider overview](../connecting-providers/overview.md)
 
+## Choose an insert pattern
+
+- To set individual columns for one row, use `Value(...)`.
+- To insert a mapped entity or a batch, use `Values(...)`.
+- To copy rows from a query, use `Values(source, mapping)`; the database performs the insert from the query result.
+- To read a generated key or the inserted rows, see [Reading the generated key](#reading-the-generated-key) and [Returning the inserted rows](#returning-the-inserted-rows).
+- For native bulk paths or chunking, use [Bulk insert](22-bulk-insert.md).
+
 ## Overview
 
-nextorm has always been a query *builder*; writing a row is the same idea applied to `INSERT`. The
-builder collects the target table and the columns to write, the active dialect renders the statement
-(parameterising every value, exactly like a query), and the context executes it once:
+Use the insert builder when you want to write rows with an explicit command. Set the target and the
+columns to write, then execute the command. The active dialect renders the statement and parameterizes
+every value, as it does for a query:
 
 ```csharp
 using var ctx = new DataContextBuilder().UsePostgres(connectionString).CreateDataContext();
@@ -19,15 +27,16 @@ var affected = ctx.CreateInsertBuilder<ISimpleEntity>()
     .Insert();
 ```
 
-There is deliberately **no** unit of work, change tracker or entity graph: commands are issued and
-executed explicitly, one at a time. See
+Each terminal executes exactly one command. nextorm has no unit of work, change tracker, or entity graph.
+See
 [Limitations and out-of-scope features](../advanced/limitations.md).
 
 ## Declaring keys, identity and computed columns
 
-The insert builder uses the entity mapping, so it needs to know which columns are database-generated.
-Declare them with the standard data-annotation attributes (on the interface when the entity is
-interface-mapped) or fluently on the metadata builder:
+The insert builder uses the entity mapping to decide which columns it can write. Mark database-generated
+columns as identity or computed so the builder can handle them correctly. Declare the mapping with
+standard data-annotation attributes (on the interface for an interface-mapped entity) or with the
+metadata builder:
 
 | Concept | Attribute | Fluent |
 |---|---|---|
@@ -151,10 +160,10 @@ insert into orders (total) values (@p0), (@p1)
 insert into simple_entity (name) values (@p0), (@p1)
 ```
 
-**A batch from a query (server-side).** The same `Values(source, mapping)` signature also accepts an
-`EntityBuilder<TSource>`, which renders `INSERT ... SELECT` and reads the rows in the database instead of
-the client - useful for copying or filtering server-side. The mapping selects the written columns exactly
-as above:
+**A batch from a query (server-side).** Pass an `EntityBuilder<TSource>` to `Values(source, mapping)` to
+render `INSERT ... SELECT`. The database reads the source rows instead of the client, which is useful for
+copying or filtering rows on the server. The mapping selects the written columns as in the previous
+example:
 
 ```csharp
 ctx.CreateInsertBuilder<IOrder>()
@@ -169,13 +178,15 @@ insert into orders (id, amount) select id, amount
  where active
 ```
 
-The source is an ordinary query builder (`Where`/`Join`/`GroupBy`/`OrderBy`/...), and its parameters are
-carried into the insert. A source that declares a CTE (`With`) is supported: the `WITH` clause is hoisted
-to precede `INSERT` (`with c as (...) insert into ... select ... from c`), because a data-modifying CTE must
-sit at the top level. A runtime `SqlFunctions.Parameter` placeholder is not supported, and `DEFAULT` is not
-valid as a selected value - both throw `NotSupportedException`. `Returning`/`ReturningIdentity`/`ReturningKey`
-compose with it wherever the provider supports them, and `.Single()` throws when the query writes more than
-one row. The target-column rules (member names, no `Computed` target) are the same as the client-side mapping.
+The source can use ordinary query operators such as `Where`, `Join`, `GroupBy`, and `OrderBy`. Its
+parameters carry into the insert. A source with a CTE (`With`) is supported; nextorm moves the `WITH`
+clause before `INSERT` (`with c as (...) insert into ... select ... from c`) because a data-modifying
+CTE must be at the top level.
+
+A runtime `SqlFunctions.Parameter` placeholder and `DEFAULT` as a selected value are not supported; both
+throw `NotSupportedException`. `Returning`, `ReturningIdentity`, and `ReturningKey` compose with this form
+where the provider supports them. `.Single()` throws if the query writes more than one row. The target
+column rules (member names and no `Computed` target) match the client-side mapping.
 
 A **CTE source** is a valid server-side source: build the scope with `With`, read the CTE by name and pass
 the resulting `EntityBuilder<TableAlias>` to `Values`. CTE columns are read by name, so the mapping must use
@@ -410,8 +421,9 @@ CTE body must be a `SELECT`. For general read CTEs see [Common table expressions
 
 ## Reading the generated key
 
-The key-reading terminals all return an [`InsertReturningBuilder<TEntity,TResult>`](xref:NextORM.Core.InsertReturningBuilder`2)
-and are read through its `Single()`/`ToList()` terminals (see [Returning the inserted rows](#returning-the-inserted-rows)):
+To read the generated key, choose a terminal based on where its value comes from. Each returns an
+[`InsertReturningBuilder<TEntity,TResult>`](xref:NextORM.Core.InsertReturningBuilder`2); read the result with
+`Single()` or `ToList()` (see [Returning the inserted rows](#returning-the-inserted-rows)):
 
 | Terminal | Selects | Requires |
 |---|---|---|

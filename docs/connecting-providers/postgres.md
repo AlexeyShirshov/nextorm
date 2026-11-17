@@ -2,7 +2,38 @@
 
 > Use `nextorm.postgres` for PostgreSQL; it renders `@name` parameters, `limit`/`offset` paging, `coalesce`, `extract` date parts and `stddev`/`variance` aggregates, supports `INTERSECT ALL`/`EXCEPT ALL`, and requires double-quoted aliases.
 
-**Prerequisites:** [Provider overview](overview.md) · [Quickstart](../getting-started/02-quickstart.md)
+**Before you begin:** [Provider overview](overview.md) · [Quickstart](../getting-started/02-quickstart.md)
+
+## Registering the provider
+
+Use a connection string when the context should create and own its connection:
+
+```csharp
+using NextORM.Core;
+using NextORM.Postgres;
+
+var builder = new DataContextBuilder().UsePostgres(
+    "Host=localhost;Database=app;Username=app;Password=secret");
+using var ctx = builder.CreateDataContext();
+```
+
+To reuse a caller-owned connection, pass it to `UsePostgres`:
+
+```csharp
+using var connection = new Npgsql.NpgsqlConnection("Host=localhost;Database=app;...");
+var builder = new DataContextBuilder().UsePostgres(connection);
+using var ctx = builder.CreateDataContext();
+```
+
+You can also construct the context directly:
+
+```csharp
+using NextORM.Core;
+using NextORM.Postgres;
+
+using IDataContext ctx = new PostgresDataContext(
+    "Host=localhost;Database=app;...", new DataContextBuilder());
+```
 
 ## Overview
 
@@ -93,32 +124,6 @@
 The variability aggregates follow the shared cardinality contract: `Stdev`/`Var` are `null` for zero or
 one contributing value, `Stdevp`/`Varp` are `null` for zero and `0.0` for one. The result is a real
 `Nullable<T>`, so a sample over an empty or single-row set materializes as `null`.
-
-## Registering the provider
-
-Two overloads are available on [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder)
-(`src/nextorm.postgres/DI/PostgresDataContextOptionsBuilderExtensions.cs`):
-
-```csharp
-using NextORM.Core;
-using NextORM.Postgres;
-
-var byString = new DataContextBuilder().UsePostgres("Host=localhost;Database=app;Username=app;Password=secret");
-
-using var connection = new Npgsql.NpgsqlConnection("Host=localhost;Database=app;...");
-var byConnection = new DataContextBuilder().UsePostgres(connection);
-
-using var ctx = byString.CreateDataContext();   // IDataContext
-```
-
-Directly:
-
-```csharp
-using NextORM.Core;
-using NextORM.Postgres;
-
-using IDataContext ctx = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder());
-```
 
 ## Server version
 

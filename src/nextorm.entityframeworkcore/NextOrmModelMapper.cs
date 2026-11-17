@@ -12,11 +12,12 @@ namespace NextORM.EntityFrameworkCore;
 /// columns declared in the EF model.
 /// </summary>
 /// <remarks>
-/// The mapping is derived from the EF model alone: no nextorm attribute or fluent configuration is
-/// required on the entity. Properties without a CLR member (shadow properties) and owned types are
-/// skipped. Because <see cref="DataContextCache.Metadata"/> is process-wide and keyed by
-/// <see cref="Type"/>, at most one mapping per CLR type is kept; a later registration for the same
-/// type replaces the previous one only when it is identical, and otherwise throws.
+/// The mapping comes from the EF model alone: entities need no nextorm attributes or fluent
+/// configuration. Properties without a CLR member (shadow properties) and owned types are skipped.
+/// <see cref="DataContextCache.Metadata"/> is process-wide and keyed by <see cref="Type"/>, so it
+/// keeps one mapping per CLR type. An identical bridge registration reuses its existing entry. A
+/// compatible mapping registered outside the bridge is preserved and receives the imported EF filters;
+/// conflicting mappings or filter registrations throw.
 /// <para>
 /// The global query filters declared in the EF model are imported too:
 /// <see cref="EfQueryFilterTranslator"/> turns each named/keyed and anonymous EF filter into a

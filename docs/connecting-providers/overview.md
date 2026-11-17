@@ -1,25 +1,27 @@
 # Provider overview
 
-> A provider supplies a dialect (SQL text rules) and a [`DataContext`](xref:NextORM.Core.DataContext) subclass (connection + parameter creation); pick the one that matches the database you already run.
+> Choose the provider package that matches your database. Each provider supplies SQL-specific rules and a [`DataContext`](xref:NextORM.Core.DataContext) subclass that creates connections and parameters.
 
 **Prerequisites:** [Quickstart](../getting-started/02-quickstart.md) · [Dependency injection](../getting-started/04-dependency-injection.md)
 
 ## Overview
 
-nextorm is split into a provider-neutral core (`nextorm`, namespace [`NextORM.Core`](xref:NextORM.Core)) and one package per
-database: `nextorm.sqlite`, `nextorm.sqlserver`, `nextorm.postgres`, `nextorm.mysql`, `nextorm.mariadb`
-and `nextorm.clickhouse`. The in-memory provider is built
-into the core package. A provider contributes two things:
+NextORM has a provider-neutral core package and a separate package for each SQL database:
+`nextorm.sqlite`, `nextorm.sqlserver`, `nextorm.postgres`, `nextorm.mysql`, `nextorm.mariadb`, and
+`nextorm.clickhouse`. The in-memory provider is included in the core package.
+
+Each SQL provider supplies two parts:
 
 1. a **dialect** — a stateless object that renders everything that differs between databases (parameter
    placeholders, paging, quoting, function names, capability flags); and
 2. a **context** — a [`DataContext`](xref:NextORM.Core.DataContext) subclass that knows how to create a connection and parameters, and
    exposes the dialect through its `Dialect` property.
 
-SQL generation is driven entirely by [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) (`src/nextorm.core/DataContext/Dialect/ISqlDialect.cs`),
-so the SQL builder and expression visitors never contain provider names. Query semantics (projection,
-filtering, joins, grouping, set operations, CTE, window functions, scalar/UDF/TVF support) are shared;
-only the rendering differs.
+The core builds SQL through [`ISqlDialect`](xref:NextORM.Core.ISqlDialect). Query behavior—such as
+projections, filters, joins, grouping, set operations, common table expressions (CTEs), and window
+functions—is shared. The dialect controls how each provider renders that behavior. Provider-specific
+scalar functions, user-defined functions (UDFs), and table-valued functions (TVFs) are listed in the
+support matrix.
 
 ## Choosing a provider
 
@@ -33,8 +35,31 @@ only the rendering differs.
 | You already run ClickHouse | `nextorm.clickhouse` |
 | Unit tests that must not touch a database, plan-cache tests, query-shape tests | [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) (core) |
 
-Use the same query code against every provider; the provider differences below are the only things that
-change.
+Use the choice table to select a package. Use the support matrix as a reference when you need to know
+whether a feature has a provider-specific implementation. SQL providers share the query API, but that
+does not mean every feature is supported by every database.
+
+## Registering a provider
+
+Every provider package adds `UseXxx` extension methods on [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder), and every context also has a
+public constructor that takes a connection string or an existing `DbConnection`:
+
+```csharp
+using NextORM.Core;
+using NextORM.Sqlite;      // or nextorm.sqlserver / nextorm.postgres
+
+var builder = new DataContextBuilder().UseSqlite("app.db");   // provider-specific overload
+using var ctx = builder.CreateDataContext();                   // returns IDataContext
+```
+
+With dependency injection:
+
+```csharp
+services.AddNextOrmContext(builder => builder.UseSqlite("app.db"));
+```
+
+See [Dependency injection](../getting-started/04-dependency-injection.md) for keyed and generic
+registrations.
 
 ## Support matrix
 
@@ -209,28 +234,6 @@ public class SqliteDataContext : DataContext
 The dialect contract deliberately excludes connection/parameter creation (`CreateConnection`/
 `CreateParam`) and column mapping (`MapColumnExpression`): those live on the context, because they are a
 separate axis from SQL text.
-
-## Registering a provider
-
-Every provider package adds `UseXxx` extension methods on [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder), and every context also has a
-public constructor that takes a connection string or an existing `DbConnection`:
-
-```csharp
-using NextORM.Core;
-using NextORM.Sqlite;      // or nextorm.sqlserver / nextorm.postgres
-
-var builder = new DataContextBuilder().UseSqlite("app.db");   // provider-specific overload
-using var ctx = builder.CreateDataContext();                   // returns IDataContext
-```
-
-With dependency injection:
-
-```csharp
-services.AddNextOrmContext(builder => builder.UseSqlite("app.db"));
-```
-
-See [Dependency injection](../getting-started/04-dependency-injection.md) for keyed and generic
-registrations.
 
 ## See also
 

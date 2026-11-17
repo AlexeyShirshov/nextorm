@@ -34,11 +34,18 @@ select group_concat(somestring, ',')
 | `SqlFunctions.Sql.string_agg(x, delimiter)` | `string_agg(x, delimiter)` / `arrayStringConcat(groupArray(x), delimiter)` / `group_concat(x separator delimiter)` / `group_concat(x, delimiter)` | PostgreSQL, SQL Server, ClickHouse, MySQL/MariaDB, SQLite |
 | `SqlFunctions.Postgres.array_agg(x)` | `array_agg(x)` | PostgreSQL |
 
+Описания пустого входа и группы из одних NULL ниже относятся к разным случаям. Агрегатный запрос без
+`GROUP BY` возвращает одну строку даже при пустом входе. Обычный `GROUP BY` на пустом входе не образует
+групп и не возвращает строк; запрос с `ROLLUP`, `CUBE` или `GROUPING SETS`, включающим пустую группировку
+`()`, всё же может вернуть строку общего итога. Группа из одних NULL — это существующая группа, в которой
+аргумент агрегата равен NULL во всех строках.
+
 ## SQL Server 2025: `product`
 
 `SqlFunctions.SqlServer.product(value)` рендерит агрегат `PRODUCT` SQL Server 2025 в агрегатном
-контексте. Результат сохраняет тип входа (`int?` для столбца `int`), NULL-строки игнорируются, а группа
-без единого не-NULL значения не имеет произведения (SQL `NULL`):
+контексте. Результат сохраняет тип входа (`int?` для столбца `int`), NULL-строки игнорируются. Если до
+агрегата не доходит ни одного не-NULL значения — из-за пустого входа без группировки или потому, что
+существующая группа содержит только NULL, — результатом будет SQL `NULL`:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -89,11 +96,11 @@ contract is established.` Отказ поднимается до генерац�
 только в агрегатной форме. `grouping_id` — аналитический член семейства, ему нужна сгруппированная
 команда.
 
-| Член | SQL | CLR-результат | Пустая группа / группа из NULL | Требование |
+| Член | SQL | CLR-результат | Пустой вход без группировки / существующая группа из одних NULL | Требование |
 |---|---|---|---|---|
 | `approx_count_distinct(value)` | `approx_count_distinct(value)` | `long` (`bigint`) | `0` / `0` | мажорная версия 15 (SQL Server 2019) |
 | `checksum_agg(value)` | `checksum_agg(value)` | `int?` (`int`) | `NULL` / `NULL` | любое объявление (без версионного порога) |
-| `grouping_id(expressions...)` | `grouping_id(a, b, …)` | `int` | `0` при обычном `GROUP BY`; иначе маска подытогов | любое объявление; только сгруппированная команда |
+| `grouping_id(expressions...)` | `grouping_id(a, b, …)` | `int` | не агрегат; `0` при обычном `GROUP BY`, иначе маска подытогов | любое объявление; только сгруппированная команда |
 | `approx_percentile_cont(fraction, value)` | `approx_percentile_cont(f) within group (order by value)` | `double?` (`float(53)`) | `NULL` / `NULL` | мажорная версия 16 (SQL Server 2022) |
 | `approx_percentile_disc(fraction, value)` | `approx_percentile_disc(f) within group (order by value)` | `T?` — тип входного выражения сортировки (`int?` для столбца `int`) | `NULL` / `NULL` | мажорная версия 16 (SQL Server 2022) |
 
@@ -136,8 +143,8 @@ The APPROX_PERCENTILE_CONT function requires SQL Server major version 16 or late
 
 ### `approx_count_distinct`
 
-`approx_count_distinct(value)` возвращает `long` (`bigint`). NULL-строки не считаются, а пустая группа
-и группа из одних NULL дают `0` — никогда не SQL NULL. Это оценка, а не точный `count(distinct …)`:
+`approx_count_distinct(value)` возвращает `long` (`bigint`). NULL-строки не считаются, поэтому и пустой
+вход без группировки, и существующая группа из одних NULL дают `0` — не SQL NULL. Это оценка, а не точный `count(distinct …)`:
 когда важна точность, используйте `SqlFunctions.Sql.count_distinct`. Постоянный NULL-операнд рендерится
 как `CAST(NULL AS <тип>)`, потому что «голый» `NULL` даёт Msg 8117 (`Operand data type NULL is invalid
 for approx_count_distinct operator.`). У движка нет формы `OVER` (Msg 4113), и здесь предлагается только
@@ -145,9 +152,9 @@ for approx_count_distinct operator.`). У движка нет формы `OVER` 
 
 ### `checksum_agg`
 
-`checksum_agg(value)` возвращает `int?` (`int`). NULL-строки пропускаются, а пустая группа или группа из
-одних NULL не имеет контрольной суммы (`NULL`). Значение не зависит от порядка, но **не** является
-стабильной идентичностью и не годится как хеш для сравнения: одинаковые значения взаимно уничтожаются
+`checksum_agg(value)` возвращает `int?` (`int`). NULL-строки пропускаются. Пустой вход без группировки и
+существующая группа из одних NULL в обоих случаях дают `NULL`. Значение не зависит от порядка, но
+**не** является стабильной идентичностью и не годится как хеш для сравнения: одинаковые значения взаимно уничтожаются
 (`checksum_agg` по `(5, 5)` — `0`, по `(5)` — `5`, по `(5, 6)` — `3`), то есть он обнаруживает изменение,
 а не содержимое. Версионного порога нет: его рендерит любая объявленная мажорная версия SQL Server,
 включая неверсионированное объявление. Постоянный NULL-операнд рендерится как `CAST(NULL AS int)`
@@ -177,9 +184,9 @@ for approx_count_distinct operator.`). У движка нет формы `OVER` 
 
 `approx_percentile_cont(fraction, value)` возвращает `double?` (`float(53)`) и интерполирует;
 `approx_percentile_disc(fraction, value)` возвращает тип входного выражения сортировки (`T?`, например
-`int?` для столбца `int`) и возвращает входное значение. NULL-строки пропускаются, а пустая группа или
-группа из одних NULL даёт `NULL` для обоих. Запись — `WITHIN GROUP (ORDER BY value)`, а концы `0` и `1`
-точны.
+`int?` для столбца `int`) и возвращает входное значение. NULL-строки пропускаются; пустой вход без
+группировки и существующая группа из одних NULL дают `NULL` для обоих членов. Запись — `WITHIN GROUP
+(ORDER BY value)`, а концы `0` и `1` точны.
 
 Дробь — это `double` в `[0, 1]`, никогда не проценты 0–100, и она должна быть независима от строки:
 литерал или захваченная переменная. Дробь, зависящая от строки (`(double)e.Int`), отклоняется при
@@ -295,6 +302,12 @@ var elements = dataContext
 `NotSupportedException`. `json_agg`, `jsonb_agg`, `json_object_agg` и `jsonb_object_agg` по-прежнему
 документированы вместе с JSON-функциями в разделе [JSON и JSONB](07-json-and-xml.md).
 
+В описаниях ниже фраза «пустой вход даёт одну строку» означает агрегатный запрос без `GROUP BY`: он
+возвращает одну строку результата, а значение агрегата в ней может быть SQL `NULL`. Обычный
+сгруппированный запрос с нулём входных строк не образует групп и не возвращает строк; `ROLLUP`, `CUBE`
+или `GROUPING SETS` могут вернуть строку общего итога, если включают пустую группировку `()`. Группа из
+одних NULL существует, поэтому результат для неё может отличаться от результата на пустом входе.
+
 ### `any_value`
 
 | C# | SQL |
@@ -306,8 +319,8 @@ var elements = dataContext
 `pg_proc` PostgreSQL, а не переносимый `Sql.any_agg`. Поскольку результат полиморфен, nextorm требует
 одноколоночную CLR-форму — примитив, строку, дату/время, decimal, `Guid` или массив байтов — и
 отклоняет любой другой `T` до генерации SQL; при необходимости проецируйте значение с явным
-преобразованием. Группа, все значения которой NULL, даёт NULL, а пустой вход по-прежнему даёт одну
-строку с NULL.
+преобразованием. Существующая группа из одних NULL даёт SQL `NULL`; агрегатный запрос без `GROUP BY`
+на пустом входе возвращает одну строку со значением `NULL`.
 
 ### Регрессионные суммы (`regr_sxx`, `regr_sxy`, `regr_syy`)
 
@@ -320,8 +333,9 @@ var elements = dataContext
 Оба операнда — обобщённые (`TY?`/`TX?`); перегрузки агрегата в PostgreSQL принимают `double precision`,
 и результат — `double precision` (`double?`). `regr_sxx` равен
 `sum(X^2) - sum(X)^2/N`, `regr_syy` — то же по `Y`, а `regr_sxy` — `sum(X*Y) - sum(X)*sum(Y)/N`. Пара
-с NULL-операндом пропускается; группа с единственной не-NULL парой даёт `0` (измерено), а группа из
-одних NULL или пустой вход дают NULL — пустой вход по-прежнему даёт одну строку.
+с NULL-операндом пропускается; группа с единственной не-NULL парой даёт `0` (измерено). Существующая
+группа из одних NULL даёт SQL `NULL`; агрегатный запрос без `GROUP BY` на пустом входе возвращает одну
+строку со значением `NULL`.
 
 ### `xmlagg`
 
@@ -333,8 +347,8 @@ var elements = dataContext
 `42883` "function … does not exist" (измерено), поэтому операнд приводится к `xml` и обязан содержать
 XML-разметку, которую принимает тип `xml`. Результат — конкатенация документов группы без разделителя,
 и Npgsql материализует результат `xml` как `string` (измерено), что и объявляет член. NULL-операнды
-пропускаются, группа, все операнды которой NULL, даёт NULL, а пустой вход по-прежнему даёт одну строку
-с NULL.
+пропускаются. Существующая группа из одних NULL даёт SQL `NULL`; агрегатный запрос без `GROUP BY` на
+пустом входе возвращает одну строку со значением `NULL`.
 
 ### Строгие и уникальные JSON-агрегаты
 
@@ -345,11 +359,13 @@ XML-разметку, которую принимает тип `xml`. Резул
 | `SqlFunctions.Postgres.json_object_agg_unique(k, v)` | `json_object_agg_unique(k, v)` |
 | `SqlFunctions.Postgres.json_object_agg_unique_strict(k, v)` | `json_object_agg_unique_strict(k, v)` |
 
-Агрегаты PostgreSQL 16. Две массивные формы игнорируют NULL-значения: группа, все значения которой
-NULL, даёт `[]` (а не массив null, измерено), пустой вход по-прежнему даёт одну строку с NULL, а
-результат `json`/`jsonb` читается как строка. `json_object_agg_unique` сохраняет NULL-значение как JSON
-`null`, а `json_object_agg_unique_strict` отбрасывает пару с NULL-значением; оба поднимают `22030` при
-дубликате ключа и `22004` при NULL-ключе (измерено на 17.11), а пустой вход даёт одну строку с NULL.
+Агрегаты PostgreSQL 16. Две массивные формы игнорируют NULL-значения: существующая группа из одних
+NULL даёт `[]` (а не массив null, измерено), а агрегатный запрос без `GROUP BY` на пустом входе
+возвращает одну строку со значением SQL `NULL`. Результат `json`/`jsonb` читается как строка.
+`json_object_agg_unique` сохраняет NULL-значение как JSON `null`, а `json_object_agg_unique_strict`
+отбрасывает пару с NULL-значением; оба поднимают `22030` при дубликате ключа и `22004` при NULL-ключе
+(измерено на 17.11), а агрегатный запрос без `GROUP BY` на пустом входе возвращает одну строку со
+значением SQL `NULL`.
 
 ### Агрегаты SQL/JSON (`json_arrayagg`, `json_objectagg`)
 
@@ -362,10 +378,12 @@ NULL, даёт `[]` (а не массив null, измерено), пустой 
 | `SqlFunctions.Postgres.jsonb_objectagg(k, v)` | `json_objectagg(k value v returning jsonb)` |
 
 Конструкции уровня парсера PostgreSQL 17 без строки в `pg_proc`. `json_arrayagg` по умолчанию работает
-как `ABSENT ON NULL`: NULL-значения отбрасываются, группа из одних NULL даёт `[]`, а пустой вход даёт
-NULL. `json_objectagg` принимает ровно одну пару на вызов (`key value value`; форма из двух пар через
+как `ABSENT ON NULL`: NULL-значения отбрасываются, существующая группа из одних NULL даёт `[]`, а
+агрегатный запрос без `GROUP BY` на пустом входе возвращает одну строку со значением SQL `NULL`.
+`json_objectagg` принимает ровно одну пару на вызов (`key value value`; форма из двух пар через
 запятую — это `42601`) и по умолчанию работает как `NULL ON NULL`, сохраняя дубликаты ключей, а
-`with unique keys` поднимает `22030`; NULL-ключ поднимает `22004`, а пустой вход даёт NULL. Ключ не
+`with unique keys` поднимает `22030`; NULL-ключ поднимает `22004`, а агрегатный запрос без `GROUP BY` на
+пустом входе возвращает одну строку со значением SQL `NULL`. Ключ не
 приводится — сервер сам приводит его к тексту (измерено на целочисленном ключе). `jsonb_arrayagg` и
 `jsonb_objectagg` — имена членов для пунктов `RETURNING jsonb`, поскольку функций с такими именами в
 PostgreSQL нет. У построителя нет места для внутреннего списка аргументов агрегата, поэтому `ORDER BY …`,
@@ -407,11 +425,12 @@ CLR-аргументами, а аргументы-значения образу�
 | Последовательности | `sequence_count`, `sequence_match_events`, `sequence_next_node` |
 | Time series | `time_series_group_sum`, `time_series_group_rate_sum`, `time_series_instant_rate_to_grid`, `time_series_rate_to_grid`, `time_series_resample_to_grid_with_staleness`; оконные `exponential_time_decayed_sum`/`_max`/`_count`/`_avg` (дополните `Over(...)`) |
 
-Версионные факты закреплены, а не скрыты: `gini`, `student_t_test_one_sample`, `group_format` и
-`quantile_prometheus_histogram` появились после 25.8, а `time_series_group_sum`/
-`time_series_group_rate_sum` были удалены, поэтому их плечи рендерят имя вендора, а живой тест
-фиксирует `UNKNOWN_FUNCTION`. `sequence_next_node` требует
-`allow_experimental_funnel_functions`, а сетки time-series — `allow_experimental_time_series_aggregate_functions`.
-Три члена остаются отклонёнными (`stochastic_linear_regression`, `stochastic_logistic_regression`,
+В закреплённой базовой версии 25.8 функции `gini`, `student_t_test_one_sample`, `group_format` и
+`quantile_prometheus_histogram` были введены позже 25.8, а `time_series_group_sum` и
+`time_series_group_rate_sum` уже удалены. Их оболочки всё равно рендерят имена вендора, поэтому живой
+тест ожидает от этого сервера `UNKNOWN_FUNCTION`. Отдельно, `sequence_next_node` требует
+`allow_experimental_funnel_functions`, а сеткам time-series нужен
+`allow_experimental_time_series_aggregate_functions`. Три члена остаются отклонёнными
+(`stochastic_linear_regression`, `stochastic_logistic_regression`,
 `exponential_moving_average`: непрозрачные состояния `AggregateFunction`) — см.
 [ClickHouse-specific SQL › Пока не поддерживается](../guide/provider-specific-sql/clickhouse.md#пока-не-поддерживается).

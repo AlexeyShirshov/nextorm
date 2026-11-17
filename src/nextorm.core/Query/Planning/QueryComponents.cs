@@ -20,8 +20,8 @@ public enum QueryComponentContribution
 }
 
 /// <summary>
-/// Narrow public contract for a query component. A component carries its own slot identity and handler;
-/// there is no global registry. The prepared descriptor is immutable and participates in the plan key.
+/// Defines a query component's slot identity and behavior without a global registry. Preparing a
+/// component returns an immutable descriptor that participates in the plan key.
 /// </summary>
 public interface IQueryComponent
 {
@@ -39,17 +39,15 @@ public interface IQueryComponent
 }
 
 /// <summary>
-/// Optional pre-preparation structural identity of a query component, used by the engine's raw
-/// (pre-preparation) recipe cache. The engine captures a command's value-free raw shape before it is
-/// prepared and may then reuse another command's prepared plan, so a component that wants that fast
-/// path must describe, without a prepare context, which of its state changes the statement it produces.
-/// Two components that report an equal <see cref="ShapeState"/> and structurally equal selectors must
-/// render the same statement for the same command; that is the contract this interface carries.
+/// Describes the parts of a query component's structure that affect its statement, before the component
+/// is prepared. The engine can use this identity in its raw-recipe cache to reuse a prepared plan.
+/// Components with equal <see cref="ShapeState"/> values and structurally equal selectors must render
+/// the same statement for the same command.
 /// </summary>
 /// <remarks>
-/// A component that does not implement this interface stays eligible for every other path but is
-/// excluded from the raw recipe cache: its state is invisible before preparation, and reusing a plan
-/// prepared for a different component would silently change the SQL it renders.
+/// A component that does not implement this interface can use other query paths but is excluded from the
+/// raw-recipe cache because its state is not available before preparation. Reusing a plan prepared for a
+/// different component could otherwise change the SQL it renders.
 /// </remarks>
 public interface IQueryComponentShape
 {
@@ -183,11 +181,10 @@ public enum QueryPreparationHavingMode
 }
 
 /// <summary>
-/// An immutable declarative contribution to query preparation. Carried by an
-/// <see cref="IQueryPreparationDescriptor"/>; the engine applies it to a separate effective
-/// preparation state before <c>PrepareColumns</c>/<c>PrepareGrouping</c> and never mutates the
-/// raw <see cref="QueryCommand"/> fields. An active contribution with an empty
-/// <see cref="GroupingKeys"/> vector denotes an explicit global aggregation.
+/// An immutable set of changes to effective query preparation, carried by an
+/// <see cref="IQueryPreparationDescriptor"/>. The engine applies it before <c>PrepareColumns</c> and
+/// <c>PrepareGrouping</c> without changing the raw <see cref="QueryCommand"/> fields. An active
+/// contribution with no <see cref="GroupingKeys"/> requests a global aggregation.
 /// </summary>
 public sealed class QueryPreparationContribution
 {
@@ -206,7 +203,7 @@ public sealed class QueryPreparationContribution
         RequireDistinct = requireDistinct;
     }
 
-    /// <summary>Ordered scalar lambda keys of the grouping (empty = explicit global aggregation when active).</summary>
+    /// <summary>Ordered grouping-key expressions. An empty list requests a global aggregation when the contribution is active.</summary>
     public IReadOnlyList<LambdaExpression> GroupingKeys { get; }
 
     /// <summary>How the effective HAVING is handled.</summary>
@@ -215,10 +212,10 @@ public sealed class QueryPreparationContribution
     /// <summary>The replacement HAVING condition when <see cref="HavingMode"/> is <see cref="QueryPreparationHavingMode.Replace"/>.</summary>
     public LambdaExpression? Having { get; }
 
-    /// <summary>An additive source predicate AND-ed into the effective source condition.</summary>
+    /// <summary>An additional source predicate combined with the effective source condition using <c>AND</c>.</summary>
     public LambdaExpression? SourcePredicate { get; }
 
-    /// <summary>Whether DISTINCT is required (monotonic OR on the effective state).</summary>
+    /// <summary>Whether the prepared query requires <c>DISTINCT</c>.</summary>
     public bool RequireDistinct { get; }
 }
 

@@ -3,13 +3,9 @@ using System.Linq.Expressions;
 namespace NextORM.Core;
 
 /// <summary>
-/// Registry of the queries, outer references and plan-equality comparers that make up a query scope.
+/// Coordinates query registration and outer-reference capture within a query scope. It also provides
+/// the comparers used to key query plans and their expression components.
 /// </summary>
-/// <remarks>
-/// It coordinates the plan cache (query registrations, outer references and comparer instances)
-/// rather than building queries, so it is deliberately named <c>IQueryRegistry</c> to avoid the
-/// collision with <see cref="System.Linq.IQueryProvider"/>.
-/// </remarks>
 public interface IQueryRegistry
 {
     /// <summary>

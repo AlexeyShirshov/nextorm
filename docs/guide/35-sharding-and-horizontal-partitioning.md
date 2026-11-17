@@ -1,6 +1,8 @@
 # Sharding and horizontal partitioning
 
-nextorm can spread one entity type over several database servers. Three ideas drive the feature:
+Sharding lets one entity type use tables or schemas on several database servers. A **bucket** is the
+logical place for a table or schema; a **shard** is the physical server that stores it. A bucket's number
+stays fixed when you add or remove servers, so its table or schema name stays the same:
 
 - A **shard** is one server with its own connection string. It is a deployment detail: today there may
   be three of them, tomorrow ten.
@@ -9,8 +11,37 @@ nextorm can spread one entity type over several database servers. Three ideas dr
 - A **bucket belongs to a shard** through consistent hashing, so a server can be added or removed
   without renaming a single table.
 
-The application works with buckets. Shard ids are only used to address servers: they never appear in a
-SQL identifier, and no query result is grouped by them.
+The application addresses data by bucket. Shard ids identify servers only: they never appear in SQL
+identifiers, and query results are not grouped by shard.
+
+## Why buckets and shards are separate
+
+A bucket is the stable logical address of a table or schema; a shard is the physical server that currently
+stores that bucket. Keeping these separate lets the ring assign the same bucket to a different server when
+the shard set changes, without changing the bucket's table or schema name. The library calculates the
+bucket and selects its shard, but it does not move the bucket's rows.
+
+The responsibilities are split as follows:
+
+| Concern | Application | nextorm |
+|---|---|---|
+| Address a row | Declares the shard key and supplies its value, or supplies a known bucket variant. | Resolves the key to a stable bucket. |
+| Name and place data | Creates the schema or table for each bucket. | Derives its physical name from the bucket and maps the bucket to a shard. |
+| Move a bucket to another shard | Copies the affected rows to the new owner. | Recomputes bucket ownership from the ring. |
+
+## Set up sharding
+
+Use these steps to configure sharding and route work by key or bucket:
+
+1. Choose a fixed `bucketCount` and a bucket placement mode. The bucket count belongs to the data and has
+   no library default.
+2. Declare the shard key on each entity you want to route (see [Declare a shard key](#declare-a-shard-key)).
+3. Create a `ShardTopology`, add its shard connection strings, register it with `UseSharding`, and configure
+   the default topology for unrouted work (see [Configure the topology](#configure-the-topology)).
+4. Route point operations with the shard-key equality or an explicit bucket, and group multi-row writes by
+   bucket (see [Route a single row](#route-a-single-row) and [Per-bucket and per-shard work](#per-bucket-and-per-shard-work)).
+5. Provision the bucket tables or schemas yourself. If a bucket changes owner, copy its rows in the
+   application; nextorm does not migrate them.
 
 Sharding builds on the [runtime mapping variant](33-runtime-mapping-variant.md): the bucket travels as a
 `MappingVariant`, the topology decorates the metadata provider and the router resolves it. The variant
@@ -270,7 +301,7 @@ itself from the shard id, and only code that opens its own ADO.NET connection ne
 ### Per-bucket and per-shard work
 
 A write is routed from the instance, so a group of rows does not need its bucket computed by hand — it
-needs **one statement per bucket**, because a bucket is a physical table on a shard. `GroupByBucket` resolves
+needs **one SQL statement per bucket**, because a bucket is a physical table on a shard. `GroupByBucket` resolves
 every row with the context's own router and hands back one group per bucket. A multi-row insert takes the
 group's rows and writes them in one round trip; rows of different buckets in one insert are rejected before
 SQL, since one `INSERT` names one table:

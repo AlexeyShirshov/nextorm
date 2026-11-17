@@ -1,9 +1,8 @@
 # Routing data to topologies
 
-Routing decides which connection executes a statement. nextorm keeps the decision separate from the
-query: the query is written against an entity type as usual, and a set of rules maps that type to a
-**topology**, a named source of connections. The engine asks the topology for a host before every routed
-command and runs the statement there.
+Routing chooses which connection executes a statement. You write the query against an entity type as
+usual; rules associate that type with a **topology**, a named source of connections. Before each routed
+command, the engine asks the topology for a host and runs the statement there.
 
 Two kinds of rule produce the mapping:
 
@@ -150,14 +149,18 @@ connection. A batch is how several statements are kept together on one routed ho
 
 ## Connections, transactions and pinning
 
+### Context connection and routed hosts
+
 Every host keeps its own lazily opened connection, cached per `topology/host` for the lifetime of the
 context and closed with it. The default topology is asked once, when the context is created; its host
 becomes the context connection, so it is used by statements that no rule routes, by raw SQL and by the
 context transaction. It is stable for the lifetime of the context: pin it or route commands elsewhere
 instead of expecting the default host to change per command.
 
-A transaction covers one connection. While one is open on the context connection, a command that routes
-elsewhere fails with an explicit error instead of writing outside the transaction.
+A transaction covers one connection. While a transaction is open on the context connection, a command
+that routes elsewhere fails with an explicit error instead of writing outside the transaction.
+
+### Start a transaction on a routed host
 
 To transact on a routed host, start the transaction through `IRoutedTransactionManager` (the extension
 methods are on `DataContext`, so the cast is not needed in the common case):
@@ -177,6 +180,8 @@ routed there joins it instead of picking another host. A command that would leav
 does an explicit pin that would move the topology elsewhere while the transaction is open. One context
 carries one transaction at a time; savepoints stay on the context connection.
 
+### Pin a host for a session
+
 An explicit pin keeps a session on one server for other reasons — a replica you warmed up, a shard you
 are about to load:
 
@@ -187,6 +192,8 @@ using (context.PinHost("reports", "host-2"))   // the picker no longer chooses
 }
 // the handle released the pin; the picker chooses again
 ```
+
+### Choose and release a host id
 
 `host-2` is a **host id** — the `HostTarget.Id` the topology returns for a command, unique inside that
 topology. `RoundRobinTopology("reports", cs1, cs2)` names its hosts `host-1`, `host-2`, … in the order the

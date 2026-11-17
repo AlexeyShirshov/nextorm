@@ -785,12 +785,10 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// one document column.
     /// </summary>
     internal bool DocumentMode { get; set; }
-    /// <summary>Whether the command is shaped to return at most a single row (set by the <c>First</c>/<c>Single</c> terminals).</summary>
+    /// <summary>Whether the command uses a single-row terminal shape.</summary>
     public bool SingleRow { get; set; }
     /// <summary>
-    /// Whether the command was marked with <c>DISTINCT</c>. Named <c>IsDistinct</c> rather than
-    /// <c>Distinct</c> so the fluent <see cref="QueryCommand{TResult}.Distinct"/> method does not hide
-    /// the property on the generic command type.
+    /// Whether the query returns distinct rows.
     /// </summary>
     public bool IsDistinct { get; internal set; }
     /// <summary>

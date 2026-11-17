@@ -4,14 +4,13 @@ using NextORM.Core;
 namespace NextORM.ClickHouse;
 
 /// <summary>
-/// ClickHouse-only fluent members of <c>EntityBuilder&lt;TEntity&gt;</c>, removed from the common
-/// <c>nextorm</c> package and re-exposed here as extension methods. Add
-/// <c>using NextORM.ClickHouse;</c> to keep the fluent chain unchanged on a ClickHouse provider.
-/// The render-time dialect gating (and the thrown exceptions) is unchanged.
+/// Adds ClickHouse-specific query-building and join-option methods. Import
+/// <c>NextORM.ClickHouse</c> to use them in a fluent query chain. The dialect checks feature support
+/// when it renders the query.
 /// </summary>
 public static class ClickHouseEntityBuilderExtensions
 {
-    /// <summary>ClickHouse <c>FINAL</c> modifier on the primary table.</summary>
+    /// <summary>Applies ClickHouse's <c>FINAL</c> modifier to the primary table.</summary>
     public static EntityBuilder<TEntity> Final<TEntity>(this EntityBuilder<TEntity> builder)
     {
         var b = builder.Clone();
@@ -19,7 +18,7 @@ public static class ClickHouseEntityBuilderExtensions
         return b;
     }
 
-    /// <summary>Trailing ClickHouse <c>SETTINGS key = value</c> clause.</summary>
+    /// <summary>Adds the supplied settings as a trailing ClickHouse <c>SETTINGS</c> clause.</summary>
     public static EntityBuilder<TEntity> Settings<TEntity>(this EntityBuilder<TEntity> builder, params (string Key, string Value)[] settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -38,7 +37,7 @@ public static class ClickHouseEntityBuilderExtensions
         return b;
     }
 
-    /// <summary>ClickHouse <c>PREWHERE</c> predicate.</summary>
+    /// <summary>Adds a ClickHouse <c>PREWHERE</c> predicate, combining it with any existing predicate using <c>AND</c>.</summary>
     public static EntityBuilder<TEntity> PreWhere<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, bool>> condition)
     {
         ArgumentNullException.ThrowIfNull(condition);
@@ -57,23 +56,23 @@ public static class ClickHouseEntityBuilderExtensions
         return b;
     }
 
-    /// <summary>ClickHouse <c>ARRAY JOIN</c> over an array expression.</summary>
+    /// <summary>Adds a ClickHouse <c>ARRAY JOIN</c> over the given array expression.</summary>
     public static EntityBuilder<TEntity> ArrayJoin<TEntity, TArray>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TArray>> array)
         => AddArrayJoin(builder, array, ArrayJoinKind.Inner);
 
-    /// <summary>ClickHouse <c>LEFT ARRAY JOIN</c> over an array expression.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT ARRAY JOIN</c> over the given array expression.</summary>
     public static EntityBuilder<TEntity> LeftArrayJoin<TEntity, TArray>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TArray>> array)
         => AddArrayJoin(builder, array, ArrayJoinKind.Left);
 
-    /// <summary>ClickHouse <c>ARRAY JOIN</c> exposing the expanded element as <c>p.Element</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>ARRAY JOIN</c> and exposes each expanded element as <c>p.Element</c>.</summary>
     public static EntityBuilder<ArrayJoinProjection<TEntity, TElement>> ArrayJoinElement<TEntity, TElement>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, IEnumerable<TElement>>> array)
         => ToArrayJoinElement(builder, array, ArrayJoinKind.Inner);
 
-    /// <summary>ClickHouse <c>LEFT ARRAY JOIN</c> exposing the expanded element as <c>p.Element</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT ARRAY JOIN</c> and exposes each expanded element as <c>p.Element</c>.</summary>
     public static EntityBuilder<ArrayJoinProjection<TEntity, TElement>> LeftArrayJoinElement<TEntity, TElement>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, IEnumerable<TElement>>> array)
         => ToArrayJoinElement(builder, array, ArrayJoinKind.Left);
 
-    /// <summary>ClickHouse <c>LIMIT n BY expr</c> clause.</summary>
+    /// <summary>Adds a ClickHouse <c>LIMIT n BY expr</c> clause.</summary>
     public static EntityBuilder<TEntity> LimitBy<TEntity, TResult>(this EntityBuilder<TEntity> builder, int limit, Expression<Func<TEntity, TResult>> exp)
     {
         ArgumentNullException.ThrowIfNull(exp);
@@ -83,7 +82,7 @@ public static class ClickHouseEntityBuilderExtensions
         return b;
     }
 
-    /// <summary>ClickHouse <c>LIMIT offset, n BY expr</c> clause.</summary>
+    /// <summary>Adds a ClickHouse <c>LIMIT offset, n BY expr</c> clause.</summary>
     public static EntityBuilder<TEntity> LimitBy<TEntity, TResult>(this EntityBuilder<TEntity> builder, int limit, int offset, Expression<Func<TEntity, TResult>> exp)
     {
         ArgumentNullException.ThrowIfNull(exp);
@@ -93,7 +92,7 @@ public static class ClickHouseEntityBuilderExtensions
         return b;
     }
 
-    /// <summary>ClickHouse <c>WITH TOTALS</c> grouping modifier.</summary>
+    /// <summary>Adds ClickHouse's <c>WITH TOTALS</c> modifier to the grouping clause.</summary>
     public static EntityBuilder<TEntity> WithTotals<TEntity>(this EntityBuilder<TEntity> builder)
     {
         var b = builder.Clone();
@@ -101,47 +100,47 @@ public static class ClickHouseEntityBuilderExtensions
         return b;
     }
 
-    /// <summary>ClickHouse <c>LEFT SEMI JOIN</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> to the query.</summary>
     public static EntityBuilder<TEntity> SemiJoin<TEntity, TJoinEntity>(this EntityBuilder<TEntity> builder, EntityBuilder<TJoinEntity> join, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
         => AddSemiAntiJoin(builder, builder.GetJoinSource(join), joinCondition, JoinType.Semi, options);
 
-    /// <summary>ClickHouse <c>LEFT ANTI JOIN</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> to the query.</summary>
     public static EntityBuilder<TEntity> AntiJoin<TEntity, TJoinEntity>(this EntityBuilder<TEntity> builder, EntityBuilder<TJoinEntity> join, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
         => AddSemiAntiJoin(builder, builder.GetJoinSource(join), joinCondition, JoinType.Anti, options);
 
-    /// <summary>ClickHouse <c>PASTE JOIN</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> to the query.</summary>
     public static JoinedEntityBuilder<TEntity, TJoinEntity> PasteJoin<TEntity, TJoinEntity>(this EntityBuilder<TEntity> builder, EntityBuilder<TJoinEntity> join, Action<JoinOptions>? options = null)
         => builder.JoinCore(join, JoinType.Paste, null, options);
 
-    /// <summary>ClickHouse <c>LEFT SEMI JOIN</c> over a subquery.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> using the query as the join source.</summary>
     public static EntityBuilder<TEntity> SemiJoin<TEntity, TJoinEntity>(this EntityBuilder<TEntity> builder, QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
         => AddSemiAntiJoin(builder, new FromExpression(query), joinCondition, JoinType.Semi, options);
 
-    /// <summary>ClickHouse <c>LEFT ANTI JOIN</c> over a subquery.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> using the query as the join source.</summary>
     public static EntityBuilder<TEntity> AntiJoin<TEntity, TJoinEntity>(this EntityBuilder<TEntity> builder, QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
         => AddSemiAntiJoin(builder, new FromExpression(query), joinCondition, JoinType.Anti, options);
 
-    /// <summary>ClickHouse <c>PASTE JOIN</c> over a subquery.</summary>
+    /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> using the query as the join source.</summary>
     public static JoinedEntityBuilder<TEntity, TJoinEntity> PasteJoin<TEntity, TJoinEntity>(this EntityBuilder<TEntity> builder, QueryCommand<TJoinEntity> query, Action<JoinOptions>? options = null)
         => builder.JoinCore(query, JoinType.Paste, null, options);
 
-    /// <summary>ClickHouse <c>SAMPLE ratio</c> modifier.</summary>
+    /// <summary>Sets the ClickHouse <c>SAMPLE ratio</c> modifier.</summary>
     public static FromOptions Sample(this FromOptions options, double ratio)
         => options.Sample(ratio);
 
-    /// <summary>ClickHouse <c>SAMPLE ratio OFFSET offset</c> modifier.</summary>
+    /// <summary>Sets the ClickHouse <c>SAMPLE ratio OFFSET offset</c> modifier.</summary>
     public static FromOptions Sample(this FromOptions options, double ratio, double offset)
         => options.Sample(ratio, offset);
 
-    /// <summary>ClickHouse <c>GLOBAL</c> join modifier.</summary>
+    /// <summary>Sets the ClickHouse <c>GLOBAL</c> modifier on the join options.</summary>
     public static JoinOptions Global(this JoinOptions options)
         => options.Global();
 
-    /// <summary>ClickHouse join modifier (<c>ANY</c>/<c>ALL</c>/<c>ASOF</c>).</summary>
+    /// <summary>Sets the ClickHouse join strictness to <c>Default</c>, <c>ANY</c>, <c>ALL</c>, or <c>ASOF</c>.</summary>
     public static JoinOptions WithStrictness(this JoinOptions options, JoinStrictness strictness)
         => options.WithStrictness(strictness);
 
-    /// <summary>ClickHouse <c>LEFT SEMI JOIN</c> in named-table (<c>TableAlias</c>) mode.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> over a named table; both sides of the condition use <c>TableAlias</c>.</summary>
     public static EntityBuilder SemiJoin(this EntityBuilder builder, EntityBuilder from, Expression<Func<TableAlias, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
     {
         var opts = new JoinOptions();
@@ -156,7 +155,7 @@ public static class ClickHouseEntityBuilderExtensions
         });
     }
 
-    /// <summary>ClickHouse <c>LEFT ANTI JOIN</c> in named-table (<c>TableAlias</c>) mode.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> over a named table; both sides of the condition use <c>TableAlias</c>.</summary>
     public static EntityBuilder AntiJoin(this EntityBuilder builder, EntityBuilder from, Expression<Func<TableAlias, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
     {
         var opts = new JoinOptions();
@@ -171,11 +170,11 @@ public static class ClickHouseEntityBuilderExtensions
         });
     }
 
-    /// <summary>ClickHouse <c>PASTE JOIN</c> in named-table (<c>TableAlias</c>) mode.</summary>
+    /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> over a named table.</summary>
     public static JoinedEntityBuilder<TableAlias, TableAlias> PasteJoin(this EntityBuilder builder, EntityBuilder from, Action<JoinOptions>? options = null)
         => builder.JoinCore(from, JoinType.Paste, null, options);
 
-    /// <summary>ClickHouse <c>LEFT SEMI JOIN</c> in named-table (<c>TableAlias</c>) mode.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> from the named source to the typed join source.</summary>
     public static EntityBuilder SemiJoin<TJoinEntity>(this EntityBuilder builder, EntityBuilder<TJoinEntity> join, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
     {
         var opts = new JoinOptions();
@@ -190,7 +189,7 @@ public static class ClickHouseEntityBuilderExtensions
         });
     }
 
-    /// <summary>ClickHouse <c>LEFT ANTI JOIN</c> in named-table (<c>TableAlias</c>) mode.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> from the named source to the typed join source.</summary>
     public static EntityBuilder AntiJoin<TJoinEntity>(this EntityBuilder builder, EntityBuilder<TJoinEntity> join, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
     {
         var opts = new JoinOptions();
@@ -205,7 +204,7 @@ public static class ClickHouseEntityBuilderExtensions
         });
     }
 
-    /// <summary>ClickHouse <c>PASTE JOIN</c> in named-table (<c>TableAlias</c>) mode.</summary>
+    /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> from the named source to the typed join source.</summary>
     public static JoinedEntityBuilder<TableAlias, TJoinEntity> PasteJoin<TJoinEntity>(this EntityBuilder builder, EntityBuilder<TJoinEntity> join, Action<JoinOptions>? options = null)
         => builder.JoinCore(join, JoinType.Paste, null, options);
 
@@ -312,137 +311,137 @@ public static class ClickHouseEntityBuilderExtensions
 }
 
 /// <summary>
-/// Arity-preserving ClickHouse extension methods for <c>JoinedEntityBuilder&lt;...&gt;</c>: they keep
-/// the explicitly typed projection so a join can be followed by further joins and operators. Add
-/// <c>using NextORM.ClickHouse;</c> to use them.
+/// Adds ClickHouse join and array-join methods to <c>JoinedEntityBuilder&lt;...&gt;</c> while preserving
+/// its typed projection, so you can continue the fluent query chain. Import
+/// <c>NextORM.ClickHouse</c> to use them.
 /// </summary>
 public static class ClickHouseJoinedEntityBuilderExtensions
 {
-    /// <summary>ClickHouse <c>LEFT SEMI JOIN</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> and preserves the joined projection type.</summary>
     public static JoinedEntityBuilder<T1, T2> SemiJoin<T1, T2, T3>(this JoinedEntityBuilder<T1, T2> builder, EntityBuilder<T3> join, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2>)((EntityBuilder<Projection<T1, T2>>)builder).SemiJoin(join, joinCondition, options);
 
-    /// <summary>ClickHouse <c>LEFT ANTI JOIN</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> and preserves the joined projection type.</summary>
     public static JoinedEntityBuilder<T1, T2> AntiJoin<T1, T2, T3>(this JoinedEntityBuilder<T1, T2> builder, EntityBuilder<T3> join, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2>)((EntityBuilder<Projection<T1, T2>>)builder).AntiJoin(join, joinCondition, options);
 
-    /// <summary>ClickHouse <c>PASTE JOIN</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> and extends the joined projection type.</summary>
     public static JoinedEntityBuilder<T1, T2, T3> PasteJoin<T1, T2, T3>(this JoinedEntityBuilder<T1, T2> builder, EntityBuilder<T3> join, Action<JoinOptions>? options = null)
         => builder.JoinCore(join, JoinType.Paste, null, options);
 
-    /// <summary>ClickHouse <c>LEFT SEMI JOIN</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> and preserves the joined projection type.</summary>
     public static JoinedEntityBuilder<T1, T2, T3> SemiJoin<T1, T2, T3, T4>(this JoinedEntityBuilder<T1, T2, T3> builder, EntityBuilder<T4> join, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2, T3>)((EntityBuilder<Projection<T1, T2, T3>>)builder).SemiJoin(join, joinCondition, options);
 
-    /// <summary>ClickHouse <c>LEFT ANTI JOIN</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> and preserves the joined projection type.</summary>
     public static JoinedEntityBuilder<T1, T2, T3> AntiJoin<T1, T2, T3, T4>(this JoinedEntityBuilder<T1, T2, T3> builder, EntityBuilder<T4> join, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2, T3>)((EntityBuilder<Projection<T1, T2, T3>>)builder).AntiJoin(join, joinCondition, options);
 
-    /// <summary>ClickHouse <c>PASTE JOIN</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> and extends the joined projection type.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4> PasteJoin<T1, T2, T3, T4>(this JoinedEntityBuilder<T1, T2, T3> builder, EntityBuilder<T4> join, Action<JoinOptions>? options = null)
         => builder.JoinCore(join, JoinType.Paste, null, options);
 
-    /// <summary>ClickHouse <c>LEFT SEMI JOIN</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> and preserves the joined projection type.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4> SemiJoin<T1, T2, T3, T4, T5>(this JoinedEntityBuilder<T1, T2, T3, T4> builder, EntityBuilder<T5> join, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2, T3, T4>)((EntityBuilder<Projection<T1, T2, T3, T4>>)builder).SemiJoin(join, joinCondition, options);
 
-    /// <summary>ClickHouse <c>LEFT ANTI JOIN</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> and preserves the joined projection type.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4> AntiJoin<T1, T2, T3, T4, T5>(this JoinedEntityBuilder<T1, T2, T3, T4> builder, EntityBuilder<T5> join, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2, T3, T4>)((EntityBuilder<Projection<T1, T2, T3, T4>>)builder).AntiJoin(join, joinCondition, options);
 
-    /// <summary>ClickHouse <c>PASTE JOIN</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> and extends the joined projection type.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5> PasteJoin<T1, T2, T3, T4, T5>(this JoinedEntityBuilder<T1, T2, T3, T4> builder, EntityBuilder<T5> join, Action<JoinOptions>? options = null)
         => builder.JoinCore(join, JoinType.Paste, null, options);
 
-    /// <summary>ClickHouse <c>LEFT SEMI JOIN</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> and preserves the joined projection type.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5> SemiJoin<T1, T2, T3, T4, T5, T6>(this JoinedEntityBuilder<T1, T2, T3, T4, T5> builder, EntityBuilder<T6> join, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5>)((EntityBuilder<Projection<T1, T2, T3, T4, T5>>)builder).SemiJoin(join, joinCondition, options);
 
-    /// <summary>ClickHouse <c>LEFT ANTI JOIN</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> and preserves the joined projection type.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5> AntiJoin<T1, T2, T3, T4, T5, T6>(this JoinedEntityBuilder<T1, T2, T3, T4, T5> builder, EntityBuilder<T6> join, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5>)((EntityBuilder<Projection<T1, T2, T3, T4, T5>>)builder).AntiJoin(join, joinCondition, options);
 
-    /// <summary>ClickHouse <c>PASTE JOIN</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> and extends the joined projection type.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> PasteJoin<T1, T2, T3, T4, T5, T6>(this JoinedEntityBuilder<T1, T2, T3, T4, T5> builder, EntityBuilder<T6> join, Action<JoinOptions>? options = null)
         => builder.JoinCore(join, JoinType.Paste, null, options);
 
-    /// <summary>ClickHouse <c>LEFT SEMI JOIN</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> and preserves the joined projection type.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> SemiJoin<T1, T2, T3, T4, T5, T6, T7>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> builder, EntityBuilder<T7> join, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>)((EntityBuilder<Projection<T1, T2, T3, T4, T5, T6>>)builder).SemiJoin(join, joinCondition, options);
 
-    /// <summary>ClickHouse <c>LEFT ANTI JOIN</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> and preserves the joined projection type.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> AntiJoin<T1, T2, T3, T4, T5, T6, T7>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> builder, EntityBuilder<T7> join, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>)((EntityBuilder<Projection<T1, T2, T3, T4, T5, T6>>)builder).AntiJoin(join, joinCondition, options);
 
-    /// <summary>ClickHouse <c>PASTE JOIN</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> and extends the joined projection type.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> PasteJoin<T1, T2, T3, T4, T5, T6, T7>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> builder, EntityBuilder<T7> join, Action<JoinOptions>? options = null)
         => builder.JoinCore(join, JoinType.Paste, null, options);
 
-    /// <summary>ClickHouse <c>LEFT SEMI JOIN</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> and preserves the joined projection type.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> SemiJoin<T1, T2, T3, T4, T5, T6, T7, T8>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> builder, EntityBuilder<T8> join, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>)((EntityBuilder<Projection<T1, T2, T3, T4, T5, T6, T7>>)builder).SemiJoin(join, joinCondition, options);
 
-    /// <summary>ClickHouse <c>LEFT ANTI JOIN</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> and preserves the joined projection type.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> AntiJoin<T1, T2, T3, T4, T5, T6, T7, T8>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> builder, EntityBuilder<T8> join, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>)((EntityBuilder<Projection<T1, T2, T3, T4, T5, T6, T7>>)builder).AntiJoin(join, joinCondition, options);
 
-    /// <summary>ClickHouse <c>PASTE JOIN</c>.</summary>
+    /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> and extends the joined projection type.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> PasteJoin<T1, T2, T3, T4, T5, T6, T7, T8>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> builder, EntityBuilder<T8> join, Action<JoinOptions>? options = null)
         => builder.JoinCore(join, JoinType.Paste, null, options);
 
-    /// <summary>ClickHouse <c>ARRAY JOIN</c> over the projection.</summary>
+    /// <summary>Adds a ClickHouse <c>ARRAY JOIN</c> over an expression on the joined projection.</summary>
     public static JoinedEntityBuilder<T1, T2> ArrayJoin<T1, T2, TArray>(this JoinedEntityBuilder<T1, T2> builder, Expression<Func<Projection<T1, T2>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2>)((EntityBuilder<Projection<T1, T2>>)builder).ArrayJoin(array);
 
-    /// <summary>ClickHouse <c>LEFT ARRAY JOIN</c> over the projection.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT ARRAY JOIN</c> over an expression on the joined projection.</summary>
     public static JoinedEntityBuilder<T1, T2> LeftArrayJoin<T1, T2, TArray>(this JoinedEntityBuilder<T1, T2> builder, Expression<Func<Projection<T1, T2>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2>)((EntityBuilder<Projection<T1, T2>>)builder).LeftArrayJoin(array);
 
-    /// <summary>ClickHouse <c>ARRAY JOIN</c> over the projection.</summary>
+    /// <summary>Adds a ClickHouse <c>ARRAY JOIN</c> over an expression on the joined projection.</summary>
     public static JoinedEntityBuilder<T1, T2, T3> ArrayJoin<T1, T2, T3, TArray>(this JoinedEntityBuilder<T1, T2, T3> builder, Expression<Func<Projection<T1, T2, T3>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3>)((EntityBuilder<Projection<T1, T2, T3>>)builder).ArrayJoin(array);
 
-    /// <summary>ClickHouse <c>LEFT ARRAY JOIN</c> over the projection.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT ARRAY JOIN</c> over an expression on the joined projection.</summary>
     public static JoinedEntityBuilder<T1, T2, T3> LeftArrayJoin<T1, T2, T3, TArray>(this JoinedEntityBuilder<T1, T2, T3> builder, Expression<Func<Projection<T1, T2, T3>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3>)((EntityBuilder<Projection<T1, T2, T3>>)builder).LeftArrayJoin(array);
 
-    /// <summary>ClickHouse <c>ARRAY JOIN</c> over the projection.</summary>
+    /// <summary>Adds a ClickHouse <c>ARRAY JOIN</c> over an expression on the joined projection.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4> ArrayJoin<T1, T2, T3, T4, TArray>(this JoinedEntityBuilder<T1, T2, T3, T4> builder, Expression<Func<Projection<T1, T2, T3, T4>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4>)((EntityBuilder<Projection<T1, T2, T3, T4>>)builder).ArrayJoin(array);
 
-    /// <summary>ClickHouse <c>LEFT ARRAY JOIN</c> over the projection.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT ARRAY JOIN</c> over an expression on the joined projection.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4> LeftArrayJoin<T1, T2, T3, T4, TArray>(this JoinedEntityBuilder<T1, T2, T3, T4> builder, Expression<Func<Projection<T1, T2, T3, T4>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4>)((EntityBuilder<Projection<T1, T2, T3, T4>>)builder).LeftArrayJoin(array);
 
-    /// <summary>ClickHouse <c>ARRAY JOIN</c> over the projection.</summary>
+    /// <summary>Adds a ClickHouse <c>ARRAY JOIN</c> over an expression on the joined projection.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5> ArrayJoin<T1, T2, T3, T4, T5, TArray>(this JoinedEntityBuilder<T1, T2, T3, T4, T5> builder, Expression<Func<Projection<T1, T2, T3, T4, T5>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5>)((EntityBuilder<Projection<T1, T2, T3, T4, T5>>)builder).ArrayJoin(array);
 
-    /// <summary>ClickHouse <c>LEFT ARRAY JOIN</c> over the projection.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT ARRAY JOIN</c> over an expression on the joined projection.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5> LeftArrayJoin<T1, T2, T3, T4, T5, TArray>(this JoinedEntityBuilder<T1, T2, T3, T4, T5> builder, Expression<Func<Projection<T1, T2, T3, T4, T5>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5>)((EntityBuilder<Projection<T1, T2, T3, T4, T5>>)builder).LeftArrayJoin(array);
 
-    /// <summary>ClickHouse <c>ARRAY JOIN</c> over the projection.</summary>
+    /// <summary>Adds a ClickHouse <c>ARRAY JOIN</c> over an expression on the joined projection.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> ArrayJoin<T1, T2, T3, T4, T5, T6, TArray>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> builder, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>)((EntityBuilder<Projection<T1, T2, T3, T4, T5, T6>>)builder).ArrayJoin(array);
 
-    /// <summary>ClickHouse <c>LEFT ARRAY JOIN</c> over the projection.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT ARRAY JOIN</c> over an expression on the joined projection.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> LeftArrayJoin<T1, T2, T3, T4, T5, T6, TArray>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> builder, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>)((EntityBuilder<Projection<T1, T2, T3, T4, T5, T6>>)builder).LeftArrayJoin(array);
 
-    /// <summary>ClickHouse <c>ARRAY JOIN</c> over the projection.</summary>
+    /// <summary>Adds a ClickHouse <c>ARRAY JOIN</c> over an expression on the joined projection.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> ArrayJoin<T1, T2, T3, T4, T5, T6, T7, TArray>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> builder, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>)((EntityBuilder<Projection<T1, T2, T3, T4, T5, T6, T7>>)builder).ArrayJoin(array);
 
-    /// <summary>ClickHouse <c>LEFT ARRAY JOIN</c> over the projection.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT ARRAY JOIN</c> over an expression on the joined projection.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> LeftArrayJoin<T1, T2, T3, T4, T5, T6, T7, TArray>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> builder, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>)((EntityBuilder<Projection<T1, T2, T3, T4, T5, T6, T7>>)builder).LeftArrayJoin(array);
 
-    /// <summary>ClickHouse <c>ARRAY JOIN</c> over the projection.</summary>
+    /// <summary>Adds a ClickHouse <c>ARRAY JOIN</c> over an expression on the joined projection.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> ArrayJoin<T1, T2, T3, T4, T5, T6, T7, T8, TArray>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> builder, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7, T8>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>)((EntityBuilder<Projection<T1, T2, T3, T4, T5, T6, T7, T8>>)builder).ArrayJoin(array);
 
-    /// <summary>ClickHouse <c>LEFT ARRAY JOIN</c> over the projection.</summary>
+    /// <summary>Adds a ClickHouse <c>LEFT ARRAY JOIN</c> over an expression on the joined projection.</summary>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> LeftArrayJoin<T1, T2, T3, T4, T5, T6, T7, T8, TArray>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> builder, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7, T8>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>)((EntityBuilder<Projection<T1, T2, T3, T4, T5, T6, T7, T8>>)builder).LeftArrayJoin(array);
 }

@@ -3,17 +3,9 @@ using Microsoft.Extensions.DependencyInjection;
 namespace NextORM.Core;
 
 /// <summary>
-/// Registration helpers for nextorm contexts.
-/// <para>
-/// Invariants:
-/// <list type="bullet">
-/// <item>a concrete context type is registered <b>once per scope</b>: resolving the concrete type and
-/// <see cref="IDataContext"/> yields the same instance (previously they were two separate instances);</item>
-/// <item>the options delegate is mandatory for factory-based registration — a <see cref="DataContextBuilder"/>
-/// without options can never produce a context, so a null delegate now fails at registration time instead of
-/// at resolution time.</item>
-/// </list>
-/// </para>
+/// Registers nextorm contexts with scoped lifetimes. For type-based registrations, resolving the concrete
+/// context and <see cref="IDataContext"/> returns the same instance. Factory-based registrations require a
+/// non-null options delegate.
 /// </summary>
 public static class ServiceCollectionExtensions
 {

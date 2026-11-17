@@ -1,8 +1,7 @@
 namespace NextORM.Core;
 
 /// <summary>
-/// Marks a projection type — a DTO or record used as a query result — as an explicit statement of
-/// intent for a compile-time row materializer.
+/// Marks a DTO or record type used as a query result.
 /// </summary>
 /// <remarks>
 /// This attribute is optional. The generator covers every materializable class, struct and anonymous

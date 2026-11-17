@@ -5,13 +5,8 @@ using System.Reflection;
 namespace NextORM.Core;
 
 /// <summary>
-/// Configures and creates an <see cref="IDataContext"/>.
+/// Configures the provider and query behavior for the <see cref="IDataContext"/> created by this builder.
 /// </summary>
-/// <remarks>
-/// The <c>DataContext</c> prefix is inconsistent with the rest of the library, which otherwise uses
-/// <c>DataContext</c> (for example <c>DataContextOptionsBuilderExtensions</c>). Recommended name:
-/// <c>DataContextBuilder</c>. See <c>docs/specs/design/API-NAMING-REVIEW.md</c> finding P2-22.
-/// </remarks>
 public class DataContextBuilder
 {
     //private readonly Dictionary<string, object> _props = new();
@@ -131,7 +126,10 @@ public class DataContextBuilder
     /// <summary>The provider used to resolve entity mapping metadata.</summary>
     public IEntityMetadataProvider EntityMetadataProvider => _entityMetadataProvider;
 
-    /// <summary>Sets the provider used to resolve entity mapping metadata.</summary>
+    /// <summary>Sets the provider used to resolve entity mapping metadata and returns this builder.</summary>
+    /// <param name="provider">The non-null metadata provider to use.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="provider"/> is <see langword="null"/>.</exception>
     public DataContextBuilder UseEntityMetadataProvider(IEntityMetadataProvider provider)
     {
         ArgumentNullException.ThrowIfNull(provider);
@@ -142,7 +140,10 @@ public class DataContextBuilder
     /// <summary>The resolver used to select a mapping variant for entities.</summary>
     public IEntityVariantResolver EntityVariantResolver => _entityVariantResolver;
 
-    /// <summary>Sets the resolver used to select a mapping variant for entities.</summary>
+    /// <summary>Sets the resolver used to select an entity mapping variant and returns this builder.</summary>
+    /// <param name="resolver">The non-null resolver to use.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="resolver"/> is <see langword="null"/>.</exception>
     public DataContextBuilder UseVariantResolver(IEntityVariantResolver resolver)
     {
         ArgumentNullException.ThrowIfNull(resolver);
@@ -218,7 +219,7 @@ public class DataContextBuilder
     }
 
     /// <summary>Appends a custom routing rule; rules are consulted in registration order.</summary>
-    /// <param name="resolver">The rule.</param>
+    /// <param name="resolver">The rule that selects a topology for an entity type.</param>
     /// <returns>This builder, to allow chaining.</returns>
     public DataContextBuilder UseRouteResolver(IEntityRouteResolver resolver)
     {
@@ -266,6 +267,8 @@ public class DataContextBuilder
     /// MySQL/MariaDB/ClickHouse). A single command can override the setting with
     /// <c>WithQuotedIdentifiers</c>.
     /// </summary>
+    /// <param name="value"><see langword="true"/> to quote identifiers; otherwise, <see langword="false"/>.</param>
+    /// <returns>This builder.</returns>
     public DataContextBuilder UseQuotedIdentifiers(bool value = true)
     {
         QuoteIdentifiers = value;
@@ -280,6 +283,8 @@ public class DataContextBuilder
     /// <see langword="null"/> to emit CLR names verbatim (the default). A single command can override
     /// the setting with <c>WithNamingConvention</c>.
     /// </summary>
+    /// <param name="convention">The convention to apply, or <see langword="null"/> to emit CLR names verbatim.</param>
+    /// <returns>This builder.</returns>
     public DataContextBuilder UseNamingConvention(INamingConvention? convention)
     {
         NamingConvention = convention;

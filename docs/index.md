@@ -1,5 +1,17 @@
 # Nextorm - high performance zero-sql object-relational mapping (ORM) library
 
+Use this documentation if you build .NET applications and want to query a database with typed C# expressions. The path below takes you from package installation to a working SQLite query, then shows how to filter rows, choose returned fields, and join tables. It focuses on NextORM's query API, not on database design or SQL fundamentals.
+
+## Start here
+
+1. [Install NextORM and a database provider](getting-started/01-installation.md).
+2. [Run your first query](getting-started/02-quickstart.md).
+3. [Filter rows](guide/03-filtering-where.md).
+4. [Select the fields you need](guide/02-projections.md).
+5. [Combine tables with a join](guide/04-joins.md).
+
+Already have a working project? Use the documentation catalog below to open a topic directly.
+
 ## Documentation
 
 ### Getting started
@@ -8,20 +20,6 @@
 - [Quickstart](getting-started/02-quickstart.md)
 - [Entities and metadata](getting-started/03-entities-and-metadata.md)
 - [Dependency injection](getting-started/04-dependency-injection.md)
-
-### Engine
-
-- [How the engine works](engine/index.md)
-- [Query pipeline: fluent to SQL](engine/01-query-pipeline.md)
-- [Execution and rows](engine/02-execution-and-rows.md)
-- [Plan cache and reuse](engine/03-plan-cache-and-reuse.md)
-
-### Relationships
-
-- [Relationships and single-query loading](relationships/relationships.md)
-- [Implicit navigation queries](relationships/implicit-navigation.md)
-- [Eager loading child collections](relationships/eager-loading.md)
-- [Per-parent paging in eager loading](relationships/eager-loading-per-parent-paging.md)
 
 ### Guide
 
@@ -56,6 +54,20 @@
 - [Dynamic columns](guide/29-dynamic-columns.md)
 - [Streaming data to a Stream](guide/30-streaming-data.md)
 - [Provider-specific features](guide/31-provider-specific-features.md)
+
+### Engine
+
+- [How the engine works](engine/index.md)
+- [Query pipeline: fluent to SQL](engine/01-query-pipeline.md)
+- [Execution and rows](engine/02-execution-and-rows.md)
+- [Plan cache and reuse](engine/03-plan-cache-and-reuse.md)
+
+### Relationships
+
+- [Relationships and single-query loading](relationships/relationships.md)
+- [Implicit navigation queries](relationships/implicit-navigation.md)
+- [Eager loading child collections](relationships/eager-loading.md)
+- [Per-parent paging in eager loading](relationships/eager-loading-per-parent-paging.md)
 
 ### Infrastructure
 

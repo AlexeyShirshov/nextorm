@@ -249,8 +249,8 @@ public class PostgresDataContext : DataContext, IBulkInsertExecutor, IBulkInsert
     }
 
     /// <summary>
-    /// True: PostgreSQL can surface an anonymous <c>ROW(...)</c> record column or a caller-registered
-    /// named composite as a single raw result-set column (#194).
+    /// Returns <see langword="true"/> because PostgreSQL can expose an anonymous <c>ROW(...)</c> record
+    /// or a caller-registered named composite as a single raw result-set column.
     /// </summary>
     protected override bool SupportsRawRowColumns => true;
 
@@ -269,9 +269,10 @@ public class PostgresDataContext : DataContext, IBulkInsertExecutor, IBulkInsert
         => reader is NpgsqlDataReader npgsql && npgsql.GetPostgresType(ordinal) is PostgresCompositeType;
 
     /// <summary>
-    /// Materializes a projected <see cref="Range{T}"/> column from the driver's
-    /// <c>NpgsqlRange&lt;T&gt;</c> through the typed <c>GetFieldValue</c> accessor, converting it to the
-    /// provider-agnostic range. Every other column is mapped by the base implementation.
+    /// Maps PostgreSQL-specific columns to their CLR representations: pgvector scalars and arrays,
+    /// <see cref="Range{T}"/> values and multiranges, and unconverted <see cref="TimeSpan"/> values.
+    /// The time-span mapping selects the reader accessor from the PostgreSQL storage type; other columns
+    /// use the base implementation.
     /// </summary>
     /// <param name="column">The projected column being read.</param>
     /// <param name="param">The data-reader expression the accessor is built from.</param>

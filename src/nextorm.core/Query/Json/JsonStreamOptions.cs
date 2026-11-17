@@ -4,7 +4,8 @@ namespace NextORM.Core;
 
 /// <summary>
 /// The container shape of a JSON stream: <see cref="Array"/> wraps every row in one JSON array,
-/// <see cref="NdJson"/> writes one standalone JSON value per line.
+/// while <see cref="NdJson"/> writes one standalone JSON value per line in newline-delimited JSON
+/// (NDJSON) format.
 /// </summary>
 public enum JsonStreamMode
 {

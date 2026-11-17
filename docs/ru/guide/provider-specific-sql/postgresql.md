@@ -31,21 +31,27 @@ select id
 ```
 
 См. [Массивы (PostgreSQL)](../../scalar-functions/06-arrays.md#массивы-postgresql). Функции, возвращающие
-массив, можно использовать внутри запроса или проецировать напрямую: row reader материализует
-результат `Array(T)` как CLR `T[]`.
+массив, можно использовать в запросе или проецировать в результат: при чтении nextorm преобразует
+`Array(T)` в CLR-массив `T[]`.
+
+Оставляйте массив значением, если нужны `any`/`all` или операторы массива. Если для каждого элемента нужна
+отдельная строка результата, разверните массив через `unnest` из раздела
+[«Функции, возвращающие наборы»](#функции-возвращающие-наборы).
 
 ## Range-типы
 
-У PostgreSQL есть нативные range-типы (`int4range`, `int8range`, `numrange`, `tsrange`, `tstzrange`,
-`daterange`). nextorm представляет их provider-agnostic value-типом
-[`Range<T>`](xref:NextORM.Core.Range`1) — `Lower`/`Upper`, `LowerInclusive`/`UpperInclusive`,
-`LowerInfinite`/`UpperInfinite`, `IsEmpty` и [`Range<T>.Empty`](xref:NextORM.Core.Range`1.Empty) — который
-провайдер PostgreSQL биндит через Npgsql, сохраняя unbounded стороны и пустой диапазон. Поверхность
-гейтится [`SupportsRanges`](xref:NextORM.Core.ISqlDialect.SupportsRanges) и живёт на
-[`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres). Операторы вынесены в статические методы с именами
-SQL-токенов, поэтому ни один член не конфликтует с CLR-оператором или полнотекстовым `Contains`:
+У PostgreSQL есть встроенные типы диапазонов (`int4range`, `int8range`, `numrange`, `tsrange`,
+`tstzrange`, `daterange`). Для работы с ними nextorm предоставляет общий для провайдеров тип-значение
+[`Range<T>`](xref:NextORM.Core.Range`1): `Lower`/`Upper`, `LowerInclusive`/`UpperInclusive`,
+`LowerInfinite`/`UpperInfinite`, `IsEmpty` и [`Range<T>.Empty`](xref:NextORM.Core.Range`1.Empty). Провайдер
+PostgreSQL передаёт его через Npgsql, сохраняя отсутствие нижней или верхней границы и пустой диапазон.
+Поддержка проверяется через [`SupportsRanges`](xref:NextORM.Core.ISqlDialect.SupportsRanges) и доступна
+через [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres). Операторы доступны как статические методы с
+именами SQL-токенов, поэтому они не конфликтуют с операторами CLR или полнотекстовым `Contains`:
 
-На базе без нативного range-типа отобразите свойство `Range<T>` на пару скалярных колонок через [`RangeColumns`](../27-range-columns.md); те же операторы транслируются поверх пары.
+Используйте встроенный тип PostgreSQL, когда значение диапазона хранится в одной колонке. В другой СУБД
+без такого типа сопоставьте свойство `Range<T>` с парой скалярных колонок через
+[`RangeColumns`](../27-range-columns.md); те же операторы транслируются и для этой пары.
 
 | Член | SQL |
 |---|---|
@@ -85,11 +91,12 @@ select id
 
 ### Multirange
 
-Multirange-типы PostgreSQL (`int4multirange`, `int8multirange`, `nummultirange`, `tsmultirange`,
-`tstzmultirange`, `datemultirange`) представляются как `Range<T>[]` — биндятся и читаются как
+Для нескольких диапазонов в одном значении PostgreSQL предоставляет мультидиапазонные типы
+(`int4multirange`, `int8multirange`, `nummultirange`, `tsmultirange`, `tstzmultirange`,
+`datemultirange`). nextorm представляет их как `Range<T>[]`, а провайдер передаёт и читает их как
 `NpgsqlRange<T>[]`. Массив канонический: отсортирован по нижней границе, перекрывающиеся и смежные
 диапазоны объединены. Сопоставьте свойство или параметр напрямую с `Range<T>[]`; имена операторов выше
-перегружены для multirange (`overlaps`, `range_contains`, `range_contained_by`, `range_union`,
+перегружены для мультидиапазонов (`overlaps`, `range_contains`, `range_contained_by`, `range_union`,
 `range_intersection`, `range_difference`, `range_adjacent` и позиционные), плюс `multirange(range)`,
 `range_merge`, функции проверки и агрегаты `range_agg` / `range_intersect_agg`:
 
@@ -108,16 +115,15 @@ var rows = dataContext.From<IReservation>()
 
 ## `json` и `jsonb`
 
-PostgreSQL — единственный провайдер с нативными типами `json`/`jsonb`. JSON-операнды — это нативные
-JSON-колонки (свойство `[JsonColumn]` отображает CLR-объект на `jsonb` на чтение и запись), другие
-JSON-функции или параметры, чьё значение во время выполнения — `JsonDocument`/`JsonElement`/`JsonNode`
-(Npgsql биндит их как `jsonb`). «Голое» свойство `JsonNode`/`JsonNode?` (объявленное ровно как `JsonNode`,
-не `JsonObject`/`JsonArray`) читает нативную колонку `json`/`jsonb` для корней-объектов, массивов и
-скаляров, в скалярной и составной проекциях; SQL `NULL` и JSON-литерал `null` оба становятся CLR `null`.
-Объявленные свойства `JsonObject`/`JsonArray` и «голая» *скалярная* проекция `JsonDocument`/`JsonElement`
-в эту поддержку не входят. Семейство `jsonb_*` покрывает построение,
-извлечение, вложенность и агрегацию: `jsonb_build_object`, `jsonb_agg`, `json_get_text`,
-`json_cast`, операторы `->`, `->>`.
+PostgreSQL — единственный провайдер со встроенными типами `json`/`jsonb`. Для хранения CLR-объекта
+используйте `[JsonColumn]`: свойство читается и записывается как `jsonb`. Для JSON-параметра передайте
+`JsonDocument`/`JsonElement`/`JsonNode` во время выполнения; Npgsql передаст его как `jsonb`. Чтобы прочитать
+нативную колонку `json`/`jsonb`, объявите свойство в точности как `JsonNode` или `JsonNode?` (не
+`JsonObject`/`JsonArray`): поддерживаются корни-объекты, массивы и скаляры в скалярной и составной
+проекциях. SQL `NULL` и JSON-литерал `null` оба становятся CLR `null`. Свойства `JsonObject`/`JsonArray`
+и отдельная скалярная проекция `JsonDocument`/`JsonElement` не поддерживаются. Семейство `jsonb_*`
+покрывает построение, извлечение, проверку вхождения и агрегацию: `jsonb_build_object`, `jsonb_agg`,
+`json_get_text`, `json_cast`, операторы `->`, `->>`.
 
 Четыре аксессора `json_get`, `json_get_text`, `json_get_path` и `json_get_path_text` (перегрузки по
 строковому ключу и по индексу) применяют **контекстную SQL-типизацию**: сырое клиентское значение документа
@@ -339,10 +345,10 @@ select distinct on (somestring) id, somestring
 
 ## Функции, возвращающие наборы
 
-Функции PostgreSQL, возвращающие набор, доступны как табличные функции через
-[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) с вызовом runtime-фабрики:
+Функции PostgreSQL, возвращающие строки, можно использовать как источники табличного запроса через
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) и вызов фабрики при построении запроса:
 
-| `SqlFunctions.Postgres.*` | Колонки SQL | Row-shape |
+| `SqlFunctions.Postgres.*` | Колонки SQL | Интерфейс строки |
 | --- | --- | --- |
 | `generate_series(start, stop[, step])` | `generate_series` | `IGenerateSeriesRow` |
 | `unnest(array)` | `unnest` | `IUnnestRow<T>` |
@@ -353,6 +359,10 @@ select distinct on (somestring) id, somestring
 | `jsonb_object_keys(json)` | `jsonb_object_keys` | `IJsonObjectKeysRow` |
 | `jsonb_path_query(json, jsonpath)` | `jsonb_path_query` | `IJsonPathQueryRow` |
 | `ts_stat(query)` | `word`, `ndoc`, `nentry` | `ITsStatRow` |
+
+Используйте `generate_series`, чтобы получить строки последовательности, а `unnest` — чтобы развернуть
+существующий массив: каждый его элемент станет отдельной строкой. JSON-функции из таблицы аналогично
+разворачивают JSON-значения или объекты в строки.
 
 JSONPath-аргумент передаётся текстом через `SqlFunctions.Postgres.jsonpath(path)`, что рендерится как
 `cast(path as jsonpath)`.

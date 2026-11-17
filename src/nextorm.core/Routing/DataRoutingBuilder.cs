@@ -31,8 +31,8 @@ public sealed class DataRoutingBuilder
     }
 
     /// <summary>
-    /// Registers a one-connection topology under <paramref name="topologyName"/> and makes it the default
-    /// one: a single connection string is the simplest topology.
+    /// Registers a one-host topology under <paramref name="topologyName"/> and makes it the default for
+    /// unrouted commands.
     /// </summary>
     /// <param name="topologyName">The name to register the topology under.</param>
     /// <param name="connectionString">The connection string that addresses its only host.</param>

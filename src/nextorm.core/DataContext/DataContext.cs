@@ -457,10 +457,13 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <param name="topology">The registered topology name.</param>
     /// <param name="hostId">The identifier of one of its hosts.</param>
     /// <returns>A handle that releases the pin when disposed.</returns>
-    /// <exception cref="ArgumentException">The topology is not registered or does not have that host.</exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="topology"/> or <paramref name="hostId"/> is null, empty, or whitespace, or the
+    /// topology does not have <paramref name="hostId"/>.
+    /// </exception>
     /// <exception cref="InvalidOperationException">
-    /// The topology is the default one, does not honour host pinning, or a routed transaction is open on
-    /// another host of it.
+    /// <paramref name="topology"/> is not registered or is the default topology, its picker returns a
+    /// different host for <paramref name="hostId"/>, or a routed transaction is open on another host.
     /// </exception>
     public HostPin PinHost(string topology, string hostId)
     {

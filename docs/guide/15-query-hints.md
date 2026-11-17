@@ -1,16 +1,26 @@
 # Query hints
 
-> Attach statement-level hints to a query with `Hint(...)`, for example SQL Server `OPTION (RECOMPILE)`.
+> Use `Hint(...)` to pass an optimizer hint with a query. Use `WithTag(...)` instead when you need to identify a statement in database logs or a profiler.
 
 **Prerequisites:** [Querying and projections](../engine/index.md) · [CTE](10-cte.md) · [Provider overview](../connecting-providers/overview.md)
 
+## Choose a hint type
+
+- To pass an optimizer hint for the whole statement, use [`Hint(...)`](#overview).
+- To label a statement for logs or a profiler, use [`WithTag(...)`](#query-tags).
+- To control locking or index use for a table, see [Locking table hints](#locking-table-hints) and [Index hints](#index-hints).
+- For hints on a join, subquery, or every table in scope, see [Join, subquery and tables-in-scope hints](#join-subquery-and-tables-in-scope-hints).
+- For ClickHouse query modifiers, see [ClickHouse query modifiers](#clickhouse-query-modifiers). These modifiers are not hints.
+
 ## Overview
 
+Use a statement-level optimizer hint when you need to influence how the database plans a query.
 [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])) returns a new command carrying one or more
-statement-level hints. Hints are provider specific: the command stores plain strings and the active
-[`ISqlDialect`](xref:NextORM.Core.ISqlDialect) decides where and how they are rendered. The method takes
-`params string[]`, so one or more hints can be passed in a single call or accumulated across repeated
-calls; the two forms are equivalent:
+hints. The active [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) decides where and how to render them, so
+the hint syntax depends on the provider.
+
+Because `Hint` accepts `params string[]`, pass several hints in one call or add them in repeated calls.
+Both forms are equivalent:
 
 ```csharp
 // one call with several arguments:
@@ -36,9 +46,9 @@ select id, somestring
  from complex_entity where (id > 1) option (recompile, fast 10)
 ```
 
-Blank hints are ignored. The hint list is part of the query plan key, so a hinted command never reuses
-the cached plan of an otherwise identical unhinted command (and vice versa), and two commands with
-different hints do not share a plan.
+Blank hints are ignored. The hint list is part of the query plan key. A hinted command does not reuse the
+cached plan of an otherwise identical unhinted command, and commands with different hints do not share a
+plan.
 
 ## Query tags
 
@@ -59,15 +69,18 @@ select /* reports.orders */ id
  from complex_entity where (id > 1)
 ```
 
-Use it to identify a statement in a profiler, the server log or a server-side query store
-(`pg_stat_activity`, SQL Server Query Store, ClickHouse `system.query_log`). Line breaks and the
-comment delimiters `*/` and `/*` are neutralised — SQL Server nests block comments, so `/*` is escaped
-too — and the comment always opens with a space, so a tag starting with `!` or `+` cannot become a
-MySQL/MariaDB executable comment or optimizer hint. The tag is part of the plan key, so two commands
-that differ only in their tag never share a cached plan; passing `null` or an empty string clears it.
-The in-memory provider accepts the call and ignores it (no SQL is generated). When a query also carries
-`Hint(...)`, the optimizer-hint comment is placed first (`select /*+ hint */ /* tag */ ...`) so
-`pg_hint_plan` and the MySQL/MariaDB optimizer still recognise it.
+Use a tag to find a statement in a profiler, server log, or server-side query store such as
+`pg_stat_activity`, SQL Server Query Store, or ClickHouse `system.query_log`.
+
+The tag is part of the plan key, so commands with different tags do not share a cached plan. Passing
+`null` or an empty string clears the tag. The in-memory provider accepts the call and ignores it because
+it generates no SQL.
+
+nextorm neutralizes line breaks and the comment delimiters `*/` and `/*`. SQL Server nests block
+comments, so nextorm escapes `/*` too. The comment always opens with a space, which prevents a tag that
+starts with `!` or `+` from becoming a MySQL/MariaDB executable comment or optimizer hint. When a query
+also carries `Hint(...)`, nextorm places the optimizer-hint comment first
+(`select /*+ hint */ /* tag */ ...`) so `pg_hint_plan` and the MySQL/MariaDB optimizer still recognize it.
 
 ## Combining with a recursive CTE
 
@@ -88,8 +101,9 @@ var sql = dataContext.WithRecursive("nums", body, 100)
 
 ## Locking table hints
 
-`FromOptions.WithTableHint(params string[] hints)` attaches SQL Server locking hints (`nolock`/`updlock`/`holdlock`) to the primary
-physical table. SQL Server renders them as a `WITH (...)` clause between the table name and its alias:
+To attach SQL Server locking hints (`nolock`/`updlock`/`holdlock`) to the primary physical table, use
+`FromOptions.WithTableHint(params string[] hints)`. SQL Server renders them in a `WITH (...)` clause
+between the table name and its alias:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>(o => o.WithTableHint("nolock"))
@@ -102,12 +116,12 @@ select id
  from complex_entity with (nolock)
 ```
 
-[`JoinOptions.WithJoinTableHint(params string[] hints)`](xref:NextORM.Core.JoinOptions.WithJoinTableHint(System.String[])) attaches the same kind of table hint to a
-join when it is declared, passed through that join's trailing lambda, like `WithJoinHint`. It is
-not the same as [`JoinOptions.WithJoinHint`](xref:NextORM.Core.JoinOptions.WithJoinHint(System.String)) (an
-optimizer *join* hint such as `loop`/`hash`/`merge`, rendered inside the join clause) and not the same as
-`WithTablesInScopeHint` (which covers every physical table). SQL Server renders it as a `WITH (...)`
-clause on that joined table only:
+To attach a locking hint to one joined table, pass it through that join's trailing lambda with
+[`JoinOptions.WithJoinTableHint(params string[] hints)`](xref:NextORM.Core.JoinOptions.WithJoinTableHint(System.String[])).
+This is different from [`JoinOptions.WithJoinHint`](xref:NextORM.Core.JoinOptions.WithJoinHint(System.String)),
+which adds an optimizer *join* hint such as `loop`, `hash`, or `merge` inside the join clause. It is also
+different from `WithTablesInScopeHint`, which covers every physical table. SQL Server renders the table
+hint as a `WITH (...)` clause on that joined table only:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -122,8 +136,9 @@ select t1.id
  inner join simple_entity with (nolock) as [t2] on t1.id = t2.id
 ```
 
-Combining it with `WithTablesInScopeHint` still yields a single `WITH (...)` clause on that table: the
-join-local hint is listed first, then the scope hints (which still cover every other physical table):
+When you combine it with `WithTablesInScopeHint`, SQL Server still emits one `WITH (...)` clause on the
+joined table. The join-local hint comes first, followed by the scope hints. Scope hints also cover every
+other physical table:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -139,7 +154,7 @@ select t1.id
  inner join simple_entity with (nolock, holdlock) as [t2] on t1.id = t2.id
 ```
 
-The hints are rendered verbatim, so only pass trusted values. A provider opts in through
+The hints are rendered verbatim, so pass only trusted values. A provider opts in through
 [`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints) and [`MakeTableHints`](xref:NextORM.Core.ISqlDialect.MakeTableHints(System.Collections.Generic.IReadOnlyList{System.String},NextORM.Core.KeywordCase)) (SQL Server); other dialects reject a
 command that carries table hints with `NotSupportedException`. Pass `j => j.WithJoinTableHint(...)` to target a chosen
 join; `WithTableHint` still covers only the primary table. A per-join table hint can only be rendered on a
@@ -159,10 +174,11 @@ PostgreSQL or MySQL, use the source-level row lock ([`FromOptions.ForUpdate`](xr
 
 ## Index hints
 
-`FromOptions.WithIndex(params string[] indexes)` asks the planner to consider a named index on the
-primary physical table. The overload `WithIndex(IndexHintKind kind, params string[] indexes)` selects the
-intent ([`IndexHintKind`](xref:NextORM.Core.IndexHintKind).`Use`/`Force`/`Ignore`), and `WithoutIndex()`
-suppresses index use. Each dialect renders its native form after the table name and before its alias:
+To guide index selection for the primary physical table, use
+`FromOptions.WithIndex(params string[] indexes)`. The overload
+`WithIndex(IndexHintKind kind, params string[] indexes)` selects the intent
+([`IndexHintKind`](xref:NextORM.Core.IndexHintKind).`Use`/`Force`/`Ignore`), and `WithoutIndex()` suppresses
+index use. Each dialect renders its native form after the table name and before its alias:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>(o => o.WithIndex("ix_complex_id"))
@@ -182,7 +198,7 @@ select id
  from complex_entity with (index(ix_complex_id))
 ```
 
-A provider opts in through [`ISqlDialect.IndexHints`](xref:NextORM.Core.ISqlDialect.IndexHints) and
+Support depends on the dialect. A provider opts in through [`ISqlDialect.IndexHints`](xref:NextORM.Core.ISqlDialect.IndexHints) and
 [`IIndexHintRenderer`](xref:NextORM.Core.IIndexHintRenderer) (MySQL/MariaDB, SQLite, SQL Server).
 PostgreSQL (without `pg_hint_plan`), ClickHouse and the in-memory provider have no native index hint and
 reject a command that carries one with `NotSupportedException`. On SQL Server an index hint is merged with
@@ -222,8 +238,9 @@ builder rejects a command that carries hints on a dialect that reports `false`.
 
 ## Join, subquery and tables-in-scope hints
 
-`Hint(...)` is statement-level. Four builder methods attach a hint to a narrower part of the query;
-each dialect renders the form it has, or rejects the command:
+`Hint(...)` applies to the whole statement. Use the following builder methods when a hint must target a
+specific join, subquery, or table scope. Each dialect renders only the forms it supports and rejects the
+others:
 
 ```csharp
 var rows = dataContext.From<ISimpleEntity>(o => o.WithTableHint("nolock"))
@@ -232,18 +249,14 @@ var rows = dataContext.From<ISimpleEntity>(o => o.WithTableHint("nolock"))
     .ToList();
 ```
 
-* [`JoinOptions.WithJoinHint(string hint)`](xref:NextORM.Core.JoinOptions.WithJoinHint(System.String)) attaches a hint to a join (`j => j.WithJoinHint("loop")`) when the join is declared. SQL Server inserts it inside the join clause
-  (`inner loop join`, `left hash join`); a hint on a `CROSS`/`APPLY` join is rejected. PostgreSQL, MySQL
-  and MariaDB fold it into the statement-level `/*+ ... */` comment.
+* [`JoinOptions.WithJoinHint(string hint)`](xref:NextORM.Core.JoinOptions.WithJoinHint(System.String)) attaches a hint to a join (`j => j.WithJoinHint("loop")`) when the join is declared. SQL Server inserts it inside the join clause (`inner loop join`, `left hash join`). A hint on a `CROSS`/`APPLY` join is rejected. PostgreSQL, MySQL and MariaDB fold it into the statement-level `/*+ ... */` comment.
 * [`JoinOptions.WithJoinTableHint(params string[] hints)`](xref:NextORM.Core.JoinOptions.WithJoinTableHint(System.String[])) attaches a locking table hint to the join it is declared on
   — the per-join counterpart of `WithTableHint`, and distinct from the optimizer `WithJoinHint` above.
   SQL Server renders a `WITH (hint, ...)` clause on that joined table; other dialects reject it with
   `NotSupportedException`. Only a physical-table join can carry it: an APPLY, derived-table,
   table-valued-function or XML/pivot join source is rejected with `InvalidOperationException`. See
   [Locking table hints](#locking-table-hints).
-* [`FromOptions.WithSubQueryHint(string hint)`](xref:NextORM.Core.FromOptions.WithSubQueryHint(System.String)) attaches a hint to the derived-table source of a
-  `From(subQuery, o => o.WithSubQueryHint(...))` builder. PostgreSQL/MySQL/MariaDB fold it into `/*+ ... */`; SQL Server rejects it, because T-SQL
-  cannot append a query hint to a subselect.
+* [`FromOptions.WithSubQueryHint(string hint)`](xref:NextORM.Core.FromOptions.WithSubQueryHint(System.String)) attaches a hint to the derived-table source of a `From(subQuery, o => o.WithSubQueryHint(...))` builder. PostgreSQL/MySQL/MariaDB fold it into `/*+ ... */`. SQL Server rejects it because T-SQL cannot append a query hint to a subselect.
 * `WithTablesInScopeHint(params string[] hints)` applies the hints to every physical table in the query's
   scope. SQL Server adds a `WITH (hint, ...)` clause to the primary and every joined table (the
   multi-table counterpart of `WithTableHint`); PostgreSQL/MySQL/MariaDB fold it into the statement
@@ -264,10 +277,11 @@ select /*+ JOIN_ORDER(t1, t2) */ id
  join complex_entity as `t2` ...
 ```
 
-A blank hint is rejected with `ArgumentException` when the lambda runs. For the inline-comment dialects the hint text is rendered verbatim, so write
-the source aliases yourself (`HashJoin(t1 t2)`): nextorm's aliases are assigned at render time and are not
-exposed. All four hints are part of the plan key. On SQLite, ClickHouse and the in-memory provider they
-are rejected with `NotSupportedException`.
+A blank hint is rejected with `ArgumentException` when the lambda runs. For dialects that use inline
+comments, the hint text is rendered verbatim. Write the source aliases yourself (for example,
+`HashJoin(t1 t2)`): nextorm assigns aliases while rendering and does not expose them. All four hints are
+part of the plan key. SQLite, ClickHouse, and the in-memory provider reject them with
+`NotSupportedException`.
 
 ### Tables-in-scope hints on joined DELETE/UPDATE
 
@@ -300,11 +314,13 @@ existing capability error is unchanged. Hint-free DML stays byte-identical.
 
 ## ClickHouse query modifiers
 
-ClickHouse exposes four query-level modifiers that are not hints: `Final()`, `PreWhere(predicate)` and
-`Settings(("key", "value"), ...)` are dedicated builder methods, while the `Sample(ratio[, offset])`
-modifier is a per-query source option set in `From`. They are ClickHouse-only and ship as extension
-methods in the `nextorm.clickhouse` package, so a file that uses them needs
-`using NextORM.ClickHouse;`. Every other provider and the in-memory context throw `NotSupportedException`.
+ClickHouse has four query-level modifiers that are not hints. Use `Final()`, `PreWhere(predicate)`, or
+`Settings(("key", "value"), ...)` as builder methods. Set `Sample(ratio[, offset])` as a per-query
+source option in `From`.
+
+These modifiers are ClickHouse-only extension methods from the `nextorm.clickhouse` package. Add
+`using NextORM.ClickHouse;` to a file that uses them. Other providers and the in-memory context throw
+`NotSupportedException`.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>(o => o.Sample(0.1, 0.5))
@@ -352,8 +368,8 @@ both.
 ## Limitations
 
 * Locking table hints on the query's `FROM` table are rendered by [`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[])); use [`JoinOptions.WithJoinTableHint`](xref:NextORM.Core.JoinOptions.WithJoinTableHint(System.String[])) for a chosen join, or `WithTablesInScopeHint` to cover every physical table.
-* Concatenating a hinted command with a set operation ([`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})), [`Intersect`](xref:NextORM.Core.QueryCommand`1.Intersect``1(NextORM.Core.QueryCommand{``0})), ...) is not guarded against;
-  the hint travels to the branch it was attached to and should be avoided there.
+* A set operation does not guard against concatenating a hinted command. The hint stays on the branch
+  where you attached it, so avoid combining hinted commands with [`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})), [`Intersect`](xref:NextORM.Core.QueryCommand`1.Intersect``1(NextORM.Core.QueryCommand{``0})), or similar operations.
 
 ## See also
 

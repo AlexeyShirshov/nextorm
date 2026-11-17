@@ -3,7 +3,10 @@ using System.Reflection;
 
 namespace NextORM.Core;
 
-/// <summary>Decorates entity metadata with the physical placement selected by a bucket scope.</summary>
+/// <summary>
+/// Applies the physical schema or table name for a bucket scope and delegates the remaining metadata to an
+/// existing provider.
+/// </summary>
 public sealed class ShardEntityMetadataProvider : IEntityMetadataProvider
 {
     private readonly IEntityMetadataProvider _inner;

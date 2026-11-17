@@ -1,5 +1,10 @@
 # Таблица сопоставления провайдеров
 
+Используйте эту матрицу для краткого сравнения выбранных SQL-трансляций в SQLite, SQL Server и
+PostgreSQL, а не как полный перечень поддержки провайдеров. В ней нет MySQL и MariaDB; ClickHouse
+кратко описан отдельно после матрицы. Ниже приведены провайдерные и версионно-зависимые API, включая
+каталоги MySQL и MariaDB и их отказы.
+
 | Возможность | SQLite | SQL Server | PostgreSQL |
 |---|---|---|---|
 | `ToUpper` / `ToLower` | `upper` / `lower` | `upper` / `lower` | `upper` / `lower` |
@@ -42,9 +47,9 @@
 | JSONPath (`jsonb_path_*`) | `NotSupportedException` | `NotSupportedException` | `cast(path as jsonpath)` |
 | Встроенные табличные функции | `NotSupportedException` | `string_split(...)`, `openjson(...)`, `regexp_split_to_table(...)` (2025+) | `generate_series(...)`, `unnest(...)` |
 
-Провайдер in-memory не рендерит SQL: он компилирует и вычисляет выражение для строк в памяти, поэтому
-выполняется сам метод .NET. Приведённая выше матрица SQL относится к провайдерам SQLite, SQL Server и
-PostgreSQL.
+Провайдер in-memory не входит в эту SQL-матрицу. Он компилирует и вычисляет .NET-выражение над строками
+в памяти, поэтому выполняется сам метод .NET; не выводите поведение in-memory из SQL-сопоставлений и
+поддержку SQL из вычисления в памяти.
 
 ClickHouse рендерит `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`addSeconds` (и масштабированный
 `addYears` над операндом `DateTime64(6)` для `year`/`decade`/`century`, тип SQL-результата которых —

@@ -2,7 +2,39 @@
 
 > Use `nextorm.sqlserver` for Microsoft SQL Server and Azure SQL; it renders `@name` parameters, `top(n)` / `offset … fetch` paging (injecting an `ORDER BY` when needed), `+` concatenation, `isnull`, `datepart` and `count_big`, with bracket-quoted identifiers.
 
-**Prerequisites:** [Provider overview](overview.md) · [Quickstart](../getting-started/02-quickstart.md)
+**Before you begin:** [Provider overview](overview.md) · [Quickstart](../getting-started/02-quickstart.md)
+
+## Registering the provider
+
+Use the connection-string overload when the context should create and own its connection. Pass an
+existing `DbConnection` when your application owns it:
+
+```csharp
+using NextORM.Core;
+using NextORM.SqlServer;
+
+var builder = new DataContextBuilder()
+    .UseSqlServer("Server=localhost;Database=app;Trusted_Connection=True;TrustServerCertificate=True");
+using var ctx = builder.CreateDataContext();
+```
+
+To reuse a caller-owned connection, pass it to `UseSqlServer`:
+
+```csharp
+using var connection = new Microsoft.Data.SqlClient.SqlConnection("Server=localhost;Database=app;...");
+var builder = new DataContextBuilder().UseSqlServer(connection);
+using var ctx = builder.CreateDataContext();
+```
+
+You can also construct the context directly:
+
+```csharp
+using NextORM.Core;
+using NextORM.SqlServer;
+
+using IDataContext ctx = new SqlServerDataContext(
+    "Server=localhost;Database=app;...", new DataContextBuilder());
+```
 
 ## Overview
 
@@ -33,33 +65,6 @@ mapping shared with the CSV terminal). Only a storage type outside the closed nu
 Finally, SQL Server has no `RECURSIVE` keyword (recursive CTEs are declared with `with` alone) and
 exposes `option (maxrecursion n)` to raise the default depth.
 
-## Registering the provider
-
-Two overloads are available on [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder)
-(`src/nextorm.sqlserver/DI/SqlServerDataContextOptionsBuilderExtensions.cs`):
-
-```csharp
-using NextORM.Core;
-using NextORM.SqlServer;
-
-var byString = new DataContextBuilder()
-    .UseSqlServer("Server=localhost;Database=app;Trusted_Connection=True;TrustServerCertificate=True");
-
-using var connection = new Microsoft.Data.SqlClient.SqlConnection("Server=localhost;Database=app;...");
-var byConnection = new DataContextBuilder().UseSqlServer(connection);
-
-using var ctx = byString.CreateDataContext();   // IDataContext
-```
-
-Directly:
-
-```csharp
-using NextORM.Core;
-using NextORM.SqlServer;
-
-using IDataContext ctx = new SqlServerDataContext("Server=localhost;Database=app;...", new DataContextBuilder());
-```
-
 ## Paging: `TOP` and `OFFSET … FETCH`
 
 ```csharp
@@ -83,11 +88,11 @@ ctx.From<ISimpleEntity>().Offset(10).OrderBy(x => x.Id).Select(x => x.Id);
 // ... order by id offset 10 rows
 ```
 
-`WITH TIES` is supported only in the no-offset `TOP(n) WITH TIES` form. A positive `OFFSET` together
-with `WithTies()` — for example `Page(5, 3).WithTies()` or `Offset(3).Limit(5).WithTies()` — throws
-`NotSupportedException` during preparation, before any SQL is rendered, sent or cached: T-SQL accepts
-`WITH TIES` only in `TOP`, not in `OFFSET … FETCH … ONLY`. Use `WithTies()` without an `OFFSET`, or
-ordinary paging without ties.
+`WITH TIES` is supported only with `TOP(n) WITH TIES` and no offset. If you combine a positive
+`OFFSET` with `WithTies()` — for example, `Page(5, 3).WithTies()` or
+`Offset(3).Limit(5).WithTies()` — preparation throws `NotSupportedException` before SQL is rendered,
+sent or cached. T-SQL accepts `WITH TIES` with `TOP`, not with `OFFSET … FETCH … ONLY`. Use
+`WithTies()` without an `OFFSET`, or use ordinary paging without ties.
 
 ## Aggregates and scalar functions
 

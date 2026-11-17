@@ -1,9 +1,9 @@
 # Runtime mapping variant
 
-One entity class can address more than one physical place, and which one it addresses is a decision of the
-running application, not of the class: a database per tenant, an `orders` table per tenant inside one
-database (`orders_acme`, `orders_beta`), a schema per tenant. The table name, the schema and even the column
-names depend on *who is asking*.
+Use a mapping variant when one entity class can address multiple physical locations and the application
+chooses which one: a database per tenant, an `orders` table per tenant in one database
+(`orders_acme`, `orders_beta`), or a schema per tenant. The table, schema, and even column names can
+depend on who is asking.
 
 The usual alternatives are worse. A generated class per tenant multiplies the model and the migrations;
 setting the name on every call scatters one decision across the code and breaks as soon as a join mixes two
@@ -171,6 +171,17 @@ context.CreateMergeBuilder<Order>()
     .WithVariant(variant)
     .Merge();
 ```
+
+### Choose how to supply the variant
+
+Use the resolver for the context's usual mapping. Use `WithVariant` when one query or merge must address a
+known variant explicitly:
+
+| Operation | Variant source |
+|---|---|
+| Query or merge with `WithVariant` | The explicit variant for that command takes precedence. |
+| Insert, update, delete or truncate | The resolver's answer; these builders do not expose `WithVariant`. |
+| Merge without `WithVariant` | The resolver resolves the entity type, not the source object's property values. |
 
 The variant applies to that command only; it never changes the context's default mapping. A variant on a
 join, a subquery or a CTE belongs to that source, so one statement may render `orders_acme` for the outer

@@ -1,11 +1,17 @@
 ﻿# NativeAOT
 
-> Native applications on .NET 11 for `linux-x64`: `<PublishAot>true</PublishAot>` is the only
-> setting. No compiled model, no separate query generation, no hand-written code.
+> For .NET 11 applications targeting `linux-x64`, enable native publishing with
+> `<PublishAot>true</PublishAot>`. You don't need a compiled model, separate query generation, or
+> hand-written code.
 
 **Read first:** [Connections](01-connections.md) · [Value converters and JSON columns](03-value-converters.md).
 
 ## Enabling it
+
+Before publishing, install the NativeAOT prerequisites for the target RID: `clang`, `zlib1g-dev`, and a
+native toolchain.
+
+Add these properties to your project file:
 
 ```xml
 <PropertyGroup>
@@ -14,11 +20,11 @@
 </PropertyGroup>
 ```
 
+Then publish the application:
+
 ```bash
 dotnet publish -c Release
 ```
-
-The standard NativeAOT prerequisites apply: `clang`, `zlib1g-dev` and a native toolchain for the RID.
 
 Entity mappings are compiled as well: the package ships a source generator that describes every
 `[SqlTable]`/`[Table]` entity declared in your assembly — table, columns, keys, precision, collation,
@@ -31,15 +37,19 @@ reflective path, so nothing has to be registered or opted in.
 
 Providers: **SQLite, PostgreSQL, SQL Server, MySQL, MariaDB, ClickHouse**.
 
-Query surface: typed and anonymous projections, whole-entity materialization, filters, ordering, paging, aggregates,
-`GROUP BY`/`HAVING`, joins, CTEs, window functions (where the provider supports them), SQLite JSON
-functions, ClickHouse arrays, `SelectGroup`/`SelectGroupHaving`, `SelectWhereMin`/`SelectWhereMax`,
-prepared-command reuse, correlated subqueries, value converters, JSON columns (see below), eager
-loading of a declared `[Relationship]` collection through the split loader (`LoadWith`) or in one
-query (`LoadWith(..., EagerLoadMode.SingleQuery)` and `JoinInto`), including tested scalar and
-composite-key many-to-many shapes, the insert/update/delete builders, bulk insert, raw-SQL row mapping
-(`ExecuteRaw`, scalar and mapped-entity results) and the streaming terminals — `WriteCsv`, `WriteJson`
-and the asynchronous row sequence (`ToAsyncEnumerable`).
+The supported query surface includes:
+
+- **Queries and results:** typed and anonymous projections, whole-entity materialization, filters,
+  ordering, paging, aggregates, `GROUP BY`/`HAVING`, joins, CTEs, provider-supported window functions,
+  prepared-command reuse, and correlated subqueries.
+- **Provider-specific features:** SQLite JSON functions and ClickHouse arrays.
+- **Mappings and relationships:** value converters, JSON columns (see [JSON columns](#json-columns)),
+  and eager loading of a declared `[Relationship]` collection through the split loader (`LoadWith`) or
+  one query (`LoadWith(..., EagerLoadMode.SingleQuery)` and `JoinInto`), including tested scalar and
+  composite-key many-to-many shapes.
+- **Writes and raw SQL:** insert, update, and delete builders; bulk insert; and raw-SQL row mapping
+  (`ExecuteRaw`, with scalar or mapped-entity results).
+- **Streaming:** `WriteCsv`, `WriteJson`, and the asynchronous row sequence (`ToAsyncEnumerable`).
 
 The repository contains native-versus-JIT regression checks for representative SQLite scenarios and
 cross-provider query shapes. The server-provider checks use a published native binary against each
@@ -88,6 +98,8 @@ the time and several times the allocations of compiled code. The build removes m
 source generator covers every projection type declared in your assembly — named types and record DTOs,
 and anonymous types as well — so a prepared query keeps its usual speed on a native build. On a
 prepared 500-row, three-column command that is 543 → 364 µs and 246 → 39 KB.
+
+For example, these projections need no attribute or registration:
 
 ```csharp
 // no attribute, no registration: covered automatically

@@ -1,10 +1,10 @@
 # Inheritance and derived entities
 
-> nextorm does not own the inheritance strategy. The engine maps one CLR type to one table and carries no
-> discriminator, so the relational shape of a hierarchy is a modelling decision on your side — exactly as
-> it would be in hand-written SQL. The engine supplies the pieces: inherited writable properties, joins,
-> projections, `UNION ALL`, JSON and dynamic columns. This page shows the four mapping shapes, how to
-> read across them, and what remains your responsibility.
+> nextorm maps one CLR type to one table and does not define an inheritance strategy or add a
+> discriminator. You choose the relational shape of a hierarchy, as you would for hand-written SQL. The
+> engine supplies the building blocks—inherited writable properties, joins, projections, `UNION ALL`,
+> JSON and dynamic columns. This page presents four mapping shapes, how to read across them, and what
+> remains your responsibility.
 
 **Prerequisites:** [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Joins](04-joins.md) · [Set operations](08-set-operations.md) · [JSON support](16-json.md) · [Dynamic columns](29-dynamic-columns.md)
 
@@ -124,6 +124,10 @@ var express = ctx.From<ExpressOrder>()
 Put shared columns on a base class, then map each concrete type to its own table. This is the closest
 shape to TPC: every concrete table contains the full set of columns, including the inherited ones.
 
+### Read or insert a concrete type
+
+Define a shared base class and map each concrete subtype to its own table:
+
 ```csharp
 public abstract class OrderBase
 {
@@ -146,6 +150,8 @@ public sealed class ExpressOrder : OrderBase
 }
 ```
 
+Query and insert a concrete subtype like this:
+
 ```csharp
 var express = ctx.From<ExpressOrder>()
     .Where(o => o.PromisedAt < cutoff)
@@ -163,7 +169,9 @@ ctx.CreateInsertBuilder<ExpressOrder>()
     .Insert();
 ```
 
-Rules and caveats:
+### Apply the TPC mapping rules
+
+Use these rules when mapping each concrete type:
 
 * `OrderBase` is a C# convenience, **not an entity**. It is not queried and has no table of its own.
 * Name every concrete table explicitly. `[SqlTable]`/`[Table]` is inherited from the base, so a base
@@ -181,7 +189,8 @@ Rules and caveats:
 ## A shared base table (TPT by hand)
 
 If the shared columns are large, or per-subtype foreign keys and constraints matter, keep them in a
-base table and put only the subtype-specific columns in a side table.
+base table and put only the subtype-specific columns in a side table. For example, map the shared and
+subtype columns like this:
 
 ```csharp
 [SqlTable("orders")]
@@ -200,7 +209,9 @@ public sealed class OrderExpress
 }
 ```
 
-Read with a join:
+### Read the shared and subtype columns
+
+Use a join to read columns from both tables:
 
 ```csharp
 var rows = ctx.From<Order>()
@@ -214,11 +225,13 @@ var rows = ctx.From<Order>()
     .ToList();
 ```
 
-Or declare a one-to-one relationship with `HasOneToOne` on an entity that exposes the detail as a
-navigation property, and let `JoinInto` fill it in one round trip
+You can also declare a one-to-one relationship with `HasOneToOne` on an entity that exposes the detail as a
+navigation property. `JoinInto` then fills it in one round trip
 ([Relationships](../relationships/relationships.md#one-to-one-reference)).
 
-Write both rows in one transaction — nextorm has no unit of work, so the two commands are explicit:
+### Write both rows in one transaction
+
+nextorm has no unit of work, so insert both rows explicitly in one transaction:
 
 ```csharp
 var transactions = (ITransactionManager)ctx;
@@ -239,7 +252,9 @@ constraint (see [One-to-one reference](../relationships/relationships.md#one-to-
 When subtype fields are open-ended, sparse, or owned by an extension, keeping them out of the relational
 shape is often better than adding nullable columns.
 
-**JSON column.** Store a payload object in one column and treat it as opaque in portable code:
+### JSON column
+
+Store a payload object in one column and treat it as opaque in portable code:
 
 ```csharp
 public sealed record ExpressPayload(DateTime PromisedAt, string? Courier);
@@ -261,7 +276,9 @@ described in [JSON support across providers](16-json.md#map-a-clr-object-to-a-na
 Filtering inside the payload is provider-specific (native JSON functions or JSON-as-text functions), so
 it is not a portable query surface.
 
-**Dynamic columns.** Keep a dictionary of unmapped physical columns on the entity:
+### Dynamic columns
+
+Keep a dictionary of unmapped physical columns on the entity:
 
 ```csharp
 [SqlTable("orders")]
@@ -286,8 +303,9 @@ keys: use it for storage and projection, not for SQL predicates.
 There is no automatic polymorphic read: a base-typed query does not return runtime subtypes. Choose one
 of the following.
 
-**Per-type queries, merged in memory.** The simplest option when the list is small or the types are
-usually queried separately:
+### Query each type and merge in memory
+
+Use this option when the list is small or the types are usually queried separately:
 
 ```csharp
 var standard = ctx.From<StandardOrder>().ToList();
@@ -296,7 +314,9 @@ var express = ctx.From<ExpressOrder>().ToList();
 var all = standard.Cast<OrderBase>().Concat(express).ToList();
 ```
 
-**One `UNION ALL` over a common DTO.** This is one round trip and keeps a discriminator in the result:
+### Combine types with `UNION ALL`
+
+Use a common DTO to keep a discriminator in the result with one round trip:
 
 ```csharp
 public sealed class OrderRow
@@ -329,8 +349,10 @@ Both projections must have the same shape; `UnionAll` renders `UNION ALL` on eve
 ([Set operations](08-set-operations.md)). The result is the DTO, not the concrete entity, so map it to
 your domain model in memory if the distinction matters.
 
-**A database view.** If the mixed list is used in many places, create a view that unions the concrete
-tables and map the view as a flat entity:
+### Map a database view
+
+If you use the mixed list in many places, create a view that unions the concrete tables and map the view
+as a flat entity:
 
 ```sql
 create view v_orders as
@@ -355,9 +377,11 @@ var all = ctx.From<OrderView>().ToList();
 The view, its `UNION ALL` and its discriminator are schema you own. Writes still go to the concrete
 tables, not to the view.
 
-**TPT.** For the shared-base-table shape, a join plus a DTO projection (shown above) is the mixed read;
-add a constant discriminator column to the projection when the consumer needs to know which subtype the
-row came from.
+### Combine the TPT tables
+
+For the shared-base-table shape, use a join plus a DTO projection (shown above) as the mixed read. Add a
+constant discriminator column to the projection when the consumer needs to know which subtype the row came
+from.
 
 ## Shared code and query filters
 

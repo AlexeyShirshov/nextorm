@@ -4,16 +4,13 @@ using System.Linq.Expressions;
 namespace NextORM.Core;
 
 /// <summary>
-/// Describes the shape of a <see cref="QueryCommand"/>: the projection/entity source, the condition,
-/// joins, paging, ordering, grouping and logging. It groups the collaborators that used to travel as
-/// a long constructor parameter list through <see cref="QueryCommand"/>,
-/// <see cref="QueryCommand{TResult}"/> and <c>CreateCommand</c>.
+/// Describes a query's source, projection, condition, joins, paging, ordering, grouping, logging, and
+/// provider-specific clauses.
 /// </summary>
 /// <remarks>
-/// Immutable; use <c>with</c> to derive a variant (for example a re-ordered clone). Exactly one of
-/// <see cref="Exp"/> or <see cref="SrcType"/> identifies the source: <see cref="Exp"/> is the
-/// projection lambda for the generic command, <see cref="SrcType"/> the entity type when there is no
-/// projection.
+/// This type is immutable; use <c>with</c> to derive a variant. Exactly one of <see cref="Exp"/> or
+/// <see cref="SrcType"/> identifies the source: <see cref="Exp"/> is the projection lambda, while
+/// <see cref="SrcType"/> is the entity type when no projection is present.
 /// </remarks>
 public sealed record QueryDefinition
 {

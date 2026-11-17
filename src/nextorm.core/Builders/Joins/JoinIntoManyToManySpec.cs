@@ -31,16 +31,16 @@ internal interface IJoinIntoManyToManySpec
     /// <summary>
     /// The number of flattened projection items one many-to-many declaration occupies in a single-query
     /// result row: the link item followed by the child item. <see cref="GetItemTypes(bool)"/> always returns
-    /// exactly this many types (only the link item's identity -- the derived <c>JoinIntoLink</c> on SQL, the
+    /// exactly this many types (only the link item's identity -- a scalar or composite carrier on SQL, the
     /// junction entity in memory -- is path-dependent), so the row layout and the stitcher's slice stride
     /// cannot disagree.
     /// </summary>
     const int ItemCount = 2;
 
     /// <summary>
-    /// The projection item types the declaration contributes for the given provider path: the derived
-    /// <see cref="JoinIntoLink{TParentKey,TChildKey}"/> followed by the child on a SQL provider; the
-    /// junction entity followed by the child on the in-memory provider.
+    /// The projection item types the declaration contributes for the given provider path: the synthetic
+    /// link carrier followed by the child on a SQL provider (the scalar <see cref="JoinIntoLink{TParentKey,TChildKey}"/>
+    /// or the flat composite-junction carrier); the junction entity followed by the child on the in-memory provider.
     /// </summary>
     /// <param name="isSql">Whether the provider maps SQL and executes the derived link source.</param>
     /// <returns>The link item type followed by the child item type.</returns>
@@ -96,10 +96,9 @@ internal readonly record struct JoinIntoLinkKeyColumn(
     int DurationPrecision);
 
 /// <summary>
-/// One denormalized many-to-many row: the parent, the path-dependent link item (the derived
-/// <see cref="JoinIntoLink{TParentKey,TChildKey}"/> on SQL, the junction entity in memory) and the
-/// joined child. Kept as a private-shaped type so the common <c>IJoinIntoSpec</c> row contract stays
-/// untouched.
+/// One denormalized many-to-many row: the parent, the path-dependent link item (a synthetic scalar or
+/// composite carrier on SQL, the junction entity in memory) and the joined child. Kept as a private-shaped
+/// type so the common <c>IJoinIntoSpec</c> row contract stays untouched.
 /// </summary>
 /// <typeparam name="TParent">The parent entity type.</typeparam>
 internal readonly struct JoinIntoManyToManyRow<TParent>
@@ -127,10 +126,11 @@ internal readonly struct JoinIntoManyToManyRow<TParent>
 
 /// <summary>
 /// <see cref="IJoinIntoSpec{TEntity}"/> for a many-to-many navigation. Unlike a one-to-many declaration
-/// it contributes <b>two</b> projection items and two joins: a synthetic
-/// <see cref="JoinIntoLink{TParentKey,TChildKey}"/> item produced by a derived junction source, followed
-/// by the child. The link join connects the parent to the junction; the child join connects the link to
-/// the child. Both edges use the declaration's <see cref="JoinType"/>.
+/// it contributes <b>two</b> projection items and two joins: a synthetic link item produced by a derived
+/// junction source, followed by the child. Scalar junctions use <see cref="JoinIntoLink{TParentKey,TChildKey}"/>;
+/// composite junctions use a flat carrier with one member per key component. The link join connects the
+/// parent to the junction; the child join connects the link to the child. Both edges use the declaration's
+/// <see cref="JoinType"/>.
 /// </summary>
 /// <typeparam name="TEntity">The parent entity type the builder projects.</typeparam>
 /// <typeparam name="TChild">The child entity type.</typeparam>
@@ -150,8 +150,7 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
     /// <param name="joinType">The join kind.</param>
     /// <param name="isSql">
     /// Whether the bound context maps SQL. It fixes the shape of the link projection item and therefore
-    /// the link accessors: the derived <see cref="JoinIntoLink{TParentKey,TChildKey}"/> on SQL, the
-    /// junction entity in memory.
+    /// the link accessors: a synthetic scalar/composite carrier on SQL, the junction entity in memory.
     /// </param>
     public JoinIntoManyToManySpec(
         EntityBuilder<TChild> child,

@@ -81,9 +81,8 @@ public sealed class UnpivotColumn
 /// <summary>
 /// A <c>PIVOT</c>/<c>UNPIVOT</c> source: the inner source whose rows/columns are reshaped, together
 /// with the aggregate/values (<c>PIVOT</c>) or the value/name columns and column list
-/// (<c>UNPIVOT</c>). Stored on <see cref="FromExpression.Pivot"/> and rendered by the provider that
-/// supports the construct (see <see cref="ISqlDialect.Pivot"/> /
-/// <see cref="ISqlDialect.Pivot"/>).
+/// (<c>UNPIVOT</c>). Stored on <see cref="FromExpression.Pivot"/> and rendered by the dialect's
+/// <c>PIVOT</c>/<c>UNPIVOT</c> renderer (see <see cref="ISqlDialect.Pivot"/>).
 /// </summary>
 public sealed class PivotExpression
 {

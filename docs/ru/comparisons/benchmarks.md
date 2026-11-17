@@ -1,29 +1,33 @@
 # Бенчмарки: Nextorm против Dapper, linq2db и EF Core
 
+Используйте результаты, чтобы сравнить указанные формы запросов в описанной конфигурации SQLite. Это
+данные для этих сценариев, а не прогноз для любого провайдера, нагрузки или компьютера.
+
 <!-- benchmarks:conditions:start -->
 Условия: провайдер SQLite (`Microsoft.Data.Sqlite`) у всех участников; асинхронные запросы; в ячейке — **самый
-быстрый метод** этой библиотеки в связанном отчёте BenchmarkDotNet. Машина: AMD EPYC 7763 (4 логических / 2
-физических ядер), .NET 11.0.0, BenchmarkDotNet 0.15.8 (`ShortRun` + `InProcessEmitToolchain`). На
-**2026-11-11** для таблиц сквозных сценариев, аллокаций и категории B (таблица категории A и раздел tier-1
-сохраняют дату своего прогона). В каждой строке лидирующая ячейка выделена **полужирным** — быстрейшая в
-таблицах времени и с наименьшей аллокацией в таблице аллокаций.
+быстрый метод** этой библиотеки в связанном отчёте BenchmarkDotNet. Машина: AMD Ryzen 7 5800HS with Radeon
+Graphics (8 логических / 4 физических ядер), .NET 11.0.0, BenchmarkDotNet 0.15.8 (`Job.Default` +
+`InProcessEmitToolchain`). На **2026-11-16** для таблиц сквозных сценариев, аллокаций и категории B (таблица
+категории A и раздел tier-1 сохраняют дату своего прогона). В каждой строке лидирующая ячейка выделена
+**полужирным** — быстрейшая в таблицах времени и с наименьшей аллокацией в таблице аллокаций.
 <!-- benchmarks:conditions:end -->
 
-> **Разбивка по фичам:** сравнение по фичам, разбитое на тиры, — без веток `Prepare()`, одна таблица
-> на tier, колонки — конкуренты — в [Feature-бенчмарках](feature-benchmarks.md).
+> **Сравнение по возможностям:** результаты сгруппированы по тирам, без веток `Prepare()`: одна
+> таблица
+> на tier, библиотеки расположены в столбцах. См. [Feature-бенчмарки](feature-benchmarks.md).
 
 ## Сквозные сценарии
 
 <!-- benchmarks:e2e:start -->
 | Метод | Nextorm | Dapper | linq2db | EF Core |
 |---|:---:|:---:|:---:|:---:|
-| [Выборка данных](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md) | **10.75 μs** | 15.80 μs | 16.50 μs | 38.46 μs |
-| [Широкая выборка данных](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md) | **9.135 ms** | 9.883 ms | 10.594 ms | 10.998 ms |
-| [Where](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md) | **915.0 μs** | 1,378.8 μs | 1,432.3 μs | 3,540.1 μs |
-| [Simulate work](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md) | **8.610 ms** | 27.766 ms | 418.616 ms | 109.613 ms |
-| [Any](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md) | **923.5 μs** | 1,421.9 μs | 1,523.8 μs | 3,742.6 μs |
-| [FirstOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFirst-report-github.md) | **93.64 μs** | 148.96 μs | 363.31 μs | 368.44 μs |
-| [SingleOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSingle-report-github.md) | **92.38 μs** | 142.69 μs | 372.78 μs | 369.31 μs |
+| [Выборка данных](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md) | **12.26 μs** | 16.55 μs | 17.17 μs | 38.08 μs |
+| [Широкая выборка данных](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md) | **7.921 ms** | 8.528 ms | 8.647 ms | 9.152 ms |
+| [Where](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md) | **1.063 ms** | 1.503 ms | 1.553 ms | 3.386 ms |
+| [Simulate work](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md) | **7.893 ms** | 24.616 ms | 364.543 ms | 108.639 ms |
+| [Any](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md) | **1.059 ms** | 1.509 ms | 1.663 ms | 3.660 ms |
+| [FirstOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFirst-report-github.md) | **107.1 μs** | 154.6 μs | 366.3 μs | 355.7 μs |
+| [SingleOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSingle-report-github.md) | **107.2 μs** | 148.6 μs | 370.8 μs | 337.2 μs |
 <!-- benchmarks:e2e:end -->
 
 ### Аллокации
@@ -33,10 +37,10 @@
 <!-- benchmarks:allocations:start -->
 | Метод | Nextorm | Dapper | linq2db | EF Core |
 |---|:---:|:---:|:---:|:---:|
-| Выборка данных | **968 B** | 1,848 B | 2,080 B | 9,776 B |
+| Выборка данных | **1,080 B** | 1,848 B | 2,080 B | 9,776 B |
 | Широкая выборка данных | **2.14 MB** | 2.59 MB | **2.14 MB** | 4.28 MB |
-| Where | **102.58 KB** | 179.23 KB | 252.74 KB | 745.41 KB |
-| Simulate work | **6.21 MB** | 8.86 MB | 107.45 MB | 13.57 MB |
+| Where | **102.90 KB** | 179.23 KB | 252.74 KB | 745.41 KB |
+| Simulate work | **6.21 MB** | 8.86 MB | 108.02 MB | 13.57 MB |
 | Any | **84.38 KB** | 138.29 KB | 232.82 KB | 763.30 KB |
 | FirstOrDefault | **8.56 KB** | 16.12 KB | 159.77 KB | 76.03 KB |
 | SingleOrDefault | **8.28 KB** | 16.04 KB | 159.77 KB | 76.03 KB |
@@ -44,43 +48,48 @@
 
 ## Сравнение по фичам (честное)
 
-Сквозная таблица смешивает стратегии переиспользования. Чтобы сравнение было симметричным, фичи разделены
-на две категории:
+Сквозная таблица показывает самый быстрый метод каждой библиотеки, но методы используют разные
+стратегии переиспользования запросов. Поэтому результаты по отдельным возможностям разделены на две
+категории:
 
-- **Категория A — prepared / compiled / raw:** Nextorm через `Prepare()` против ближайшей *скомпилированной*
-  формы того же запроса (`EF.CompileAsyncQuery`, `LinqToDB.CompiledQuery.Compile`) и сырого Dapper (его IL
-  кэшируется по тексту SQL). Это «сравнение скомпилированного со скомпилированным».
-- **Категория B — warm cached против обычных:** Nextorm через неявный кэш планов (на каждый вызов — свежий
-  fluent-запрос с константами, так что переиспользуется только закэшированный план) против обычных
-  (не compiled) EF Core и linq2db и сырого Dapper.
+- **Категория A — prepared / compiled / raw:** Nextorm через `Prepare()` сравнивается с ближайшей
+  *скомпилированной* формой того же запроса (`EF.CompileAsyncQuery`,
+  `LinqToDB.CompiledQuery.Compile`) и с сырым Dapper, чей IL кэшируется по тексту SQL. Это сравнение
+  повторно используемых форм запроса: compiled против compiled, а для Dapper — единственный
+  доступный ему raw-SQL-путь.
+- **Категория B — warm cached против обычных:** Nextorm использует неявный кэш планов. Каждый вызов
+  создаёт новый fluent-запрос с константами, поэтому повторно используется только закэшированный
+  план. Сравнение идёт с обычными (не compiled) EF Core и linq2db, а также с сырым Dapper.
 
-Каждый метод фичи выполняет **10 запросов**; в ячейке — **на запрос**: среднее и аллокация (BenchmarkDotNet
-`Mean` и `Allocated`, делённые на 10). Исходные отчёты:
+Каждый метод для отдельной возможности выполняет **10 запросов**. В таблицах указаны среднее время и
+выделенная память на один запрос: `Mean` и `Allocated` BenchmarkDotNet делятся на 10. Исходные
+отчёты:
 [Категория A](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md) ·
 [Категория B](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFairCached-report-github.md).
 
 ### Категория A — prepared против compiled и raw
 
 <!-- benchmarks:category-a:start -->
-На **2026-11-11**.
+На **2026-11-16**.
 
 | Фича | Nextorm (prepared) | Dapper | linq2db (compiled) | EF Core (compiled) |
 |---|---|---|---|---|
-| `CASE WHEN` | **9.45 μs / 664 B** | 14.64 μs / 1.34 KB | 15.43 μs / 1.59 KB | 36.91 μs / 7.46 KB |
-| CTE | **9.89 μs / 712 B** | 22.25 μs / 1.56 KB | 23.75 μs / 1.77 KB | — |
-| `SELECT DISTINCT` | **11.44 μs / 665 B** | 18.27 μs / 1.44 KB | 18.36 μs / 1.59 KB | 42.53 μs / 7.23 KB |
-| `EXCEPT` | **11.41 μs / 680 B** | 18.13 μs / 1.43 KB | 21.57 μs / 1.67 KB | 46.40 μs / 8.38 KB |
-| IN-list | **12.79 μs / 1.55 KB** | 18.55 μs / 1.26 KB | 47.92 μs / 13.63 KB | 66.24 μs / 14.34 KB |
-| `INTERSECT` | **10.59 μs / 665 B** | 16.64 μs / 1.28 KB | 20.33 μs / 1.62 KB | 44.07 μs / 7.50 KB |
-| Join по 4 таблицам | **13.27 μs / 1,000 B** | 27.17 μs / 2.02 KB | 24.65 μs / 2.06 KB | 50.99 μs / 8.05 KB |
-| `LEFT JOIN` | **12.65 μs / 1.12 KB** | 21.22 μs / 2.21 KB | 21.63 μs / 2.31 KB | 45.27 μs / 9.48 KB |
-| Рекурсивный CTE | **12.95 μs / 672 B** | 26.02 μs / 1.52 KB | 28.50 μs / 1.77 KB | — |
-| Строковые функции | **9.33 μs / 656 B** | 14.22 μs / 1.27 KB | 15.25 μs / 1.63 KB | 36.89 μs / 7.05 KB |
-| UDF | **9.43 μs / 688 B** | 14.28 μs / 1.27 KB | 15.31 μs / 1.63 KB | 36.24 μs / 7.05 KB |
-| Оконные функции | **14.99 μs / 768 B** | 31.84 μs / 1.53 KB | 34.65 μs / 1.73 KB | — |
+| `CASE WHEN` | **10.79 μs / 664 B** | 15.22 μs / 1.34 KB | 16.10 μs / 1.59 KB | 35.25 μs / 7.46 KB |
+| CTE | **11.35 μs / 752 B** | 23.01 μs / 1.56 KB | 23.50 μs / 1.77 KB | — |
+| `SELECT DISTINCT` | **12.66 μs / 665 B** | 18.81 μs / 1.44 KB | 18.85 μs / 1.59 KB | 40.43 μs / 7.23 KB |
+| `EXCEPT` | **12.56 μs / 680 B** | 18.52 μs / 1.43 KB | 21.50 μs / 1.67 KB | 42.52 μs / 8.38 KB |
+| IN-list | **14.11 μs / 1.55 KB** | 19.66 μs / 1.26 KB | 45.78 μs / 13.63 KB | 62.91 μs / 14.34 KB |
+| `INTERSECT` | **12.13 μs / 665 B** | 17.51 μs / 1.28 KB | 20.79 μs / 1.62 KB | 42.32 μs / 7.50 KB |
+| Join по 4 таблицам | **14.58 μs / 1.03 KB** | 27.04 μs / 2.02 KB | 24.96 μs / 2.06 KB | 48.61 μs / 8.05 KB |
+| `LEFT JOIN` | **14.15 μs / 1.16 KB** | 21.17 μs / 2.21 KB | 21.46 μs / 2.31 KB | 41.92 μs / 9.48 KB |
+| Рекурсивный CTE | **14.06 μs / 672 B** | 25.65 μs / 1.52 KB | 26.92 μs / 1.77 KB | — |
+| Строковые функции | **10.81 μs / 656 B** | 15.30 μs / 1.27 KB | 15.85 μs / 1.63 KB | 34.86 μs / 7.05 KB |
+| UDF | **10.84 μs / 688 B** | 15.78 μs / 1.27 KB | 15.53 μs / 1.63 KB | 34.45 μs / 7.05 KB |
+| Оконные функции | **15.75 μs / 793 B** | 30.19 μs / 1.54 KB | 32.76 μs / 1.74 KB | — |
 <!-- benchmarks:category-a:end -->
 
-Nextorm prepared быстрее **на каждой** фиче и с наименьшей аллокацией на 11 из 12 — исключение IN-list, где
+В подготовленном варианте Nextorm быстрее **на каждой** проверенной возможности и создаёт меньше
+аллокаций в 11 из 12 случаев — исключение IN-list, где
 кэшированный raw SQL Dapper экономнее. Точные соотношения — в таблице выше; они зависят от раннера, поэтому
 дельты меньше ~20 % считайте шумом.
 
@@ -89,58 +98,66 @@ Nextorm prepared быстрее **на каждой** фиче и с наиме�
 <!-- benchmarks:category-b:start -->
 | Фича | Nextorm (cached) | Dapper | linq2db | EF Core |
 |---|---|---|---|---|
-| `CASE WHEN` | **12.69 μs / 2.04 KB** | 14.89 μs / 1.34 KB | 24.93 μs / 3.77 KB | 60.62 μs / 11.46 KB |
-| CTE | 31.54 μs / 9.27 KB | **22.60 μs / 1.56 KB** | 60.15 μs / 9.02 KB | — |
-| `SELECT DISTINCT` | **15.56 μs / 2.98 KB** | 17.90 μs / 1.44 KB | 30.64 μs / 3.88 KB | 68.58 μs / 11.70 KB |
-| `EXCEPT` | **17.38 μs / 4.12 KB** | 18.59 μs / 1.43 KB | 40.69 μs / 5.01 KB | 80.83 μs / 14.73 KB |
-| IN-list | 43.85 μs / 8.59 KB | **19.46 μs / 1.26 KB** | 74.64 μs / 17.28 KB | 116.25 μs / 22.05 KB |
-| `INTERSECT` | **16.31 μs / 4.10 KB** | 17.14 μs / 1.28 KB | 39.33 μs / 4.96 KB | 78.83 μs / 13.81 KB |
-| Join по 4 таблицам | 35.21 μs / 9.92 KB | **28.06 μs / 2.02 KB** | 70.15 μs / 14.15 KB | 127.10 μs / 23.97 KB |
-| `LEFT JOIN` | 23.83 μs / 5.49 KB | **21.60 μs / 2.21 KB** | 76.56 μs / 9.02 KB | 104.27 μs / 19.66 KB |
-| Рекурсивный CTE | 33.93 μs / 9.84 KB | **26.32 μs / 1.52 KB** | 67.39 μs / 8.62 KB | — |
-| Строковые функции | **13.45 μs / 2.78 KB** | 14.73 μs / 1.27 KB | 31.63 μs / 4.74 KB | 70.22 μs / 12.74 KB |
-| UDF | **13.86 μs / 2.87 KB** | 14.67 μs / 1.27 KB | 50.31 μs / 6.63 KB | 70.22 μs / 12.74 KB |
-| Оконные функции | **29.80 μs / 4.16 KB** | 32.83 μs / 1.54 KB | 67.61 μs / 5.79 KB | — |
+| `CASE WHEN` | **13.63 μs / 2.06 KB** | 15.59 μs / 1.34 KB | 25.31 μs / 3.77 KB | 57.41 μs / 11.46 KB |
+| CTE | 32.56 μs / 9.49 KB | **22.91 μs / 1.56 KB** | 56.53 μs / 9.37 KB | — |
+| `SELECT DISTINCT` | **17.52 μs / 3.06 KB** | 18.67 μs / 1.44 KB | 30.84 μs / 3.88 KB | 63.18 μs / 11.70 KB |
+| `EXCEPT` | **18.34 μs / 4.23 KB** | 18.92 μs / 1.43 KB | 38.30 μs / 5.01 KB | 71.39 μs / 14.73 KB |
+| IN-list | 43.73 μs / 8.77 KB | **19.82 μs / 1.26 KB** | 68.29 μs / 17.28 KB | 102.95 μs / 22.05 KB |
+| `INTERSECT` | **17.51 μs / 4.22 KB** | 18.01 μs / 1.28 KB | 39.05 μs / 4.96 KB | 70.88 μs / 13.81 KB |
+| Join по 4 таблицам | 35.68 μs / 10.02 KB | **27.48 μs / 2.02 KB** | 65.00 μs / 14.14 KB | 114.91 μs / 23.90 KB |
+| `LEFT JOIN` | 26.32 μs / 5.74 KB | **21.79 μs / 2.21 KB** | 69.49 μs / 8.94 KB | 98.61 μs / 19.77 KB |
+| Рекурсивный CTE | 36.53 μs / 10.10 KB | **26.70 μs / 1.52 KB** | 63.08 μs / 8.43 KB | — |
+| Строковые функции | **15.34 μs / 2.81 KB** | 16.34 μs / 1.27 KB | 31.89 μs / 4.74 KB | 66.92 μs / 12.74 KB |
+| UDF | **15.71 μs / 2.90 KB** | 16.26 μs / 1.27 KB | 50.07 μs / 6.75 KB | 66.85 μs / 12.74 KB |
+| Оконные функции | **31.01 μs / 4.09 KB** | 31.99 μs / 1.53 KB | 61.46 μs / 5.79 KB | — |
 <!-- benchmarks:category-b:end -->
 
-В warm-пути Nextorm быстрее Dapper на `CASE WHEN` и `SELECT DISTINCT` и идёт наравне на `INTERSECT`;
-отстаёт от Dapper примерно в 1.06–1.20 раза на строковых функциях, `EXCEPT`, UDF и оконных функциях,
-в 1.38 раза на `LEFT JOIN` и в 1.56–1.82 раза на join по 4 таблицам, CTE, рекурсивном CTE и IN-list —
-при этом заметно опережая обычные linq2db и EF Core по времени. Аллокации в warm-пути выше, чем в
-prepared (ключ плана перестраивается на каждый вызов); они намного ниже, чем у обычных EF Core, и ниже
-linq2db на большинстве фич, но выше linq2db на CTE, рекурсивном CTE, `EXCEPT` и `INTERSECT`.
+При повторных запросах с кэшем Nextorm быстрее Dapper на `CASE WHEN` и `SELECT DISTINCT` и идёт
+наравне на `INTERSECT`. Он отстаёт от Dapper примерно в 1.06–1.20 раза на строковых функциях,
+`EXCEPT`, UDF и оконных функциях; в 1.38 раза на `LEFT JOIN`; в 1.56–1.82 раза на join по четырём
+таблицам, CTE, рекурсивном CTE и IN-list. По времени Nextorm опережает обычные linq2db и EF Core.
 
-> **IN-list, категория B.** Захваченная коллекция отключает кэш планов по замыслу (SQL перестраивается на
-> каждый вызов), поэтому captured-варианты платят за полную сборку, а inline-варианты попадают в кэш. Четыре
-> варианта Nextorm дают 37.5–41.4 µs — это фича, где кэшированный сырой SQL Dapper впереди с наибольшим
-> отрывом.
+При повторных запросах с кэшем аллокаций больше, чем в подготовленном режиме, потому что ключ плана
+строится заново при каждом вызове. Их значительно меньше, чем у обычного EF Core, и меньше, чем у
+linq2db на большинстве проверенных возможностей, но больше на CTE, рекурсивном CTE, `EXCEPT` и
+`INTERSECT`.
+
+> **IN-list, категория B.** Захваченная коллекция намеренно отключает кэш планов, потому что SQL нужно перестраивать при
+> каждом вызове; варианты с inline-списком используют кэш. Четыре варианта Nextorm дают 37.5–41.4 µs.
+> В этом сценарии кэшированный сырой SQL Dapper опережает Nextorm с наибольшим отрывом.
 
 ## Сценарии tier 1 по форме запроса
 
-Добавлены в #188, чтобы покрыть формы запросов, которых нет в двух таблицах выше: проекцию в свежий
-DTO, SQL-агрегаты, сортированную пагинацию, стриминг (buffered/unbuffered DTO против
-zero-materialization raw reader) и кросс-библиотечный вывод JSON/CSV. Данные: `large_table`
-(10 000 строк) для projection/aggregates/paging/streaming; JSON-класс сеет собственную таблицу
-`json_bench`, CSV-класс берёт срез `large_table` (10 000 строк). Инварианты честного сравнения остаются
-`simple_entity`=10 и `complex_entity`=3 — «10 000 строк» выше относится к `large_table`, а не к этим
-фикстурам. На **2026-11-07**.
+В #188 добавили формы запросов, которых нет в двух предыдущих таблицах: проекцию в новый DTO (объект
+передачи данных), агрегаты на стороне SQL, упорядоченную пагинацию, потоковое чтение DTO с
+буферизацией и без неё, чтение через `DbDataReader` без создания объектов, а также вывод JSON/CSV в
+разных библиотеках.
 
-Категории переиспользования те же, что в сравнении по фичам: **категория A** — Nextorm `Prepare()` против
-ближайшей *скомпилированной* формы (`EF.CompileAsyncQuery`, `LinqToDB.CompiledQuery.Compile`) и сырого
-Dapper; **категория B** — неявный кэш планов Nextorm против обычных (не compiled) EF Core/linq2db и
-сырого Dapper. У Dapper нет compiled-формы запроса/ридера, поэтому его армы несут обе категории.
+Для проекции, агрегатов, пагинации и потокового чтения используется `large_table` (10 000 строк).
+JSON-класс заполняет собственную таблицу `json_bench`, а CSV-класс берёт срез `large_table` (10 000
+строк). Инварианты фикстур честного сравнения остаются прежними: `simple_entity`=10 и
+`complex_entity`=3; 10 000 строк относятся к `large_table`, а не к этим фикстурам. Снимок на
+**2026-11-07**.
 
-**У стриминга три группы:** буферизованная материализация DTO, небуферизованное перечисление DTO и
-**zero-materialization** подгруппа raw reader. Zero-подгруппа только синхронная (async reader-армы
-отложены): Nextorm `ToDataReader`, Dapper `ExecuteReader` и linq2db `ExecuteReader` (его
-`DataReaderAsync.Reader`) читают одну и ту же проекцию `id, someString` через **один общий
-неудерживающий sink**. EF Core в zero-подгруппу **не** входит — у него нет LINQ raw-reader-аналога.
-«Zero-materialization» означает отсутствие конструирования entity/DTO, **не** нулевые аллокации: путь
-reader всё равно аллоцирует свою команду/ридер на вызов.
+Категории переиспользования те же, что в сравнении возможностей: **категория A** сравнивает Nextorm
+`Prepare()` с ближайшей *скомпилированной* формой (`EF.CompileAsyncQuery`,
+`LinqToDB.CompiledQuery.Compile`) и сырым SQL Dapper; **категория B** — неявный кэш планов Nextorm с
+обычными, не скомпилированными вызовами EF Core и linq2db, а также с сырым SQL Dapper. В этом
+сравнении у Dapper нет отдельного скомпилированного варианта запроса или чтения, поэтому его ветки с
+сырым SQL входят в обе категории. В сценарии чтения Dapper использует API `ExecuteReader`.
 
-Для JSON/CSV конкурентные армы — **ближайший эквивалент**: ни у Dapper, ни у linq2db, ни у EF Core нет
-non-materialising терминала вывода, поэтому их арм = материализация → ручной сериализатор. Это не
-заявление о zero-materialization.
+**У потокового чтения три группы:** буферизованная материализация DTO, небуферизованное перечисление
+DTO и чтение через `DbDataReader` **без создания объектов**. Последняя группа только синхронная;
+асинхронные варианты чтения отложены. Nextorm `ToDataReader`, Dapper `ExecuteReader` и linq2db
+`ExecuteReader` (его `DataReaderAsync.Reader`) читают одну проекцию `id, someString` через **один
+общий приёмник, который не сохраняет прочитанные строки**. EF Core в эту группу **не** входит: у
+него нет аналога LINQ для чтения через `DbDataReader`. Здесь «без материализации» означает, что не
+создаются объекты entity/DTO, а **не** отсутствие аллокаций: при каждом вызове всё равно выделяются
+память под команду и объект `DbDataReader`.
+
+Для JSON/CSV конкурентные армы — **ближайший эквивалент**: у Dapper, linq2db и EF Core нет терминала
+вывода без материализации, поэтому они сначала материализуют строки, а затем сериализуют их вручную.
+Это не сравнение без материализации.
 
 > **Как читать эти числа.** `ShortRun` + `InProcessEmitToolchain` — исследовательский режим: различия
 > меньше ~20% считайте шумом и смотрите полный отчёт (error, стандартное отклонение, аллокации), прежде
@@ -234,7 +251,8 @@ non-materialising терминала вывода, поэтому их арм = 
 | B_Linq2Db_AsyncStream_Dto | B | 4,982.80 μs | 1,254.55 KB |
 | B_EFCore_AsyncStream_Dto | B | 5,295.63 μs | 3,448.89 KB |
 
-Zero-materialization raw reader (синхронные; общий неудерживающий sink; EF Core исключён):
+Чтение через `DbDataReader` без материализации (синхронно; общий приёмник не сохраняет строки; EF Core
+исключён):
 
 | Арм | Категория | Mean | Allocated |
 |---|---|---:|---:|
@@ -291,14 +309,17 @@ nextorm публикуется с одним `PublishAot=true`; эталонно
 
 ## Как читать числа
 
-- Все участники используют один и тот же ADO.NET-провайдер (`Microsoft.Data.Sqlite`), поэтому сравнение
-  apples-to-apples; база SQLite лежит в tmpfs, чтобы дисковый ввод-вывод не маскировал ORM.
-- Nextorm показывает оба пути переиспользования — неявный кэш планов и явный `Prepare()`, — а в сквозной
-  ячейке указан самый быстрый из них. См. [Переиспользование запросов: кэш и Prepare](../engine/03-plan-cache-and-reuse.md).
-- `ShortRun` + `InProcessEmitToolchain` — быстрый режим: сигнала он даёт достаточно, но небольшие различия
-  считайте шумом и смотрите полный отчёт (mean, error, стандартное отклонение и аллокации).
-- Это одна машина, один провайдер (SQLite) и фиксированный набор сценариев. Это не утверждение про любую
-  нагрузку — воспроизводите на своих данных и железе.
+- Все участники используют один ADO.NET-провайдер (`Microsoft.Data.Sqlite`), что позволяет
+  сравнивать библиотеки при одинаковом провайдере. База SQLite находится в tmpfs, поэтому дисковый
+  ввод-вывод не маскирует накладные расходы ORM.
+- Для Nextorm показаны оба пути переиспользования — неявный кэш планов и явный `Prepare()`. Для
+  Nextorm в сквозной таблице указан самый быстрый из двух путей переиспользования. См.
+  [Переиспользование запросов: кэш и Prepare](../engine/03-plan-cache-and-reuse.md).
+- `ShortRun` + `InProcessEmitToolchain` — исследовательский режим. Небольшие различия считайте шумом
+  и перед выводами проверяйте полный отчёт: среднее, погрешность, стандартное отклонение и
+  аллокации.
+- Замеры охватывают одну машину, один провайдер (SQLite) и фиксированный набор сценариев. Они не
+  описывают любую нагрузку — повторите их на своих данных и оборудовании.
 
 ## Воспроизведение
 

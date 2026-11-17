@@ -1,13 +1,17 @@
 # Set operations
 
-> Combine two result sets with [`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})), [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})), [`Intersect`](xref:NextORM.Core.QueryCommand`1.Intersect``1(NextORM.Core.QueryCommand{``0})), [`IntersectAll`](xref:NextORM.Core.QueryCommand`1.IntersectAll``1(NextORM.Core.QueryCommand{``0})), [`Except`](xref:NextORM.Core.QueryCommand`1.Except``1(NextORM.Core.QueryCommand{``0})) and [`ExceptAll`](xref:NextORM.Core.QueryCommand`1.ExceptAll``1(NextORM.Core.QueryCommand{``0})), and chain them left to right.
+> Combine two query results, choosing whether to remove duplicates, keep only shared rows, or exclude rows found on the right.
 
 **Prerequisites:** [Querying and projections](../engine/index.md) · [Subqueries](07-subqueries.md) · [SELECT DISTINCT](09-distinct.md)
 
 ## Overview
 
-Every [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) exposes six set-operation methods that take another command and return
-a new command:
+Every [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) exposes six methods that combine its
+result with another command and return a new command. Choose an operation by the result you need:
+
+* Use `Union` to combine both results and remove duplicates; use `UnionAll` to keep duplicates.
+* Use `Intersect` to keep rows present on both sides; use `Except` to keep rows found only on the left.
+* Add `All` to `Intersect` or `Except` when you need to preserve duplicate counts.
 
 | Method | SQL keyword | Keeps duplicates | Right side by selector |
 |---|---|---|---|
@@ -18,11 +22,12 @@ a new command:
 | `Except(query)` / `Except<TEntity>(selector)` | `except` | no | `Except<TEntity>(selector)` |
 | `ExceptAll(query)` / `ExceptAll<TEntity>(selector)` | `except all` | yes | `ExceptAll<TEntity>(selector)` |
 
-The right-hand command may project a different element type: the method is generic over the other
-side (`Union<T>(QueryCommand<T>)`), so `SimpleEntity.Select(it => it.Id).Union(ComplexEntity.Select(it => (int)it.Id))`
-is valid as long as the shapes line up. The selector form (`Union<TEntity>(selector)` and friends) fixes
-the element type of the right side to the left side's `TResult` and projects `TEntity` to `TResult`
-through the selector; use the explicit `Union<T>(QueryCommand<T>)` form when the right side needs a
+The right-hand command may project a different element type if the two result shapes line up. For
+example, `SimpleEntity.Select(it => it.Id).Union(ComplexEntity.Select(it => (int)it.Id))` combines
+the two ID projections.
+
+The selector overloads (`Union<TEntity>(selector)` and friends) project the right-side `TEntity` to the
+left-side `TResult`. Use the explicit `Union<T>(QueryCommand<T>)` overload when the right side needs a
 different CLR type.
 
 The result is itself a [`QueryCommand`](xref:NextORM.Core.QueryCommand), so it can be executed through `From(result)` or have another
@@ -76,6 +81,9 @@ var allCount = dataContext.From(
 
 ## Intersect and Except
 
+Use `Intersect` to return values present on both sides. Use `Except` to return values present only on
+the left.
+
 ```csharp
 var common = dataContext.From<ISimpleEntity>().Select(it => it.Id)
     .Intersect(dataContext.From<ISimpleEntity>().Select(it => it.Id));
@@ -115,6 +123,9 @@ var count = dataContext.From(cmd).Count(); // 7
 ```
 
 ## IntersectAll and ExceptAll
+
+The `All` variants preserve duplicate counts. They are available only on providers whose SQL dialect
+supports the corresponding `INTERSECT ALL` or `EXCEPT ALL` operation.
 
 ```csharp
 var cmd = dataContext.From<ISimpleEntity>().Select(it => it.Id)

@@ -1,13 +1,18 @@
 # Capabilities: Nextorm vs Dapper, linq2db and EF Core
 
-One construct-level matrix: what each library supports and where it does not. Legend: **yes** =
-first-class; **partial** = supported with a named limitation, or implementable but not implemented; **no** =
-not supported. A Nextorm cell names a database-engine restriction in parentheses; it does not lower the mark.
-Competitor gaps with an open tracking issue link to it. As of **2026-10-04**.
+Use this matrix to check which query constructs and data-access features each library exposes. Each
+row names a construct; the columns show its support status. **yes** means first-class support
+through the library's public API; **partial** means support has a named limitation or the feature is
+possible to implement but is not implemented; **no** means the feature is not supported. A Nextorm
+cell may name a database-engine restriction in parentheses. Check that restriction when choosing a
+provider; it does not lower the library-level mark. Competitor gaps with an open tracking issue link
+to it. Snapshot date: **2026-10-04**.
 
-Rows are ordered by area — querying, types and mapping, provider functions, writes, model and tooling. A
-**Total** row closes the matrix: the yes / partial / no counts for that column (`n/a` is excluded, and the
-provider list is not scored). The per-engine API breadth is on [Provider features](provider-features.md).
+Rows are ordered by area — querying, types and mapping, provider functions, writes, model, and
+tooling. The **Total** row counts yes / partial / no entries in each column (`n/a` is excluded, and
+the provider list is not scored). This is an unweighted inventory, not a suitability score: choose
+by the features your application requires and the limits of its target provider. For per-engine API
+breadth, see [Provider features](provider-features.md).
 
 | Area | Nextorm | linq2db | EF Core |
 |---|---|---|---|
@@ -111,12 +116,16 @@ Against the shared surface Nextorm matches or exceeds linq2db; on top of that it
 - Unmapped columns (`SqlFunctions.Column`), named join aliases (`Alias.<Name>`) and per-query source
   overrides — each folded into the plan key.
 
-- **Multi-tenancy and sharding without a second model.** A runtime mapping variant renames the table,
-  schema, columns and parameter prefix for a key, with metadata, plans and parameter prefixes isolated per
-  variant (`WithVariant(...)` on the builder, or a resolver on the context); sharding then places one entity
-  type across servers on top of it. linq2db can rename through a per-connection `MappingSchema` and EF Core
-  documents the tenant-column/`HasQueryFilter` and model-per-tenant patterns, but neither has a per-command
-  variant, and neither ships sharding.
+- **Multi-tenancy and sharding without a second model.** For a key, a runtime mapping variant can
+  rename
+  the table, schema, columns, and parameter prefix. It isolates metadata, plans, and parameter
+  prefixes
+  by variant; configure it with `WithVariant(...)` on the builder or a resolver on the context.
+  Sharding
+  can then place the same entity type across servers. linq2db renames through a per-connection
+  `MappingSchema`; EF Core documents tenant-column/`HasQueryFilter` and model-per-tenant patterns.
+  Neither
+  provides a per-command variant or ships sharding.
 - `SelectWhereMax`/`SelectWhereMin` as a dedicated extreme-row operator, lowered to the native strategy on
   PostgreSQL and ClickHouse; linq2db composes window functions plus `OrderBy`/`Take`.
 - `[JsonColumn]` with Auto/Native/Text storage — a mapping linq2db still lacks
@@ -129,18 +138,23 @@ Against the shared surface Nextorm matches or exceeds linq2db; on top of that it
   navigation, with global query filters applied to children at every level.
 - An EF Core integration package (`nextorm.entityframeworkcore`) sharing the EF connection, model mapping and
   transaction.
-- **Zero-config NativeAOT migration.** Inside the verified surface (all six providers on .NET 11 /
-  `linux-x64`) the only consumer change is `PublishAot=true`: no compiled model, no precompilation
-  step, no analyzer/interceptor opt-in, no entity or query registration, no linker descriptors or
-  roots. EF Core requires a compiled model plus interceptor-based query precompilation and rejects
-  dynamically composed queries; Dapper requires `Dapper.AOT` with `[module: DapperAot]`, an
-  `InterceptorsNamespaces` opt-in and statically known SQL; linq2db does not support NativeAOT
-  officially. On a 13 GB SQLite reporting app nextorm published natively with no source changes
-  (8.2 MB, 0.12 s, 30 MB RSS), while EF Core needed 17.3 MB / 0.23 s / 42 MB after two code-generation
-  workarounds. Coverage is measured rather than complete: the EF Core bridge, bulk insert, raw SQL row
-  mapping and the DML builders stay on the JIT runtime
-  ([#370](https://github.com/AlexeyShirshov/nextorm/issues/370)); the advantage is the migration
-  contract. See the [NativeAOT guide](../infrastructure/05-nativeaot.md).
+- **Zero-config NativeAOT migration.** In the verified surface—all six providers on .NET 11 /
+  `linux-x64`—the only consumer change is `PublishAot=true`. No compiled model, precompilation step,
+  analyzer/interceptor opt-in, entity or query registration, linker descriptor, or root is needed.
+  EF Core requires a compiled model and interceptor-based query precompilation, and rejects
+  dynamically
+  composed queries. Dapper requires `Dapper.AOT`, `[module: DapperAot]`, an `InterceptorsNamespaces`
+  opt-in, and statically known SQL. linq2db does not officially support NativeAOT.
+
+  On a 13 GB SQLite reporting app, Nextorm published natively with no source changes (8.2 MB, 0.12
+  s,
+  30 MB RSS); EF Core needed 17.3 MB / 0.23 s / 42 MB after two code-generation workarounds.
+  Coverage is measured across all six providers but remains incomplete: the EF Core bridge, bulk
+  insert,
+  raw SQL row mapping, and DML builders stay on JIT
+  ([#370](https://github.com/AlexeyShirshov/nextorm/issues/370)).
+  The advantage is the migration contract, not full AOT feature parity. See the [NativeAOT
+  guide](../infrastructure/05-nativeaot.md).
 - Cross-provider row values, portable range-over-scalar-pairs (`[RangeColumns]`), index hints, configurable
   keyword casing, full-text search including the SQLite FTS3/4/5 query surface and the FTS5
   maintenance/control builder, and CLR `Regex` translation.
@@ -162,10 +176,13 @@ surface, which Nextorm matches or exceeds:
 - **DDL / schema management**: linq2db ships `CreateTable`/`DropTable` and a schema API; Nextorm mutates the
   schema only through `CREATE TABLE AS SELECT` — ad-hoc DDL goes through `ExecuteRaw` (out of scope).
 
-Correlation is uniform on the SQL providers (arbitrary nesting depth). The in-memory provider evaluates
-depth-one correlated scalar/aggregate/`EXISTS`/`IN` once per outer row and rejects only the deeper forms (an
-outer reference inside the inner projection or `ORDER BY`, a correlated `GROUP BY`/`HAVING`, and an async
-inner source).
+SQL providers support correlated subqueries at arbitrary nesting depth. The in-memory provider
+evaluates
+depth-one correlated scalar, aggregate, `EXISTS`, and `IN` forms once per outer row. It rejects only
+deeper
+forms: an outer reference in the inner projection or `ORDER BY`, correlated `GROUP BY` or `HAVING`,
+and an
+async inner source.
 
 ## Architecture differences
 
@@ -178,15 +195,19 @@ inner source).
 
 ## Summary
 
-For reading, reporting and explicit data modification over an existing schema, Nextorm is the stronger
-choice: it covers essentially the whole analytic query surface linq2db offers — the provider-only function
-families, the ClickHouse-specific constructs, cross-provider row values, table-valued functions and more —
-with a smaller allocation footprint, benchmark results at or above Dapper, EF Core and linq2db on the shipped
-scenarios, and more configurable SQL output (identifier quoting, naming conventions and keyword casing are
-opt-in and overridable per command). NativeAOT migration is zero-config — `PublishAot=true` and nothing
-else — while EF Core needs a compiled model plus precompilation and Dapper needs an opt-in AOT package.
-linq2db remains the better fit only when the same layer must also track
-changes or generate the data layer from a live schema — the deliberate boundaries listed above.
+For a workload centered on reading, reporting, or explicit writes over an existing schema, use the
+rows above to check the required constructs and target-provider limits; the totals alone do not
+determine fit. The matrix shows that Nextorm covers nearly all of linq2db's analytic query surface,
+including provider-specific function families, ClickHouse constructs, cross-provider row values, and
+table-valued functions. It also offers configurable SQL output: identifier quoting, naming
+conventions, and keyword casing are opt-in and can be overridden per command.
+
+The benchmark results show a smaller allocation footprint and results at or above Dapper,
+EF Core, and linq2db on the shipped SQLite scenarios; they do not predict every workload. Within the
+verified NativeAOT surface, Nextorm requires only `PublishAot=true`, while EF Core needs a compiled
+model and precompilation, and Dapper needs an opt-in AOT package. linq2db remains a better fit when
+the same layer must also track changes or generate the data layer from a live schema—deliberate
+boundaries listed above.
 
 ## See also
 

@@ -1,8 +1,18 @@
 # Изменение данных (DELETE)
 
-> nextorm удаляет строки в той же модели явных команд, что и `INSERT`: [`CreateDeleteBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateDeleteBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) строит параметризованный `DELETE FROM <table> [WHERE ...]`, расширение контекста [`Delete<TEntity>(entity)`](xref:NextORM.Core.DataContextExtensions.Delete``1(NextORM.Core.IDataContext,``0)) удаляет по объявленному ключу сущности, а соединённый запрос может завершаться multi-table удалением. Тут нет ни change tracking, ни `SaveChanges`: каждый терминал выполняет ровно одну команду.
+> Используйте [`CreateDeleteBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateDeleteBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})), чтобы удалить строки по условию или явно удалить все строки. Он формирует параметризованный `DELETE FROM <table> [WHERE ...]`. Чтобы удалить сущность по объявленному ключу, передайте её в [`Delete<TEntity>(entity)`](xref:NextORM.Core.DataContextExtensions.Delete``1(NextORM.Core.IDataContext,``0)). Также можно удалить строки, выбранные соединением.
 
 **Что нужно знать:** [Изменение данных (INSERT)](17-insert-statement.md) · [Фильтрация (WHERE)](03-filtering-where.md) · [Соединения (JOIN)](04-joins.md) · [Обзор провайдеров](../connecting-providers/overview.md)
+
+## Выберите способ удаления
+
+- Чтобы удалить строки по условию, используйте [Удаление строк по предикату](#удаление-строк-по-предикату).
+- Чтобы удалить все строки, явно укажите маркер [`All()`](#удаление-всех-строк).
+- Чтобы удалить сущность по ключу, см. [Удаление по ключу](#удаление-по-ключу).
+- Чтобы получить удалённые строки, см. [Возврат удалённых строк](#возврат-удалённых-строк).
+- Чтобы удалить строки по соединению или очистить таблицу, см. [Удаление по соединению](#удаление-по-соединению) или [Очистка таблицы (`TRUNCATE`)](#очистка-таблицы-truncate).
+
+Каждый терминал выполняет одну команду. nextorm не отслеживает изменения и не предоставляет `SaveChanges`.
 
 ## Удаление строк по предикату
 
@@ -24,14 +34,19 @@ delete from simple_entity where id = 1
 delete from simple_entity where (age > 10)
 ```
 
-`Where` принимает те же выражения-предикаты, что и запрос (`From<T>().Where(...)`), а повторный вызов объединяет предикаты через `and`. `CreateDeleteBuilder<T>().ToSql()` рендерит инструкцию, не открывая соединение.
+`Where` принимает те же выражения-предикаты, что и запрос (`From<T>().Where(...)`). Повторные вызовы
+объединяют условия через `and`.
+
+Чтобы проверить сформированный SQL без открытия соединения, вызовите
+`CreateDeleteBuilder<T>().ToSql()`.
 
 * Захваченные в предикате значения становятся параметрами (`x => x.Id == id` рендерит `id = @id`); встроенные литералы подставляются как есть, точно как в `WHERE` запроса.
 * `Delete()`/`DeleteAsync()` возвращают число затронутых строк (`0`, если ничего не совпало). ClickHouse число не возвращает (мутация его не отдаёт).
 
 ## Удаление всех строк
 
-Удаление всех строк требует явного маркера `All()`, поэтому нефильтрованное удаление всей таблицы нельзя записать случайно. Совместное использование `Where` и `All` бросает `InvalidOperationException`:
+Чтобы удалить все строки, явно добавьте маркер `All()`. Так полное удаление таблицы становится
+осознанным действием. Совместное использование `Where` и `All` приводит к `InvalidOperationException`:
 
 ```csharp
 ctx.CreateDeleteBuilder<ISimpleEntity>().All().Delete();   // delete from simple_entity
@@ -39,7 +54,8 @@ ctx.CreateDeleteBuilder<ISimpleEntity>().All().Delete();   // delete from simple
 
 ## Удаление по ключу
 
-Форма по сущности удаляет ровно строку, определяемую объявленным ключом (`[Key]`/`.Key()`), рендеря равенство по ключу параметром:
+Чтобы удалить сущность по ключу, передайте её в расширение контекста `Delete`. Операция использует
+объявленный ключ сущности (`[Key]`/`.Key()`) и передаёт равенство по ключу параметром:
 
 ```csharp
 ctx.Delete(new SimpleEntity { Id = 1 });          // delete from simple_entity where id = @p0
@@ -68,12 +84,18 @@ ctx.CreateDeleteBuilder<Order>().All().ToSql();                            // п
 
 ## Глобальные фильтры запросов
 
-[Глобальный фильтр запроса](../advanced/query-filters.md), объявленный для удаляемой сущности, подмешивается в `WHERE` инструкции через `and`:
+[Глобальный фильтр запроса](../advanced/query-filters.md), объявленный для удаляемой сущности,
+объединяется с условием `WHERE`:
 
 * предикатная форма — `delete from ... where <predicate> and <filter>`;
-* key-форма — `delete from ... where <pk> = @p and <filter>`, поэтому `ctx.Delete(entity)` не удалит ничего, если фильтр отсекает этот ключ.
+* форма по ключу — `delete from ... where <pk> = @p and <filter>`, поэтому `ctx.Delete(entity)` не удалит ничего, если фильтр исключает этот ключ.
 
-`All()` — явное удаление всей таблицы, фильтр к нему **не** применяется. Соединённое удаление фильтрует цель (первую таблицу) и все источники соединений. [`DeleteBuilder<TEntity>`](xref:NextORM.Core.DeleteBuilder`1) предоставляет четыре перегрузки `IgnoreFilters` (все, по типу сущности, по ключу фильтра, пересечение ключа и типа); вызов хранит состояние, а повторные вызовы накапливаются:
+`All()` явно удаляет все строки, и фильтры к нему **не** применяются. Соединённое удаление фильтрует
+цель (первую таблицу) и все источники соединений.
+
+[`DeleteBuilder<TEntity>`](xref:NextORM.Core.DeleteBuilder`1) предоставляет четыре перегрузки
+`IgnoreFilters`: для всех фильтров, типа сущности, ключа фильтра или пересечения ключа и типа. Вызов
+меняет состояние билдера, поэтому повторные вызовы накапливаются:
 
 ```csharp
 ctx.CreateDeleteBuilder<Document>()
@@ -97,7 +119,9 @@ ctx.CreateDeleteBuilder<Document>()
 
 ## Возврат удалённых строк
 
-`Returning()` / `Returning(projection)` материализуют удалённые строки через `RETURNING`/`OUTPUT` провайдера и читаются через `Single()`/`ToList()`:
+Чтобы прочитать строки, удалённые командой, используйте `Returning()` или `Returning(projection)`.
+Провайдер формирует нативный вариант `RETURNING`/`OUTPUT`; результат читается через `Single()` или
+`ToList()`:
 
 ```csharp
 var removed = ctx.CreateDeleteBuilder<ISimpleEntity>()
@@ -129,7 +153,8 @@ delete from simple_entity where id = 1 returning id, name, age
 
 ## Очистка таблицы (`TRUNCATE`)
 
-`CreateTruncateBuilder<TEntity>()` рендерит родной `TRUNCATE TABLE`, сбрасывая таблицу быстрее, чем `CreateDeleteBuilder<T>().All()`:
+Чтобы очистить таблицу, используйте `CreateTruncateBuilder<TEntity>()`. Он формирует нативную команду
+`TRUNCATE TABLE`, которая сбрасывает таблицу быстрее, чем `CreateDeleteBuilder<T>().All()`:
 
 ```csharp
 var cleared = ctx.CreateTruncateBuilder<ISimpleEntity>().Execute();   // truncate table simple_entity
@@ -139,7 +164,9 @@ var cleared = ctx.CreateTruncateBuilder<ISimpleEntity>().Execute();   // truncat
 
 ## Удаление по соединению
 
-Соединённый запрос может завершаться `Delete()`/`DeleteAsync()`: первая таблица цепочки — цель удаления, а удаляются строки, совпавшие по условию соединения и `Where`. Поддерживаются только INNER-соединения.
+Чтобы удалить подходящие строки, завершите соединённый запрос вызовом `Delete()` или `DeleteAsync()`.
+Первая таблица в цепочке — цель. Удаляются строки, совпавшие с условием соединения и предикатами
+`Where`. Поддерживаются только INNER-соединения.
 
 ```csharp
 var removed = await ctx.From<ISimpleEntity>()
@@ -161,8 +188,23 @@ delete from simple_entity as "t1" using complex_entity as "t2" where cast(t1.id 
 | SQLite, ClickHouse, in-memory | `NotSupportedException` |
 
 * Цель — первая таблица (`Item1`); принимается только `Join` (INNER). `LeftJoin`/`RightJoin`/`FullJoin`/`CrossJoin` и `APPLY`-соединения бросают `NotSupportedException`, потому что меняют набор удаляемых строк.
-* Терминалы — extension-методы на соединённом билдере для арностей 2–8; `Delete()`/`DeleteAsync()` возвращают число затронутых строк. `ToSql()` рендерит инструкцию без открытия соединения и бросает на in-memory контексте.
-* `CreateDeleteJoinBuilder()` запускает форму multi-table delete с возвратом строк; его терминалы `Returning()`/`Returning(projection)` доступны только на PostgreSQL (`DELETE ... USING ... RETURNING`), на INNER-соединениях и для арностей 2–8. `Returning()` — эквивалент `Returning(p => p)` — возвращает всю соединённую проекцию (`Projection<T1, ...>`): каждое returnable mapped-свойство каждого item-слота, в порядке слотов. `Item1` — цель удаления, а повторяющийся CLR-тип остаётся различимым по слоту, поэтому self-join одной сущности сохраняет значения `Item1`/`Item2` раздельно. Delete возвращает значения удалённых строк. `Returning(p => new { p.Item1.Id, p.Item2.Name })` возвращает явную проекцию, читается через `Single()`/`ToList()`; возвращённые колонки получают детерминированные per-slot алиасы, а явные проекции не меняются. Ни один вызов `Returning()` не добавляет список `RETURNING` неявно. Работает и как обычный терминал, и как тело модифицирующего CTE через `With(имя, delete)`. Возвращаемый item, чьё mapped-свойство — многоколоночный `Range<T>`, отклоняется, а обязательный член без соответствия в форме соединённого источника отклоняется с указанием слота и члена. См. [Common table expressions](10-cte.md).
+* Терминалы — методы расширения соединённого билдера для арностей 2–8; `Delete()`/`DeleteAsync()` возвращают число затронутых строк. `ToSql()` формирует SQL без открытия соединения и бросает исключение в контексте in-memory.
+* `CreateDeleteJoinBuilder()` запускает многотабличное удаление с возвратом строк. Терминалы
+  `Returning()` и `Returning(projection)` доступны только в PostgreSQL (`DELETE ... USING ... RETURNING`),
+  для INNER-соединений и арностей 2–8.
+  * `Returning()` эквивалентен `Returning(p => p)` и возвращает всю соединённую проекцию
+    (`Projection<T1, ...>`): все доступные для возврата отображённые свойства каждого слота в исходном
+    порядке. `Item1` — цель удаления. Если CLR-тип повторяется, слоты остаются раздельными: при
+    self-join значения `Item1` и `Item2` не смешиваются.
+  * `Returning(p => new { p.Item1.Id, p.Item2.Name })` возвращает заданную проекцию; результат читается
+    через `Single()` или `ToList()`. Возвращаемые колонки получают детерминированные псевдонимы для
+    каждого слота, а явные проекции остаются без изменений. `Returning()` не добавляет список
+    `RETURNING` неявно.
+  * Форма с возвратом строк работает как обычный терминал и как тело модифицирующего CTE через
+    `With(имя, delete)`. См. [Общие табличные выражения](10-cte.md).
+  * nextorm отклоняет возвращаемый элемент, если его отображённое свойство — многоколоночный
+    `Range<T>`. Также отклоняется обязательный член без соответствия в форме соединённого источника;
+    сообщение указывает слот и член.
 * Присоединяемая сторона может быть CTE, его объявление поднимается перед `DELETE` (PostgreSQL `with c as (…) delete from <t> as "t1" using c as "t2" where …`); целью остаётся первая физическая таблица, а CTE может стоять на любой позиции join. См. [Common table expressions](10-cte.md).
 
 ```csharp

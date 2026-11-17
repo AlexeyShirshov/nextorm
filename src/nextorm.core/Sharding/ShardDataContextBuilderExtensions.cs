@@ -106,9 +106,9 @@ public static class ShardDataContextExtensions
     }
 
     /// <summary>
-    /// Groups entity rows by the bucket their shard key hashes to, so every group can be written with one
-    /// statement on the shard that owns that bucket. One <c>INSERT</c> names one bucket table, so a list that
-    /// spans buckets cannot be written as a single statement — group it here and run one command per group.
+    /// Groups rows by the bucket selected from each shard key, so each group can be written with one
+    /// statement on the shard that owns that bucket. Because one <c>INSERT</c> targets one bucket table,
+    /// group rows that span buckets before writing them.
     /// </summary>
     /// <typeparam name="TEntity">The sharded entity type of the rows.</typeparam>
     /// <param name="context">The sharded context; its router decides the buckets.</param>

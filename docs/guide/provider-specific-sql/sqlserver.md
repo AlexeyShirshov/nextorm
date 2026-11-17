@@ -1,12 +1,8 @@
 # SQL Server-specific SQL
 
-> SQL Server contributes the `CHOOSE` conditional function, the T-SQL-only scalar library
-> (`PATINDEX`, `QUOTENAME`, `SOUNDEX`, `DIFFERENCE`, `STRING_ESCAPE`, `UNICODE`, `NCHAR`, `FORMAT`, the
-> trigonometric functions, `DATENAME`, `DATE_BUCKET`, `HASHBYTES`, `NEWSEQUENTIALID`, the
-> clock/offset/`*FROMPARTS` date family, the `CHECKSUM`/`COMPRESS`/`RAND`/`STUFF` scalars, the metadata
-> functions and the SQL/JSON constructors/aggregates), statement/table hints and the `FOR JSON`/`FOR
-> XML` result shape, the XML data-type methods (`value`/`query`/`exist` and the `nodes` rowset), the
-> native `PIVOT`/`UNPIVOT` source constructs, plus `string_split`/`openjson` table functions.
+> SQL Server-only functions and query constructs are listed here with their placement: per-row scalar
+> expressions, aggregates, or row-producing `FROM` sources. For versioned functions, the reference
+> separates the declared-version check from additional database prerequisites.
 
 **Prerequisites:** [Querying and projections](../../engine/index.md) · [SQL Server provider](../../connecting-providers/sqlserver.md)
 
@@ -408,25 +404,32 @@ session `currval`/`lastval`, no value-returning `setval`). See
 
 ## Version-gated functions (2022 and 2025)
 
-The [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) names below are gated by the **declared
-server major version** on this provider. The gate is version-only: unlike the native JSON storage type
-(`SupportsJson`, [#345](https://github.com/AlexeyShirshov/nextorm/issues/345)), which also consults an
-engine-edition allowlist because a few Azure/Fabric products have the type while reporting a lower major
-version, function availability follows the engine major version itself. An edition declaration never
-substitutes for a version here, and an unversioned context refuses them before SQL.
+The [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) functions below are checked against the
+SQL Server **major version declared in the provider configuration**. This declaration controls the
+version check; it does not connect to the database to discover its version or verify database settings.
+The runtime prerequisites in the table and notes still need to be met. Unlike function checks, the native
+JSON storage type (`SupportsJson`, [#345](https://github.com/AlexeyShirshov/nextorm/issues/345)) also
+uses an engine-edition allowlist: a few Azure/Fabric products have that type while reporting a lower
+major version. For functions, availability follows the engine major version itself; an edition
+declaration does not substitute for a version, and an unversioned context refuses these functions before
+SQL.
 
-| Member | SQL | Prerequisite |
-|---|---|---|
-| `SqlFunctions.SqlServer.left_shift` / `right_shift` / `bit_count` / `get_bit` / `set_bit` (one overload set per operand type `byte`/`short`/`int`/`long`) | `CASE WHEN … THEN CAST(NULL AS <operand type>) ELSE left_shift(cast(value as tinyint\|smallint\|int\|bigint), cast(shift as bigint)) END`; `bit_count` → `bigint`, `get_bit` → `bit` | major 16 (SQL Server 2022) |
-| `SqlFunctions.SqlServer.regexp_count(input, pattern)` | `regexp_count(input, pattern)` | major 17 (SQL Server 2025); no compatibility-level gate |
-| `SqlFunctions.SqlServer.regexp_substr(input, pattern[, start[, occurrence[, match_type]]])` / `regexp_instr(input, pattern[, start[, occurrence[, return_option[, match_type]]]])` | the native call; `0` for a no-match `regexp_instr`; the match type is a `varchar` argument and renders as `cast(… as varchar(4000))` (an `nvarchar` argument is Msg 8116) | major 17; no compatibility-level gate |
-| `SqlFunctions.SqlServer.regexp_matches(input, pattern[, match_type])` | a `FROM` source; rows are `match_id bigint`, `start_position`/`end_position int`, `match_value`, `substring_matches` (full JSON capture text) | major 17 **and** database compatibility level 170 |
-| `SqlFunctions.SqlServer.edit_distance(input, pattern[, maximum_distance])` / `edit_distance_similarity` / `jaro_winkler_distance` / `jaro_winkler_similarity` | the native call; the capped `edit_distance` returns `maximum_distance + 1` when the distance exceeds the cap | major 17 **and** compatibility level 170 **and** `PREVIEW_FEATURES = ON` **and** a Windows collation |
-| `SqlFunctions.SqlServer.product(value)` | `product(value)` (aggregate context only — no `OVER`) | major 17 |
-| `SqlFunctions.SqlServer.regexp_split_to_table(input, pattern)` | a `FROM` source; rows are `value` plus the one-based `ordinal bigint` | major 17 **and** database compatibility level 170 |
-| `SqlFunctions.SqlServer.approx_count_distinct(value)` | `approx_count_distinct(value)` (aggregate context; `0` for an empty or all-NULL group) | major 15 (SQL Server 2019) |
-| `SqlFunctions.SqlServer.checksum_agg(value)` / `grouping_id(expressions...)` | `checksum_agg(value)`; `grouping_id(a, b, …)` in the `SELECT` list, `HAVING` or `ORDER BY` of a grouped command | no version floor; `GROUPING_ID` needs a `GROUP BY` context and every argument must be a grouping expression (both enforced before SQL) |
-| `SqlFunctions.SqlServer.approx_percentile_cont(fraction, value)` / `approx_percentile_disc(fraction, value)` | `approx_percentile_cont(f) within group (order by value)`; the `_disc` form returns the sort input type | major 16 (SQL Server 2022); no `OVER` form |
+The **Query form** column tells you where each member can appear: scalar expressions yield a value for
+each input row, aggregates summarize a group, and rowset functions produce multiple rows for a `FROM`
+source.
+
+| Member | Query form | SQL | Prerequisite |
+|---|---|---|---|
+| `SqlFunctions.SqlServer.left_shift` / `right_shift` / `bit_count` / `get_bit` / `set_bit` (one overload set per operand type `byte`/`short`/`int`/`long`) | Scalar | `CASE WHEN … THEN CAST(NULL AS <operand type>) ELSE left_shift(cast(value as tinyint\|smallint\|int\|bigint), cast(shift as bigint)) END`; `bit_count` → `bigint`, `get_bit` → `bit` | major 16 (SQL Server 2022) |
+| `SqlFunctions.SqlServer.regexp_count(input, pattern)` | Scalar | `regexp_count(input, pattern)` | major 17 (SQL Server 2025); no compatibility-level gate |
+| `SqlFunctions.SqlServer.regexp_substr(input, pattern[, start[, occurrence[, match_type]]])` / `regexp_instr(input, pattern[, start[, occurrence[, return_option[, match_type]]]])` | Scalar | the native call; `0` for a no-match `regexp_instr`; the match type is a `varchar` argument and renders as `cast(… as varchar(4000))` (an `nvarchar` argument is Msg 8116) | major 17; no compatibility-level gate |
+| `SqlFunctions.SqlServer.regexp_matches(input, pattern[, match_type])` | Rowset (`FROM`) | rows are `match_id bigint`, `start_position`/`end_position int`, `match_value`, `substring_matches` (full JSON capture text) | major 17 **and** database compatibility level 170 |
+| `SqlFunctions.SqlServer.edit_distance(input, pattern[, maximum_distance])` / `edit_distance_similarity` / `jaro_winkler_distance` / `jaro_winkler_similarity` | Scalar | the native call; the capped `edit_distance` returns `maximum_distance + 1` when the distance exceeds the cap | major 17 **and** compatibility level 170 **and** `PREVIEW_FEATURES = ON` **and** a Windows collation |
+| `SqlFunctions.SqlServer.product(value)` | Aggregate | `product(value)` (aggregate context only — no `OVER`) | major 17 |
+| `SqlFunctions.SqlServer.regexp_split_to_table(input, pattern)` | Rowset (`FROM`) | rows are `value` plus the one-based `ordinal bigint` | major 17 **and** database compatibility level 170 |
+| `SqlFunctions.SqlServer.approx_count_distinct(value)` | Aggregate | `approx_count_distinct(value)` (`0` for an empty or all-NULL group) | major 15 (SQL Server 2019) |
+| `SqlFunctions.SqlServer.checksum_agg(value)` / `grouping_id(expressions...)` | Aggregate / grouped expression | `checksum_agg(value)`; `grouping_id(a, b, …)` in the `SELECT` list, `HAVING` or `ORDER BY` of a grouped command | no version floor; `GROUPING_ID` needs a `GROUP BY` context and every argument must be a grouping expression (both enforced before SQL) |
+| `SqlFunctions.SqlServer.approx_percentile_cont(fraction, value)` / `approx_percentile_disc(fraction, value)` | Ordered-set aggregate | `approx_percentile_cont(f) within group (order by value)`; the `_disc` form returns the sort input type | major 16 (SQL Server 2022); no `OVER` form |
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -447,57 +450,70 @@ var fragments = dataContext
 ```
 
 A context declared for 15, 16 or 17 permits exactly the rows its major version lists; anything lower or
-unversioned is refused **before SQL**, for example:
+unversioned is refused **before SQL**. This is a check of the declared version, not a live database
+probe. For example:
 
 ```text
 The LEFT_SHIFT function requires SQL Server major version 16 or later; declared major version: 15.
 The REGEXP_SPLIT_TO_TABLE function requires SQL Server major version 17 or later; declared major version: 16.
 ```
 
-The bit family types every argument inside the call and guards a NULL operand, shift, offset or bit value
-with a typed NULL, because a bare `left_shift(NULL, …)` is Msg 8116; the operand's own type selects
-`tinyint`/`smallint`/`int`/`bigint`, `bit_count` is `bigint` (`long?`) and `get_bit` is `bit` (`bool?`).
-`right_shift` is the engine's logical (zero-fill) shift — `right_shift(-8, 1)` is `2147483644`. Because the
-family is one overload set per operand type, an untyped constant binds to the smallest overload
-(`left_shift(1, 2)` → `byte?`/`tinyint`, `left_shift(-8, 1)` → `short?`): cast the operand
-(`left_shift((int?)1, 2)`) when a specific SQL type is required. `regexp_split_to_table` is a real gate on
-two axes: at compatibility level 160 a major-17 engine reports the function as missing (Msg 208), so the 170
-prerequisite is asserted live rather than assumed. `product` is offered in the aggregate context only.
+**Bit operations.** The family types every argument inside the call and guards a NULL operand, shift,
+offset or bit value with a typed NULL, because a bare `left_shift(NULL, …)` is Msg 8116. The operand's
+type selects `tinyint`/`smallint`/`int`/`bigint`; `bit_count` returns `bigint` (`long?`) and `get_bit`
+returns `bit` (`bool?`). `right_shift` is the engine's logical (zero-fill) shift:
+`right_shift(-8, 1)` is `2147483644`. Each operand type has its own overload set, so an untyped constant
+binds to the smallest overload (`left_shift(1, 2)` → `byte?`/`tinyint`, `left_shift(-8, 1)` → `short?`).
+Cast the operand (`left_shift((int?)1, 2)`) when you need a specific SQL type.
 
-The U3 regex scalars and the fuzzy family were executed on the tested engine baseline
-`17.0.5005.3`: `regexp_substr`/`regexp_instr` work at compatibility levels **160 and 170**, while
-`regexp_matches` disappears at 160 (Msg 208) and the four fuzzy names need compatibility 170,
-`PREVIEW_FEATURES = ON` (off by default) and a Windows collation (a `SQL_*` collation is Msg 9847, and a
-missing preview flag is Msg 195). Those are runtime prerequisites the dialect cannot inspect, so they are
-documented and asserted live; the version flag promises the major-version gate only, and no promise is
-made for future builds.
+**Rowset prerequisite.** `regexp_split_to_table` has two independent requirements: major version 17
+and compatibility level 170. At compatibility level 160, a major-17 engine reports the function as
+missing (Msg 208), so the compatibility requirement is verified against the live engine rather than
+assumed from its version.
 
-The U4 aggregate family is aggregate-context only. `approx_count_distinct` is `long` (`bigint`) and
-counts `0` — not `NULL` — for an empty or all-NULL group; `checksum_agg` is `int?` and returns `NULL`
-there; the approximate percentiles are `double?` and the sort input type respectively and also return
-`NULL`. A constant NULL operand renders as a typed `CAST(NULL AS <type>)` (a bare `NULL` is Msg 8117);
-the percentile fraction must be a query-independent literal or captured scalar in `[0, 1]`, a
-row-dependent fraction is refused before SQL, and a literal or NULL `WITHIN GROUP` sort key is refused
-before SQL because the engine answers Msg 5309. `GROUPING_ID`'s grouping-context and grouping-list
-obligations are enforced before execution with zero statements dispatched; neither approximate
-percentile has an `OVER` overload (ordered-set, `WITHIN GROUP` only), and an `OVER` shape constructed
-by other means is rejected by the engine with Msg 4113 (`checksum_agg` is the one name whose native
-`OVER` the engine accepts, but this surface offers the aggregate form only). Both percentiles and the
-distinct count are approximate: the vendor documents a
-≈1.33 % rank error at 99 % confidence for the percentiles, which is a statistical bound, not a
-deterministic tolerance.
+**Aggregate forms.** `product` and `approx_count_distinct` are aggregates, not per-row scalar expressions.
+`checksum_agg` and the percentile functions are also aggregate forms; `GROUPING_ID` instead requires a
+grouped-query context, as stated in the table.
+
+**Regex and fuzzy runtime prerequisites.** The U3 regex scalars and fuzzy functions were executed on the
+tested engine baseline `17.0.5005.3`: `regexp_substr`/`regexp_instr` work at compatibility levels
+**160 and 170**, while `regexp_matches` is missing at 160 (Msg 208). The four fuzzy functions require
+compatibility level 170, `PREVIEW_FEATURES = ON` (off by default) and a Windows collation. A `SQL_*`
+collation produces Msg 9847, and omitting the preview flag produces Msg 195. The dialect cannot inspect
+these database settings; they are documented and tested against a live database. The declared-version
+check promises only the major-version floor, and no promise is made for future builds.
+
+**Aggregate results and constraints.** These U4 functions are aggregate forms, not per-row scalar
+expressions. `approx_count_distinct` returns `long` (`bigint`) and counts `0` — not `NULL` — for an
+empty or all-NULL group. `checksum_agg` returns `int?` and yields `NULL` for such a group. The
+approximate percentiles return `double?` and the sort input type, respectively, and also yield `NULL`.
+
+A constant NULL operand is emitted as a typed `CAST(NULL AS <type>)` (a bare `NULL` is Msg 8117). The
+percentile fraction must be a query-independent literal or captured scalar in `[0, 1]`; a row-dependent
+fraction is refused before SQL. A literal or NULL `WITHIN GROUP` sort key is also refused before SQL
+because the engine returns Msg 5309. `GROUPING_ID`'s grouping-context and grouping-list requirements
+are checked before execution, with zero statements dispatched.
+
+Neither approximate percentile has an `OVER` overload: these are ordered-set aggregates that use
+`WITHIN GROUP` only. The engine rejects an `OVER` shape constructed by other means with Msg 4113.
+Although the engine accepts `OVER` for `checksum_agg`, this API exposes only its aggregate form. Both
+percentiles and the distinct count are approximate. The vendor documents an approximately 1.33% rank
+error at 99% confidence for the percentiles; this is a statistical bound, not a deterministic tolerance.
 
 ## T-SQL scalar functions
 
-`SqlFunctions.SqlServer` exposes the T-SQL-only scalar functions through
+`SqlFunctions.SqlServer` exposes SQL Server-only functions through
 [`ISqlDialect.SqlServerFunctions`](xref:NextORM.Core.ISqlDialect.SqlServerFunctions)
 ([`ISqlServerFunctions`](xref:NextORM.Core.ISqlServerFunctions)); SQL Server is the only provider that
-implements it, so every other provider throws `NotSupportedException` for these members. The members
-have no portable equivalent: the cross-provider `ascii`/`char`/`translate` live on
+implements this API, so every other provider throws `NotSupportedException` for these members. Most
+entries below are scalar expressions that yield a value for each projected row. The list calls out
+aggregate functions and special placement or scope restrictions separately. These members have no
+portable equivalent: the cross-provider `ascii`/`char`/`translate` live on
 [`SqlFunctions.Sql`](../../scalar-functions/01-string-functions.md#cross-provider-scalar-functions) instead, and
 `Math.Log10` already renders T-SQL `LOG10`.
 
-The functions are usable as ordinary values (and as predicates where the T-SQL form is a condition):
+Most functions can be used as projected values; predicate-shaped functions can also be used as
+conditions. Some have narrower placement rules, which the catalogue below identifies:
 
 ```csharp
 var data = System.Text.Encoding.UTF8.GetBytes("abc");
@@ -543,35 +559,50 @@ select patindex('%a%', somestring) as [Pos],
  from complex_entity
 ```
 
-* **String:** `patindex(pattern, expression)`, `quotename(value)` / `quotename(value, quote)`,
-  `soundex(value)`, `difference(first, second)`, `string_escape(value, type)`, `unicode(value)`,
-  `nchar(code)`, `format(value, format)` / `format(value, format, culture)` and
-  `stuff(value, start, length, newValue)` (string only — SQL Server's `STUFF` implicitly converts binary arguments to character data, so no `byte[]` overload is exposed). `format` is the native T-SQL
-  `FORMAT`, distinct from the CLR `string.Format` translation; `str(value[, length[, decimals]])`
-  is the fixed-width floating-point conversion. An apostrophe delimiter is an ordinary string argument:
-  `quotename("abc", "'")` renders `quotename(N'abc', N'''')` and the server returns `'abc'`. Text
-  literals are Unicode `N'…'` literals with inline apostrophes doubled (`O'Brien` becomes `N'O''Brien'`),
-  and a value containing a NUL character is rendered as a constructed Unicode expression over `NCHAR(0)`
-  rather than as one literal, so the value is always passed as-is and is never pre-escaped by the caller.
-  This paragraph describes SQL Server only and is not a cross-provider guarantee.
+* **String:**
+  * `patindex(pattern, expression)`, `quotename(value)` / `quotename(value, quote)`, `soundex(value)`,
+    `difference(first, second)`, `string_escape(value, type)`, `unicode(value)` and `nchar(code)` provide
+    the listed T-SQL string operations.
+  * `format(value, format)` / `format(value, format, culture)` call native T-SQL `FORMAT`; this is distinct
+    from the CLR `string.Format` translation. `str(value[, length[, decimals]])` converts a
+    floating-point value to a fixed-width string.
+  * `stuff(value, start, length, newValue)` is string-only. SQL Server's `STUFF` implicitly converts
+    binary arguments to character data, so no `byte[]` overload is exposed.
+  * An apostrophe delimiter is an ordinary string argument: `quotename("abc", "'")` renders
+    `quotename(N'abc', N'''')`, and the server returns `'abc'`. Text literals use Unicode `N'…'` form
+    with inline apostrophes doubled (`O'Brien` becomes `N'O''Brien'`). A value containing NUL is emitted
+    as a constructed Unicode expression over `NCHAR(0)`, not as one literal. Pass the value as-is; do not
+    pre-escape it. These literal-handling details apply only to SQL Server, not across providers.
 * **Numeric:** `acos`, `asin`, `atan`, `atn2(y, x)`, `square` (`cot`/`degrees`/`radians`/`pi` are portable — see [`SqlFunctions.Sql`](../../scalar-functions/02-math-functions.md)) and `rand()` / `rand(seed)` (non-deterministic without a seed).
-* **Date/time:** `datename(datepart, date)` (the part is a constant), `date_bucket(datepart, width, date[, origin])` (SQL Server 2022+), the server clocks `sysdatetime`/`sysdatetimeoffset`/`sysutcdatetime`, the offset functions `switchoffset(value, offset)`/`todatetimeoffset(value, offset)` (a string such as `"+02:00"` or signed minutes) and the construction family `timefromparts`/`smalldatetimefromparts`/`datetimefromparts`/`datetime2fromparts`/`datetimeoffsetfromparts`. The trailing `*FROMPARTS` precision must be a constant `0..7` (a non-constant, `null` or out-of-range value throws before any SQL is emitted).
-* **Binary/system:** `hashbytes(algorithm, data)` (the algorithm is a constant such as `SHA2_256`), `newsequentialid()` (valid only as a column `DEFAULT`, not in an ordinary `SELECT`), `checksum(values...)`/`binary_checksum(values...)` (at least one value; the `checksum(*)` wildcard is not exposed) and `compress(value)`/`decompress(value)` (GZIP over `varbinary(max)`).
-* **Metadata:** `col_length`, `col_name`, `ident_incr`/`ident_seed`, `index_col`, `object_definition`/`object_id`/`object_name`/`object_schema_name`, `stats_date`, `db_id`/`db_name`/`original_db_name`, `schema_id`/`schema_name`, `type_id`/`type_name`, `filegroup_id`/`filegroup_name`/`file_id`/`file_idex`/`file_name`, `current_timezone`/`current_timezone_id`, `getansinull`, `parsename` and `publishingservername`. A missing object/column/index/statistic yields `null`, like the native function.
+* **Date/time:**
+  * `datename(datepart, date)` requires a constant date part. `date_bucket(datepart, width, date[, origin])` requires SQL Server 2022 or later.
+  * The server clocks are `sysdatetime`/`sysdatetimeoffset`/`sysutcdatetime`. `switchoffset(value, offset)` and `todatetimeoffset(value, offset)` accept an offset string such as `"+02:00"` or signed minutes.
+  * The constructors are `timefromparts`/`smalldatetimefromparts`/`datetimefromparts`/`datetime2fromparts`/`datetimeoffsetfromparts`. The trailing `*FROMPARTS` precision must be a constant `0..7`; a non-constant, `null` or out-of-range value throws before SQL is emitted.
+* **Binary/system:**
+  * `hashbytes(algorithm, data)` requires a constant algorithm such as `SHA2_256`.
+  * `newsequentialid()` is valid only as a column `DEFAULT`, not in an ordinary `SELECT`.
+  * `checksum(values...)` / `binary_checksum(values...)` require at least one value; the `checksum(*)` wildcard is not exposed. `compress(value)` / `decompress(value)` use GZIP over `varbinary(max)`.
+* **Metadata:**
+  * Object and index metadata: `col_length`, `col_name`, `index_col`, `object_definition`/`object_id`/`object_name`/`object_schema_name` and `stats_date`. `ident_incr`/`ident_seed` report identity-column settings.
+  * Database, schema and type metadata: `db_id`/`db_name`/`original_db_name`, `schema_id`/`schema_name` and `type_id`/`type_name`.
+  * File and server metadata: `filegroup_id`/`filegroup_name`/`file_id`/`file_idex`/`file_name`, `current_timezone`/`current_timezone_id`, `getansinull`, `parsename` and `publishingservername`.
+  * A missing object, column, index or statistic yields `null`, as it does for the native function.
 * **Live state:** `current_request_id()` (`short?`, NULL outside a request), `current_transaction_id()`
   (`long?`, NULL outside a transaction), `xact_state()` (native `smallint` 0/1/-1), `ident_current(table)`
   (`decimal?`, the last identity of the table in **any** session — racy, not a last-insert API),
   `min_active_rowversion()` (native `binary(8)`, not a counter), `rowcount_big()` (the previous command on
   the same connection) and `scope_identity()` (`decimal?`, only in the same batch as the `INSERT`).
-* **Conversion/logical:** `isdate(value)`/`isnumeric(value)` return the native T-SQL `int` (1/0), not a `bit`, so they stay integer values rather than materialised predicates, and `formatmessage(messageOrId, args...)` accepts at most 20 formatting arguments. `try_cast<T>(value)`/`try_convert<T>(value[, style])` (plus the `string`-target overloads over `nvarchar(4000)`) render the T-SQL `TRY_CAST`/`TRY_CONVERT` through a **closed** CLR→SQL destination map and are not version-gated: an invalid value is SQL NULL, a NULL style is SQL NULL even for a convertible value, and a target outside the map is refused before SQL. See [TRY_CAST and TRY_CONVERT](../../scalar-functions/04-conditionals-and-conversion.md#sql-server-try_cast-and-try_convert).
+* **Conversion/logical:**
+  * `isdate(value)` / `isnumeric(value)` return native T-SQL `int` (1/0), not `bit`, so they remain integer values rather than materialized predicates. `formatmessage(messageOrId, args...)` accepts at most 20 formatting arguments.
+  * `try_cast<T>(value)` / `try_convert<T>(value[, style])` (plus the `string`-target overloads over `nvarchar(4000)`) emit T-SQL `TRY_CAST` / `TRY_CONVERT` through a **closed** CLR-to-SQL destination map and have no version gate. An invalid value yields SQL `NULL`; a NULL style yields SQL `NULL` even for a convertible value; a target outside the map is refused before SQL. See [TRY_CAST and TRY_CONVERT](../../scalar-functions/04-conditionals-and-conversion.md#sql-server-try_cast-and-try_convert).
 
-The portable BASE64 and crypto members are SQL Server 2025-only on this provider: `SqlFunctions.Sql.base64_encode` renders `BASE64_ENCODE(value)` over `varbinary` and `base64_decode` renders `BASE64_DECODE(value)` over `varchar` (cast an `nvarchar` column), while `crypt_gen_random` renders the typed `CASE WHEN length IS NULL THEN CAST(NULL AS varbinary(8000)) ELSE CRYPT_GEN_RANDOM(length) END` wrapper so a NULL length stays a typed NULL. No compatibility level or preview flag is required.
-* **JSON:** `json_array(value, ...)` and `json_object(key, value, ...)` (SQL Server 2022+),
-  `json_objectagg(key, value)` and `json_arrayagg(value)` (SQL Server 2025+),
-  `json_path_exists(json, path)` (SQL Server 2022+) and `json_contains(json, searchValue, path)`
-  (SQL Server 2025+). The two predicates are materialised as `bit` values, mirroring `isjson`.
+* **BASE64/crypto:** These portable functions require SQL Server 2025 on this provider. `SqlFunctions.Sql.base64_encode` emits `BASE64_ENCODE(value)` over `varbinary`; `base64_decode` emits `BASE64_DECODE(value)` over `varchar` (cast an `nvarchar` column). `crypt_gen_random` emits the typed wrapper `CASE WHEN length IS NULL THEN CAST(NULL AS varbinary(8000)) ELSE CRYPT_GEN_RANDOM(length) END`, so a NULL length stays a typed NULL. No compatibility level or preview flag is required.
+* **JSON:**
+  * `json_array(value, ...)` and `json_object(key, value, ...)` are SQL Server 2022+ constructors.
+  * `json_objectagg(key, value)` and `json_arrayagg(value)` are SQL Server 2025+ aggregate functions; use them in aggregate context, not as per-row scalar constructors.
+  * `json_path_exists(json, path)` is available from SQL Server 2022, and `json_contains(json, searchValue, path)` from SQL Server 2025. Both predicates are materialized as `bit` values, like `isjson`.
 
-Live mutable state is **not** an exclusion criterion: the seven names that report live connection-,
+The live-state functions are **not** excluded merely because their results can change: the seven names that report live connection-,
 transaction-, session- or statement-scope state are exposed as-is, with the native SQL Server semantics
 and the caveats above. nextorm promises no per-row stability, no connection continuity between queries
 and no identity-retrieval guarantee — a separate `SCOPE_IDENTITY`/`IDENT_CURRENT` call is not a
@@ -593,12 +624,12 @@ operand needs a SQL type derived from metadata; an unmapped one is rejected befo
 ## Refused functions (deterministic, before SQL)
 
 [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) is closed for this slice:
-**22 delivered / 0 delivery names remaining / 11 tested refusals**. The eleven refusals are part of the
-surface — callable `SqlFunctions.SqlServer` members that throw `NotSupportedException` with one stable
+**22 delivered / 0 delivery names remaining / 11 tested refusals**. The eleven refusals are callable
+`SqlFunctions.SqlServer` API members that throw `NotSupportedException` with one stable
 message per member (`SqlFunctions.SqlServer.<member> (<TOKEN>) is refused: <reason>`) at the SQL-builder
 command boundary, before SQL is rendered and before any command is created. They are not deferred names:
-they are deterministic, tested refusals, and each keeps the supported siblings of the same surface
-(`rowcount_big`, `xact_state`, `scope_identity`, `db_name`, `current_user`, …) rendering.
+they are deterministic, tested refusals. The supported sibling members (`rowcount_big`, `xact_state`,
+`scope_identity`, `db_name`, `current_user`, …) still render normally.
 
 | Member | SQL token | Kind and reason |
 |---|---|---|
@@ -614,9 +645,9 @@ they are deterministic, tested refusals, and each keeps the supported siblings o
 | `error_procedure()` | `ERROR_PROCEDURE` | Scope: the same `CATCH`-only scope. |
 | `any_value(value)` | `ANY_VALUE` | Engine rejection: SQL Server build `17.0.5005.3` rejected it with `Msg 195` in the aggregate and `OVER ()` forms, at compatibility 160/170 and with `PREVIEW_FEATURES = ON`; no supported SQL Server execution contract is established. |
 
-The two kinds stay distinct: the ten system names are **scope/CLR limitations** (a statement or `CATCH`
-scope, or `sql_variant` without a faithful CLR carrier) except `SESSION_ID`, which — like `ANY_VALUE` — is
-an **observed engine rejection**. `ANY_VALUE` is not a version gap a later nextorm release can close, and
+The two refusal types stay distinct. Most system names are **scope/CLR limitations**: they require a
+statement or `CATCH` scope, or return `sql_variant` without a faithful CLR carrier. `SESSION_ID` and
+`ANY_VALUE` are **observed engine rejections**. `ANY_VALUE` is not a version gap a later nextorm release can close, and
 the portable `CommonFunctions.any_agg` is unaffected on the providers that enable it. See
 [Limitations and out-of-scope features](../../advanced/limitations.md) and
 [system functions](../../scalar-functions/09-system-functions.md#refused-statement-and-error-scope-names-sql-server).

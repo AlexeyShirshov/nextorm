@@ -3,13 +3,11 @@ using System.Linq.Expressions;
 namespace NextORM.Core;
 
 /// <summary>
-/// Non-generic identity of a typed self-reference handed to the step callback of the recursive
-/// <c>AsRecursiveCte</c> overloads on <c>QueryCommand&lt;TResult&gt;</c>.
+/// Base type for the typed self-reference passed to a recursive CTE's step callback.
 /// <para>
-/// Creation is non-public: a reference is produced only by the recursive-CTE factory and is bound to
-/// the anchor's readable column shape. Identity is the non-public <see cref="Owner"/>
-/// token, not the declared <see cref="Name"/> — two references carrying the same name but a different
-/// owner are not interchangeable.
+/// Only the recursive CTE factory creates references, and each is bound to the anchor's readable column
+/// shape. A reference is identified by its non-public <see cref="Owner"/> token, not its declared
+/// <see cref="Name"/>; references with the same name but different owners are not interchangeable.
 /// </para>
 /// </summary>
 public abstract class CteReference
@@ -36,11 +34,11 @@ public abstract class CteReference
 }
 
 /// <summary>
-/// Typed self-reference of a recursive common table expression: the step callback received this
-/// instance and reads the anchor's rows through
-/// <see cref="DataContextExtensions.From{TResult}(IDataContext, CteReference{TResult})"/>. A self-reference
-/// is valid only while the factory is running that definition's step; using it afterwards (a captured
-/// or foreign reference) is rejected before any database command is built.
+/// Typed self-reference to a recursive common table expression. The step callback receives this instance
+/// and reads the anchor's rows through
+/// <see cref="DataContextExtensions.From{TResult}(IDataContext, CteReference{TResult})"/>. Use it only
+/// while the factory runs that callback; a captured or foreign reference is rejected before a database
+/// command is built.
 /// </summary>
 /// <typeparam name="TResult">The anchor/step row shape, identical to the recursive CTE's projection.</typeparam>
 public sealed class CteReference<TResult> : CteReference
@@ -52,23 +50,22 @@ public sealed class CteReference<TResult> : CteReference
 }
 
 /// <summary>
-/// An immutable, reference-identified descriptor of a common table expression whose rows carry the
-/// projection shape <typeparamref name="TResult"/>.
+/// A typed descriptor for a common table expression (CTE) whose rows have the projected shape
+/// <typeparamref name="TResult"/>.
 /// <para>
-/// Created from a query with <see cref="QueryCommand{TResult}.AsCte(string)"/> and read with
-/// <see cref="DataContextExtensions.From{T}(IDataContext, Cte{T})"/>. The descriptor is a typed
-/// projection source, not a mapped entity: typed member reads resolve to the defining query's output
-/// columns, so a whole-entity <typeparamref name="TResult"/> does not imply a table mapping.
+/// Create it from a query with <see cref="QueryCommand{TResult}.AsCte(string)"/> and read it with
+/// <see cref="DataContextExtensions.From{T}(IDataContext, Cte{T})"/>. The CTE acts as a projection source,
+/// not a mapped entity: member reads use the defining query's output columns, even when
+/// <typeparamref name="TResult"/> is an entity type.
 /// </para>
 /// <para>
-/// The descriptor holds the defining command and its declaration set internally; identity is by
-/// reference, there is no structural or name equality. The defining <see cref="QueryCommand"/> is not
-/// snapshotted, matching the existing CTE lifecycle contract.
+/// The descriptor is identified by object reference, not by its name or query structure. It retains the
+/// defining <see cref="QueryCommand"/> rather than copying it.
 /// </para>
 /// <para>
-/// Recursion is not part of this API — it declares an ordinary CTE only. The legacy
-/// <c>With</c>/<c>WithRecursive</c>/<c>From(string)</c>/<c>From(CteDefinition)</c> string APIs are
-/// unchanged and remain the way to read a CTE by name or to build a recursive CTE.
+/// This type creates ordinary, non-recursive CTEs. Use the existing
+/// <c>With</c>/<c>WithRecursive</c>/<c>From(string)</c>/<c>From(CteDefinition)</c> APIs to read a CTE by
+/// name or create a recursive CTE.
 /// </para>
 /// </summary>
 /// <typeparam name="TResult">The row shape the CTE's defining <c>SELECT</c> projects.</typeparam>

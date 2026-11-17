@@ -2,20 +2,27 @@
 
 > Наблюдайте за жизненным циклом выполнения команд и соединения контекста без наследования от `DataContext` и без логгера.
 
-**Предварительные требования:** [Соединения](01-connections.md) · [Переиспользование запросов](../engine/03-plan-cache-and-reuse.md) · [Dependency injection](../getting-started/04-dependency-injection.md).
+**Предварительные требования:** [Соединения](01-connections.md) · [Переиспользование запросов](../engine/03-plan-cache-and-reuse.md) · [Внедрение зависимостей](../getting-started/04-dependency-injection.md).
 
 ## Обзор
 
-Интерцептор — это небольшой объект, зарегистрированный на контексте и получающий обратные вызовы вокруг работы, которую выполняет контекст. nextorm поставляет два интерфейса:
+Интерцептор — это небольшой объект, зарегистрированный на контексте. Он получает обратные вызовы до и после работы контекста. nextorm поставляет два интерфейса интерцепторов.
+
+В таблице указано, за чем наблюдает каждый интерфейс и какие обратные вызовы он получает:
 
 | Интерфейс | Что наблюдает | Обратные вызовы |
 |---|---|---|
 | [`IQueryInterceptor`](xref:NextORM.Core.IQueryInterceptor) | выполнение команд | `CommandInitialized`, `CommandExecuting`, `CommandExecuted`, `CommandFailed` |
 | [`IConnectionInterceptor`](xref:NextORM.Core.IConnectionInterceptor) | открытие соединения | `ConnectionOpening`, `ConnectionOpened` |
 
-Обратный вызов получает данные события ([`CommandEventData`](xref:NextORM.Core.CommandEventData) / [`ConnectionEventData`](xref:NextORM.Core.ConnectionEventData)) и задействованный объект ADO.NET (`DbCommand` / `DbConnection`). События поднимает **execution/connection axis контекста**, а не команда: `DbCommand` — это структура данных, которая не может логировать или профилировать сама себя.
+Каждый обратный вызов получает данные события ([`CommandEventData`](xref:NextORM.Core.CommandEventData)
+или [`ConnectionEventData`](xref:NextORM.Core.ConnectionEventData)) и задействованный объект ADO.NET
+(`DbCommand` или `DbConnection`). Контекст вызывает события при выполнении команды или открытии
+соединения. Сама команда события не вызывает: `DbCommand` — структура данных, которая не может
+логировать или профилировать себя.
 
-Типичные применения — замер времени и метрики, structured-логирование выполняемого SQL и провайдер-специфичные опции команды (например, таймаут).
+Интерцепторы используют для замера времени и сбора метрик, структурированного журналирования SQL и
+настройки параметров команды, специфичных для провайдера, например таймаута.
 
 ## Регистрация интерцептора
 
@@ -41,7 +48,9 @@ services.AddNextOrmContext(o => o
 
 ### Регистрация интерцептора через dependency injection
 
-Когда [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) создаёт контейнер (options-путь), **type**- и **generic**-регистрации заставляют builder разрешать интерцептор из своей области видимости:
+Когда контейнер создаёт [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) (options-путь),
+регистрация **по типу** или **обобщённая регистрация** заставляет builder разрешать интерцептор из
+своей области видимости:
 
 ```csharp
 services.AddScoped<TimingInterceptor>();
@@ -51,15 +60,32 @@ services.AddNextOrmContext(builder => builder
     .AddInterceptor<TimingInterceptor>()); // или .AddInterceptor(typeof(TimingInterceptor))
 ```
 
-`AddInterceptor<T>()` и `AddInterceptor(Type)` разрешают сервис через `GetRequiredService` **один раз на создание контекста**, из той области, которая создала builder. Поэтому времени жизни контейнера применяются без изменений: scoped-интерцептор переиспользуется внутри области и отличается между областями, singleton — общий, transient разрешается на каждый контекст. Владение интерцептором и его освобождение остаются за контейнером; builder никогда не освобождает разрешённый экземпляр.
+`AddInterceptor<T>()` и `AddInterceptor(Type)` разрешают сервис через `GetRequiredService` один раз
+при создании контекста, из области, которая создала builder. Времена жизни контейнера сохраняются:
+scoped-интерцептор переиспользуется внутри области, но отличается между областями; singleton общий;
+transient разрешается для каждого контекста. Контейнер владеет интерцептором и освобождает его.
+Builder никогда не освобождает экземпляр, разрешённый из контейнера.
 
-Разрешённый объект подключается к каждому интерфейсу интерцептора, который он реализует, поэтому класс, реализующий и [`IQueryInterceptor`](xref:NextORM.Core.IQueryInterceptor), и [`IConnectionInterceptor`](xref:NextORM.Core.IConnectionInterceptor), наблюдается обоими конвейерами. Тип обязан быть закрытым ссылочным типом, приводимым к одному из двух интерфейсов: открытый generic или value-type `Type` отклоняется сразу с `ArgumentException`, а `null` — с `ArgumentNullException`.
+Разрешённый объект подключается к каждому интерфейсу интерцептора, который он реализует. Поэтому
+класс, реализующий и [`IQueryInterceptor`](xref:NextORM.Core.IQueryInterceptor), и
+[`IConnectionInterceptor`](xref:NextORM.Core.IConnectionInterceptor), наблюдается обоими конвейерами.
+Тип должен быть закрытым ссылочным типом, реализующим хотя бы один из этих интерфейсов. Открытый
+generic-тип или тип-значение отклоняется сразу с `ArgumentException`, а `null` — с
+`ArgumentNullException`.
 
-Регистрация дедуплицируется по точному ключу — `instance.GetType()` для экземпляра, переданный `Type` для type-записи — и первая регистрация побеждает, в том числе для смешанных записей. Поэтому повторная регистрация того же типа разрешается и вызывается один раз.
+Регистрации дедуплицируются по точному ключу: `instance.GetType()` для экземпляра и переданный
+`Type` для регистрации типа. Первая регистрация побеждает, в том числе при смешении этих вариантов.
+Поэтому повторная регистрация того же типа разрешается и вызывается только один раз.
 
-Type-регистрация требует builder с DI. На отдельном `new DataContextBuilder()` ошибка проявляется при `CreateDataContext()` как `InvalidOperationException`, а незарегистрированный сервис — ошибкой `GetRequiredService` самого контейнера. В обоих случаях сбой происходит **до** вызова фабрики контекста, поэтому частично созданный контекст не появляется.
+Регистрация типа требует builder, созданный через dependency injection. Для отдельного
+`new DataContextBuilder()` вызов `CreateDataContext()` бросает `InvalidOperationException`.
+Если сервис не зарегистрирован, контейнер бросает собственную ошибку `GetRequiredService`. Оба сбоя
+происходят **до** вызова фабрики контекста, поэтому частично созданный контекст не появляется.
 
-Мост EF Core (`CreateNextOrmContext`) строит контекст из отдельного builder без захваченного провайдера: регистрация интерцептора по типу там падает при создании контекста тем же `InvalidOperationException`. Регистрируйте экземпляр (`configure: builder => builder.AddInterceptor(new TimingInterceptor())`).
+Мост EF Core (`CreateNextOrmContext`) создаёт контекст из отдельного builder без доступа к контейнеру.
+Поэтому регистрация интерцептора по типу при создании контекста приводит к тому же
+`InvalidOperationException`. Вместо неё зарегистрируйте экземпляр:
+`configure: builder => builder.AddInterceptor(new TimingInterceptor())`.
 
 Контекст, созданный из builder, может добавить интерцепторы на время своей жизни:
 
@@ -71,6 +97,8 @@ ctx.AddInterceptor(new AuditInterceptor());
 `AddInterceptor` доступен на [`DataContext`](xref:NextORM.Core.DataContext), а не на фасаде [`IDataContext`](xref:NextORM.Core.IDataContext), поэтому при работе через интерфейс нужно привести контекст к типу.
 
 ## Интерцептор запросов
+
+Пример записывает SQL перед выполнением, затраченное время после успеха и тип исключения после ошибки:
 
 ```csharp
 using System.Data.Common;
@@ -102,6 +130,8 @@ CommandInitialized -> CommandExecuting -> CommandExecuted
 
 ## Интерцептор соединения
 
+Пример записывает тип соединения и источник данных при открытии соединения:
+
 ```csharp
 public sealed class AuditConnectionInterceptor : IConnectionInterceptor
 {
@@ -132,8 +162,8 @@ public sealed class AuditConnectionInterceptor : IConnectionInterceptor
 
 * [Соединения](01-connections.md)
 * [Переиспользование запросов: кэш и `Prepare`](../engine/03-plan-cache-and-reuse.md)
-* [Dependency injection](../getting-started/04-dependency-injection.md)
-* [API reference](../advanced/api-reference.md)
+* [Внедрение зависимостей](../getting-started/04-dependency-injection.md)
+* [Справочник API](../advanced/api-reference.md)
 
 ---
 

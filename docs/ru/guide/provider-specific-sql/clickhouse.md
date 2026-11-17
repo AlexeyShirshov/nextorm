@@ -1,14 +1,14 @@
 # Специфичный для ClickHouse SQL
 
-> У ClickHouse самая крупная эксклюзивная поверхность в nextorm: нативные массивы и `ARRAY JOIN`,
-> модификаторы `LIMIT n BY expr` и `GROUP BY ... WITH TOTALS`, модификаторы запроса
+> Для запросов с возможностями ClickHouse, которых нет в общем API `nextorm`, здесь описаны нативные
+> массивы и `ARRAY JOIN`, модификаторы `LIMIT n BY expr` и `GROUP BY ... WITH TOTALS`,
 > `FINAL`/`SAMPLE`/`PREWHERE`/`SETTINGS`, строгость соединений и `GLOBAL JOIN`, распределённый
-> предикат `GLOBAL IN`, собственные агрегаты, функции массивов, JSON и словарей, а также табличные
-> функции `numbers`/`zeros`.
+> предикат `GLOBAL IN`, а также агрегаты и скалярные функции ClickHouse для массивов, JSON и словарей
+> и табличные функции.
 
 **Что нужно знать:** [Запросы и проекции](../../engine/index.md) · [Провайдер ClickHouse](../../connecting-providers/clickhouse.md)
 
-> **Методы-расширения.** Каждый эксклюзивный для ClickHouse член на этой странице (`ArrayJoin`/
+> **Методы-расширения.** Каждый специфичный для ClickHouse метод на этой странице (`ArrayJoin`/
 > `LeftArrayJoin`/`ArrayJoinElement`/`LeftArrayJoinElement`, `LimitBy`, `WithTotals`, `Final`,
 > `PreWhere`, `Settings`, `Sample`, `SemiJoin`/`AntiJoin`/`PasteJoin` и `j => j.Global()`) — это
 > метод-расширение из пакета `nextorm.clickhouse`, а не часть общего API `nextorm`. Добавьте
@@ -17,7 +17,8 @@
 ## Массивы и `ARRAY JOIN`
 
 У ClickHouse есть нативный тип `Array(T)`. Функции массивов работают с колонками-массивами или
-вложенными выражениями, а клауза array-join разворачивает по одной строке на элемент:
+вложенными выражениями, а часть запроса `ARRAY JOIN` разворачивает массив в отдельную строку на
+каждый элемент:
 
 ```csharp
 var rows = dataContext.From<IArrayEntity>()
@@ -33,15 +34,17 @@ select id
  left array join tags where id > 0
 ```
 
-Скалярный `array_join` (одна строка на элемент, проекция) и методы-клаузы
-`ArrayJoin`/`LeftArrayJoin`/`ArrayJoinElement`/`LeftArrayJoinElement` описаны в разделе
-[Массивы (ClickHouse)](../../scalar-functions/06-arrays.md#массивы-clickhouse); функции массивов гейтятся
-`SupportsArrayFunctions`, клауза — `ArrayJoinClause`.
+Используйте скалярный `array_join`, если нужен результат «одна строка на элемент» в проекции.
+`ArrayJoin`/`LeftArrayJoin`/`ArrayJoinElement`/`LeftArrayJoinElement` добавляют часть запроса
+`ARRAY JOIN`. Оба варианта описаны в разделе
+[Массивы (ClickHouse)](../../scalar-functions/06-arrays.md#массивы-clickhouse). Провайдер проверяет их
+поддержку отдельно: `SupportsArrayFunctions` отвечает за функции массивов, а `ArrayJoinClause` — за
+методы, добавляющие `ARRAY JOIN`.
 
 ## `LIMIT n BY expr`
 
 [`LimitBy`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.LimitBy``2(NextORM.Core.EntityBuilder{``0},System.Int32,System.Int32,System.Linq.Expressions.Expression{System.Func{``0,``1}})) возвращает первые `n` строк **на каждое значение
-ключа**, клауза рендерится после `ORDER BY` и до финального `LIMIT`:
+ключа**. В SQL она добавляется после `ORDER BY` и до финального `LIMIT`:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -79,13 +82,13 @@ select nullableint, count(*)
 ```
 
 См. [Группировка и агрегаты](../05-grouping-and-aggregates.md#with-totals)
-([`SupportsGroupByWithTotals`](xref:NextORM.Core.ISqlDialect.SupportsGroupByWithTotals)). Официальный
-`ClickHouse.Driver` возвращает блок итогов отдельно и не отдаёт его через `IDataReader`, поэтому
-материализуются только строки групп.
+([`SupportsGroupByWithTotals`](xref:NextORM.Core.ISqlDialect.SupportsGroupByWithTotals)). Строка
+итогов не попадает в результат запроса: официальный `ClickHouse.Driver` возвращает её отдельным
+блоком, вне `IDataReader`. Поэтому код выше получает только строки групп.
 
 ## Модификаторы запроса: `FINAL`, `SAMPLE`, `PREWHERE`, `SETTINGS`
 
-Четыре метода рендерят модификаторы уровня запроса ClickHouse: `Final()`, `Sample(ratio[, offset])`,
+Четыре метода добавляют в SQL модификаторы уровня запроса ClickHouse: `Final()`, `Sample(ratio[, offset])`,
 `PreWhere(predicate)` и `Settings(("key", "value"), ...)`:
 
 ```csharp
@@ -102,12 +105,13 @@ select id
  from complex_entity final prewhere (nullableint > 0) settings max_threads = 2
 ```
 
-Предложение `SETTINGS` всегда выводится последним среди добавляемых построителем предложений: после
-`LIMIT n BY` и после `LIMIT`/`OFFSET` (порядок хвоста: `ORDER BY` → `LIMIT ... BY` → `LIMIT`/`OFFSET` →
-`SETTINGS`). ClickHouse считает `LIMIT` после `SETTINGS` синтаксической ошибкой (код сервера 62),
-поэтому именно такой порядок делает скалярный терминал пригодным для запроса с настройками: `First`,
-`FirstOrDefault`, `Single` и `SingleOrDefault` добавляют постраничность (`limit 1` или `limit 2`), и
-предложение настроек идёт за ней.
+Построитель ставит `SETTINGS` после остальных частей хвоста запроса. Порядок такой: `ORDER BY` →
+`LIMIT ... BY` → `LIMIT`/`OFFSET` → `SETTINGS`. Если поставить `LIMIT` после `SETTINGS`, ClickHouse
+сообщит о синтаксической ошибке (код сервера 62).
+
+Этот порядок также позволяет использовать скалярные завершающие методы в запросе с настройками.
+`First`, `FirstOrDefault`, `Single` и `SingleOrDefault` добавляют ограничение (`limit 1` или
+`limit 2`); построитель ставит `SETTINGS` после него.
 
 ```csharp
 var count = dataContext.From<IComplexEntity>()
@@ -148,17 +152,19 @@ select t1.id, t2.somestring
 
 См. [Соединения](../04-joins.md#специфичные-для-провайдера-модификаторы-соединения-clickhouse)
 ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness)/[`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).
-`ANY` оставляет одну правую строку на каждую левую, `ALL` — все совпадения, `ASOF` требует одну
-колонку равенства и завершающее неравенство; `GLOBAL` рассылает правую сторону в распределённых
-запросах. Для `SEMI`/`ANTI`/`PASTE` есть отдельные построители: `SemiJoin`/`AntiJoin` отдают только
-левые колонки для левых строк, у которых есть (соответственно нет) совпадение, а `PasteJoin`
-сопоставляет два источника по позиции строки без `ON`
+`ANY` оставляет одну правую строку на каждую левую, а `ALL` — все совпадения. Для `ASOF` нужны
+колонка соединения по равенству и завершающее неравенство. `GLOBAL` рассылает правую сторону в
+распределённых запросах.
+
+Для `SEMI`, `ANTI` и `PASTE` есть отдельные построители. `SemiJoin` и `AntiJoin` возвращают только
+левые колонки: для левых строк, у которых есть совпадение, или, соответственно, нет его. `PasteJoin`
+сопоставляет два источника по позиции строки и не использует `ON`
 ([`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/`SupportsPasteJoin`).
 
 ## `GLOBAL IN`
 
-[`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions.global_in``1(``0,NextORM.Core.QueryCommand{``0})) рендерит распределённый
-предикат по подзапросу или списку значений; отрицание через `!` даёт `GLOBAL NOT IN`:
+[`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions.global_in``1(``0,NextORM.Core.QueryCommand{``0})) генерирует распределённый
+предикат для подзапроса или списка значений; отрицание через `!` даёт `GLOBAL NOT IN`:
 
 ```csharp
 var values = new int[] { 1, 3 };
@@ -178,57 +184,70 @@ select id
 
 ## Агрегаты
 
-Эксклюзивные агрегаты ClickHouse живут на [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions)
-и отклоняются всеми остальными диалектами. Их нативные типы результата (`UInt64`, `Float32`, целые
-типы комбинаторов `-If`) не всегда совпадают с объявленным CLR-типом, поэтому диалект оборачивает их в
-`toInt64(...)`/`toInt32(...)`/`toFloat64(...)`, нормализуя значение к типу, который объявляет метод:
+Только ClickHouse поддерживает агрегаты из
+[`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions); остальные диалекты их отклоняют.
+Нативные типы результата (`UInt64`, `Float32` и целые типы комбинаторов `-If`) не всегда совпадают с
+CLR-типами, объявленными методами. Поэтому диалект приводит результаты через `toInt64(...)`,
+`toInt32(...)` или `toFloat64(...)` к объявленному типу:
 
 * агрегаты числа уникальных `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12` (`toInt64`);
-* параметрические `quantile(level)(value)`/`quantile_exact`/`quantile_timing` и `median` (`toFloat64`), многоуровневые `quantiles(level1, level2, ...)(value)` (возвращают `Array(Float64)`, материализуются как CLR `double[]`; уровни должны быть inline-массивом);
-* `median` — нативный агрегат семейства `quantile` (приблизительный; одна строка на группу) и единственное имя квантилеподобной формы, которое рендерится: общий `SqlFunctions.ClickHouse.percentile` и оконные `percentile_cont`/`percentile_disc` бросают `NotSupportedException`, и для этих переносимых написаний не создаётся псевдонима `quantile*`;
+* параметрические `quantile(level)(value)`/`quantile_exact`/`quantile_timing` и `median` (`toFloat64`);
+* многоуровневый `quantiles(level1, level2, ...)(value)` возвращает `Array(Float64)`, который
+  материализуется как CLR `double[]`; уровни должны быть inline-массивом;
+* `median` — нативный агрегат семейства `quantile`: он приблизительный и возвращает одну строку на
+  группу. Это также единственное поддерживаемое здесь имя квантилеподобной формы. Общий
+  `SqlFunctions.ClickHouse.percentile` и оконные `percentile_cont`/`percentile_disc` бросают
+  `NotSupportedException`; для этих переносимых имён нет псевдонимов `quantile*`;
 * агрегаты наиболее частых значений `topK(k)(value)`/`topKWeighted(k)(value, weight)` (возвращают `Array(T)`, материализуются как CLR `T[]`);
 * агрегат последнего произвольного значения `any_last` (`anyLast`);
 * возвращающие массивы агрегаты `group_array`/`group_uniq_array` (`groupArray`/`groupUniqArray`, материализуются как CLR `T[]`; `groupArray` над array-колонкой даёт вложенный `T[][]`);
 * агрегаты последовательностей/воронки `window_funnel`/`sequence_match`/`retention` (`windowFunnel`/`sequenceMatch` с `toInt32(...)`; `retention` нормализуется к объявленному `int[]`);
-* общий API фильтрации агрегатов, рендерящий комбинаторы `-If`: `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`;
+* общий API фильтрации агрегатов добавляет комбинаторы `-If`: `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`;
 * `arg_min`/`arg_max`;
 * битмап-агрегаты `group_bitmap`/`group_bitmap_and`/`group_bitmap_or`/`group_bitmap_xor`
   (`groupBitmap`/`groupBitmapAnd`/`groupBitmapOr`/`groupBitmapXor`; непрозрачное состояние `UInt64`) и
   агрегаты по ключам `sum_map`/`sum_map_filtered` (`sumMap`/`sumMapFiltered(keys)(key, value)`,
   проецируется как `Map`).
 
-Функции, возвращающие массив, объявляют закрытый CLR-тип массива, и диалект нормализует результат
-сервера к нему ровно одним внешним `cast(... as Array(...))`: `top_k`, `top_k_weighted`, `group_array`,
-`group_uniq_array`, `retention` (`int[]` → `Array(Int32)`, никогда не `byte[]`), `array_map` и
-все три перегрузки `range` (`long[]` → `Array(Int64)`). Объявленный тип элемента определяют два
-правила: элемент **значимого типа** записывается как объявлен (`int` → `Array(Int32)`, `int?` →
-`Array(Nullable(Int32))`; `byte` остаётся `UInt8`), а элемент **ссылочного типа** объявляется
-`Nullable(...)` безусловно — nullable-аннотация CLR для элемента стирается в рантайме и никогда не
-учитывается: `string[]` и `string?[]` рендерятся одинаково, `Array(Nullable(String))`, а jagged
-`string[][]` даёт `Array(Array(Nullable(String)))` (сначала применяется правило массива, никогда
-`Nullable(Array(...))`). Результат `string[]` рендерится как `Array(Nullable(String))`; данные,
-материализуемый CLR-тип результата (`string[]`) и публичный API те же; элементы
-значимых типов (`int[]`, `int?[]`, `byte[]`) не затронуты. В остальном это только коррекция типа
-отрендеренного вызова: она не меняет ни трансляцию лямбды, ни рендеринг операндов, поэтому описанные
-ниже ограничения higher-order лямбд продолжают действовать. Привязка симметрична для входа: **связанный**
-массив ранга 1,
-чей объявленный тип элемента nullable, отправляется как `Array(Nullable(T))`, выведенный из объявленного
-CLR-типа, поэтому `null`-элементы и их позиции сохраняются (см.
-[Массивы (ClickHouse)](../../scalar-functions/06-arrays.md#массивы-clickhouse)).
+Фасады, возвращающие массив, объявляют конкретный CLR-тип массива. Диалект приводит результат
+сервера к этому типу одним внешним `cast(... as Array(...))`. Это относится к `top_k`,
+`top_k_weighted`, `group_array`, `group_uniq_array`, `retention` (`int[]` → `Array(Int32)`, никогда
+не `byte[]`), `array_map` и всем трём перегрузкам `range` (`long[]` → `Array(Int64)`).
 
-Переносимые агрегаты — в том числе `count`, произвольное значение `any_agg` (рендерится `ANY_VALUE` в
-MySQL и MariaDB) и `corr`/`covar*` — документированы на тематической странице. Обычная колонка `UInt64`
-(или любая проекция `ulong`/`ulong?`) материализуется напрямую через аксессор построителя строк
-`DbDataReader.GetFieldValue<ulong>`, поэтому нормализующее приведение нужно только результатам функций
-выше.
+Тип элемента массива ClickHouse определяется объявленным CLR-типом элемента:
+
+* Для элемента **значимого типа** сохраняется объявленная nullable-форма: `int` →
+  `Array(Int32)`, `int?` → `Array(Nullable(Int32))`; `byte` остаётся `UInt8`.
+* Элемент **ссылочного типа** всегда записывается как `Nullable(...)`. CLR-аннотация nullable для
+  ссылочного элемента стирается во время выполнения, поэтому `string[]` и `string?[]` дают
+  `Array(Nullable(String))`. Для jagged-массива `string[][]` результат —
+  `Array(Array(Nullable(String)))`: сначала применяется тип массива, а не
+  `Nullable(Array(...))`.
+
+Для результата `string[]` меняется только SQL-тип: данные, материализуемый CLR-тип (`string[]`) и
+публичный API остаются прежними. Массивы значимых типов (`int[]`, `int?[]`, `byte[]`) не затронуты.
+Коррекция меняет только тип сгенерированного вызова, но не трансляцию лямбды и не SQL операндов.
+Поэтому ограничения лямбд высшего порядка, описанные ниже, сохраняются.
+
+Для входных данных действует симметричное правило. **Связанный** одномерный массив (ранг 1) с
+объявленным nullable-типом элемента отправляется как `Array(Nullable(T))`, выведенный из объявленного
+CLR-типа. Так сохраняются и `null`-элементы, и их позиции; см.
+[Массивы (ClickHouse)](../../scalar-functions/06-arrays.md#массивы-clickhouse).
+
+Переносимые агрегаты, в том числе `count`, агрегат произвольного значения `any_agg` (в MySQL и
+MariaDB он генерирует `ANY_VALUE`) и `corr`/`covar*`, описаны на тематической странице.
+
+Для обычной колонки `UInt64` и проекций `ulong`/`ulong?` не нужно нормализующее приведение:
+построитель строк читает значение напрямую методом `DbDataReader.GetFieldValue<ulong>`. Приведение
+нужно только результатам агрегатов выше.
 
 См. [Группировка и агрегаты](../05-grouping-and-aggregates.md).
 
 ## Нативные скалярные функции, Map и хэши
 
-Помимо кросс-провайдерной скалярной поверхности, `ClickHouseFunctions` предоставляет нативные функции
-ClickHouse, у которых нет переносимого написания. Они рендерят точное camel-case-имя и отклоняются
-всеми остальными диалектами:
+Помимо скалярных функций, общих для провайдеров, `ClickHouseFunctions` предоставляет нативные
+функции ClickHouse без переносимого имени. В SQL они записываются под нативными именами ClickHouse;
+остальные диалекты их отклоняют:
 
 * UTF-8-регистр, trim и regexp/поиск по строкам: `lower_utf8`/`upper_utf8` (`lowerUTF8`/`upperUTF8`),
   `trim_left`/`trim_right`/`trim_both` (`trimLeft`/`trimRight`/`trimBoth`, с необязательным набором
@@ -243,25 +262,27 @@ ClickHouse, у которых нет переносимого написания
   [Объявление версии сервера](../../connecting-providers/clickhouse.md#объявление-версии-сервера));
 * семейство `Map`: конструктор `map` (inline-пары `Tuple.Create`), `map_keys`/`map_values`,
   `map_contains_key`/`map_contains_value`, `map_add`/`map_concat`, а также публичные
-  высокопорядковые помощники `map_filter`/`map_apply`/`map_sort` (результат — кортежи и массивы,
-  понижаются до массивных форм) и `map_all`/`map_exists` (булевы результаты, нативные предикаты);
+  помощники `map_filter`/`map_apply`/`map_sort`, принимающие лямбды (возвращают кортежи и массивы,
+  преобразуются в операции над массивами), и `map_all`/`map_exists` (возвращают `bool`, используют
+  нативные предикаты);
 * хэши: шесть строковых хэшей `md5`/`sha1`/`sha256`/`sha512`/`sip_hash128`/`murmur_hash3_128`
   (`MD5`/`SHA1`/`SHA256`/`SHA512`/`sipHash128`/`murmurHash3_128`, нижний шестнадцатеричный регистр) и
   числовые `xx_hash32`/`xx_hash64`/`xxh3`, `city_hash64`, `sip_hash64` и
   `murmur_hash2_32`/`murmur_hash2_64`/`murmur_hash3_32`/`murmur_hash3_64`;
-* математика: `log2`, `cbrt`, `exp2` и `exp10` (рендерятся `log2(x)`/`cbrt(x)`/`exp2(x)`/`exp10(x)`), у
+* математика: `log2`, `cbrt`, `exp2` и `exp10` (в SQL становятся `log2(x)`/`cbrt(x)`/`exp2(x)`/`exp10(x)`), у
   каждой перегрузки `double` и `double?`, результат `Float64`/`Nullable(Float64)` (аргумент `NULL`
   остаётся `NULL`); остальные провайдеры и in-memory провайдер их отклоняют;
 * `generate_ulid` (`generateULID`).
 
 ### Поставленные семейства (#286, T286b)
 
-Таблицы ниже дополняют нативную поверхность. Каждый член — типизированный метод
-`ClickHouseFunctions`, который рендерит точное имя вендора, явно объявляет CLR-форму результата и
-отклоняется с `NotSupportedException` всеми остальными диалектами (общий шлюз
-`IScalarFunctions`/capabilities). Закреплённый сервер — ClickHouse **25.8.33.6**
-(`clickhouse/clickhouse-server:25.8-alpine`); имена, появившиеся позже, и CLR-формы, которые нельзя
-материализовать, перечислены в разделе [Пока не поддерживается](#пока-не-поддерживается).
+Таблицы ниже перечисляют остальные нативные функции. Каждая запись — типизированный метод
+`ClickHouseFunctions`: он использует точное имя ClickHouse в SQL и явно объявляет тип результата
+CLR. Общая проверка возможностей `IScalarFunctions` отклоняет метод с `NotSupportedException` в
+других диалектах. Базовый сервер — ClickHouse **25.8.33.6**
+(`clickhouse/clickhouse-server:25.8-alpine`). Функции, появившиеся позже этой версии, и типы
+результатов, которые провайдер не может преобразовать, перечислены в разделе
+[Пока не поддерживается](#пока-не-поддерживается).
 
 | Семейство | Члены |
 |---|---|
@@ -282,21 +303,24 @@ ClickHouse, у которых нет переносимого написания
 | Оконные | `non_negative_derivative` (возвращает `WindowFunction<double>`, дополните `Over(...)`) |
 | Словари | `dict_get_or_null`, `dict_get_all`, `dict_get_descendants`, `region_to_name`, `region_to_city`, `region_to_area`, `region_to_district`, `region_to_country`, `region_to_continent`, `region_to_top_continent`, `region_to_population`, `region_hierarchy`, `region_in` (плюс уже поставленные `dict_get`, `dict_get_or_default`, `dict_get_hierarchy`, `dict_get_children`, `dict_has`, `dict_is_in`) |
 
-Объявленные CLR-формы точные, а не выведенные: результаты `UInt64`/`UInt32`/`UInt16` проецируются как
-`ulong`/`uint`/`int`, `UInt8` — как `byte` или `bool`, результаты `FixedString` — как hex-текст
-(бинарные UUID, IPv6 и кодирование), результаты `Tuple`/`Array` — как `System.Tuple<...>`/`T[]` с
-явно выписанными типами компонентов, а каждый nullable-аргумент вендора даёт `NULL`, а не значение по
-умолчанию. Члены с версионными ограничениями (`array_top_k`, `array_bottom_k`, `array_remove`,
-`array_transpose`, `gini`, `quantile_prometheus_histogram`, `group_format`, сетки `time_series_*`)
-сохраняют нативное плечо и фиксируют пробел сервера живым негативом `UNKNOWN_FUNCTION`/`BAD_ARGUMENTS`;
-`sequence_next_node` и сетки time-series требуют `allow_experimental_funnel_functions` /
+Метод явно задаёт тип CLR-результата; он не выводится из типа результата сервера. Результаты
+`UInt64`/`UInt32`/`UInt16` имеют типы `ulong`/`uint`/`int`, а `UInt8` — `byte` или `bool`.
+Результаты `FixedString` для бинарных UUID, IPv6 и кодирования становятся шестнадцатеричным
+текстом. Результаты `Tuple`/`Array` имеют типы `System.Tuple<...>`/`T[]` с указанными типами
+компонентов. Nullable-аргумент вендорной функции передаёт `NULL`, а не значение по умолчанию.
+
+Некоторые функции зависят от версии сервера: `array_top_k`, `array_bottom_k`, `array_remove`,
+`array_transpose`, `gini`, `quantile_prometheus_histogram`, `group_format` и сетки `time_series_*`.
+Интеграционные негативные проверки подтверждают, что закреплённый сервер отвечает для них
+`UNKNOWN_FUNCTION`/`BAD_ARGUMENTS`. Для `sequence_next_node` требуется
+`allow_experimental_funnel_functions`, а для сеток time-series —
 `allow_experimental_time_series_aggregate_functions`.
 
-Шесть строковых хэшей кодируются на сервере в нижний шестнадцатеричный регистр, поэтому проекция
-`string?` получает текст хэша, а не сырые байты `FixedString` (которые драйвер декодировал бы как
-UTF-8 с потерями):
+Сервер кодирует шесть строковых хэшей в нижний шестнадцатеричный регистр. Поэтому проекция `string?`
+получает текст хэша, а не сырые байты `FixedString`, которые драйвер декодировал бы как UTF-8 с
+потерями:
 
-| Функция | Рендеринг SQL | Символов |
+| Функция | Сгенерированный SQL | Символов |
 |---|---|---:|
 | `md5` | `lower(hex(MD5(value)))` | 32 |
 | `sha1` | `lower(hex(SHA1(value)))` | 40 |
@@ -309,8 +333,8 @@ UTF-8 с потерями):
 хэшем по умолчанию. Значение без изменений проходит обычную материализацию строки — через анонимную
 проекцию, типизированную проекцию и `Scalar<string>` (это `string`, а не массив байтов).
 
-`array_except` остаётся в `SqlFunctions.ClickHouse` для совместимости API, а её доступность
-определяется объявленной версией сервера: нативная `arrayExcept` появилась в ClickHouse 25.9.
+`array_except` остаётся в `SqlFunctions.ClickHouse` для совместимости API, но доступность зависит от
+версии ClickHouse, объявленной для контекста. Нативная `arrayExcept` появилась в ClickHouse 25.9.
 
 | Объявление | Поведение |
 |---|---|
@@ -322,10 +346,10 @@ UTF-8 с потерями):
 [Объявление версии сервера](../../connecting-providers/clickhouse.md#объявление-версии-сервера).
 Остальные операции над множествами массивов не затронуты и версию не проверяют.
 
-Нативный результат `Map` (конструктор `map`, `map_add`, `map_concat`) представляется как
-`IDictionary<TKey, TValue>`; при проецировании комбинируйте его с `map_keys`/`map_values` или одним
-из предикатов `map_contains_*`, потому что построитель строк не материализует «голую» колонку
-`IDictionary`.
+Нативный результат `Map` из конструктора `map`, `map_add` или `map_concat` имеет CLR-тип
+`IDictionary<TKey, TValue>`. Построитель строк не может преобразовать в результат отдельную колонку
+`IDictionary`. При проецировании карты выберите `map_keys`/`map_values` или используйте предикат
+`map_contains_*`.
 
 ```csharp
 var rows = dataContext.From<Event>()
@@ -338,8 +362,9 @@ var rows = dataContext.From<Event>()
     .ToList();
 ```
 
-Пять высокопорядковых помощников — публичные LINQ-методы, и объявленный CLR-тип результата входит в
-контракт; нативную серверную функцию сохраняют только `map_all` и `map_exists`:
+Пять публичных LINQ-помощников принимают лямбду для операции над картой; объявленный CLR-тип
+результата входит в контракт. `map_filter`, `map_apply` и `map_sort` преобразуются в операции над
+массивами. Нативные серверные функции сохраняют только `map_all` и `map_exists`:
 
 * `map_filter` — записи, удовлетворяющие предикату, как `Tuple<TKey, TValue>[]`. Понижается до
   `arrayFilter(_t -> predicate, arrayZip(mapKeys(map), mapValues(map)))`, где ключ и значение лямбды
@@ -348,14 +373,15 @@ var rows = dataContext.From<Event>()
   до `arrayMap((k, v) -> expression, mapKeys(map), mapValues(map))`;
 * `map_sort` — записи, упорядоченные по ключу, как `Tuple<TKey, TValue>[]`. Понижается до
   `arraySort(_t -> _t.1, arrayZip(mapKeys(map), mapValues(map)))`;
-* `map_all`/`map_exists` — `bool`. Остаются нативными и рендерятся как
+* `map_all`/`map_exists` — `bool`. Остаются нативными и генерируют
   `mapAll((k, v) -> predicate, map)` / `mapExists((k, v) -> predicate, map)`, лямбда первой.
 
-Пониженное выражение filter, apply и sort оборачивается приведением **объявленного** типа результата,
-а не того типа, который сервер вывел бы из операнда: `Tuple<string, int>[]` даёт
-`cast(... as Array(Tuple(String, Int32)))`, результат `long` в apply — `cast(... as Array(Int64))`, —
-поэтому сервер сообщает ровно тот тип элемента, который обещает объявление, а не более узкий. Тип
-элемента выбирают два правила:
+После преобразования выражения `map_filter`, `map_apply` или `map_sort` SQL оборачивается в `CAST`
+к **объявленному** типу результата, а не к типу, который сервер вывел бы из входных данных.
+Например, `Tuple<string, int>[]` даёт `cast(... as Array(Tuple(String, Int32)))`, а результат
+`long` у `map_apply` — `cast(... as Array(Int64))`. Так сервер возвращает тип элемента,
+обещанный объявлением метода, даже если выведенный тип был бы уже. Тип элемента определяется двумя
+правилами:
 
 * результат apply **значимого типа** остаётся «голым» — `int` → `Array(Int32)`;
 * результат apply **ссылочного типа** записывается как `Nullable(...)` — `string` →
@@ -391,15 +417,17 @@ cast(arrayMap((k, v) -> k,
 `map_filter` возвращает `Tuple<TKey, TValue>[]`, потому что карту нельзя материализовать из
 проецируемого выражения. `map_sort` возвращает массив кортежей, а `map_apply` — `TResult[]`.
 
-Публичного пути, превращающего отфильтрованную карту обратно в серверную `Map`, нет: `mapFilter`
-достижима только через понижение `map_*`, `map_keys`/`map_values` требуют `IDictionary` и потому
-отклоняют массив кортежей на этапе компиляции, а лямбды высокопорядковых функций массивов запрещают
-доступ к полям параметра, поэтому `arrayMap(t => t.Item2, ...)` выразить нельзя. Читайте возвращённые
-кортежи напрямую — обычный LINQ по массиву после материализации:
-`filtered.Select(t => t.Item2)` для значений или
-`filtered.ToDictionary(t => t.Item1, t => t.Item2)` для словаря на клиенте.
+Публичного способа превратить отфильтрованную карту обратно в серверный `Map` нет. `mapFilter`
+достижима только через преобразование `map_*`. `map_keys`/`map_values` требуют `IDictionary`, поэтому
+массив кортежей, возвращённый помощником, они отклоняют ещё при компиляции. Лямбды функций массивов
+высшего порядка также не разрешают обращаться к членам параметра, поэтому выразить
+`arrayMap(t => t.Item2, ...)` нельзя.
 
-Нативная поверхность `Map` — `map_keys`/`map_values`, `map_contains_key`/`map_contains_value`,
+После преобразования результата в массив читайте кортежи обычным LINQ:
+`filtered.Select(t => t.Item2)` возвращает значения, а
+`filtered.ToDictionary(t => t.Item1, t => t.Item2)` строит словарь на клиенте.
+
+Нативные функции типа `Map` — `map_keys`/`map_values`, `map_contains_key`/`map_contains_value`,
 `map_add`/`map_concat` и конструктор `map` — по-прежнему строится на `IDictionary<TKey, TValue>` и
 отделена от этих пяти помощников, которые принимают операнд-карту, а возвращают массивы или
 булевы значения.
@@ -408,26 +436,26 @@ cast(arrayMap((k, v) -> k,
 
 ## JSON, словари и функции массивов
 
-* извлекатели строкового JSON `JSONExtractString`/`JSONExtractInt`/`JSONExtractFloat`/
+* Для JSON, хранящегося в строке, используйте извлекатели `JSONExtractString`/`JSONExtractInt`/`JSONExtractFloat`/
   `JSONExtractBool`/`JSONExtractRaw`/`JSONHas`/`JSONType`, `json_length` и плоский
   `visitParamExtract*`;
-* возвращающие массивы `JSONExtractKeys`/`JSONExtractArrayRaw` (`json_extract_keys`/
+* Функции JSON, возвращающие массивы: `JSONExtractKeys`/`JSONExtractArrayRaw` (`json_extract_keys`/
   `json_extract_array_raw`, проецируются как `string[]`) и `JSONExtractKeysAndValues`
   (`json_extract_keys_and_values<T>`, проецируется как `Tuple<string, T>[]`; `T` — non-nullable
   ClickHouse-тип);
-* JSONPath-скаляры `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (по строковому JSON);
-* функции нативного JSON `json_all_paths`/`json_all_paths_with_types` (`JSONAllPaths`/
+* JSONPath-функции `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` работают со строковым JSON;
+* Для нативного значения `JSON` используйте функции `json_all_paths`/`json_all_paths_with_types` (`JSONAllPaths`/
   `JSONAllPathsWithTypes`; первая проецируется как `string[]`, нативный `Map(String, String)` второй —
   как `Dictionary<string, string>`; обе принимают нативное значение `JSON`) и `to_json_string`
   (`toJSONString`);
-* словарные функции `dict_get`/`dict_get_or_default`/`dict_has` и иерархические
+* Словарные функции включают `dict_get`/`dict_get_or_default`/`dict_has` и иерархические
   `dict_get_hierarchy`/`dict_get_children`/`dict_is_in` (нужен настроенный
   `CREATE DICTIONARY`);
-* функции массивов `length`/`has`/`index_of`/`has_any`/`has_all`/`starts_with`/`ends_with`/
+* Функции массивов включают `length`/`has`/`index_of`/`has_any`/`has_all`/`starts_with`/`ends_with`/
   `has_substr`/`array_string_concat`/`split_by_char`/`array_sort`/`array_reverse`/`array_distinct`/
   `range`/`array_enumerate`/`array_cum_sum`/`array_slice`/`array_push_back`;
-* конструктор кортежа и доступ к элементу: `System.Tuple.Create(a, b)` рендерится как `tuple(a, b)`,
-  а `System.Tuple<...>.ItemN` — как `tupleElement(t, n)` (целый `Tuple(...)` проецируется как
+* Конструктор кортежа и доступ к элементу: `System.Tuple.Create(a, b)` генерирует `tuple(a, b)`,
+  а `System.Tuple<...>.ItemN` — `tupleElement(t, n)` (целый `Tuple(...)` проецируется как
   `System.Tuple<...>`); `untuple` не поддерживается.
 
 См. [Скалярные функции](../../scalar-functions/index.md) и [Поддержка JSON](../16-json.md)
@@ -435,12 +463,12 @@ cast(arrayMap((k, v) -> k,
 
 ## Табличные функции
 
-`numbers`/`numbers_mt`, генераторы строк `zeros`/`zeros_mt`, `generate_random` и `values` доступны через
-[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) с runtime-фабричным вызовом,
-как и серверные/кластерные источники `url`, `s3`, `file`, `remote`, `remote_secure`, `cluster` и
-`cluster_all_replicas`. Именно эти тринадцать имён принимает `ISqlDialect.SupportsTableFunction`.
-Колонка `number` типа `UInt64` приводится к `Int64` внутри оборачивающего подзапроса, чтобы
-материализоваться в CLR `long`; `zeros` материализуется сразу в `byte`:
+Используйте перегрузку [`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})),
+принимающую фабричную лямбду, чтобы запросить `numbers`/`numbers_mt`, генераторы строк `zeros`/`zeros_mt`,
+`generate_random`, `values` или серверные и кластерные источники `url`, `s3`, `file`, `remote`,
+`remote_secure`, `cluster`, `cluster_all_replicas`. Проверка `ISqlDialect.SupportsTableFunction` принимает ровно эти
+тринадцать имён. Колонка `number` имеет тип `UInt64`; оборачивающий подзапрос приводит её к `Int64`,
+чтобы результат имел CLR-тип `long`. `zeros` сразу даёт `byte`:
 
 ```csharp
 var rows = dataContext.From(() => SqlFunctions.ClickHouse.zeros(3))
@@ -448,50 +476,63 @@ var rows = dataContext.From(() => SqlFunctions.ClickHouse.zeros(3))
     .ToList();
 ```
 
-Табличные функции внешних движков (`mysql`, `postgresql`, `sqlite`, `jdbc`, `odbc`, `mongodb`,
+Другие табличные функции подключают внешние движки и системы ввода-вывода: `mysql`, `postgresql`,
+`sqlite`, `jdbc`, `odbc`, `mongodb`,
 `redis`, `hdfs`, `s3Cluster`, `azureBlobStorage`, `deltaLake`, `iceberg`, `hudi`, `paimon`, `bigquery`,
 `gcs`, `ytsaurus`, `arrowFlight`, `prometheusQuery`, `input`, `view`, `format`, `null`, `executable`,
-`primes`, `merge`, `dictionary`, `eval`, `loop`, `fuzzJSON`, `fuzzQuery`) **не** моделируются: они
-относятся к границе внешнего I/O, описанной как §4 каталога покрытия, и доступны только через сырой
-SQL или обёртку `[SqlFunction]`. Диалект отклоняет каждую из них, а живой boundary-тест перебирает все
-функции из `system.table_functions` и доказывает, что принимаются только тринадцать имён выше.
+`primes`, `merge`, `dictionary`, `eval`, `loop`, `fuzzJSON` и `fuzzQuery` провайдер не моделирует.
+Они относятся к границе внешнего I/O, описанной в §4 каталога покрытия, и доступны только через
+сырой SQL или обёртку `[SqlFunction]`. Диалект отклоняет каждую из них. Сквозная проверка на сервере
+перебирает функции из `system.table_functions` и подтверждает, что принимаются только тринадцать имён
+выше.
 
 См. [Табличные функции](../13-table-valued-functions.md).
 
 ## Нативные JSON-колонки
 
-Нативная колонка `JSON` в ClickHouse имеет корень-**объект** (массивы и скалярные корни отклоняются).
-Свойство `[JsonColumn]` (storage `Auto` или `Native`) отображает POCO с корнем-объектом, `JsonObject`,
-`JsonDocument` или `JsonElement` на неё и на чтение, и на запись; `Text` сохраняет колонку `String`, а
-модель, не сериализующаяся в объект, отклоняется с `NotSupportedException`. «Голые» `JsonObject`/
-`JsonDocument`/`JsonElement` с корнем-объектом тоже отображаются при проекции и как параметры (драйвер
-отдаёт `JSON` как `JsonObject`, а `JsonDocument`/`JsonElement` из него адаптируются). Проецируйте через
-именованную форму (`Select(x => new { x.Doc })` или DTO): «голый» скаляр верхнего уровня
-`Select(x => x.Doc)` не обрабатывается ядровым классификатором проекции. Пустой `{}` остаётся непустым
-значением, а SQL `NULL` в колонке `Nullable(JSON)` остаётся отличным от него (`null`, либо
-`default`/`Undefined` для value-типа `JsonElement`). Чтение «голой» `string` из колонки `JSON` и
-легаси-алиас `Object('json')` не поддерживаются; алиас создаётся только с connection-level параметром
-`allow_experimental_object_type`, который nextorm никогда не выставляет, и даже тогда чтение
-материализуется как `Tuple<SByte,String>`, а не через нативный транспорт `JsonObject`. См.
+Для нативной колонки `JSON` ClickHouse требует корень-**объект**; массивы и скалярные корни он
+отклоняет.
+
+Для свойств модели `[JsonColumn]` с storage `Auto` или `Native` отображает POCO с корнем-объектом,
+`JsonObject`, `JsonDocument` или `JsonElement` на нативную колонку как при чтении, так и при записи.
+`Text` оставляет колонку типа `String`. Если модель сериализуется не в объект, nextorm выдаёт
+`NotSupportedException`.
+
+«Голые» значения `JsonObject`, `JsonDocument` и `JsonElement` с корнем-объектом также поддерживаются
+в проекциях и параметрах. Драйвер возвращает `JSON` как `JsonObject`; nextorm при необходимости
+адаптирует его к `JsonDocument` или `JsonElement`. Проецируйте JSON через именованную форму,
+например `Select(x => new { x.Doc })` или DTO. Ядровой классификатор проекций не обрабатывает
+«голый» скаляр верхнего уровня (`Select(x => x.Doc)`).
+
+Пустой `{}` остаётся непустым значением. SQL `NULL` в колонке `Nullable(JSON)` отличен от него:
+результат — `null`, либо `default`/`Undefined` для value-типа `JsonElement`.
+
+Чтение «голой» `string` из колонки `JSON` не поддерживается. Не поддерживается и легаси-алиас
+`Object('json')`: для его создания нужен параметр уровня подключения `allow_experimental_object_type`,
+который nextorm никогда не устанавливает. Даже с этим параметром результат чтения имеет тип
+`Tuple<SByte,String>`, а не проходит через нативный транспорт `JsonObject`. См.
 [Поддержка JSON](../16-json.md#отобразить-clr-объект-на-нативную-json-колонку).
 
 ## Null-safe-сравнение
 
-В ClickHouse нет пригодной скалярной нативной формы: `isNotDistinctFrom(...)` и оператор `<=>`
-принимаются только в секции `JOIN ON`, а вне неё на 25.8 падают ошибкой сервера Code 48
-`NOT_IMPLEMENTED` («Function isNotDistinctFrom can be used only in the JOIN ON section»). Поэтому оба
-помощника эмулируются охраняемым предикатом:
-`((a is null and b is null) or (a is not null and b is not null and a = b))`, а `is_distinct_from` —
-его дополнение `not (...)`. Нормализация через sentinel не используется, поэтому `NULL` никогда не
-сравнивается как равный реальному значению (включая `0`), а скалярный результат уже имеет тип `UInt8`.
-См. [Null-safe-сравнение](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-сравнение-is-not-distinct-from).
+ClickHouse принимает `isNotDistinctFrom(...)` и оператор `<=>` только в секции `JOIN ON`. Вне неё
+оба варианта завершаются ошибкой сервера Code 48 `NOT_IMPLEMENTED` на версии 25.8
+(«Function isNotDistinctFrom can be used only in the JOIN ON section»).
+
+Поэтому скалярные помощники используют такой предикат:
+`((a is null and b is null) or (a is not null and b is not null and a = b))`.
+`is_distinct_from` — его дополнение `not (...)`. Для сравнения не используется специальное
+значение-заменитель:
+`NULL` не считается равным реальному значению, в том числе `0`. Скалярный результат уже имеет тип
+`UInt8`. См.
+[Null-safe-сравнение](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-сравнение-is-not-distinct-from).
 
 ## Пока не поддерживается
 
-Каталог закрывает остаточный набор §3 на закреплённом сервере **25.8.33.6**: перечисленные ниже члены
-существуют как типизированные методы-отказы на `ClickHouseFunctions` и падают с точным
-`NotSupportedException` до отправки SQL провайдеру — они никогда не переписываются молча, не
-подменяются значением по умолчанию и не усекаются.
+Перечисленные ниже члены завершают остаточный набор §3 для закреплённого сервера **25.8.33.6**.
+Они существуют как типизированные методы `ClickHouseFunctions`, но намеренно выбрасывают точное
+`NotSupportedException` до отправки SQL провайдеру. nextorm не переписывает их молча, не подменяет
+значением по умолчанию и не усекает результат.
 
 | Семейство | Отклонённый член | Проверенная причина |
 |---|---|---|
@@ -503,7 +544,7 @@ SQL или обёртку `[SqlFunction]`. Диалект отклоняет к�
 | JSON | `pretty_print_json` | Появился в ClickHouse 26.4; отсутствует на закреплённом 25.8.33.6 (`UNKNOWN_FUNCTION`), документированной эквивалентной композиции нет. |
 | JSON | `json_extract_uint_or_default` | Такой функции не существует; `json_extract_uint` уже возвращает дефолт вендора `0` для отсутствующего пути/неверного типа/битого JSON и `NULL` для `NULL`-входа. |
 | Хэши | `ngram_sim_hash_arg`, `word_shingle_sim_hash_arg` | Таких функций нет: аргументы возвращают только формы `MinHashArg`; имена отсутствуют в `system.functions` на 25.8.33.6 и в справочнике вендора. |
-| Приведение типов | `to_int128`, `to_int256`, `to_uint128`, `to_uint256`, `reinterpret_as_int128`, `reinterpret_as_int256`, `reinterpret_as_uint128`, `reinterpret_as_uint256` | Драйвер отдаёт 128/256-битные типы как `System.Numerics.BigInteger`; в общем построителе строк нет аксессора `BigInteger`, поэтому значение или битовый шаблон нельзя материализовать в целое фиксированной ширины. |
+| Приведение типов | `to_int128`, `to_int256`, `to_uint128`, `to_uint256`, `reinterpret_as_int128`, `reinterpret_as_int256`, `reinterpret_as_uint128`, `reinterpret_as_uint256` | Драйвер отдаёт 128/256-битные типы как `System.Numerics.BigInteger`; в общем построителе строк нет метода для чтения `BigInteger`, поэтому значение или битовый шаблон нельзя преобразовать в целое CLR фиксированной ширины. |
 | Приведение типов | `to_decimal128`, `to_decimal256` | 38/76 значащих цифр против 96-битной мантиссы `System.Decimal` (28–29 цифр): значение выше этого диапазона потеряло бы точность молча или дало `OverflowException`. |
 | Приведение типов | одиннадцать единиц `to_interval_*` | У результатов `Interval*`, существующих только в ClickHouse, нет CLR-представления, и сам драйвер не может их материализовать (`Unknown type: Interval*` на 25.8.33.6). |
 | Агрегаты | `stochastic_linear_regression`, `stochastic_logistic_regression`, `exponential_moving_average` | Агрегат возвращает непрозрачное бинарное состояние `AggregateFunction` без типизированного CLR-результата; значение даёт только комбинатор `-Merge`, которому нужна колонка типа `AggregateFunction`, недоступная провайдеру. |

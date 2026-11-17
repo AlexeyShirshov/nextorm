@@ -2,7 +2,38 @@
 
 > Use `nextorm.sqlite` for file-based or in-memory SQLite databases; it renders `$name` parameters, `limit`/`offset` paging, `ifnull` coalescing and `strftime` date parts, and registers custom `stdev`/`var` aggregates.
 
-**Prerequisites:** [Provider overview](overview.md) · [Quickstart](../getting-started/02-quickstart.md)
+**Before you begin:** [Provider overview](overview.md) · [Quickstart](../getting-started/02-quickstart.md)
+
+## Registering the provider
+
+Choose the connection-string overload when the context should create and own the connection. Pass an
+existing `DbConnection` when your application owns it. The first example uses a file path; in `DEBUG`
+builds, `UseSqlite(string)` also checks that the file exists:
+
+```csharp
+using NextORM.Core;
+using NextORM.Sqlite;
+
+var builder = new DataContextBuilder().UseSqlite("app.db");
+using var ctx = builder.CreateDataContext();
+```
+
+To reuse a caller-owned connection, pass the connection instead:
+
+```csharp
+using var connection = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=:memory:");
+var builder = new DataContextBuilder().UseSqlite(connection);
+using var ctx = builder.CreateDataContext();
+```
+
+You can also construct the context directly:
+
+```csharp
+using NextORM.Core;
+using NextORM.Sqlite;
+
+using IDataContext ctx = new SqliteDataContext("Data Source=app.db", new DataContextBuilder());
+```
 
 ## Overview
 
@@ -20,34 +51,6 @@ connection it creates, and returns [`Instance`](xref:NextORM.Sqlite.SqliteDialec
   `dayofyear` (`%j`), falling back to ANSI `extract(part from value)` for anything else;
 - `Math.Log` maps to `ln(...)` (SQLite's `log()` is base 10);
 - paging is `limit n` / `limit n offset m`; offset without limit becomes `limit -1 offset m`.
-
-## Registering the provider
-
-Two overloads are available on [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder)
-(`src/nextorm.sqlite/DI/SqliteDataContextOptionsBuilderExtensions.cs`):
-
-```csharp
-using NextORM.Core;
-using NextORM.Sqlite;
-
-// From a file path (the debug build checks that the file exists).
-var byPath = new DataContextBuilder().UseSqlite("app.db");
-
-// From an existing, caller-owned connection.
-using var connection = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=:memory:");
-var byConnection = new DataContextBuilder().UseSqlite(connection);
-
-using var ctx = byPath.CreateDataContext();   // IDataContext
-```
-
-You can also construct the context directly (this is what the provider tests do):
-
-```csharp
-using NextORM.Core;
-using NextORM.Sqlite;
-
-using IDataContext ctx = new SqliteDataContext("Data Source=app.db", new DataContextBuilder());
-```
 
 ## Custom aggregate functions
 

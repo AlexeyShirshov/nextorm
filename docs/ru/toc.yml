@@ -12,16 +12,124 @@
       href: getting-started/03-entities-and-metadata.md
     - name: Внедрение зависимостей
       href: getting-started/04-dependency-injection.md
-- name: Движок
+- name: Руководство по запросам
   items:
-    - name: Обзор
-      href: engine/index.md
-    - name: "Построение запроса: fluent к SQL"
-      href: engine/01-query-pipeline.md
-    - name: Исполнение и строки
-      href: engine/02-execution-and-rows.md
-    - name: Кэш планов и переиспользование
-      href: engine/03-plan-cache-and-reuse.md
+    - name: Основы запросов
+      items:
+        - name: Источники запроса
+          href: guide/01-query-sources.md
+        - name: Проекции
+          href: guide/02-projections.md
+        - name: Фильтрация (WHERE)
+          href: guide/03-filtering-where.md
+        - name: Соединения (JOIN)
+          href: guide/04-joins.md
+        - name: Группировка и агрегаты
+          href: guide/05-grouping-and-aggregates.md
+        - name: Сортировка и постраничный вывод
+          href: guide/06-sorting-and-paging.md
+        - name: Подзапросы
+          href: guide/07-subqueries.md
+        - name: Операции над множествами
+          href: guide/08-set-operations.md
+        - name: SELECT DISTINCT
+          href: guide/09-distinct.md
+    - name: Дополнительные возможности запросов
+      items:
+        - name: Обобщённые табличные выражения (CTE)
+          href: guide/10-cte.md
+        - name: Оконные функции
+          href: guide/11-window-functions.md
+        - name: Пользовательские функции
+          href: guide/12-user-defined-functions.md
+        - name: Табличные функции
+          href: guide/13-table-valued-functions.md
+        - name: Схемы результата табличных функций
+          href: guide/13-tvf-result-schemas.md
+        - name: Сырой SQL
+          href: guide/14-raw-sql.md
+        - name: Хинты запросов
+          href: guide/15-query-hints.md
+        - name: Поддержка JSON в разных провайдерах
+          href: guide/16-json.md
+        - name: ИИ и векторный поиск
+          href: guide/36-ai-and-vector-search.md
+    - name: Изменение данных и транзакции
+      items:
+        - name: Изменение данных (INSERT)
+          href: guide/17-insert-statement.md
+        - name: Изменение данных (DELETE)
+          href: guide/18-delete-statement.md
+        - name: Изменение данных (UPDATE)
+          href: guide/19-update-statement.md
+        - name: Материализация запроса в таблицу
+          href: guide/20-create-table-as.md
+        - name: Изменение данных (MERGE)
+          href: guide/21-merge-statement.md
+        - name: Массовая вставка (bulk)
+          href: guide/22-bulk-insert.md
+        - name: Транзакции
+          href: guide/23-transactions.md
+        - name: Пакетное выполнение SQL-команд
+          href: guide/25-sql-batch.md
+        - name: Оптимистичная конкурентность и отслеживание изменений
+          href: guide/26-optimistic-concurrency.md
+    - name: Сопоставление и передача данных
+      items:
+        - name: Колонки-длительности (TimeSpan)
+          href: guide/24-duration-columns.md
+        - name: Диапазоны в паре столбцов
+          href: guide/27-range-columns.md
+        - name: Потоковое чтение больших объектов (BLOB/CLOB)
+          href: guide/28-large-objects.md
+        - name: Динамические колонки
+          href: guide/29-dynamic-columns.md
+        - name: Потоковое сохранение данных
+          href: guide/30-streaming-data.md
+        - name: Наследование и производные сущности
+          href: guide/32-inheritance-and-derived-entities.md
+        - name: Сопоставление данных для разных арендаторов
+          href: guide/33-runtime-mapping-variant.md
+        - name: Маршрутизация данных по топологиям
+          href: guide/34-routing-data-to-topologies.md
+        - name: Шардирование и горизонтальное партиционирование
+          href: guide/35-sharding-and-horizontal-partitioning.md
+    - name: Возможности и SQL провайдеров
+      items:
+        - name: Специфичные для провайдеров возможности
+          href: guide/31-provider-specific-features.md
+        - name: Специфичный для провайдеров SQL
+          items:
+            - name: Обзор
+              href: guide/provider-specific-sql/overview.md
+            - name: ClickHouse
+              href: guide/provider-specific-sql/clickhouse.md
+            - name: PostgreSQL
+              href: guide/provider-specific-sql/postgresql.md
+            - name: SQL Server
+              href: guide/provider-specific-sql/sqlserver.md
+            - name: MySQL и MariaDB
+              href: guide/provider-specific-sql/mysql.md
+            - name: SQLite
+              href: guide/provider-specific-sql/sqlite.md
+- name: Настройка провайдеров
+  items:
+    - name: Обзор провайдеров
+      href: connecting-providers/overview.md
+    - name: SQLite
+      href: connecting-providers/sqlite.md
+    - name: SQL Server
+      href: connecting-providers/sqlserver.md
+    - name: PostgreSQL
+      href: connecting-providers/postgres.md
+    - name: MySQL
+      href: connecting-providers/mysql.md
+    - name: MariaDB
+      href: connecting-providers/mariadb.md
+    - name: ClickHouse
+      href: connecting-providers/clickhouse.md
+    - name: In-memory
+      href: connecting-providers/in-memory.md
 - name: Связи
   items:
     - name: Связи и однозапросная загрузка
@@ -32,98 +140,8 @@
       href: relationships/eager-loading.md
     - name: Постраничная выборка на родителя при жадной загрузке
       href: relationships/eager-loading-per-parent-paging.md
-    - name: Слоты коллекционной проекции
+    - name: Коллекции в результатах запроса
       href: relationships/collection-projection.md
-- name: Руководство
-  items:
-    - name: Источники запроса
-      href: guide/01-query-sources.md
-    - name: Проекции
-      href: guide/02-projections.md
-    - name: Фильтрация (WHERE)
-      href: guide/03-filtering-where.md
-    - name: Соединения (JOIN)
-      href: guide/04-joins.md
-    - name: Группировка и агрегаты
-      href: guide/05-grouping-and-aggregates.md
-    - name: Сортировка и постраничный вывод
-      href: guide/06-sorting-and-paging.md
-    - name: Подзапросы
-      href: guide/07-subqueries.md
-    - name: Операции над множествами
-      href: guide/08-set-operations.md
-    - name: SELECT DISTINCT
-      href: guide/09-distinct.md
-    - name: Обобщённые табличные выражения (CTE)
-      href: guide/10-cte.md
-    - name: Оконные функции
-      href: guide/11-window-functions.md
-    - name: Пользовательские функции
-      href: guide/12-user-defined-functions.md
-    - name: Табличные функции
-      href: guide/13-table-valued-functions.md
-    - name: Схемы результата табличных функций
-      href: guide/13-tvf-result-schemas.md
-    - name: Сырой SQL
-      href: guide/14-raw-sql.md
-    - name: Хинты запросов
-      href: guide/15-query-hints.md
-    - name: Поддержка JSON в разных провайдерах
-      href: guide/16-json.md
-    - name: Изменение данных (INSERT)
-      href: guide/17-insert-statement.md
-    - name: Изменение данных (DELETE)
-      href: guide/18-delete-statement.md
-    - name: Изменение данных (UPDATE)
-      href: guide/19-update-statement.md
-    - name: Материализация запроса в таблицу
-      href: guide/20-create-table-as.md
-    - name: Изменение данных (MERGE)
-      href: guide/21-merge-statement.md
-    - name: Массовая вставка (bulk)
-      href: guide/22-bulk-insert.md
-    - name: Транзакции
-      href: guide/23-transactions.md
-    - name: Колонки-длительности (TimeSpan)
-      href: guide/24-duration-columns.md
-    - name: Выполнение утверждений одним батчем
-      href: guide/25-sql-batch.md
-    - name: Оптимистичная конкурентность и отслеживание изменений
-      href: guide/26-optimistic-concurrency.md
-    - name: Range-колонки (пара скалярных колонок)
-      href: guide/27-range-columns.md
-    - name: Потоковое чтение больших объектов (BLOB/CLOB)
-      href: guide/28-large-objects.md
-    - name: Динамические колонки
-      href: guide/29-dynamic-columns.md
-    - name: Потоковое сохранение данных
-      href: guide/30-streaming-data.md
-    - name: Специфичные для провайдеров возможности
-      href: guide/31-provider-specific-features.md
-    - name: Наследование и производные сущности
-      href: guide/32-inheritance-and-derived-entities.md
-    - name: Вариант сопоставления времени выполнения (multi-tenancy)
-      href: guide/33-runtime-mapping-variant.md
-    - name: Маршрутизация данных по топологиям
-      href: guide/34-routing-data-to-topologies.md
-    - name: Шардирование и горизонтальное партиционирование
-      href: guide/35-sharding-and-horizontal-partitioning.md
-    - name: ИИ и векторный поиск
-      href: guide/36-ai-and-vector-search.md
-    - name: Специфичный для провайдеров SQL
-      items:
-        - name: Обзор
-          href: guide/provider-specific-sql/overview.md
-        - name: ClickHouse
-          href: guide/provider-specific-sql/clickhouse.md
-        - name: PostgreSQL
-          href: guide/provider-specific-sql/postgresql.md
-        - name: SQL Server
-          href: guide/provider-specific-sql/sqlserver.md
-        - name: MySQL и MariaDB
-          href: guide/provider-specific-sql/mysql.md
-    - name: SQLite
-      href: guide/provider-specific-sql/sqlite.md
 - name: Инфраструктура
   items:
     - name: Подключения
@@ -136,7 +154,7 @@
       href: infrastructure/04-logging.md
     - name: NativeAOT
       href: infrastructure/05-nativeaot.md
-- name: Скалярные функции
+- name: Справочник скалярных функций
   items:
     - name: Обзор
       href: scalar-functions/index.md
@@ -162,27 +180,9 @@
       href: scalar-functions/10-sequences.md
 - name: Культуронезависимое форматирование строк
   href: string-format-invariant-provider.md
-- name: Подключение провайдеров
-  items:
-    - name: Обзор провайдеров
-      href: connecting-providers/overview.md
-    - name: SQLite
-      href: connecting-providers/sqlite.md
-    - name: SQL Server
-      href: connecting-providers/sqlserver.md
-    - name: PostgreSQL
-      href: connecting-providers/postgres.md
-    - name: MySQL
-      href: connecting-providers/mysql.md
-    - name: MariaDB
-      href: connecting-providers/mariadb.md
-    - name: ClickHouse
-      href: connecting-providers/clickhouse.md
-    - name: In-memory
-      href: connecting-providers/in-memory.md
 - name: Сравнения
   href: comparisons/
-- name: Продвинутое
+- name: Дополнительные темы
   items:
     - name: Глобальные фильтры запросов
       href: advanced/query-filters.md
@@ -198,3 +198,13 @@
       href: advanced/extensions-package.md
     - name: Краткий справочник API
       href: advanced/api-reference.md
+- name: Внутреннее устройство движка
+  items:
+    - name: Обзор
+      href: engine/index.md
+    - name: "Построение запроса: fluent к SQL"
+      href: engine/01-query-pipeline.md
+    - name: Исполнение и строки
+      href: engine/02-execution-and-rows.md
+    - name: Кэш планов и переиспользование
+      href: engine/03-plan-cache-and-reuse.md

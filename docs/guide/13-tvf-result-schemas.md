@@ -7,10 +7,10 @@
 
 ## Dynamic result schema
 
-A table function whose result shape is supplied by the caller gets it from the factory's row type — the
-`T` of `TvfEntityBuilder<T>`. nextorm renders the matching native column list from that type's `[Column]`
-metadata and CLR property types, and every provider form is expressed by
-[`TableFunctionSchema`](xref:NextORM.Core.TableFunctionSchema) on the descriptor:
+When a table function needs caller-declared output columns, describe them in the factory's row type —
+the `T` in `TvfEntityBuilder<T>`. nextorm uses that type's `[Column]` metadata and CLR property types
+to render the provider's column list. Set [`TableFunctionSchema`](xref:NextORM.Core.TableFunctionSchema)
+on the descriptor to choose where that list appears in SQL:
 
 ```csharp
 public TvfEntityBuilder(
@@ -22,12 +22,14 @@ public TvfEntityBuilder(
     TableFunctionSchema resultSchema);
 ```
 
-The rows still materialise into the same `[Column]`-annotated DTO as any other table function — there is
-no separate dynamic reader — and the declared schema is part of the query plan key, so two row shapes
-never share a cached plan. `None` is the default and renders nothing: the function supplies its own
-result shape.
+Rows materialise into the same `[Column]`-annotated DTO as rows from any other table function; there is
+no separate dynamic reader. The declared schema also forms part of the query-plan key, so different row
+types do not share a cached plan. Use `None` when the function already supplies its result shape. This
+is the default and renders no schema.
 
 ## Where the schema is rendered
+
+Choose the form that matches the SQL syntax the function requires:
 
 | `ResultSchema` | Rendered form | Provider |
 |---|---|---|
@@ -35,8 +37,8 @@ result shape.
 | `LeadingArgument` | a quoted structure string as the first call argument: `values('a UInt8, b String', (1,'x'))` | ClickHouse |
 | `AliasColumnList` | an alias column-definition list: `jsonb_to_recordset(@json) as "t1"(a integer, b text)` | PostgreSQL |
 
-ClickHouse `values` reads a literal table from a tuple list; the `tuples` argument is emitted verbatim, so
-it is developer-authored SQL only — never build it from user input:
+ClickHouse `values` reads a literal table from a tuple list. The `tuples` argument is emitted verbatim,
+so it must contain developer-authored SQL; never build it from user input:
 
 ```csharp
 public interface IPairRow
@@ -58,8 +60,8 @@ select a, b
  from values('a UInt8, b String', (1, 'x'), (2, 'y')) as `t1`
 ```
 
-PostgreSQL's `jsonb_to_record`/`jsonb_to_recordset` expand a JSON object/array into a record whose columns
-are declared by the row type:
+PostgreSQL's `jsonb_to_record`/`jsonb_to_recordset` expand a JSON object or array into a record. The row
+type declares its columns:
 
 ```csharp
 public interface IPairRow
@@ -88,10 +90,10 @@ The column types come from the provider's CLR-to-SQL type mapping (`byte`→`UIn
 
 ## Provider restrictions
 
-A provider opts into the specific form it can express
-([`SupportsResultSchema(TableFunctionSchema)`](xref:NextORM.Core.ISqlDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema)));
-a declared form the provider does not implement is rejected with `NotSupportedException` — it is never
-emitted as SQL without the column list.
+Each provider opts into the result-schema forms it can express through
+[`SupportsResultSchema(TableFunctionSchema)`](xref:NextORM.Core.ISqlDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema)).
+If a query declares an unsupported form, nextorm throws `NotSupportedException`. It does not emit the call
+without its required column list.
 
 | Provider | `None` | `LeadingArgument` | `AliasColumnList` |
 |---|---|---|---|

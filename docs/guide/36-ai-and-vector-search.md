@@ -1,8 +1,8 @@
 # AI and vector search
 
-For developers building semantic search or retrieval-augmented generation (RAG) with nextorm, this guide
-shows you how to store embeddings produced by external models and retrieve the nearest documents with the
-shared vector-search API. nextorm handles database storage and search only; it does not generate
+This guide is for developers building semantic search or retrieval-augmented generation (RAG) with
+nextorm. Use it to store embeddings produced by external models and retrieve the nearest documents with
+the shared vector-search API. nextorm handles database storage and search only; it does not generate
 embeddings, integrate with embedding models or large language models (LLMs), or build prompts.
 
 ## Before you begin
@@ -46,12 +46,15 @@ Expected output:
 3; 3
 ```
 
-The constructor copies its `IEnumerable<float>` and rejects `NaN` and infinity; it throws
+### Validate vector values
+
+The constructor copies its `IEnumerable<float>`, rejects `NaN` and infinity, and throws
 `ArgumentNullException` for a null input. `Parse` accepts a bracketed, comma-separated list of finite
-single-precision numbers, using invariant number formatting; malformed input throws `FormatException`.
-An empty vector can be constructed or parsed, but it cannot be used as a search query: `VectorSearch`
+single-precision numbers in invariant number format; malformed input throws `FormatException`.
+
+You can construct or parse an empty vector, but you cannot use it as a search query: `VectorSearch`
 requires at least one dimension. The query vector must also match the mapped vector column's type and
-dimension; the database may reject a mismatch with its stored vectors.
+dimension. The database may reject a query whose dimensions do not match its stored vectors.
 
 ### Vector equality and hashing
 
@@ -159,9 +162,11 @@ var distances = context.From<Document>()
 
 ## Map entities and store embeddings
 
-Map a vector property as part of the entity, just as you map its other columns. The dimension in the
-database schema must match the embedding model's output. For example, this illustrative entity has
-three coordinates; real models commonly use a different fixed dimension:
+### Map the vector column
+
+Map the vector property like any other entity column. Set the database column's dimension to match the
+embedding model's output. The example uses three coordinates for illustration; real models commonly use a
+different fixed dimension:
 
 ```csharp
 public sealed class Document
@@ -174,9 +179,11 @@ public sealed class Document
 }
 ```
 
-Assume `category` and `body` contain the document data and `embeddingValues` is an
-`IEnumerable<float>` returned by an embedding service outside nextorm. Wrap it in `Vector` and use the
-normal insert builder:
+### Store a document and its embedding
+
+Assume `category` and `body` contain the document data, and `embeddingValues` is an `IEnumerable<float>`
+returned by an embedding service outside nextorm. Wrap the values in `Vector`, then use the ordinary insert
+builder:
 
 ```csharp
 var document = new Document

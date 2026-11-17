@@ -5,9 +5,9 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Semantic equality comparer for expressions, distinct from the value-free plan comparer:
-/// literals compare by value, source parameters are alpha-equivalent, closure targets compare by
-/// reference identity plus member path, and unknown nodes are conservatively unequal. No captured
-/// value is evaluated.
+/// literals compare by value, parameter expressions compare equal when their types match, closure
+/// targets compare by reference identity plus member path, and unknown nodes are conservatively
+/// unequal. No captured value is evaluated.
 /// </summary>
 public sealed class SemanticExpressionEqualityComparer : IEqualityComparer<Expression>
 {

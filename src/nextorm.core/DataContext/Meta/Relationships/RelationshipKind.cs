@@ -34,8 +34,8 @@ public enum RelationshipKind
     OneToOne,
 
     /// <summary>
-    /// Two collection navigations joined through a junction. Represented by the model but not creatable
-    /// through the slice-A fluent API; loading it is rejected in a later slice.
+    /// A many-to-many relationship between collection navigations. Fluent declarations use
+    /// <c>HasManyThrough</c> with an explicit junction entity.
     /// </summary>
     ManyToMany,
 }

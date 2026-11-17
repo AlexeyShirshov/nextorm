@@ -16,7 +16,7 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
 {
     private readonly Type _realType;
     //private readonly bool _nullable;
-    /// <summary>Whether the CLR type can hold <c>null</c> (a reference type or a <see cref="Nullable{T}"/>).</summary>
+    /// <summary>Whether this column's type is treated as nullable: a class type or <see cref="Nullable{T}"/>.</summary>
     public readonly bool Nullable;
     /// <summary>The zero-based ordinal of the column in the result set.</summary>
     public int Index { get; set; }
@@ -209,8 +209,8 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     // internal int XxHash32;
     internal int PlanHashCode;
 
-    /// <summary>Gets the reader accessor that reads a value of this column's type from a data record.</summary>
-    /// <returns>The <see cref="MethodInfo"/> of the matching <see cref="IDataRecord"/> getter.</returns>
+    /// <summary>Gets the reader accessor selected for this column's provider type, or its CLR type when no provider type is set.</summary>
+    /// <returns>The reflected reader method used to read the column value.</returns>
     public MethodInfo GetDataRecordMethod() => GetLegacyDataRecordMethod(ProviderType ?? _realType);
 
     /// <summary>

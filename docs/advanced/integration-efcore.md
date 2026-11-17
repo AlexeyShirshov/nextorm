@@ -16,7 +16,8 @@ This lets you keep writes, change tracking and navigation fixup in EF Core while
 
 ## Requirements
 
-- EF Core **Relational** (`Microsoft.EntityFrameworkCore.Relational`) with one of the supported providers: `Npgsql.EntityFrameworkCore.PostgreSQL`, `Microsoft.EntityFrameworkCore.SqlServer`, `Pomelo.EntityFrameworkCore.MySql` (MySQL and MariaDB), Oracle's `MySql.EntityFrameworkCore` (MySQL) or `Microsoft.EntityFrameworkCore.Sqlite`. Both MySQL providers are recognised; because Pomelo has no EF Core 10 release yet, the MySQL shared-transaction path is verified through Oracle's `MySql.EntityFrameworkCore` 10.x (ADO.NET driver `MySql.Data`) — see [Shared connection and transaction](#shared-connection-and-transaction).
+- EF Core **Relational** (`Microsoft.EntityFrameworkCore.Relational`) and one supported provider: `Npgsql.EntityFrameworkCore.PostgreSQL`, `Microsoft.EntityFrameworkCore.SqlServer`, `Pomelo.EntityFrameworkCore.MySql` (MySQL and MariaDB), Oracle's `MySql.EntityFrameworkCore` (MySQL), or `Microsoft.EntityFrameworkCore.Sqlite`.
+- Both MySQL providers are recognised. Because Pomelo has no EF Core 10 release, the shared-transaction path is verified with Oracle's `MySql.EntityFrameworkCore` 10.x and its `MySql.Data` ADO.NET driver. See [Shared connection and transaction](#shared-connection-and-transaction).
 - The `nextorm.entityframeworkcore` package; it references `nextorm.core` and the four provider packages, so no separate nextorm provider reference is needed for the mapping.
 - EF's non-relational `InMemory` provider is not supported (see [Limitations](#limitations)).
 
@@ -166,7 +167,13 @@ await tx.RollbackAsync(ct);
 next.From<Row>().Where(r => r.Name == "pending").ToList(); // empty
 ```
 
-The shared connection/transaction path is verified end-to-end by container-backed integration tests on **PostgreSQL**, **SQL Server** and **MySQL**, and by local tests on **SQLite**. On PostgreSQL, SQL Server and MySQL the public `CreateNextOrmContext()` bridge is exercised against a live server: nextorm borrows the exact `DbConnection` EF owns, sees EF's uncommitted rows inside an open transaction, an EF rollback discards them, a nextorm `CreateInsertBuilder` run inside EF's transaction is visible to EF and then commits or rolls back with it, and disposing the nextorm context leaves EF's connection open and EF's transaction active. On SQLite the tests cover seeing EF's uncommitted rows and an EF rollback discarding them. Verifying PostgreSQL, SQL Server and MySQL requires running the integration suite against provisioned containers (Testcontainers); the SQLite cases run without one.
+Container-backed integration tests exercise the public `CreateNextOrmContext()` bridge against live **PostgreSQL**, **SQL Server**, and **MySQL** servers. They confirm that nextorm:
+
+- borrows the exact `DbConnection` owned by EF and sees EF's uncommitted rows;
+- writes rows through `CreateInsertBuilder` that EF can see, with the write committed or rolled back with EF's transaction; and
+- leaves EF's connection open and transaction active when you dispose the nextorm context.
+
+SQLite tests verify visibility of EF's uncommitted rows and that an EF rollback removes them. The PostgreSQL, SQL Server, and MySQL tests require provisioned Testcontainers; the SQLite tests do not.
 
 > **MySQL is verified through Oracle's provider.** Because `Pomelo.EntityFrameworkCore.MySql` has no EF Core 10 release (its latest 9.0.0 targets EF Core 9), the container-backed MySQL tests run on EF Core 10 with Oracle's `MySql.EntityFrameworkCore` 10.0.9 and its `MySql.Data` ADO.NET driver. The bridge recognises both provider names — `Pomelo.EntityFrameworkCore.MySql` and `MySql.EntityFrameworkCore`; to serve the second driver, `nextorm.mysql` creates its parameters through the executing command (`command.CreateParameter()`), leaving the normal `MySqlConnector` path unchanged. Sharing EF's transaction with MySQL is therefore verified, not pending. MariaDB is served by Pomelo's provider only.
 
