@@ -1410,7 +1410,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// This overload builds the second operand from <typeparamref name="TEntity"/>, projects it with
     /// <paramref name="selector"/>, and combines it with this command using <c>UNION</c>. If a
     /// <see langword="null"/> literal is ambiguous, cast it to
-    /// <see cref="Expression{Func{TEntity, TResult}}"/> to select this overload; it then throws
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> to select this overload; it then throws
     /// <see cref="ArgumentNullException"/>. Cast to <see cref="QueryCommand{TResult}"/> to select the
     /// command overload.
     /// </remarks>
@@ -1432,7 +1432,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// This overload builds the second operand from <typeparamref name="TEntity"/>, projects it with
     /// <paramref name="selector"/>, and combines it with this command using <c>UNION ALL</c>. If a
     /// <see langword="null"/> literal is ambiguous, cast it to
-    /// <see cref="Expression{Func{TEntity, TResult}}"/> to select this overload; it then throws
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> to select this overload; it then throws
     /// <see cref="ArgumentNullException"/>. Cast to <see cref="QueryCommand{TResult}"/> to select the
     /// command overload.
     /// </remarks>
@@ -1454,7 +1454,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// This overload builds the second operand from <typeparamref name="TEntity"/>, projects it with
     /// <paramref name="selector"/>, and combines it with this command using <c>INTERSECT</c>. If a
     /// <see langword="null"/> literal is ambiguous, cast it to
-    /// <see cref="Expression{Func{TEntity, TResult}}"/> to select this overload; it then throws
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> to select this overload; it then throws
     /// <see cref="ArgumentNullException"/>. Cast to <see cref="QueryCommand{TResult}"/> to select the
     /// command overload.
     /// </remarks>
@@ -1476,7 +1476,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// This overload builds the second operand from <typeparamref name="TEntity"/>, projects it with
     /// <paramref name="selector"/>, and combines it with this command using <c>INTERSECT ALL</c>. If a
     /// <see langword="null"/> literal is ambiguous, cast it to
-    /// <see cref="Expression{Func{TEntity, TResult}}"/> to select this overload; it then throws
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> to select this overload; it then throws
     /// <see cref="ArgumentNullException"/>. Cast to <see cref="QueryCommand{TResult}"/> to select the
     /// command overload.
     /// </remarks>
@@ -1498,7 +1498,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// This overload builds the second operand from <typeparamref name="TEntity"/>, projects it with
     /// <paramref name="selector"/>, and combines it with this command using <c>EXCEPT</c>. If a
     /// <see langword="null"/> literal is ambiguous, cast it to
-    /// <see cref="Expression{Func{TEntity, TResult}}"/> to select this overload; it then throws
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> to select this overload; it then throws
     /// <see cref="ArgumentNullException"/>. Cast to <see cref="QueryCommand{TResult}"/> to select the
     /// command overload.
     /// </remarks>
@@ -1520,7 +1520,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// This overload builds the second operand from <typeparamref name="TEntity"/>, projects it with
     /// <paramref name="selector"/>, and combines it with this command using <c>EXCEPT ALL</c>. If a
     /// <see langword="null"/> literal is ambiguous, cast it to
-    /// <see cref="Expression{Func{TEntity, TResult}}"/> to select this overload; it then throws
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> to select this overload; it then throws
     /// <see cref="ArgumentNullException"/>. Cast to <see cref="QueryCommand{TResult}"/> to select the
     /// command overload.
     /// </remarks>

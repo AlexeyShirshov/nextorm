@@ -62,7 +62,7 @@ public sealed class WindowFunction<T>
     /// <summary>
     /// Completes the window function with multiple ordered keys. Use this for mixed <c>asc</c>/<c>desc</c>
     /// ordering or more than one key. To supply partition keys as well, use
-    /// <see cref="Over(Expression{Func{object?}}[]?, WindowOrder[]?, WindowFrame?)"/>.
+    /// <c>Over(partitionBy, orderBy, frame)</c>.
     /// </summary>
     public T Over(WindowOrder[] orderBy, WindowFrame? frame = null) => default!;
 
