@@ -42,17 +42,17 @@
     "multimodalWarnings": 6
   },
   "reportsSha256": {
-    "NextORM.Benchmark.SqliteBenchmarkProjection-report-github.md": "9c9125a0a27e5866880ce7d1cd7cb26acfdd69002b3940f4baa0d5a691e5d2f6",
-    "NextORM.Benchmark.SqliteBenchmarkProjection-report.csv": "b2d88648a26f3a0a9a64b17c286f97fc495ed8a6eafd08580881a1ce2562a846",
-    "NextORM.Benchmark.SqliteBenchmarkAggregates-report-github.md": "20ceae1d76cc9f77bd1f66b1d5478868108d52d297020f1773317e364e13b7ae",
-    "NextORM.Benchmark.SqliteBenchmarkAggregates-report.csv": "9f1dfe7c87eff1552ddc96f125f64bae96301f9604c70b029fb0fb1ad18d97bc",
-    "NextORM.Benchmark.SqliteBenchmarkPaging-report-github.md": "30f9774315f47c412f5dc97a4bb2ec370d1df70b69a09f63dd04a0a47aefa3a1",
-    "NextORM.Benchmark.SqliteBenchmarkPaging-report.csv": "b14553293f967f06bc7841a2e33853f407957455aef40ef17f88a41d191ee0fc",
-    "NextORM.Benchmark.SqliteBenchmarkStreaming-report-github.md": "9c0085da3399be66a334da1f602958d93e513187618d04e5c16d5a6a3dd105a1",
-    "NextORM.Benchmark.SqliteBenchmarkStreaming-report.csv": "5cc6576505c5643050a8d0a035429d2e23b77350b330b6a57ae1a638bd4f60f4",
-    "NextORM.Benchmark.SqliteBenchmarkWriteJson-report-github.md": "3c89b698f72ba8f440e66a5d402ffad285a30e91353e572487695ce2421a705b",
-    "NextORM.Benchmark.SqliteBenchmarkWriteJson-report.csv": "bb5c76b8e5d5f22b07a9e64cc743ef3dfaa63a4cf9415f60093177bbef1fdb9a",
-    "NextORM.Benchmark.SqliteBenchmarkCsv-report-github.md": "0de8b8426b0aaa63203d2c6194236d66986566f8eb51f8cfb2e126cda29a7f8e",
-    "NextORM.Benchmark.SqliteBenchmarkCsv-report.csv": "dd2b061996d2c6d72ec3af4c6db9ed35f37fa94117c31da39dedebf8e96fa57a"
+    "NextORM.Benchmark.SqliteBenchmarkProjection-report-github.md": "7f940d4466aa3f016c454b6c8042f22ef469d60b24daf0d0c36d68b6c0509419",
+    "NextORM.Benchmark.SqliteBenchmarkProjection-report.csv": "14f62e4bb475ef7e7ba03be84192b4a2b4c21a8964bd13a716f2904686a8f556",
+    "NextORM.Benchmark.SqliteBenchmarkAggregates-report-github.md": "5af52f4b1254b37650fbf7375a6c7400defd6eb5d9ce5c6cdbb2c6ea052ad3cb",
+    "NextORM.Benchmark.SqliteBenchmarkAggregates-report.csv": "310d2a458218d38704eb9d4f8d332875c61ba8f893181d954b53d364ee6afad9",
+    "NextORM.Benchmark.SqliteBenchmarkPaging-report-github.md": "ea25013d31994bf08a200673603d4b1bfc8f5ffcea22a42ffffad37675724924",
+    "NextORM.Benchmark.SqliteBenchmarkPaging-report.csv": "ade4e33b6440995bbdfdc0fbd40ab16cd989bb26e746b21a64f36a546798f5aa",
+    "NextORM.Benchmark.SqliteBenchmarkStreaming-report-github.md": "a99afa1eed87c7415c1d27e3438a782c7065648a814d22c9bd8b6098f0eabe13",
+    "NextORM.Benchmark.SqliteBenchmarkStreaming-report.csv": "f69d7a72d3f795186f793ad2eedca1afaf67747969e2d2b26440a4f09d26d393",
+    "NextORM.Benchmark.SqliteBenchmarkWriteJson-report-github.md": "4b9629e07a7f55d7b419323a02b9d523e479352c60b50ff23a5bd3faedf8783e",
+    "NextORM.Benchmark.SqliteBenchmarkWriteJson-report.csv": "18857792e889eea6e5e71f3dd1e1479108e3ca2c5b774617705e3bd66fc600a2",
+    "NextORM.Benchmark.SqliteBenchmarkCsv-report-github.md": "99d7ec6a965a65c6d91b371aa710a034d04008324ad225f832fc6bf31e972765",
+    "NextORM.Benchmark.SqliteBenchmarkCsv-report.csv": "5d521335af5fd58ef3cf8cdf3437d8c10ec8552a9115e851277fc7da21159219"
   }
 }

@@ -380,6 +380,23 @@ class Tier1TableTests(unittest.TestCase):
         self.assertEqual(len(blocks["tier1-write-json"].splitlines()), 13)
         self.assertEqual(len(blocks["tier1-csv"].splitlines()), 10)
 
+    def test_tier1_hash_manifest_accepts_lf_and_crlf_reports(self):
+        for line_ending in (b"\n", b"\r\n"):
+            with self.subTest(line_ending=line_ending), tempfile.TemporaryDirectory() as temp:
+                results = Path(temp)
+                for filename in tables.TIER1_REQUIRED_REPORTS:
+                    report = tables.DEFAULT_RESULTS_DIR / filename
+                    report_bytes = report.read_bytes().replace(b"\r\n", b"\n")
+                    if line_ending == b"\r\n":
+                        report_bytes = report_bytes.replace(b"\n", b"\r\n")
+                    (results / filename).write_bytes(report_bytes)
+                shutil.copy2(
+                    tables.DEFAULT_RESULTS_DIR / tables.TIER1_RUN_METADATA,
+                    results / tables.TIER1_RUN_METADATA,
+                )
+
+                tables.build_tier1_blocks(results, "en")
+
     def test_tier1_hash_manifest_rejects_a_changed_report(self):
         with tempfile.TemporaryDirectory() as temp:
             results = Path(temp)

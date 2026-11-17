@@ -387,7 +387,9 @@ python3 tools/benchmarks/update_benchmark_tables.py --check  # CI mode: fail whe
 Tier-1 uses the Projection, Aggregates, Paging, Streaming, WriteJson, Csv reports and their
 `tier1-run.json` sidecar under `benchmarks/BenchmarkDotNet.Artifacts/results/`. The current workflow
 refreshes the end-to-end tables and Category A/B; refresh Tier-1 after a separate run of those classes
-and update the sidecar's run date and report hashes.
+and update the sidecar's run date and report hashes. Each report hash is computed after replacing CRLF
+line endings with LF, so checkout line-ending settings do not affect validation; all other report bytes
+remain covered by the hash.
 
 The same end-to-end refresh runs from `.github/workflows/benchmarks.yml` — automatically after every
 merge into `main` that touches the engine (`src/**`) or the benchmark project, and on demand from the

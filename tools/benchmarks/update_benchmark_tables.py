@@ -951,7 +951,10 @@ def _tier1_run_metadata(results_dir: Path, measurements: dict) -> dict:
         report_path = results_dir / filename
         if not report_path.is_file():
             raise TableError(f"missing Tier-1 report required by {path.name}: {filename}")
-        actual_hash = hashlib.sha256(report_path.read_bytes()).hexdigest()
+        # Reports are text files; normalize CRLF so Git checkout settings do not
+        # invalidate their hashes. All other report bytes remain covered.
+        report_bytes = report_path.read_bytes().replace(b"\r\n", b"\n")
+        actual_hash = hashlib.sha256(report_bytes).hexdigest()
         if actual_hash != hashes[filename]:
             raise TableError(
                 f"{filename}: SHA-256 differs from {path.name}; refresh Tier-1 run metadata "
