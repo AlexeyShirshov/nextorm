@@ -5,8 +5,8 @@ namespace NextORM.Core;
 /// <c>SELECT ... INTO</c> (SQL Server) or <c>CREATE TABLE ... ENGINE = MergeTree ... AS SELECT</c>
 /// (ClickHouse). The row shape is taken from the query's projection; the created table is addressed later
 /// with <see cref="DataContextExtensions.From(IDataContext, string)"/>. Unlike a common table expression,
-/// which is reusable only within one statement, the materialised table is reusable across subsequent
-/// queries on the same connection.
+/// which is reusable only within one statement, the created table can be reused by later
+/// queries. Temporary tables remain session-scoped, as described below.
 /// <para>
 /// The temporary form (<c>ToTempTable</c>) is session-scoped: create and read it on one context (one
 /// connection). It is available on PostgreSQL, SQLite, MySQL and MariaDB only — SQL Server has no
@@ -453,7 +453,17 @@ public static class TempTableExtensions
     // validated and the options checked by BuildCommand, and the create is rendered (validated) before
     // this runs, so the drop is only issued once the create is known to be executable.
     private static DropTableCommand BuildDropCommand<TResult>(QueryCommand<TResult> source, string name)
-        => new(name, source.QuoteIdentifiers, source.KeywordCase);
+    {
+        // The drop addresses the same literal target as the materialisation, so it has to run where that
+        // materialisation runs: under the source's scope and routed by the source's own entities.
+        var command = new DropTableCommand(name, source.QuoteIdentifiers, source.KeywordCase)
+        {
+            MappingVariant = source.MappingVariant,
+            RouteSources = CommandRouteSources.Collect(source),
+        };
+
+        return command;
+    }
 
     // Renders the drop + create pair a DropExisting materialisation executes, for the diagnostic
     // ToTableSql/ToTempTableSql form.

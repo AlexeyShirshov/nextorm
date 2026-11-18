@@ -96,6 +96,7 @@ public sealed class PostgresTestProvider : ITestProvider
         -- tests, so the extension has to exist before any test prepares such a query. Creating it
         -- during seeding keeps those tests independent of one another (and of test order).
         create extension if not exists pgcrypto;
+        create extension if not exists vector;
 
         drop table if exists complex_entity;
         drop table if exists binary_entity;

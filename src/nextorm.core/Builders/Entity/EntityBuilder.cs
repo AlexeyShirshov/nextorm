@@ -19,7 +19,7 @@ namespace NextORM.Core;
 /// <c>IDataContext.From&lt;TEntity&gt;()</c>.
 /// </summary>
 /// <typeparam name="TEntity">The mapped entity type the query projects.</typeparam>
-public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncEnumerable<TEntity>
+public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, IQueryCommandSource, IAggregateProjectionHost //IAsyncEnumerable<TEntity>
 {
     // private const string AnyCommandProperty = "NextORM.Core.AnyCommand";
     #region Fields
@@ -33,6 +33,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     private QueryCommand? _query;
     private Expression<Func<TEntity, bool>>? _condition;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
+    private MappingVariant _mappingVariant = MappingVariant.Default;
     private LambdaExpression? _group;
     private LimitByClause? _limitBy
     {
@@ -486,6 +487,71 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// the join chain can hand the pre-join builder's scope to its joined projection builder.
     /// </summary>
     internal QueryFilterScope FilterScope { get => _filterScope; set => _filterScope = value; }
+    /// <summary>Returns a copy of this builder bound to the supplied runtime mapping variant.</summary>
+    /// <param name="variant">The mapping variant used to resolve metadata for this query.</param>
+    /// <returns>A builder that carries <paramref name="variant"/> into its query command.</returns>
+    public EntityBuilder<TEntity> WithVariant(MappingVariant variant)
+    {
+        if (_mappingVariant == variant)
+            return this;
+
+        var copy = Clone();
+        copy._mappingVariant = variant;
+        return copy;
+    }
+    /// <summary>
+    /// Returns a builder routed to the shard selected by the supplied shard-key values.
+    /// </summary>
+    /// <param name="shardKeyValues">The shard-key values in the order the entity declares them.</param>
+    /// <returns>A builder that carries the resolved shard scope into its query command.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The context has no shard router or the entity type is not sharded.
+    /// </exception>
+    public EntityBuilder<TEntity> WithShardKey(params object?[] shardKeyValues)
+    {
+        if (_dataProvider is not DataContext dataContext || dataContext.EntityVariantResolver is not IShardRouter router)
+            throw new InvalidOperationException("WithShardKey requires a context configured with a shard router.");
+
+        if (!router.IsSharded(typeof(TEntity)))
+            throw new InvalidOperationException($"Entity '{typeof(TEntity)}' does not declare a shard key.");
+
+        return WithVariant(router.ResolveShard(typeof(TEntity), shardKeyValues));
+    }
+    /// <summary>
+    /// Starts a client-side fan-out that runs this query once per bucket and returns one result vector
+    /// per bucket.
+    /// </summary>
+    /// <param name="parallelism">
+    /// The maximum number of shards queried at once; <see langword="null"/> uses the number of shards.
+    /// Buckets that share a shard always run sequentially on that shard's connection.
+    /// </param>
+    /// <returns>A fan-out query returning one vector (or scalar) per bucket.</returns>
+    /// <exception cref="InvalidOperationException">The context has no shard router or no shard is configured.</exception>
+    public ShardQuery<TEntity> AcrossBuckets(int? parallelism = null)
+    {
+        var router = RequireShardRouter();
+        if (router.ShardIds.Count == 0)
+            throw new InvalidOperationException("The shard topology has no configured shards.");
+
+        var buckets = new List<int>(router.BucketCount);
+        var owners = new Dictionary<int, string>(router.BucketCount);
+        for (var bucket = 0; bucket < router.BucketCount; bucket++)
+        {
+            buckets.Add(bucket);
+            owners.Add(bucket, router.GetShard(bucket));
+        }
+
+        return new ShardQuery<TEntity>(this, buckets, owners, parallelism);
+    }
+
+    /// <summary>
+    /// Returns the configured shard router or throws when the context is not sharding-enabled.
+    /// </summary>
+    private IShardRouter RequireShardRouter()
+        => _dataProvider is DataContext dataContext && dataContext.EntityVariantResolver is IShardRouter router
+            ? router
+            : throw new InvalidOperationException("AcrossBuckets requires a context configured with a shard router.");
+
     /// <summary>
     /// Returns a builder whose selective filter scope is the union of this builder's scope and
     /// <paramref name="scope"/>, without mutating this builder. Used by the DML builders to fold their
@@ -504,6 +570,14 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         return copy;
     }
     internal Expression<Func<TEntity, bool>>? Condition { get => _condition; set => _condition = value; }
+    /// <summary>The mapping variant carried by this builder; read-only seam for native-route eligibility.</summary>
+    internal MappingVariant MappingVariant => _mappingVariant;
+    /// <summary>
+    /// Whether this builder is bound to a non-default mapping variant (one shard bucket). A scoped builder
+    /// renders different table/schema names and runs on a different connection per value, so it must never
+    /// share a context-wide singleton command or a scope-less scalar artifact with another scope.
+    /// </summary>
+    internal bool IsShardScoped => _mappingVariant != MappingVariant.Default;
     /// <summary>
     /// The <c>HAVING</c> predicate applied by <see cref="Having"/>, or <c>null</c> when there is none.
     /// Read-only neutral seam used by provider extensions that must inspect the composed state (for
@@ -665,6 +739,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             SrcType = _sourceEntityType,
             Condition = _condition,
             FilterScope = _filterScope,
+            MappingVariant = _mappingVariant,
             Joins = _joins?.ToArray(),
             Paging = Paging,
             Sorting = _sorting?.ToArray(),
@@ -706,6 +781,30 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// Copies the builder's provider-independent modifiers onto an already-created command. Shared by
     /// <see cref="Select{TResult}"/>, <see cref="ToCommand"/> and the <c>JoinInto</c> pair command.
     /// </summary>
+    /// <summary>
+    /// Resolves the mapping variant the command runs under: an explicit scope always wins, otherwise a
+    /// sharded entity is routed by the shard-key equality found in the predicate, and an unroutable
+    /// sharded query fails before any SQL is rendered.
+    /// </summary>
+    private MappingVariant ResolveCommandScope()
+    {
+        if (_mappingVariant != MappingVariant.Default)
+            return _mappingVariant;
+
+        if (_dataProvider is not DataContext dataContext || dataContext.EntityVariantResolver is not IShardRouter router)
+            return MappingVariant.Default;
+
+        var entityType = _sourceEntityType ?? typeof(TEntity);
+        if (!router.IsSharded(entityType))
+            return MappingVariant.Default;
+
+        if (entityType == typeof(TEntity) && _condition is not null &&
+            ShardKeyPredicateExtractor.TryGetValues(_condition, router.GetShardKey(entityType), out var values))
+            return router.ResolveShard(entityType, values);
+
+        throw new InvalidOperationException(
+            $"Entity '{entityType}' is sharded. Add an equality on the shard key to the predicate or call WithShardKey(...) before building the query.");
+    }
     private void ApplyCommandOptions(QueryCommand cmd)
     {
         cmd.GroupingType = GroupingType;
@@ -740,6 +839,8 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         // Structural identity of the collection-valued projection slot graph this entity query materializes
         // (#249 / T353). Empty for every ordinary command, so unrelated plan keys are untouched.
         cmd.CollectionSlotShape = _collectionSlotShape;
+        cmd.MappingVariant = ResolveCommandScope();
+        cmd.RouteEntityType = _sourceEntityType ?? typeof(TEntity);
 
         // Eager-load strategy and graph identity: only commands that actually carry eager loads record
         // them, so a command with no eager loads is never touched. The requested override (or null to
@@ -813,6 +914,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             SrcType = _sourceEntityType ?? typeof(TEntity),
             Condition = _condition,
             FilterScope = _filterScope,
+            MappingVariant = _mappingVariant,
             Joins = _joins?.ToArray(),
             Paging = Paging,
             Sorting = _sorting?.ToArray(),
@@ -941,8 +1043,9 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     }
     /// <summary>
     /// Declares a split-query eager load for <paramref name="collection"/>: after the parent query is
-    /// materialized, one extra child query per key chunk is executed to fetch the children, and they are
-    /// stitched onto the parents in memory (two round trips, never N+1). Only the stitching terminals
+    /// materialized, the loader fetches children with one query per key chunk and stitches them onto the
+    /// parents in memory, rather than running one child query per parent.
+    /// Only the stitching terminals
     /// (<c>ToList</c>/<c>ToListAsync</c> and <c>ToArray</c>/<c>ToArrayAsync</c>) honor the declaration;
     /// <c>ToHashSet</c>, <c>ToDictionary</c>, <c>First</c>, <c>FirstOrDefault</c>, <c>Single*</c>,
     /// <c>ToEnumerable</c>, <c>ToAsyncEnumerable</c> and <see cref="ToCommand"/> run the parent only and
@@ -2617,6 +2720,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             OriginalJoinCondition = source.OriginalJoinCondition,
             IsJoinInto = source.IsJoinInto,
             JoinIntoIdentity = source.JoinIntoIdentity,
+            JoinIntoLinkKeyColumns = source.JoinIntoLinkKeyColumns,
             SuppressCartesianWarning = source.SuppressCartesianWarning,
             FilterScope = childFilterScope,
         };
@@ -2758,6 +2862,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             BindArrayJoinElement = _bindArrayJoinElement,
         });
 
+        cmd.MappingVariant = _mappingVariant;
         cmd.From = from ?? ResolveSource();
 
         if (Ctes is not null)
@@ -3515,6 +3620,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         CopyProjectionIndependentStateTo(dst);
         dst._condition = _condition;
         dst._filterScope = _filterScope;
+        dst._mappingVariant = _mappingVariant;
         dst._having = _having;
         dst._arrayJoins = _arrayJoins is null ? null : [.. _arrayJoins];
         dst._windows = _windows;
@@ -3580,6 +3686,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         dst.CommandTimeout = CommandTimeout;
         dst.Ctes = Ctes;
         dst._collectionSlotShape = _collectionSlotShape;
+        dst._mappingVariant = _mappingVariant;
     }
     /// <summary>
     /// Creates a typed copy of this raw-source builder with <paramref name="binding"/> attached to the
@@ -3689,6 +3796,59 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="builder">The builder to convert.</param>
     /// <returns>The command built by <see cref="ToCommand"/>.</returns>
     public static implicit operator QueryCommand(EntityBuilder<TEntity> builder) => builder.ToCommand();
+    /// <summary>
+    /// Exposes the builder's command through <see cref="IQueryCommandSource"/>, so the correlated
+    /// visitor can obtain it with a statically known property getter instead of resolving the implicit
+    /// conversion operator through reflection (which trimming removes).
+    /// </summary>
+    QueryCommand IQueryCommandSource.Command => ToCommand();
+    /// <summary>
+    /// Builds the projection command for an aggregate terminal whose result type is only known at run
+    /// time; see <see cref="IAggregateProjectionHost"/>. Mirrors the projection part of
+    /// <see cref="Select{TResult}"/> without closing a generic method at run time.
+    /// </summary>
+    /// <param name="projection">The aggregate projection lambda over the entity parameter.</param>
+    /// <param name="resultType">The aggregate's result type.</param>
+    /// <returns>The projection command, carrying <paramref name="resultType"/> as its result type.</returns>
+    QueryCommand IAggregateProjectionHost.SelectAggregateProjection(LambdaExpression projection, Type resultType)
+    {
+        EnsureNoJoinIntos(nameof(Select));
+        EnsureNoEagerLoadState(nameof(Select));
+
+        // A definition (not the stack-only QueryShape) because the untyped factory takes one; this is the
+        // cold correlated-subquery path, never the fluent hot path.
+        var cmd = RequireContext.CreateCommand(resultType, new QueryDefinition
+        {
+            Exp = projection,
+            SrcType = _sourceEntityType,
+            Condition = _condition,
+            FilterScope = _filterScope,
+            Joins = _joins?.ToArray(),
+            Paging = Paging,
+            Sorting = _sorting?.ToArray(),
+            Group = _group,
+            Having = _having,
+            Logger = Logger,
+            IsDistinct = IsDistinct,
+            Final = IsFinal,
+            SampleRatio = SampleRatio,
+            SampleOffset = SampleOffset,
+            Settings = _settings,
+            PreWhere = _preWhere,
+            ArrayJoins = _arrayJoins,
+            Windows = _windows,
+            ArrayJoinKind = _arrayJoinKind,
+            BindArrayJoinElement = _bindArrayJoinElement,
+        });
+
+        cmd.From = ResolveSource();
+
+        if (Ctes is not null)
+            cmd.Ctes = Ctes;
+
+        ApplyCommandOptions(cmd);
+        return cmd;
+    }
     // public QueryCommand<TEntity> ToCommand() => Select<TEntity>(typeof(TEntity));
     // public IAsyncEnumerator<TEntity> GetAsyncEnumerator(CancellationToken cancellationToken = default) => ToCommand().GetAsyncEnumerator(cancellationToken);
 
@@ -6207,9 +6367,10 @@ public class EntityBuilder : ICloneable
     }
 
     /// <summary>
-    /// Overrides identifier quoting for the commands this builder creates (see
-    /// <see cref="EntityBuilder{TEntity}.WithQuotedIdentifiers"/>).
+    /// Sets whether commands created by this builder quote physical table and column names.
     /// </summary>
+    /// <param name="value"><see langword="true"/> to quote identifiers; otherwise, <see langword="false"/>.</param>
+    /// <returns>A new builder with the override; this builder is unchanged.</returns>
     public EntityBuilder WithQuotedIdentifiers(bool value = true)
     {
         var b = Clone();
@@ -6219,9 +6380,11 @@ public class EntityBuilder : ICloneable
         return b;
     }
     /// <summary>
-    /// Overrides the naming convention for the commands this builder creates (see
-    /// <see cref="EntityBuilder{TEntity}.WithNamingConvention"/>).
+    /// Sets the naming convention for commands created by this builder. Pass <see langword="null"/>
+    /// to use the context's default convention.
     /// </summary>
+    /// <param name="convention">The convention to use, or <see langword="null"/> to inherit the context default.</param>
+    /// <returns>A new builder with the override; this builder is unchanged.</returns>
     public EntityBuilder WithNamingConvention(INamingConvention? convention)
     {
         var b = Clone();

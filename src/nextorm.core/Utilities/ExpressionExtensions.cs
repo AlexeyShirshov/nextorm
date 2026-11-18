@@ -1,6 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
-using System.Reflection;
 
 namespace NextORM.Core;
 
@@ -52,9 +51,9 @@ public static class ExpressionExtensions
     }
 }
 /// <summary>
-/// Expression visitor that operates on a single entity type.
+/// Visits an expression tree and records the first node assignable to <typeparamref name="T"/>.
 /// </summary>
-/// <typeparam name="T">The entity type the visitor expects at the leaves.</typeparam>
+/// <typeparam name="T">The expression-node type to find.</typeparam>
 public class TypeExpressionVisitor<T> : ExpressionVisitor
     where T : Expression
 {
@@ -84,14 +83,10 @@ public class TypeExpressionVisitor<T> : ExpressionVisitor
     }
 }
 /// <summary>
-/// Expression visitor that operates over two entity types (used when translating join conditions).
+/// Visits an expression tree and records the first node assignable to either of two expression types.
 /// </summary>
-/// <typeparam name="T1">The first entity type.</typeparam>
-/// <typeparam name="T2">The second entity type.</typeparam>
-/// <remarks>
-/// Renamed from <c>TwoTypeExpressionVisitor</c> to use the arity style (<c>T1, T2</c>) shared by the
-/// rest of the surface. See <c>docs/specs/design/API-NAMING-REVIEW.md</c> finding P1-14.
-/// </remarks>
+/// <typeparam name="T1">The first expression-node type to find.</typeparam>
+/// <typeparam name="T2">The second expression-node type to find.</typeparam>
 public class TypeExpressionVisitor<T1, T2> : ExpressionVisitor
     where T1 : Expression
     where T2 : Expression
@@ -135,11 +130,6 @@ public class TypeExpressionVisitor<T1, T2> : ExpressionVisitor
 /// <summary>
 /// Replaces captured constant values with query parameters.
 /// </summary>
-/// <remarks>
-/// The plural <c>Constants</c> distinguishes this full parametrisation pass from the singular
-/// <see cref="ReplaceConstantExpressionVisitor"/> in <c>Visitors/ReplaceExpressionVisitor.cs</c>.
-/// See <c>docs/specs/design/API-NAMING-REVIEW.md</c> finding P1-14.
-/// </remarks>
 public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
 {
     private readonly List<(ParameterExpression, object?)> _params = new();
@@ -157,8 +147,8 @@ public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
         _replaceParams = @params;
     }
     /// <summary>
-    /// Creates a visitor that replaces members of <paramref name="params"/> with outer-reference
-    /// markers and all other constants with parameters.
+    /// Creates a visitor that replaces direct member accesses on <paramref name="params"/> with
+    /// outer-reference markers and constants with parameters.
     /// </summary>
     /// <param name="params">The outer parameters whose members become outer references; may be <c>null</c>.</param>
     /// <param name="queryProvider">The registry the outer references are registered on.</param>
@@ -211,8 +201,6 @@ public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
         if (node.NodeType == ExpressionType.MemberAccess && node.Expression is ParameterExpression param
             && _outerParams is not null && _outerParams.Contains(param))
         {
-            int idx;
-
             // #324: a member of the left row of a projection-shaped correlated APPLY is bound to its
             // exact left-row slot. The slot comes from the projection member's position (ItemN or the
             // generated JoinSlot ordinal), never from an alias name or a type guess. A slot outside the
@@ -225,34 +213,20 @@ public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
                     throw new InvalidOperationException(
                         $"The correlated CROSS/OUTER APPLY source references slot {slot} of its left row, but only {leftSlots} preceding source(s) (the FROM source plus earlier joins) are in scope. The applied source and later joins cannot be referenced.");
 
-                idx = command.AddBoundOuterReference(node, param, slot);
-            }
-            else
-            {
-                idx = _queryProvider!.AddOuterReference(node);
+                return OuterReference.Create(command.AddBoundOuterReference(node, param, slot), node.Type);
             }
 
-            return Expression.Property(Expression.New(GetOuterRefMarkerCI(node.Type), Expression.Constant(idx)), "Ref");
+            return OuterReference.Create(_queryProvider!, node);
         }
 
         return base.VisitMember(node);
-    }
-    /// <summary>
-    /// Returns the constructor of <c>OuterRefMarker&lt;T&gt;</c> closed over
-    /// <paramref name="type"/>, used to build an outer-reference marker node.
-    /// </summary>
-    /// <param name="type">The type of the outer reference.</param>
-    /// <returns>The constructor taking the reference index.</returns>
-    public static ConstructorInfo GetOuterRefMarkerCI(Type type)
-    {
-        return typeof(OuterRefMarker<>).MakeGenericType(type).GetConstructor([typeof(int)])!;
     }
 }
 /// <summary>
 /// Expression visitor whose traversal is driven by a caller-supplied predicate.
 /// </summary>
-/// <typeparam name="T">The entity type the predicate is evaluated against.</typeparam>
-/// <param name="predicate">Receives the current node and a compiled predicate for <typeparamref name="T"/>.</param>
+/// <typeparam name="T">The type of value the predicate can store during traversal.</typeparam>
+/// <param name="predicate">Receives each node and a callback that stores a <typeparamref name="T"/> value in <see cref="Value"/>.</param>
 public class PredicateExpressionVisitor<T>(Func<Expression?, Func<T, bool>, bool> predicate) : ExpressionVisitor
 {
     private readonly Func<Expression?, Func<T, bool>, bool> _predicate = predicate;

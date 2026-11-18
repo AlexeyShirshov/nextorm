@@ -13,7 +13,8 @@ namespace NextORM.Core;
 /// (SQL Server).
 /// <para>
 /// There is deliberately no change tracking: every terminal (<see cref="Merge"/>, <see cref="MergeAsync"/>)
-/// issues one explicit command, as with the insert builder. The builder is single-use.
+/// issues one explicit command, as with the insert builder. The builder retains its source and branch state,
+/// so calling a terminal again executes the merge again.
 /// </para>
 /// </summary>
 /// <typeparam name="TEntity">The mapped entity type upserted.</typeparam>
@@ -42,11 +43,22 @@ public sealed partial class MergeBuilder<TEntity>
     private LambdaExpression? _keyUpdateAssignments;
     private LambdaExpression? _keyInsertAssignments;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
+    private MappingVariant _mappingVariant = MappingVariant.Default;
 
-    internal MergeBuilder(IDataContext dataContext, IEntityMetadata metadata)
+    internal MergeBuilder(IDataContext dataContext, IEntityMetadata metadata, MappingVariant mappingVariant = default)
     {
         _dataContext = dataContext;
         _metadata = metadata;
+        _mappingVariant = mappingVariant;
+    }
+
+    /// <summary>Selects a runtime mapping variant for the merge target and source.</summary>
+    /// <param name="variant">The mapping variant used to resolve table, schema and column names.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public MergeBuilder<TEntity> WithVariant(MappingVariant variant)
+    {
+        _mappingVariant = variant;
+        return this;
     }
 
     /// <summary>
@@ -674,8 +686,28 @@ public sealed partial class MergeBuilder<TEntity>
         return await RequireExecutor().Execute(BuildCommand(), cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Rejects a sharded merge that carries no resolved shard scope: merging into the default table of a
+    /// sharded entity is never a silent fallback.
+    /// </summary>
+    private void EnsureShardScopeResolved()
+    {
+        if (_mappingVariant != MappingVariant.Default)
+            return;
+
+        if (_dataContext is not DataContext dataContext || dataContext.EntityVariantResolver is not IShardRouter router)
+            return;
+
+        if (!router.IsSharded(typeof(TEntity)))
+            return;
+
+        throw new InvalidOperationException(
+            $"Entity '{typeof(TEntity)}' is sharded. Call WithVariant(...) with a shard scope before executing the merge.");
+    }
+
     private MergeCommand BuildCommand(IReadOnlyList<IPropertyMetadata>? returningColumns = null)
     {
+        EnsureShardScopeResolved();
         EnsureAssignmentFormSupported();
         EnsureFilteredFormSupported();
         EnsureAssignmentFilterSupported();
@@ -744,7 +776,7 @@ public sealed partial class MergeBuilder<TEntity>
             // every captured or constant assignment value (the scalar visitor keys such a value through the
             // registry's plan comparer), so an expression branch needs it with or without a condition.
             var registry = hasCondition || HasActiveFilter() || HasExpressionBranch() ? _registry ??= new EntityBuilder<TEntity>(_dataContext).ToCommand() : null;
-            return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys ?? [], [], [.. _branches], returningColumns, _source, _matchCondition, registry, _dynamicColumns, _filterScope);
+            return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys ?? [], [], [.. _branches], returningColumns, _source, _matchCondition, registry, _dynamicColumns, _filterScope, mappingVariant: _mappingVariant);
         }
 
         if (_source is not null)
@@ -796,7 +828,8 @@ public sealed partial class MergeBuilder<TEntity>
             registry: keyRegistry,
             keyUpdateAssignments: keyUpdateAssignments,
             keyInsertAssignments: keyInsertAssignments,
-            sourceRow: keyUpdateAssignments is { UsesSource: true } || keyInsertAssignments is { UsesSource: true } ? sourceRow : null);
+            sourceRow: keyUpdateAssignments is { UsesSource: true } || keyInsertAssignments is { UsesSource: true } ? sourceRow : null,
+            mappingVariant: _mappingVariant);
     }
 
     /// <summary>

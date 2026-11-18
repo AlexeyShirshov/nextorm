@@ -1,1 +1,13 @@
 #nullable enable
+NextORM.SqlServer.SqlServerVectorSearchSyntax
+NextORM.SqlServer.SqlServerVectorSearchSyntax.TopN = 0 -> NextORM.SqlServer.SqlServerVectorSearchSyntax
+NextORM.SqlServer.SqlServerVectorSearchSyntax.WithApproximate = 1 -> NextORM.SqlServer.SqlServerVectorSearchSyntax
+NextORM.SqlServer.SqlServerDataContext.SqlServerDataContext(System.Version! serverVersion, string! connectionString, NextORM.SqlServer.SqlServerVectorSearchSyntax vectorSearchSyntax) -> void
+NextORM.SqlServer.SqlServerDataContext.SqlServerDataContext(System.Version! serverVersion, System.Data.Common.DbConnection! connection, NextORM.SqlServer.SqlServerVectorSearchSyntax vectorSearchSyntax) -> void
+static NextORM.SqlServer.SqlServerDataContextOptionsBuilderExtensions.UseSqlServer(this NextORM.Core.DataContextBuilder! builder, string! connectionString, System.Version! serverVersion, NextORM.SqlServer.SqlServerVectorSearchSyntax vectorSearchSyntax) -> NextORM.Core.DataContextBuilder!
+static NextORM.SqlServer.SqlServerDataContextOptionsBuilderExtensions.UseSqlServer(this NextORM.Core.DataContextBuilder! builder, System.Data.Common.DbConnection! connection, System.Version! serverVersion, NextORM.SqlServer.SqlServerVectorSearchSyntax vectorSearchSyntax) -> NextORM.Core.DataContextBuilder!
+override NextORM.SqlServer.SqlServerDialect.SupportsVectorSearch.get -> bool
+override NextORM.SqlServer.SqlServerDialect.MakeApproximateTop(string! limitSql, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.SqlServer.SqlServerDialect.ApproximateVectorSearchTopNArgumentName.get -> string?
+NextORM.SqlServer.SqlServerDataContext.SqlServerDataContext(NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+static NextORM.SqlServer.SqlServerDataContextOptionsBuilderExtensions.UseSqlServer(this NextORM.Core.DataContextBuilder! builder) -> NextORM.Core.DataContextBuilder!

@@ -7,52 +7,33 @@
 
 ## Обзор
 
-Оконные функции находятся в [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql). Каждый вызов возвращает
-маркер [`WindowFunction<T>`](xref:NextORM.Core.WindowFunction`1), который должен быть дополнен `.Over(...)`;
-внутри выражения запроса он читается как тип значения функции (`int` для
-`row_number`/`rank`/`dense_rank`/`ntile`, `double` для `percent_rank`/`cume_dist`, `T?` для функций
-значения/агрегатов). Типы маркеров и их методы интерпретируются исключительно посетителем выражений —
-они никогда не выполняются.
+Оконные функции из [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) вычисляют значение
+для каждой строки в секции, не сворачивая строки в один результат агрегирования.
 
-[`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.Core.WindowOrder,NextORM.Core.WindowFrame)) без аргументов рендерит пустую спецификацию (`over ()`). Поскольку деревья выражений C# отклоняют
-именованные аргументы, пропускающие предшествующий параметр со значением по умолчанию, спецификация
-**только с сортировкой** должна использовать перегрузку [`WindowOrder`](xref:NextORM.Core.WindowOrder) — `Over(SqlFunctions.Sql.asc(() => e.Id))` —
-а не `Over(orderBy: ...)`. `SqlFunctions.Sql.asc(expression)` и `SqlFunctions.Sql.desc(expression)` возвращают [`WindowOrder`](xref:NextORM.Core.WindowOrder)
-(ключ сортировки плюс [`OrderDirection`](xref:NextORM.Core.OrderDirection)).
+Каждый вызов возвращает маркер [`WindowFunction<T>`](xref:NextORM.Core.WindowFunction`1). Вызовите
+`.Over(...)`, чтобы задать окно. Посетитель выражений преобразует маркер в SQL, а сам маркер не
+выполняется.
 
-Вызов оконной функции **без** [`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.Core.WindowOrder,NextORM.Core.WindowFrame)) — ошибка: посетитель бросает `NotSupportedException`, в сообщении
-которого упоминается [`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.Core.WindowOrder,NextORM.Core.WindowFrame)).
+В выражении запроса маркер имеет тип результата функции: `int` для
+`row_number`/`rank`/`dense_rank`/`ntile`, `double` для `percent_rank`/`cume_dist` и `T?` для
+функций значений и агрегатов.
 
-## Функции
+[`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.Core.WindowOrder,NextORM.Core.WindowFrame))
+без аргументов генерирует пустую спецификацию (`over ()`). Чтобы задать только сортировку,
+используйте перегрузку [`WindowOrder`](xref:NextORM.Core.WindowOrder), например
+`Over(SqlFunctions.Sql.asc(() => e.Id))`. Деревья выражений C# не допускают именованные аргументы,
+пропускающие предшествующий необязательный параметр, поэтому `Over(orderBy: ...)` в этом случае
+не подходит. Вызовы `SqlFunctions.Sql.asc(expression)` и `SqlFunctions.Sql.desc(expression)`
+возвращают [`WindowOrder`](xref:NextORM.Core.WindowOrder): ключ сортировки и направление
+[`OrderDirection`](xref:NextORM.Core.OrderDirection).
 
-| Функция | Вызов [`Sql`](xref:NextORM.Core.SqlFunctions.Sql) | Генерируемый SQL |
-|---|---|---|
-| Номер строки | `row_number()` | `row_number()` |
-| Ранг (с пропусками) | `rank()` | `rank()` |
-| Плотный ранг | `dense_rank()` | `dense_rank()` |
-| Относительный ранг | `percent_rank()` | `percent_rank()` |
-| Накопленное распределение | `cume_dist()` | `cume_dist()` |
-| Интерполированный квантиль | `percentile_cont(fraction, property)` | `percentile_cont(f) within group (order by expr) over (...)` |
-| Дискретный квантиль | `percentile_disc(fraction, property)` | `percentile_disc(f) within group (order by expr) over (...)` |
-| Медиана (аналитическая) | `SqlFunctions.SqlServer.median(property)` / `SqlFunctions.MySql.median(property)` | `percentile_cont(0.5) within group (order by expr) over (...)` |
-| Сегменты (бакеты) | `ntile(buckets)` | `ntile(n)` |
-| Предыдущее значение | `lag(property[, offset[, defaultValue]])` | `lag(expr, offset[, default])` |
-| Следующее значение | `lead(property[, offset[, defaultValue]])` | `lead(expr, offset[, default])` |
-| Предыдущее значение в рамке (ClickHouse) | `SqlFunctions.ClickHouse.lag_in_frame(property[, offset[, defaultValue]])` | `lagInFrame(expr, offset[, default])` |
-| Следующее значение в рамке (ClickHouse) | `SqlFunctions.ClickHouse.lead_in_frame(property[, offset[, defaultValue]])` | `leadInFrame(expr, offset[, default])` |
-| Первое в рамке | `first_value(property)` | `first_value(expr)` |
-| Последнее в рамке | `last_value(property)` | `last_value(expr)` |
-| N-е в рамке | `nth_value(property, n)` | `nth_value(expr, n)` |
-| Оконная сумма | `sum_over(property)` | `sum(expr)` |
-| Оконное среднее | `avg_over(property)` | `avg(expr)` |
-| Оконный минимум | `min_over(property)` | `min(expr)` |
-| Оконный максимум | `max_over(property)` | `max(expr)` |
-| Оконное количество | `count_over()` / `count_over(property)` | `count(*)` / `count(expr)` |
-
-Варианты агрегатов имеют суффикс `_over`, чтобы не конфликтовать со скалярными агрегатами `sum`, `avg`,
-`min`, `max` и `count`, используемыми с [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})).
+Вызов оконной функции без
+[`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.Core.WindowOrder,NextORM.Core.WindowFrame))
+— ошибка. Посетитель бросает `NotSupportedException` и упоминает `Over` в сообщении.
 
 ## Номер строки по секции
+
+Чтобы пронумеровать строки внутри секции, передайте ключ секции и ключ сортировки в `.Over(...)`:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -82,6 +63,37 @@ select id, row_number() over (partition by nullableint order by id) as 'rn'
 
 В заполненной `complex_entity` есть секция `nullableint` из одной строки (`id` 1) и секция из двух строк
 (`id` 2, 3), поэтому `rn` равно 1, 1, 2.
+
+## Функции
+
+В таблице перечислены доступные функции и соответствующий им SQL:
+
+| Функция | Вызов [`Sql`](xref:NextORM.Core.SqlFunctions.Sql) | Генерируемый SQL |
+|---|---|---|
+| Номер строки | `row_number()` | `row_number()` |
+| Ранг (с пропусками) | `rank()` | `rank()` |
+| Плотный ранг | `dense_rank()` | `dense_rank()` |
+| Относительный ранг | `percent_rank()` | `percent_rank()` |
+| Накопленное распределение | `cume_dist()` | `cume_dist()` |
+| Интерполированный квантиль | `percentile_cont(fraction, property)` | `percentile_cont(f) within group (order by expr) over (...)` |
+| Дискретный квантиль | `percentile_disc(fraction, property)` | `percentile_disc(f) within group (order by expr) over (...)` |
+| Медиана (аналитическая) | `SqlFunctions.SqlServer.median(property)` / `SqlFunctions.MySql.median(property)` | `percentile_cont(0.5) within group (order by expr) over (...)` |
+| Сегменты (бакеты) | `ntile(buckets)` | `ntile(n)` |
+| Предыдущее значение | `lag(property[, offset[, defaultValue]])` | `lag(expr, offset[, default])` |
+| Следующее значение | `lead(property[, offset[, defaultValue]])` | `lead(expr, offset[, default])` |
+| Предыдущее значение в рамке (ClickHouse) | `SqlFunctions.ClickHouse.lag_in_frame(property[, offset[, defaultValue]])` | `lagInFrame(expr, offset[, default])` |
+| Следующее значение в рамке (ClickHouse) | `SqlFunctions.ClickHouse.lead_in_frame(property[, offset[, defaultValue]])` | `leadInFrame(expr, offset[, default])` |
+| Первое в рамке | `first_value(property)` | `first_value(expr)` |
+| Последнее в рамке | `last_value(property)` | `last_value(expr)` |
+| N-е в рамке | `nth_value(property, n)` | `nth_value(expr, n)` |
+| Оконная сумма | `sum_over(property)` | `sum(expr)` |
+| Оконное среднее | `avg_over(property)` | `avg(expr)` |
+| Оконный минимум | `min_over(property)` | `min(expr)` |
+| Оконный максимум | `max_over(property)` | `max(expr)` |
+| Оконное количество | `count_over()` / `count_over(property)` | `count(*)` / `count(expr)` |
+
+Варианты агрегатов имеют суффикс `_over`, чтобы не конфликтовать со скалярными агрегатами `sum`, `avg`,
+`min`, `max` и `count`, используемыми с [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})).
 
 ## Rank, dense rank и `asc`/`desc`
 

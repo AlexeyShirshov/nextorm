@@ -1,6 +1,11 @@
 # Per-parent paging in eager loading (`LoadWith`)
 
-> `LoadWith` can apply a child query's own `Limit`/`Offset`/`Page` **independently to each parent**. Child filtering and ordering run first, so the page a parent receives is the `filter → order → Skip → Take` slice of its own children; a child query that limits globally never starves later parents. Root paging stays independent, and a parent with no qualifying children is kept with an empty collection. The rewrite is a partitioned `row_number()` child source, batched exactly like ordinary eager loading and supported in both `EagerLoadMode.SplitQuery` and `EagerLoadMode.SingleQuery`.
+> `LoadWith` applies a child query's `Limit`/`Offset`/`Page` **separately for each parent**. It filters and
+> orders each parent's children before applying `Skip` and `Take`, so a global child limit cannot starve
+> later parents. Root paging remains independent, and parents with no qualifying children keep an empty
+> collection. The engine rewrites the child source as a partitioned `row_number()` query and batches it like
+> ordinary eager loading. Per-parent paging is supported in both `EagerLoadMode.SplitQuery` and
+> `EagerLoadMode.SingleQuery`.
 
 **Prerequisites:** [Eager loading child collections (`LoadWith`)](eager-loading.md) · [Joins](../guide/04-joins.md) · [Relationships and single-query loading (`JoinInto`)](relationships.md)
 
@@ -39,6 +44,11 @@ A [collection-valued projection slot](collection-projection.md) also pages per p
 SQL — the statement count stays the ordinary eager-loading one and the statement carries no `row_number()` page.
 This page describes the per-parent paging of a **child query** (`Limit`/`Offset`/`Page` declared on the child query
 of `LoadWith`/`JoinInto`), where the database computes the page inside each partition.
+
+| Paging form | Where the page is applied | Effect on the SQL |
+|---|---|---|
+| Child-query page in `LoadWith` | In the database, independently for each parent. | Uses a ranked child source; many-to-many pages trim surviving junction occurrences after loading. |
+| `Limit` in a collection projection slot | In memory, after the child rows are loaded. | Does not add paging to SQL or change the eager-loading statement count. |
 
 ## Many-to-many child paging is applied to surviving occurrences
 

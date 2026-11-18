@@ -3227,10 +3227,6 @@ NextORM.Core.NullsPosition.Last = 2 -> NextORM.Core.NullsPosition
 NextORM.Core.OrderDirection
 NextORM.Core.OrderDirection.Asc = 0 -> NextORM.Core.OrderDirection
 NextORM.Core.OrderDirection.Desc = 1 -> NextORM.Core.OrderDirection
-NextORM.Core.OuterRefMarker<T>
-NextORM.Core.OuterRefMarker<T>.I.get -> int
-NextORM.Core.OuterRefMarker<T>.OuterRefMarker(int i) -> void
-NextORM.Core.OuterRefMarker<T>.Ref.get -> T?
 NextORM.Core.OutputIntoBuilder
 NextORM.Core.OutputIntoBuilder.Execute() -> int
 NextORM.Core.OutputIntoBuilder.ExecuteAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
@@ -5806,7 +5802,6 @@ static NextORM.Core.QueryDefinition.operator ==(NextORM.Core.QueryDefinition? le
 static NextORM.Core.Range<T>.Empty.get -> NextORM.Core.Range<T>
 static NextORM.Core.Range<T>.operator !=(NextORM.Core.Range<T> left, NextORM.Core.Range<T> right) -> bool
 static NextORM.Core.Range<T>.operator ==(NextORM.Core.Range<T> left, NextORM.Core.Range<T> right) -> bool
-static NextORM.Core.ReplaceConstantsExpressionVisitor.GetOuterRefMarkerCI(System.Type! type) -> System.Reflection.ConstructorInfo!
 static NextORM.Core.ServiceCollectionExtensions.AddKeyedNextOrmContext(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<NextORM.Core.DataContextBuilder!>! optionsBuilder, object? serviceKey) -> void
 static NextORM.Core.ServiceCollectionExtensions.AddKeyedNextOrmContext(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<System.IServiceProvider!, NextORM.Core.DataContextBuilder!>! optionsBuilder, object? serviceKey) -> void
 static NextORM.Core.ServiceCollectionExtensions.AddKeyedNextOrmContext<T>(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, object? serviceKey) -> void

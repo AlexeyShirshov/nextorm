@@ -1,8 +1,33 @@
 # Провайдер ClickHouse
 
-> Используйте `nextorm.clickhouse` для ClickHouse; он отрисовывает параметры `@name` (драйвер переписывает их в `{name:Type}`), идентификаторы в обратных кавычках, конкатенацию `concat(...)`, разбиение на страницы `limit`/`offset` и имена типов ClickHouse.
+> Используйте `nextorm.clickhouse` для ClickHouse. Провайдер формирует SQL с параметрами `@name` (драйвер переписывает их в `{name:Type}`), идентификаторами в обратных кавычках, конкатенацией `concat(...)`, постраничной выборкой `limit`/`offset` и типами ClickHouse.
 
-**Предварительные требования:** [Обзор провайдеров](overview.md) · [Quickstart](../getting-started/02-quickstart.md)
+**Предварительные требования:** [Обзор провайдеров](overview.md) · [Быстрый старт](../getting-started/02-quickstart.md)
+
+## Регистрация провайдера
+
+На [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) доступны две перегрузки
+(`src/nextorm.clickhouse/DI/ClickHouseDataContextOptionsBuilderExtensions.cs`):
+
+```csharp
+using NextORM.Core;
+using NextORM.ClickHouse;
+
+var builder = new DataContextBuilder()
+    .UseClickHouse("Host=localhost;Port=8123;Username=default;Password=secret;Database=app");
+
+using var ctx = builder.CreateDataContext();   // IDataContext
+```
+
+Также можно создать контекст напрямую:
+
+```csharp
+using NextORM.Core;
+using NextORM.ClickHouse;
+
+using IDataContext ctx = new ClickHouseDataContext(
+    "Host=localhost;Username=default;Database=app", new DataContextBuilder());
+```
 
 > **Методы-расширения.** Эксклюзивные для ClickHouse fluent-члены — `Final`, `PreWhere`, `Settings`,
 > `Sample`, `LimitBy`, `WithTotals`, `ArrayJoin`/`LeftArrayJoin`/`ArrayJoinElement`/`LeftArrayJoinElement`,
@@ -10,23 +35,40 @@
 > Они поставляются пакетом `nextorm.clickhouse` как методы-расширения; добавьте
 > `using NextORM.ClickHouse;`, и цепочки ниже компилируются без изменений.
 
+## Конкатенация строк
+
+Диалект преобразует сложение строк в C# в вызов `concat(...)`:
+
+```csharp
+var query = ctx.From<ISimpleEntity>().Select(x => new { Label = "id:" + x.Id });
+```
+
+Сгенерированный SQL:
+
+```sql
+select concat('id:', id) as `Label`
+ from simple_entity
+```
+
 ## Обзор
 
 [`ClickHouseDataContext`](xref:NextORM.ClickHouse.ClickHouseDataContext) (`src/nextorm.clickhouse/ClickHouseDataContext.cs`) оборачивает официальный
 ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseConnection` из строки подключения и
 возвращает [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) из свойства `Dialect`.
 
-[`ClickHouseDialect`](xref:NextORM.ClickHouse.ClickHouseDialect) (`src/nextorm.clickhouse/ClickHouseDialect.cs`) отрисовывает:
+[`ClickHouseDialect`](xref:NextORM.ClickHouse.ClickHouseDialect) (`src/nextorm.clickhouse/ClickHouseDialect.cs`) формирует SQL:
 
-- плейсхолдер параметра `@name`; драйвер переписывает их в нативный для ClickHouse вид
+### Синтаксис SQL и скалярные функции
+
+- маркер параметра `@name`; драйвер переписывает его в типизированную форму ClickHouse
   `{name:Type}` и выводит тип из значения .NET;
 - идентификаторы и псевдонимы в обратных кавычках с экранированием встроенной обратной косой черты
   (`\` → `\\`) и встроенной обратной кавычки (`` ` `` → ``` `` ```). Это исправление специфично для
   ClickHouse: MySQL и MariaDB тоже квотируют обратными кавычками, но не считают обратную косую черту
   экранирующим символом внутри идентификатора, поэтому их квотирование не меняется;
-- нативные колонки `UInt64` и свойства/проекции `ulong`/`ulong?` материализуются через аксессор
-  построителя строк `DbDataReader.GetFieldValue<ulong>`, поэтому SQL-приведение не нужно (тем же
-  аксессором пользуется MySQL/MariaDB `BIGINT UNSIGNED`);
+- колонки `UInt64` и свойства/проекции `ulong`/`ulong?` считываются с помощью
+  `DbDataReader.GetFieldValue<ulong>`, поэтому SQL-приведение не нужно. MySQL/MariaDB `BIGINT UNSIGNED`
+  читается тем же методом;
 - конкатенацию строк функцией `concat(a, b, ...)`;
 - `coalesce(a, b)`, логические литералы `true`/`false` и `lengthUTF8(x)` для длины строки;
 - `trimBoth`/`trimLeft`/`trimRight` для трёх видов trim;
@@ -40,17 +82,23 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
   закреплённом ClickHouse 25.8 поддерживаемые результаты годового семейства остаются в диапазоне
   1900–2299, арифметика за его пределами не поддерживается, входные значения нормализуются до
   микросекунд с отбрасыванием более тонкой точности), `end_of_month` — как `toLastDayOfMonth(x)`;
-- поверхность приведения/частей даты `SqlFunctions.ClickHouse.to_*` (гейт
+
+### Функции преобразования дат
+
+- набор функций преобразования дат `SqlFunctions.ClickHouse.to_*` (поддержка определяется свойством
   [`DateConversion`](xref:NextORM.Core.ISqlDialect.DateConversion)):
   `to_date`/`to_date_time`/`to_date32` — как `toDate`/`toDateTime`/`toDate32`; аксессоры `to_year`/
   `to_quarter`/`to_month`/`to_day_of_month`/`to_day_of_week`/`to_day_of_year`/`to_hour`/`to_minute`/
   `to_second` (а также проекции `DateTime.Year`/`Month`/…) — как `toYear`/`toQuarter`/…, обёрнутые в
-  `toInt32(...)` (нативные `UInt8`/`UInt16` иначе не читаются построителем строк); `to_start_of_*` —
+  `toInt32(...)` (иначе `DbDataReader` не может прочитать `UInt8`/`UInt16`); `to_start_of_*` —
   как `toStartOfYear`/`toStartOfQuarter`/`toStartOfMonth`/`toStartOfWeek`/`toStartOfDay`/
   `toStartOfHour`/`toStartOfMinute`/`toStartOfSecond`; `to_monday` — как `toMonday` (ISO-понедельник,
   тогда как `toStartOfWeek` начинает неделю с воскресенья); `to_yyyymm`/`to_yyyymmdd` — как
   `toInt32(toYYYYMM(...))`/`toInt32(toYYYYMMDD(...))`; `to_unix_timestamp` — как
   `toInt64(toUnixTimestamp(...))`;
+
+### Агрегаты и функции JSON
+
 - `string_agg(x, delimiter)` как `arrayStringConcat(groupArray(x), delimiter)`;
 - `bit_and`/`bit_or`/`bit_xor` как `groupBitAnd`/`groupBitOr`/`groupBitXor`, `covar_pop`/`covar_samp`
   как `covarPop`/`covarSamp`, `corr` как `corr`, `arg_min`/`arg_max` как `argMin`/`argMax`, а
@@ -82,25 +130,31 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
   `visitParamExtractBool`/`visitParamExtractRaw`; JSONPath-скаляры `json_value`/`json_query`/
   `json_exists` — как `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS`, а функции нативного JSON `json_all_paths`/
   `json_all_paths_with_types`/`to_json_string` — как `JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`
-  (тот же гейт [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract));
+  (доступность также определяется свойством [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract));
   функции словарей `dict_get`/`dict_get_or_default`/
   `dict_has`/`dict_get_hierarchy`/`dict_get_children`/`dict_is_in` — как
-  `dictGet`/`dictGetOrDefault`/`dictHas`/`dictGetHierarchy`/`dictGetChildren`/`dictIsIn`;
+   `dictGet`/`dictGetOrDefault`/`dictHas`/`dictGetHierarchy`/`dictGetChildren`/`dictIsIn`;
+
+### Структура запросов и табличные функции
+
 - модификатор супер-агрегации `GROUP BY ... WITH TOTALS` ([`SupportsGroupByWithTotals`](xref:NextORM.Core.ISqlDialect.SupportsGroupByWithTotals))
   через `EntityBuilder.WithTotals()`;
 - `LIMIT n BY expr` ([`LimitBy`](xref:NextORM.Core.ISqlDialect.LimitBy)) через
-  `EntityBuilder.LimitBy(...)`: не более `n` строк на каждое значение ключа, эмитится после `ORDER BY`
+  `EntityBuilder.LimitBy(...)`: не более `n` строк на каждое значение ключа; добавляется после `ORDER BY`
   и перед финальным `LIMIT`;
 - табличные функции `numbers`/`numbers_mt` через `SqlFunctions.ClickHouse.numbers(...)` (колонка `number`
-  типа `UInt64` приводится к `Int64` подзапросом-обёрткой, чтобы row reader мог её материализовать) и
+  типа `UInt64` приводится к `Int64` подзапросом-обёрткой, чтобы считыватель строк мог её материализовать) и
   `zeros`/`zeros_mt` через `SqlFunctions.ClickHouse.zeros(...)` (`IZerosRow`, колонка `zero UInt8`
   материализуется напрямую как `byte`); также предобъявлены серверные/кластерные табличные функции
   `url`/`s3`/`file`/`remote`/`remote_secure`/`cluster`/`cluster_all_replicas` (схема строки задаётся
   generic-интерфейсом `TRow` вызывающего и должна совпадать с аргументом `structure` или целевой
-  таблицей); табличная функция `values` (`SqlFunctions.ClickHouse.values<TRow>(tuples)`) рендерит
-  `structure` из `TRow`
+  таблицей); табличная функция `values` (`SqlFunctions.ClickHouse.values<TRow>(tuples)`) задаёт
+  `structure` по типу `TRow`
   ([`SupportsResultSchema(TableFunctionSchema)`](xref:NextORM.Core.ISqlDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema)))
-  и принимает список кортежей дословно как аргумент;
+   и принимает список кортежей дословно как аргумент;
+
+### Модификаторы запросов и соединения
+
 - модификаторы запроса `FINAL`/`SAMPLE`/`PREWHERE`/`SETTINGS` через `Final()`, `Sample(ratio[, offset])`,
   `PreWhere(predicate)` и `Settings(("key", "value"), ...)`
   ([`SupportsFinal`](xref:NextORM.Core.ISqlDialect.SupportsFinal)/[`SupportsSample`](xref:NextORM.Core.ISqlDialect.SupportsSample)/[`SupportsPreWhere`](xref:NextORM.Core.ISqlDialect.SupportsPreWhere)/[`SupportsSettings`](xref:NextORM.Core.ISqlDialect.SupportsSettings));
@@ -130,7 +184,7 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
   отдельные методы-построители: [`SemiJoin`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.SemiJoin``2(NextORM.Core.EntityBuilder{``0},NextORM.Core.EntityBuilder{``1},System.Linq.Expressions.Expression{System.Func{``0,``1,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/`AntiJoin` отдают
   только левые колонки для левых строк, у которых есть (соответственно нет) совпадение, а `PasteJoin`
   сопоставляет два источника по позиции строки без `ON` (строк — сколько у более короткой стороны).
-  Гейты — [`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/`SupportsPasteJoin`.
+   Поддержка определяется свойствами [`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/`SupportsPasteJoin`.
   Вариант `GLOBAL` (правая сторона разрешается один раз и broadcast'ится для распределённых
   запросов) задаётся через [`JoinOptions.Global`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.Global(NextORM.Core.JoinOptions)) и
   комбинируется со strictness (`global left any join`,
@@ -153,31 +207,6 @@ ClickHouse проверена только на генерации SQL (`stddevS
 
 ClickHouse не поддерживает рекурсивные CTE, поэтому диалект объявляет каждый CTE просто через `with`.
 
-## Регистрация провайдера
-
-На [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) доступны две перегрузки
-(`src/nextorm.clickhouse/DI/ClickHouseDataContextOptionsBuilderExtensions.cs`):
-
-```csharp
-using NextORM.Core;
-using NextORM.ClickHouse;
-
-var builder = new DataContextBuilder()
-    .UseClickHouse("Host=localhost;Port=8123;Username=default;Password=secret;Database=app");
-
-using var ctx = builder.CreateDataContext();   // IDataContext
-```
-
-Также можно создать контекст напрямую:
-
-```csharp
-using NextORM.Core;
-using NextORM.ClickHouse;
-
-using IDataContext ctx = new ClickHouseDataContext(
-    "Host=localhost;Username=default;Database=app", new DataContextBuilder());
-```
-
 ### Объявление версии сервера
 
 Версия сервера — это объявление вызывающего кода, а не результат опроса: без него провайдер
@@ -192,8 +221,8 @@ using var ctx = new ClickHouseDataContext(
     new DataContextBuilder());
 ```
 
-Объявленная версия 25.9 или новее включает нативную `arrayExcept` за
-`SqlFunctions.ClickHouse.array_except`; вызов с двумя массивами рендерится как `arrayExcept(...)`
+Объявленная версия 25.9 или новее включает нативную `arrayExcept` для
+`SqlFunctions.ClickHouse.array_except`; вызов с двумя массивами формирует SQL `arrayExcept(...)`
 (нативная функция принимает ровно два массива, поэтому любая другая арность отклоняется до генерации
 SQL). Необъявленный
 контекст сохраняет исторический отказ — общий `ClickHouseDialect.Instance` никогда не включает
@@ -222,17 +251,6 @@ builder.Factory = b => new Declared25Context(connectionString, b);   // путь
 любого запроса. Конструкторы с клиентом и источником данных неверсионированные: они всегда создают
 диалект закреплённой базовой версии.
 
-## Конкатенация строк
-
-```csharp
-var query = ctx.From<ISimpleEntity>().Select(x => new { Label = "id:" + x.Id });
-```
-
-```sql
-select concat('id:', id) as `Label`
- from simple_entity
-```
-
 ## Табличные параметры
 
 ClickHouse эмулирует табличный параметр нативным массивом, связываемым через `ProcedureParameter.Table<T>` ([`SupportsTableValuedParameters`](xref:NextORM.Core.ISqlDialect.SupportsTableValuedParameters) равно `true`): скалярный тип строки связывается как `Array(T)`, а тип-сущность — как `Array(Tuple(col1, col2, ...))`, и сервер разворачивает массив через `arrayJoin`. Провайдер задаёт драйверу явный `ClickHouseType` (оборачивая nullable-колонку в `Nullable(...)`), потому что драйвер выводит non-nullable тип из CLR-значения и иначе не смог бы сериализовать null-элемент или пустой массив. Столбец `decimal` связывается как объявленный `Decimal(p, s)` (из `[DecimalPrecision(p, s)]` или fluent-отображения) либо как `Decimal(38, 10)`, если ничего не объявлено.
@@ -241,13 +259,13 @@ ClickHouse эмулирует табличный параметр нативны
 using var ctx = new ClickHouseDataContext(
     "Host=localhost;Username=default;Database=app", new DataContextBuilder());
 
-// скалярный набор -> select arrayJoin(@ids)
+// Скалярный набор: select arrayJoin(@ids).
 using var scalar = ctx.ExecuteRaw(
     "select arrayJoin(@ids) as value order by value",
     [ProcedureParameter.Table("ids", new[] { 3, 1, 2 })]);
 var values = scalar.Read<int>();   // [1, 2, 3]
 
-// набор сущностей -> select t.1, t.2 from (select arrayJoin(@rows) as t)
+// Набор сущностей: select t.1, t.2 from (select arrayJoin(@rows) as t).
 using var entity = ctx.ExecuteRaw(
     "select t.1 as Id, t.2 as Name from (select arrayJoin(@rows) as t) order by Id",
     [ProcedureParameter.Table("rows", new[]
@@ -268,7 +286,7 @@ public sealed class TvpRow
 
 ## Массовая вставка
 
-Нативный путь — `ClickHouseClient.InsertBinaryAsync` через собственный клиент контекста, поэтому нужен клиент
+Встроенный путь использует `ClickHouseClient.InsertBinaryAsync` и собственный клиент контекста; для него нужен
 `ClickHouse.Driver` (`ClickHouseClient`/`ClickHouseDataSource` — перегрузки `UseClickHouse`). Настройки клиента
 копируются для вставки; объект настроек вызывающего и настройки соединения никогда не мутируются.
 
@@ -279,11 +297,11 @@ public sealed class TvpRow
   ошибка аргумента.
 - Адаптер читает источник ограниченными чанками (`MaxBatchSize`, по умолчанию 10 000 строк), дожидается
   каждого вызова драйвера до чтения следующего чанка и сообщает прогресс только после завершения чанка.
-- Записываемы только обычные колонки и колонки `DEFAULT`: замапленная колонка ALIAS или MATERIALIZED
+- Записываемы только обычные колонки и колонки `DEFAULT`: сопоставленный столбец ALIAS или MATERIALIZED
   отклоняется по имени (каталог читается один раз на цель). `KeepIdentity` пишет явное значение.
 - `IgnoreDuplicates`, `Returning*`, `TableLock`, `FireTriggers` и `CheckConstraints=false` отклоняются;
-  `KeepNulls=false` требует default-equivalent формы.
-- `DatabaseName` рендерит `db.table`; `ServerName` отклоняется (перенаправления нет). `Timeout` — один бюджет
+  `KeepNulls=false` допускается только для формы, эквивалентной значениям по умолчанию.
+- `DatabaseName` формирует `db.table`; `ServerName` отклоняется (перенаправления нет). `Timeout` — один бюджет
   на весь вызов со связанной отменой; истёкший бюджет даёт `TimeoutException`, а отмена побеждает.
 
 Класс `ClickHouseBulkCopy` из `ClickHouse.Driver` 1.4.0 **не** устарел — устарел только его метод
@@ -293,12 +311,14 @@ public sealed class TvpRow
 
 ## Различия провайдера
 
+В таблице собраны особенности диалекта:
+
 | Аспект | ClickHouse |
 |---|---|
-| Плейсхолдер параметра | `@name` (драйвер переписывает в `{name:Type}`) |
+| Маркер параметра | `@name` (драйвер переписывает его в `{name:Type}`) |
 | Табличные параметры | связанный `Array(T)` (скаляр) / `Array(Tuple(...))` (сущность), разворачиваемый через `arrayJoin(@p)`; `TypeName` отклоняется, хранимых процедур нет |
 | Конкатенация | `concat(a, b)` |
-| Coalesce | `coalesce` |
+| Подстановка при `NULL` | `coalesce` |
 | Логический литерал | `true` / `false` |
 | Квотирование идентификаторов | обратные кавычки (`` as `t1` ``); встроенные `\` и обратная кавычка экранируются |
 | Псевдоним производной таблицы | требуется |
@@ -320,16 +340,16 @@ public sealed class TvpRow
 | Условная функция | `iif(cond, a, b)` → `if(cond, a, b)`; `multi_if(when(c1, v1), ..., otherwise(v))` → `multiIf(c1, v1, ..., v)` |
 | Оконные функции | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` поддерживаются; `lag_in_frame`/`lead_in_frame` → `lagInFrame`/`leadInFrame` (учитывают фрейм; обычные `lag`/`lead` на ClickHouse отвергают явный фрейм) |
 | Строковый JSON | `JSONExtractString`, `JSONExtractInt`, `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `toInt64(JSONLength(...))`, `JSONType`, `JSONExtractKeys`/`JSONExtractArrayRaw` (`string[]`), `JSONExtractKeysAndValues` (`Tuple<string, T>[]`), `visitParamExtract*`, `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (JSONPath) |
-| Функции нативного JSON | `json_all_paths` → `JSONAllPaths` (проецируется как `string[]`), `json_all_paths_with_types` → `JSONAllPathsWithTypes` (нативный `Map(String, String)` отдаётся как `Dictionary<string, string>`; мост к коллекции — `mapKeys`/`mapValues`), `to_json_string` → `toJSONString`; все принимают нативное значение `JSON` (`CAST(col AS JSON)` для колонки `String`); нативный *тип колонки* `JSON` замаплен только как «голый» `JsonObject` |
+| Функции встроенного JSON | `json_all_paths` → `JSONAllPaths` (проецируется как `string[]`), `json_all_paths_with_types` → `JSONAllPathsWithTypes` (тип `Map(String, String)` передаётся как `Dictionary<string, string>`; преобразовать его в коллекцию можно через `mapKeys`/`mapValues`), `to_json_string` → `toJSONString`; все принимают значение `JSON` (`CAST(col AS JSON)` для колонки `String`); тип колонки `JSON` сопоставляется только с обычным `JsonObject` |
 | Словари | `dictGet`, `dictGetOrDefault`, `dictHas`, `dictGetHierarchy`, `dictGetChildren`, `dictIsIn` (нужен сконфигурированный `CREATE DICTIONARY`) |
-| Session/info-функции | `currentUser()`, `currentDatabase()`, `version()` (`session_user`/`current_schema` недоступны) |
+| Функции сведений о сеансе | `currentUser()`, `currentDatabase()`, `version()` (`session_user`/`current_schema` недоступны) |
 | `GROUP BY ... WITH TOTALS` | `with totals` (отдельная строка итогов не отдаётся `ClickHouse.Driver`) |
 | `LIMIT n BY expr` | `limit [offset, ]n by col1, col2` (перед финальным `LIMIT`) |
 | Модификаторы запроса | `final`, `sample r [offset o]`, `prewhere`, `settings k = v` (`FINAL`/`PREWHERE` требуют поддерживающего движка таблицы) |
 | Табличные функции | `numbers`/`numbers_mt` (колонка `UInt64 number` приводится к `Int64`), `zeros`/`zeros_mt` (`zero UInt8`), `generateRandom` (встроенные `generate_random()`/`generate_random(seed)` фиксируют структуру `id UInt64, value Float64, name String` и приводят `id` к `Int64`), а также серверные/кластерные `url(url, format, structure)`, `s3(url, format, structure)`, `file(path, format, structure)`, `remote(addresses, db, table)`, `remote_secure(...)`, `cluster(cluster, db, table)`, `cluster_all_replicas(...)` (схема строки — generic-интерфейс `TRow` вызывающего), `values` (структура из `TRow`) |
-| Функции массивов | над колонками/выражениями `Array(T)`: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `startsWith`, `endsWith`, `hasSubstr`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`, `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice`, `arrayPushBack`; CLR-метод `string.Split` рендерится как `splitByChar(separator, value)` под [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit) (только одноразрядный разделитель); `arrayJoin(array)` разворачивает по строке на элемент, а `EntityBuilder.ArrayJoin`/`LeftArrayJoin` рендерят клаузу `[left ]array join expr, ...`. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` дополнительно привязывают вырожденный элемент к `ArrayJoinProjection<TEntity, TElement>.Element` (исходная сущность — в `.Item1`); выражение клаузы получает алиас, и `p.Element` ссылается на него (см. [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
-| Поверхность кортежей | нативная колонка/выражение `Tuple(...)` проецируется как `System.Tuple<...>` (арность 1–7); `Tuple.Create(a, b, ...)` рендерится как `tuple(a, b, ...)`, а `System.Tuple<...>.ItemN` — как `tupleElement(t, n)`, оба под [`SupportsTupleFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTupleFunctions); `untuple` не поддерживается (меняет набор колонок результата) |
-| Нативный тип колонки JSON | нативный тип `JSON` с корнем-объектом: свойство `[JsonColumn]` (`Auto`/`Native`: POCO/`JsonObject`/`JsonDocument`/`JsonElement` с корнем-объектом) и «голые» `JsonObject`/`JsonDocument`/`JsonElement` (чтение и параметр) отображаются на него; массивы/скалярные корни отклоняются fail-closed. «Голый» скаляр верхнего уровня `Select(x => x.Doc)` не обрабатывается ядровым классификатором проекции — используйте анонимный тип или DTO. `Text` сохраняет колонку `String`; «голая» `string` и легаси-алиас `Object('json')` не поддерживаются. См. [Поддержка JSON](../guide/16-json.md#отобразить-clr-объект-на-нативную-json-колонку) |
+| Функции массивов | Для колонок и выражений `Array(T)` доступны `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `startsWith`, `endsWith`, `hasSubstr`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`, `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice` и `arrayPushBack`. CLR-метод `string.Split` преобразуется в SQL `splitByChar(separator, value)` под [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit) (разделитель должен состоять из одного символа). `arrayJoin(array)` разворачивает массив, возвращая строку на каждый элемент; `EntityBuilder.ArrayJoin`/`LeftArrayJoin` добавляют клаузу `[left ]array join expr, ...`. Варианты `ArrayJoinElement`/`LeftArrayJoinElement` связывают развёрнутый элемент с `ArrayJoinProjection<TEntity, TElement>.Element`, а исходную сущность помещают в `.Item1`; выражению назначается псевдоним, на который ссылается `p.Element` (см. [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
+| Кортежи | Нативная колонка/выражение `Tuple(...)` проецируется как `System.Tuple<...>` (арность 1–7). `Tuple.Create(a, b, ...)` формирует SQL `tuple(a, b, ...)`, а `System.Tuple<...>.ItemN` — `tupleElement(t, n)`; оба варианта используют [`SupportsTupleFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTupleFunctions). `untuple` не поддерживается, поскольку меняет набор колонок результата |
+| Нативный тип колонки JSON | Тип колонки `JSON` с корнем-объектом: свойство `[JsonColumn]` (`Auto`/`Native`: POCO/`JsonObject`/`JsonDocument`/`JsonElement` с корнем-объектом) и `JsonObject`/`JsonDocument`/`JsonElement` (чтение и параметр) преобразуются в него; массивы и скалярные корни сразу отклоняются. Верхнеуровневую скалярную проекцию `Select(x => x.Doc)` не обрабатывает классификатор проекций ядра — используйте анонимный тип или DTO. `Text` сохраняет колонку `String`; обычная строка `string` и устаревший псевдоним `Object('json')` не поддерживаются. См. [Поддержка JSON](../guide/16-json.md#отобразить-clr-объект-на-нативную-json-колонку) |
 | Потоковое чтение LOB (`ToStream`/`ToTextReader`) | `NotSupportedException` (у драйвера нет потоковых геттеров) |
 
 ### Строковые литералы и экранирование в LIKE
@@ -338,7 +358,7 @@ public sealed class TvpRow
 удваиваются, а остальные символы C0 записываются как `\xNN`. Клауза `ESCAPE` **никогда** не
 выдаётся: движок отвергает любое её написание, а литерал шаблона `LIKE` уже несёт `\%`/`\_`.
 Поэтому пользовательский символ экранирования `LIKE` (третий аргумент `SqlFunctions.Sql.like`)
-падает fail-closed с `NotSupportedException`, называющим ClickHouse.
+сразу вызывает `NotSupportedException` с упоминанием ClickHouse.
 
 ```sql
 select `Id` as `Id`
@@ -351,19 +371,20 @@ select `Id` as `Id`
 - Нативная `arrayExcept` существует только с ClickHouse 25.9. `SqlFunctions.ClickHouse.array_except`
   остаётся в публичном API: необъявленный контекст сохраняет отказ закреплённой 25.8
   (`NotSupportedException` на этапе трансляции, SQL не генерируется), контекст с объявленной 25.9
-  или новее рендерит `arrayExcept(...)`, а контекст с объявленной более старой версией отклоняет
+  или новее генерирует SQL `arrayExcept(...)`, а контекст с объявленной более старой версией отклоняет
   вызов сообщением с требуемой `25.9` и объявленной версией. См.
   [Объявление версии сервера](#объявление-версии-сервера).
-- `GROUP BY ... WITH TOTALS` рендерится корректно, но официальный `ClickHouse.Driver` возвращает строку
-  итогов отдельным блоком ответа, который не отдаётся через `IDataReader`, поэтому материализуются
-  только строки групп. Используйте, если ваш драйвер отдаёт итоги; сам nextorm только эмитит модификатор.
+- SQL для `GROUP BY ... WITH TOTALS` генерируется корректно, но официальный `ClickHouse.Driver`
+  возвращает строку итогов отдельным блоком ответа, который не отдаётся через `IDataReader`, поэтому
+  материализуются только строки групп. Другой драйвер может предоставлять итоги через свой интерфейс
+  чтения; nextorm только добавляет модификатор в SQL.
 - Параметры ClickHouse передаются как параметры HTTP-запроса. Для массовой вставки следует
   использовать нативный бинарный путь провайдера (см. [Массовая вставка](#массовая-вставка)), который
   построитель запросов предоставляет через `CreateBulkInsertBuilder`; утверждение
   `INSERT ... VALUES` остаётся портируемым запасным вариантом (`Mode.Portable`).
 - Для `null`-значений параметров тип ClickHouse невозможно вывести только из значения CLR. Когда
   запрос связывает параметр `null`, задайте явный тип параметра на уровне драйвера (например,
-  пользовательским резолвером) или приведите плейсхолдер в SQL.
+  пользовательским резолвером) или приведите маркер параметра в SQL.
 - ClickHouse отвергает явный оконный фрейм у стандартных `lag`/`lead` (и других не учитывающих фрейм
   оконных функций) с `BAD_ARGUMENTS`. Когда расчёт должен учитывать фрейм, используйте
   `SqlFunctions.ClickHouse.lag_in_frame`/`lead_in_frame`; их «обычные» аналоги `lag`/`lead`
@@ -383,7 +404,7 @@ select `Id` as `Id`
   также «голые» `JsonObject`/`JsonDocument`/`JsonElement` в проекции и параметре; проецируйте через
   анонимный тип или DTO, потому что «голый» скаляр верхнего уровня `Select(x => x.Doc)` не
   обрабатывается ядровым классификатором проекции. Пустой `{}` остаётся непустым значением, а SQL `NULL`
-  в `Nullable(JSON)` остаётся отличным от него. Массивы/скалярные корни отклоняются fail-closed с
+  в `Nullable(JSON)` остаётся отличным от него. Массивы и скалярные корни сразу отклоняются с
   `NotSupportedException`; чтение «голой» `string` из колонки `JSON` и легаси-алиас `Object('json')` не
   поддерживаются — алиасу нужен connection-level `allow_experimental_object_type` (который nextorm
   никогда не выставляет), и даже тогда чтение материализуется как `Tuple<SByte,String>`, а не через

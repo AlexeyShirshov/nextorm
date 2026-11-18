@@ -9,21 +9,14 @@
 
 ## Why there is no built-in change tracker
 
-A change tracker is only useful when the framework **owns** the loaded entity: it keeps the instance in an
-identity map, remembers the original values, notices mutations and turns them into `UPDATE`s in
-`SaveChanges`. nextorm does none of that — it is a query builder with an explicit DML surface
-([Limitations and out-of-scope features](../advanced/limitations.md)):
+A change tracker is useful only when the framework **owns** the loaded entity. It keeps the instance in an identity map, remembers its original values, detects mutations, and turns them into `UPDATE`s in `SaveChanges`. nextorm does not take on that role; it provides an explicit query and DML surface ([Limitations and out-of-scope features](../advanced/limitations.md)):
 
 * every terminal (`ToList`, `Update`, `Insert`, `Merge`, `Delete`, ...) issues exactly one command and
   returns its result;
 * a loaded row is a plain POCO the caller owns; the context never sees it again;
 * there is no identity map, no original-values snapshot and no "changed properties" concept.
 
-For concurrency this means the framework cannot know which token value a row had when you read it, so it
-cannot add the check for you. It only has to hand you the two primitives you need — a `WHERE` that
-compares the token, and the affected-row count — and both already exist. Optimistic concurrency is
-therefore a **pattern** on top of the explicit surface, documented here, rather than an
-`IfUnchanged`/`WithRefresh` API shipped by the library.
+Because nextorm does not retain a loaded entity, it cannot remember the token value from the read and add a concurrency check automatically. The pattern needs two primitives that nextorm already provides: a `WHERE` predicate that compares the token and the affected-row count. Optimistic concurrency is therefore a **pattern** built on the explicit API, not an `IfUnchanged`/`WithRefresh` feature shipped by the library.
 
 ## The token column
 
@@ -51,9 +44,18 @@ A database-managed token is never written by the application, so mark it compute
 (`[DatabaseGenerated(DatabaseGeneratedOption.Computed)]` or `.Computed()`) — `Set(entity)` then skips it
 automatically.
 
+Choose a pattern based on the operation you need:
+
+| Situation | Pattern |
+|---|---|
+| Update an existing row and detect a stale write | On providers that report affected rows, put the key and original token in `Where`; treat zero affected rows as a conflict. |
+| Return the updated token from the same statement | Use `Returning` on a provider that supports it. |
+| The row may or may not exist | Use a token-guarded `MERGE` on a provider that supports conditional branches. |
+| Add `SaveChanges`-style tracking | Build a user-land tracker from the explicit update and batch APIs. |
+
 ## Check on update
 
-Load the row, remember its token, then put both the key and the original token in `Where`:
+To guard the write, keep the token read with the row and include both the key and that original token in `Where`. The example uses an application-managed version and increments it in the same SQL statement; for a database-managed token, compare it in `Where` but do not add it to `Set`:
 
 ```csharp
 public sealed class ConcurrencyException(string message) : Exception(message);
@@ -87,8 +89,7 @@ changed. If you need to tell the two apart, run one extra `FirstOrDefault` on th
 
 ## Read the new token back
 
-After a successful update the token has changed. When the provider can return rows, ask for the new value
-in the same statement:
+A successful update changes the token. If the provider can return rows, request the new value in the same statement:
 
 ```csharp
 var row = ctx.CreateUpdateBuilder<IOrder>()
@@ -202,9 +203,7 @@ merge into orders as target using (values (@p0, @p1, @p2)) as source (id, status
 
 ## Rolling your own change tracking
 
-There is no row-materialization hook, so a user-land tracker attaches rows as it loads them and diffs
-them at `SaveChanges` time. For one entity type it is small — and the writes go out as **one batch**
-instead of one round trip per row:
+This example tracks only `Status`. `Load` stores the entity, its original status, and its version. `SaveChanges` compares the current status with that snapshot, batches the guarded updates, then reads the versions back to detect a missing row or a stale token and refresh the snapshot. Even a tracker for one entity type can send the writes as **one batch** instead of making one round trip per row:
 
 ```csharp
 public sealed class OrderVersion

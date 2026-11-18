@@ -2524,8 +2524,10 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         var databases = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_tablespace_databases("1663"))
             .Select(r => new { r.DatabaseOid })
             .ToList();
-        databases.Should().HaveCount(3, "the pg_default tablespace holds template0, template1 and postgres");
+        databases.Should().HaveCountGreaterThanOrEqualTo(3,
+            "the pg_default tablespace holds template0, template1 and postgres, plus any database a test created");
         databases.Should().OnlyContain(r => r.DatabaseOid != null && r.DatabaseOid.All(char.IsAsciiDigit));
+        databases.Select(r => r.DatabaseOid).Should().OnlyHaveUniqueItems("the function returns one row per database");
         var noTablespace = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_tablespace_databases("0"))
             .Select(r => new { r.DatabaseOid })
             .ToList();

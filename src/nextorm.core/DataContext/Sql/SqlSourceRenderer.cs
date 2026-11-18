@@ -169,7 +169,8 @@ internal static class SqlSourceRenderer
             ctx.KeywordCase,
             sourceSql,
             sourceSql is null ? null : [],
-            parameterProvider: ctx.ParameterProvider);
+            parameterProvider: ctx.ParameterProvider,
+            metadataProvider: ctx.MetadataProvider);
 
         ctx.Params.AddRange(parameters);
         return sql;
@@ -729,7 +730,7 @@ internal static class SqlSourceRenderer
 
         protected override Expression VisitNew(NewExpression node)
         {
-            if (node.Type.IsGenericType && node.Type.GetGenericTypeDefinition() == typeof(OuterRefMarker<>))
+            if (node.Type == typeof(OuterRefMarker))
             {
                 Found = true;
                 return node;
@@ -827,8 +828,8 @@ internal static class SqlSourceRenderer
                 if (from.DatabaseOverride is not null && !ctx.Dialect.SupportsCrossDatabase)
                     throw new NotSupportedException("A cross-database table qualifier is not supported by this SQL dialect");
 
-                if (from.HasQualificationOverride)
-                    tableName = ctx.Dialect.MakeQualifiedTableName(from.ServerOverride, from.DatabaseOverride, from.SchemaOverride, tableName);
+                if (from.HasQualificationOverride || from.Schema is not null)
+                    tableName = ctx.Dialect.MakeQualifiedTableName(from.ServerOverride, from.DatabaseOverride, from.SchemaOverride ?? from.Schema, tableName);
 
                 sqlBuilder.Append(from.IsTableVariableSource || !ctx.QuoteIdentifiers ? tableName : QuoteQualifiedIdentifier(ctx.Dialect, tableName));
 
@@ -1036,6 +1037,7 @@ internal static class SqlSourceRenderer
             throw new NotSupportedException("Raw SQL as a FROM source is not supported by this SQL dialect");
 
         var raw = from.RawSqlSource!;
+        var sql = RawSqlPlaceholders.Expand(raw.Sql, from.SourceBinding?.EntityType, in ctx);
 
         if (raw.Parameters is not null)
         {
@@ -1053,7 +1055,7 @@ internal static class SqlSourceRenderer
         var sqlBuilder = StringBuilderPool.Shared.Get();
         try
         {
-            sqlBuilder.Append('(').Append(raw.Sql).Append(')');
+            sqlBuilder.Append('(').Append(sql).Append(')');
 
             if (needAlias || ctx.Dialect.RequireSubqueryAlias)
             {
@@ -1105,7 +1107,9 @@ internal static class SqlSourceRenderer
         var sqlBuilder = StringBuilderPool.Shared.Get();
         try
         {
-            sqlBuilder.Append('(').Append(from.TableExpressionOverride).Append(')');
+            var tableExpression = RawSqlPlaceholders.Expand(
+                from.TableExpressionOverride!, from.SourceType ?? entityType, in ctx);
+            sqlBuilder.Append('(').Append(tableExpression).Append(')');
 
             if (entityType is not null)
                 ctx.ColumnsProvider.Add(entityType, false);
@@ -1131,6 +1135,14 @@ internal static class SqlSourceRenderer
     {
         var function = from.TableFunction!;
         var arguments = function.Arguments;
+
+        if (function.IsApproximateVectorSearch && !ctx.Dialect.SupportsVectorSearch)
+        {
+            var unsupportedReason = ctx.Dialect.SqlServerFunctions?.GetUnsupportedReason("vector_distance");
+            throw new NotSupportedException(
+                unsupportedReason
+                ?? $"Approximate VECTOR_SEARCH is not supported by the {ctx.Dialect.GetType().Name} provider.");
+        }
 
         // The built-in SqlFunctions.Sql table functions are provider-specific; user-defined runtime
         // table-function factories are emitted verbatim and are the caller's responsibility.
@@ -1178,9 +1190,32 @@ internal static class SqlSourceRenderer
                 if (i > 0 || leadsWithSchema)
                     sqlBuilder.Append(", ");
 
+                if (function.ArgumentNames is { } argumentNames)
+                    sqlBuilder.Append(argumentNames[i]).Append(" = ");
+
                 if (IsVerbatimArgument(function, i))
                 {
                     var verbatim = GetVerbatimArgument(arguments[i]);
+                    if (function.IsApproximateVectorSearch)
+                    {
+                        if (i == 0)
+                        {
+                            verbatim = ctx.QuoteIdentifiers
+                                ? QuoteQualifiedIdentifier(ctx.Dialect, verbatim)
+                                : verbatim;
+                        }
+                        else if (i == 1)
+                        {
+                            verbatim = ctx.QuoteIdentifiers
+                                ? ctx.Dialect.QuoteIdentifier(verbatim)
+                                : verbatim;
+                        }
+                        else if (i == 3)
+                        {
+                            verbatim = SqlLiteral.ToSqlStringLiteral(verbatim);
+                        }
+                    }
+
                     renderedArguments[i] = verbatim;
                     sqlBuilder.Append(verbatim);
                     continue;
@@ -1205,6 +1240,13 @@ internal static class SqlSourceRenderer
 
                 renderedArguments[i] = renderedArgument;
                 sqlBuilder.Append(renderedArgument);
+            }
+
+            if (function.ApproximateTopK is { } topK
+                && ctx.Dialect.ApproximateVectorSearchTopNArgumentName is { } topNArgumentName)
+            {
+                sqlBuilder.Append(", ").Append(topNArgumentName).Append(" = ")
+                    .Append(MakeApproximateTopValue(in ctx, entityType ?? typeof(object), topK));
             }
 
             if (!string.IsNullOrEmpty(function.CallClause))
@@ -1240,6 +1282,32 @@ internal static class SqlSourceRenderer
         {
             StringBuilderPool.Shared.Return(sqlBuilder);
         }
+    }
+
+    /// <summary>Walks or renders the captured TOP expression for SQL Server VECTOR_SEARCH.</summary>
+    internal static string MakeApproximateTopValue(in SqlBuildContext ctx, Type entityType, Expression topK)
+    {
+        using var visitor = new BaseExpressionVisitor(new VisitorOptions(
+            entityType,
+            ctx.Dialect,
+            ctx.ColumnsProvider,
+            0,
+            ctx.AliasProvider,
+            ctx.ParameterProvider,
+            ctx.QueryProvider,
+            true,
+            ctx.ParamMode,
+            ctx.Params,
+            ctx.Logger)
+        {
+            QuoteIdentifiers = ctx.QuoteIdentifiers,
+            NamingConvention = ctx.NamingConvention,
+            KeywordCase = ctx.KeywordCase,
+            ParameterNamePrefix = ctx.ParameterNamePrefix
+        });
+
+        visitor.Visit(topK);
+        return visitor.ToString();
     }
 
     /// <summary>
@@ -1539,7 +1607,7 @@ internal static class SqlSourceRenderer
         return visitor.ToString();
     }
 
-    internal static (bool NeedAliasForColumn, string Column) MakeColumn(in SqlBuildContext ctx, SelectExpression selExp, Type entityType, bool dontNeedAlias, bool renameAware = false, bool selectList = false)
+    internal static (bool NeedAliasForColumn, string Column) MakeColumn(in SqlBuildContext ctx, SelectExpression selExp, Type entityType, bool dontNeedAlias, bool renameAware = false, bool selectList = false, bool bridgeVectorToText = true)
     {
         // A consumer-side reference to a projection source's output identifier (an unaliased computed
         // scalar has no member name to re-resolve): render the source's output column directly instead
@@ -1564,7 +1632,19 @@ internal static class SqlSourceRenderer
         var column = visitor.ToString();
         if (visitor.BooleanSelectProjection)
             column = ctx.Dialect.MakeBooleanPredicate(column, asPredicate: false);
-        else if (ctx.Capture is not null && visitor.Recorder is { } columnRecorder)
+        else if (selectList && bridgeVectorToText
+            && (Nullable.GetUnderlyingType(selExp.PropertyType) ?? selExp.PropertyType) is { } projectionType
+            && TypeFacts.IsPostgresVectorProjection(ctx.Dialect, projectionType, out var vectorArray))
+        {
+            // Npgsql does not expose PostgreSQL extension types as CLR values unless the caller
+            // registers a data-source plugin. Keep the public pgvector API plugin-free by projecting
+            // vector-valued SELECT expressions through PostgreSQL's text representation; the provider
+            // materializer parses that text back into the provider-owned CLR type. Restrict this bridge
+            // to select-list values so vector operands in predicates and ordering retain their native
+            // PostgreSQL type.
+            column = vectorArray ? $"CAST({column} AS text[])" : $"CAST({column} AS text)";
+        }
+        if (!visitor.BooleanSelectProjection && ctx.Capture is not null && visitor.Recorder is { } columnRecorder)
         {
             // The column was rendered by its own visitor; register the fragment so a caller that appends
             // this exact text can merge the parameter occurrences it recorded at emission time. The

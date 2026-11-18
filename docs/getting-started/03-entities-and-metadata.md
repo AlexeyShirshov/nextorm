@@ -1,37 +1,37 @@
 # Entities and metadata
 
-> Map CLR types and members to tables and columns with attributes or a fluent builder, or skip entities entirely and address columns by name with [`TableAlias`](xref:NextORM.Core.TableAlias).
+> Use this page to map a CLR type to a table and its properties to columns. Start with conventions, then add attributes or a fluent mapping when your database names differ. To query a table without an entity type, use [`TableAlias`](xref:NextORM.Core.TableAlias).
 
 **Prerequisites:** [Installation](01-installation.md) · [Quickstart](02-quickstart.md).
 
 ## Overview
 
-NextORM needs to know three things before it can build SQL: the table a type maps to, the column each
-property maps to, and how to create materialised rows. A mapping is obtained in one of these ways:
+Before NextORM can build SQL, it needs a table name, a column name for each mapped property, and a way
+to create result objects. Choose the mapping approach that fits your model:
 
-1. **Attributes** on an interface or on a class (`[SqlTable]`, `[Column]`, optionally `[Table]`).
-2. A **fluent builder** passed to `From<T>(cfg => …)`.
-3. **Nothing at all** - `From<T>()` auto-builds the mapping from the CLR type's shape (table = type
-   name, column = property name). See [Types without attributes](#types-without-attributes).
-4. A **raw table name** with `From("table")` and column access through a
-   [`TableAlias`](xref:NextORM.Core.TableAlias) (`tbl.GetInt32("id")`, `tbl.GetString("name")`, …) -
-   no entity type at all.
+1. **Start with conventions** when the CLR type and property names match the database. `From<T>()`
+   builds and caches a mapping from the type shape. See [Types without attributes](#types-without-attributes).
+2. **Add attributes** (`[SqlTable]`, `[Column]`, and optionally `[Table]`) when you want the mapping
+   next to the class or interface.
+3. **Use a fluent mapping** with `From<T>(cfg => …)` when you want to configure the mapping in code.
+4. **Skip the entity type** when you need a one-off query by table and column name. Start with
+   `From("table")` and read columns through [`TableAlias`](xref:NextORM.Core.TableAlias).
 
-The names auto-derived in item 3 can be translated to the database's spelling with a
-[naming convention](#naming-conventions); names declared with an attribute or a fluent mapping are
-always taken verbatim.
+You can translate names derived by convention with a [naming convention](#naming-conventions).
+Names declared with attributes or a fluent mapping are always used verbatim.
 
-Metadata is resolved lazily and cached **process-wide** in [`Metadata`](xref:NextORM.Core.DataContextCache.Metadata), keyed by type,
-the first time a type is queried through [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)). Because of that cache:
+When you first query a type through [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)),
+NextORM resolves its metadata and caches it by type in the process-wide
+[`Metadata`](xref:NextORM.Core.DataContextCache.Metadata) cache. As a result:
 
-* the config delegate passed to `From<T>(…)` runs only on the first call for that type in the
-  process;
-* later calls for the same type reuse the already-built [`IEntityMetadata`](xref:NextORM.Core.IEntityMetadata) and ignore a new delegate;
-* the in-memory and SQL contexts share the same metadata (the in-memory context exposes it as
-  [`Metadata`](xref:NextORM.Core.InMemoryDataContext.Metadata)).
+* The config delegate passed to `From<T>(…)` runs only on the first call for that type in the process.
+* Later calls for the same type reuse the existing [`IEntityMetadata`](xref:NextORM.Core.IEntityMetadata)
+  and ignore a new delegate.
+* SQL and in-memory contexts share the same metadata. The in-memory context exposes it as
+  [`Metadata`](xref:NextORM.Core.InMemoryDataContext.Metadata).
 
-A type that was never registered throws [`BuildSqlCommandException`](xref:NextORM.Core.BuildSqlCommandException) when used as a `FROM` source, naming
-the type.
+If a type has no registered metadata and you use it as a `FROM` source, NextORM throws
+[`BuildSqlCommandException`](xref:NextORM.Core.BuildSqlCommandException) and names the type.
 
 ## Attributes
 
@@ -361,6 +361,27 @@ provider-side quoting instead.
 | MariaDB | Names used as given; identifiers and aliases are backtick-quoted (the MySQL driver and dialect). |
 | ClickHouse | Names used as given; identifiers and aliases are backtick-quoted when the SQL is rendered. |
 | In-memory | Identical metadata, shared with the SQL contexts through [`DataContextCache`](xref:NextORM.Core.DataContextCache). |
+
+## Runtime mapping variant (one entity, several tables)
+
+One entity class can address a different physical table, schema or column set per runtime *variant* — the
+mechanism behind multi-tenancy. Choose the variant with `IEntityVariantResolver`, map it with
+`IEntityMetadataProvider`, and override the choice for a single command with `WithVariant(...)`:
+
+```csharp
+var builder = new DataContextBuilder()
+    .UseVariantResolver(new TenantScopeResolver())
+    .UseEntityMetadataProvider(new TenantMetadataProvider());
+
+var rows = new SqliteDataContext(connectionString, builder)
+    .From<Order>()
+    .WithVariant(new MappingVariant("acme"))
+    .ToList();
+```
+
+`MappingVariant.Default` keeps the ordinary mapping. Plans, metadata and parameter names are isolated per
+variant, and the DML builders resolve the variant before they build their statement. Full guide:
+[Runtime mapping variant](../guide/33-runtime-mapping-variant.md).
 
 ## See also
 

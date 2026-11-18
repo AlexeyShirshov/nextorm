@@ -25,6 +25,9 @@ internal static class NormSqlTranslator
     {
         if (node.Method.DeclaringType == typeof(SqlFunctions))
         {
+            if (node.Method.Name is nameof(SqlFunctions.VectorDistance) or nameof(SqlFunctions.VectorSearchDistance))
+                return ExtendedScalarFunctionTranslator.TryTranslate(visitor, node);
+
             TranslateNormParam(visitor, node);
             return true;
         }

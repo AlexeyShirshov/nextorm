@@ -58,6 +58,17 @@ public class PostgresDataContext : DataContext, IBulkInsertExecutor, IBulkInsert
     }
 
     /// <summary>
+    /// Creates a PostgreSQL context from the builder alone. The builder must configure routing and name a
+    /// default topology; its host supplies the connection, so no connection string is passed here.
+    /// </summary>
+    /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
+    /// <exception cref="InvalidOperationException">The builder configures no routing, or no default topology.</exception>
+    public PostgresDataContext(DataContextBuilder optionsBuilder)
+        : this(null, null, optionsBuilder, null)
+    {
+    }
+
+    /// <summary>
     /// Creates a version-aware PostgreSQL context that owns a connection built lazily from
     /// <paramref name="connectionString"/>.
     /// </summary>
@@ -136,6 +147,9 @@ public class PostgresDataContext : DataContext, IBulkInsertExecutor, IBulkInsert
     /// <returns>A new PostgreSQL parameter.</returns>
     public override DbParameter CreateParam(string name, object? value)
     {
+        if (value is not null && PostgresVectorTypes.NameFor(value.GetType()) is not null)
+            return new NpgsqlParameter(name, PostgresVectorTypes.ToParameterText(value)) { NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Unknown };
+
         // A provider-agnostic Range<T> is bound as the matching Npgsql range type so that the range
         // operators and columns accept it without a cast.
         if (value is not null && value.GetType().IsGenericType && value.GetType().GetGenericTypeDefinition() == typeof(Range<>))
@@ -235,8 +249,8 @@ public class PostgresDataContext : DataContext, IBulkInsertExecutor, IBulkInsert
     }
 
     /// <summary>
-    /// True: PostgreSQL can surface an anonymous <c>ROW(...)</c> record column or a caller-registered
-    /// named composite as a single raw result-set column (#194).
+    /// Returns <see langword="true"/> because PostgreSQL can expose an anonymous <c>ROW(...)</c> record
+    /// or a caller-registered named composite as a single raw result-set column.
     /// </summary>
     protected override bool SupportsRawRowColumns => true;
 
@@ -255,9 +269,10 @@ public class PostgresDataContext : DataContext, IBulkInsertExecutor, IBulkInsert
         => reader is NpgsqlDataReader npgsql && npgsql.GetPostgresType(ordinal) is PostgresCompositeType;
 
     /// <summary>
-    /// Materializes a projected <see cref="Range{T}"/> column from the driver's
-    /// <c>NpgsqlRange&lt;T&gt;</c> through the typed <c>GetFieldValue</c> accessor, converting it to the
-    /// provider-agnostic range. Every other column is mapped by the base implementation.
+    /// Maps PostgreSQL-specific columns to their CLR representations: pgvector scalars and arrays,
+    /// <see cref="Range{T}"/> values and multiranges, and unconverted <see cref="TimeSpan"/> values.
+    /// The time-span mapping selects the reader accessor from the PostgreSQL storage type; other columns
+    /// use the base implementation.
     /// </summary>
     /// <param name="column">The projected column being read.</param>
     /// <param name="param">The data-reader expression the accessor is built from.</param>
@@ -265,6 +280,11 @@ public class PostgresDataContext : DataContext, IBulkInsertExecutor, IBulkInsert
     public override Expression MapColumnExpression(SelectExpression column, Expression param)
     {
         var realType = Nullable.GetUnderlyingType(column.PropertyType) ?? column.PropertyType;
+        if (PostgresVectorTypes.IsVectorArray(realType))
+            return MapVectorArrayColumn(column, param, realType.GetElementType()!);
+        if (PostgresVectorTypes.IsVectorType(realType))
+            return MapVectorColumn(column, param, realType);
+
         if (realType.IsGenericType && realType.GetGenericTypeDefinition() == typeof(Range<>))
             return MapRangeColumn(column, param, realType);
 
@@ -279,6 +299,34 @@ public class PostgresDataContext : DataContext, IBulkInsertExecutor, IBulkInsert
             return MapIntervalTimeSpanColumn(column, param);
 
         return base.MapColumnExpression(column, param);
+    }
+
+    private static Expression MapVectorColumn(SelectExpression column, Expression param, Type vectorType)
+    {
+        var index = Expression.Constant(column.Index);
+        var getter = Expression.Call(param, typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetString))!, index);
+        var parsed = Expression.Call(vectorType.GetMethod(nameof(PgVector.Parse))!, getter);
+        return WrapVectorNull(column, param, index, parsed);
+    }
+
+    private static Expression MapVectorArrayColumn(SelectExpression column, Expression param, Type elementType)
+    {
+        var index = Expression.Constant(column.Index);
+        var getter = Expression.Call(Expression.Convert(param, typeof(DbDataReader)), GetFieldValueMI.MakeGenericMethod(typeof(string[])), index);
+        var parse = PostgresVectorArrays.ParseMethodFor(elementType)
+            ?? throw new NotSupportedException(
+                $"The PostgreSQL provider cannot materialize an array of '{elementType.Name}': declare the element type as PgVector, PgHalfVector, PgSparseVector or PgBit.");
+        var parsed = Expression.Call(parse, getter);
+        return WrapVectorNull(column, param, index, parsed);
+    }
+
+    private static Expression WrapVectorNull(SelectExpression column, Expression param, Expression index, Expression parsed)
+    {
+        if (column.Nullable)
+            return Expression.Condition(Expression.Call(param, IsDBNullMI, index), Expression.Constant(null, column.PropertyType), Expression.Convert(parsed, column.PropertyType));
+        if (column.DefaultOnNull)
+            return Expression.Condition(Expression.Call(param, IsDBNullMI, index), Expression.Default(column.PropertyType), parsed);
+        return parsed;
     }
 
     /// <summary>

@@ -134,7 +134,8 @@ internal static class NativeAnyRoute
 
         // Only a plain entity source with a predicate: every other SQL-affecting member keeps the
         // legacy route. The list mirrors the ones the parent command transfer carries.
-        if (builder.SourceFrom is not null
+        if (builder.MappingVariant != MappingVariant.Default
+            || builder.SourceFrom is not null
             || builder.Table is not null
             || builder.Sorting is { Count: > 0 }
             || builder.Paging.Limit != 0

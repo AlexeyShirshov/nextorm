@@ -10,6 +10,24 @@ public class PreparedQueryCommand<TResult, TRecord> : IPreparedQueryCommand<TRes
     public readonly Func<TRecord, TResult>? MapDelegate;
 
     /// <summary>
+    /// The mapping variant the command was planned for. A bucket scope selects the shard (server) whose
+    /// connection executes the command; the default scope keeps the context connection.
+    /// </summary>
+    public MappingVariant MappingVariant { get; internal set; } = MappingVariant.Default;
+
+    /// <summary>
+    /// The entity type the command is routed by. Plans are shared across contexts with different routing
+    /// rules, so the topologies are resolved per execution from this type and <see cref="MappingVariant"/>.
+    /// </summary>
+    internal Type? RouteEntityType { get; init; }
+
+    /// <summary>
+    /// Every entity type the statement reads or writes. Routing resolves them all per execution and
+    /// rejects a statement whose sources belong to different topologies: one SQL text runs on one host.
+    /// </summary>
+    internal Type[]? RouteSources { get; init; }
+
+    /// <summary>
     /// Creates a prepared command with a fixed record-to-result mapper.
     /// </summary>
     /// <param name="mapDelegate">Maps a record to a result, or <see langword="null"/> when no projection is needed.</param>

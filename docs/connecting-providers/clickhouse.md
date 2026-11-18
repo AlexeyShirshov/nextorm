@@ -4,11 +4,51 @@
 
 **Prerequisites:** [Provider overview](overview.md) · [Quickstart](../getting-started/02-quickstart.md)
 
+## Registering the provider
+
+Two overloads are available on [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder)
+(`src/nextorm.clickhouse/DI/ClickHouseDataContextOptionsBuilderExtensions.cs`):
+
+```csharp
+using NextORM.Core;
+using NextORM.ClickHouse;
+
+var builder = new DataContextBuilder()
+    .UseClickHouse("Host=localhost;Port=8123;Username=default;Password=secret;Database=app");
+
+using var ctx = builder.CreateDataContext();   // IDataContext
+```
+
+You can also construct the context directly:
+
+```csharp
+using NextORM.Core;
+using NextORM.ClickHouse;
+
+using IDataContext ctx = new ClickHouseDataContext(
+    "Host=localhost;Username=default;Database=app", new DataContextBuilder());
+```
+
 > **Extension methods.** The ClickHouse-only fluent members — `Final`, `PreWhere`, `Settings`,
 > `Sample`, `LimitBy`, `WithTotals`, `ArrayJoin`/`LeftArrayJoin`/`ArrayJoinElement`/`LeftArrayJoinElement`,
 > `SemiJoin`/`AntiJoin`/`PasteJoin` and `j => j.Global()` — are not part of the common `nextorm` builder
 > API. They ship with the `nextorm.clickhouse` package as extension methods; add
 > `using NextORM.ClickHouse;` and the fluent chains below compile unchanged.
+
+## String concatenation
+
+The dialect translates C# string addition to `concat(...)`:
+
+```csharp
+var query = ctx.From<ISimpleEntity>().Select(x => new { Label = "id:" + x.Id });
+```
+
+The generated SQL is:
+
+```sql
+select concat('id:', id) as `Label`
+ from simple_entity
+```
 
 ## Overview
 
@@ -17,6 +57,8 @@
 and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) from its `Dialect` property.
 
 [`ClickHouseDialect`](xref:NextORM.ClickHouse.ClickHouseDialect) (`src/nextorm.clickhouse/ClickHouseDialect.cs`) renders:
+
+### SQL syntax and scalar functions
 
 - parameter placeholder `@name`; the driver rewrites these to ClickHouse's native
   `{name:Type}` form and infers the type from the .NET value;
@@ -39,6 +81,8 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
   supported year-family results stay within 1900–2299, arithmetic outside that range is unsupported,
   and inputs are normalized to microseconds, discarding finer precision),
   `end_of_month` as `toLastDayOfMonth(x)`;
+### Date conversion functions
+
 - the date conversion/part surface `SqlFunctions.ClickHouse.to_*` (gated by
   [`DateConversion`](xref:NextORM.Core.ISqlDialect.DateConversion)):
   `to_date`/`to_date_time`/`to_date32` as `toDate`/`toDateTime`/`toDate32`, the `to_year`/`to_quarter`/
@@ -49,6 +93,8 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
   `toStartOfMinute`/`toStartOfSecond`, `to_monday` as `toMonday` (ISO Monday, whereas `toStartOfWeek`
   starts on Sunday), `to_yyyymm`/`to_yyyymmdd` as `toInt32(toYYYYMM(...))`/`toInt32(toYYYYMMDD(...))`
   and `to_unix_timestamp` as `toInt64(toUnixTimestamp(...))`;
+### Aggregates and JSON functions
+
 - `string_agg(x, delimiter)` as `arrayStringConcat(groupArray(x), delimiter)`;
 - `bit_and`/`bit_or`/`bit_xor` as `groupBitAnd`/`groupBitOr`/`groupBitXor`, `covar_pop`/`covar_samp` as
   `covarPop`/`covarSamp`, `corr` as `corr`, `arg_min`/`arg_max` as `argMin`/`argMax`, and an aggregate
@@ -86,6 +132,8 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
   the dictionary functions `dict_get`/`dict_get_or_default`/
   `dict_has`/`dict_get_hierarchy`/`dict_get_children`/`dict_is_in` as
   `dictGet`/`dictGetOrDefault`/`dictHas`/`dictGetHierarchy`/`dictGetChildren`/`dictIsIn`;
+### Query shape and table functions
+
 - the super-aggregate `GROUP BY ... WITH TOTALS` modifier ([`SupportsGroupByWithTotals`](xref:NextORM.Core.ISqlDialect.SupportsGroupByWithTotals))
   via `EntityBuilder.WithTotals()`;
 - ClickHouse type names in casts (`Int32`, `Int64`, `Float64`, `Decimal(38, 10)`, …);
@@ -104,6 +152,8 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
   (`SqlFunctions.ClickHouse.values<TRow>(tuples)`) renders its `structure` from `TRow`
   ([`SupportsResultSchema(TableFunctionSchema)`](xref:NextORM.Core.ISqlDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema))) and takes the
   verbatim tuple list as its argument;
+### Query modifiers and joins
+
 - the query modifiers `FINAL`/`SAMPLE`/`PREWHERE`/`SETTINGS` via `Final()`, `Sample(ratio[, offset])`,
   `PreWhere(predicate)` and `Settings(("key", "value"), ...)`
   ([`SupportsFinal`](xref:NextORM.Core.ISqlDialect.SupportsFinal)/[`SupportsSample`](xref:NextORM.Core.ISqlDialect.SupportsSample)/[`SupportsPreWhere`](xref:NextORM.Core.ISqlDialect.SupportsPreWhere)/[`SupportsSettings`](xref:NextORM.Core.ISqlDialect.SupportsSettings));
@@ -150,31 +200,6 @@ data is returned unchanged. This applies to ordinary, `DISTINCT`, filtered and w
 
 ClickHouse has no recursive CTE support, so the dialect declares every CTE with plain `with`.
 
-## Registering the provider
-
-Two overloads are available on [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder)
-(`src/nextorm.clickhouse/DI/ClickHouseDataContextOptionsBuilderExtensions.cs`):
-
-```csharp
-using NextORM.Core;
-using NextORM.ClickHouse;
-
-var builder = new DataContextBuilder()
-    .UseClickHouse("Host=localhost;Port=8123;Username=default;Password=secret;Database=app");
-
-using var ctx = builder.CreateDataContext();   // IDataContext
-```
-
-You can also construct the context directly:
-
-```csharp
-using NextORM.Core;
-using NextORM.ClickHouse;
-
-using IDataContext ctx = new ClickHouseDataContext(
-    "Host=localhost;Username=default;Database=app", new DataContextBuilder());
-```
-
 ### Declaring the server version
 
 The server version is a caller declaration, never probed: without one the provider keeps the pinned
@@ -217,17 +242,6 @@ builder.Factory = b => new Declared25Context(connectionString, b);   // the DI p
 A second, different declaration for the same type throws `InvalidOperationException` before any query
 is prepared. The client and data-source constructors are unversioned: they always create the
 pinned-baseline dialect.
-
-## String concatenation
-
-```csharp
-var query = ctx.From<ISimpleEntity>().Select(x => new { Label = "id:" + x.Id });
-```
-
-```sql
-select concat('id:', id) as `Label`
- from simple_entity
-```
 
 ## Table-valued parameters
 
@@ -289,6 +303,8 @@ so the class is not why nextorm uses `InsertBinaryAsync`: the binary insert API 
 per-insert settings copy and the session/parallelism contract. See [Bulk insert](../guide/22-bulk-insert.md).
 
 ## Provider differences
+
+The following table summarizes the dialect's behavior:
 
 | Aspect | ClickHouse |
 |---|---|

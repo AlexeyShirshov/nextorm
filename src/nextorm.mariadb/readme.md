@@ -1,6 +1,6 @@
 # Nextorm — MariaDB provider
 
-[![NuGet](https://img.shields.io/nuget/vpre/nextorm.mariadb?logo=nuget)](https://www.nuget.org/packages/nextorm.mariadb)
+[![NuGet](https://img.shields.io/nuget/v/nextorm.mariadb?logo=nuget)](https://www.nuget.org/packages/nextorm.mariadb)
 
 `nextorm.mariadb` adds MariaDB support to [Nextorm](https://github.com/AlexeyShirshov/nextorm) — a
 zero-SQL object-relational mapper for .NET that turns typed C# queries into SQL and materializes rows
@@ -9,15 +9,15 @@ differences, and ships the `UseMariaDb` builder extension over `MySqlConnector`.
 
 ## Installation
 
-All current nextorm releases are prereleases, so `--prerelease` is required:
+Stable version `1.0.9` is available. Add the packages without prerelease flags:
 
 ```bash
-dotnet add package nextorm --prerelease
-dotnet add package nextorm.mariadb --prerelease
+dotnet add package nextorm
+dotnet add package nextorm.mariadb
 ```
 
-Package Manager Console: `Install-Package nextorm -Prerelease` and
-`Install-Package nextorm.mariadb -Prerelease`.
+Package Manager Console: `Install-Package nextorm` and
+`Install-Package nextorm.mariadb`.
 
 ## Usage
 
@@ -71,8 +71,8 @@ open `DbConnection`.
 
 ## Status
 
-Beta: every release so far is a prerelease, the public API still changes between them, and backward
-compatibility is not preserved yet. Release notes are on
+The public API may change between prereleases, and backward compatibility across prereleases is not
+guaranteed. Review the release notes before upgrading between prereleases:
 [GitHub Releases](https://github.com/AlexeyShirshov/nextorm/releases).
 
 ## License

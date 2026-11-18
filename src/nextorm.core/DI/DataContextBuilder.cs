@@ -1,16 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Reflection;
 
 namespace NextORM.Core;
 
 /// <summary>
-/// Configures and creates an <see cref="IDataContext"/>.
+/// Configures the provider and query behavior for the <see cref="IDataContext"/> created by this builder.
 /// </summary>
-/// <remarks>
-/// The <c>DataContext</c> prefix is inconsistent with the rest of the library, which otherwise uses
-/// <c>DataContext</c> (for example <c>DataContextOptionsBuilderExtensions</c>). Recommended name:
-/// <c>DataContextBuilder</c>. See <c>docs/specs/design/API-NAMING-REVIEW.md</c> finding P2-22.
-/// </remarks>
 public class DataContextBuilder
 {
     //private readonly Dictionary<string, object> _props = new();
@@ -19,11 +15,17 @@ public class DataContextBuilder
     private bool _logSensitiveData;
     private int? _commandTimeout;
     private Func<DataContextBuilder, IDataContext>? _factory;
+    private IEntityMetadataProvider _entityMetadataProvider = new DefaultEntityMetadataProvider();
+    private IEntityVariantResolver _entityVariantResolver = new DefaultEntityVariantResolver();
     // One ordered list holds every interceptor registration: either an already-created interceptor
     // instance or a Type to resolve from the captured IServiceProvider when a context is created.
     // Registration order is the invocation order in each event pipeline.
     private readonly List<object> _interceptorEntries = [];
     private readonly IServiceProvider? _serviceProvider;
+    // Topologies routed commands may run on, by name, plus the rules that choose one per entity type.
+    private readonly Dictionary<string, IHostTopology> _topologies = new(StringComparer.Ordinal);
+    private readonly RouteTable _routes = new();
+    private string? _defaultTopologyName;
     // Resolved for the current creation only (cleared by CreateDataContext), so a transient service
     // is resolved once per context and never reused across creations.
     private IQueryInterceptor[]? _resolvedQueryInterceptors;
@@ -67,6 +69,9 @@ public class DataContextBuilder
     /// verbatim; can be overridden per command with <c>WithNamingConvention</c>.
     /// </summary>
     public INamingConvention? NamingConvention { get; private set; }
+
+    /// <summary>The shard topology configured through <c>UseSharding</c>, or <see langword="null"/>.</summary>
+    internal IShardTopology? ShardTopology { get; set; }
 
     /// <summary>
     /// The letter case in which SQL keywords are emitted by default. Defaults to
@@ -118,6 +123,110 @@ public class DataContextBuilder
     /// </summary>
     public Func<DataContextBuilder, IDataContext>? Factory { get => _factory; set => _factory = value; }
 
+    /// <summary>The provider used to resolve entity mapping metadata.</summary>
+    public IEntityMetadataProvider EntityMetadataProvider => _entityMetadataProvider;
+
+    /// <summary>Sets the provider used to resolve entity mapping metadata and returns this builder.</summary>
+    /// <param name="provider">The non-null metadata provider to use.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="provider"/> is <see langword="null"/>.</exception>
+    public DataContextBuilder UseEntityMetadataProvider(IEntityMetadataProvider provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        _entityMetadataProvider = provider;
+        return this;
+    }
+
+    /// <summary>The resolver used to select a mapping variant for entities.</summary>
+    public IEntityVariantResolver EntityVariantResolver => _entityVariantResolver;
+
+    /// <summary>Sets the resolver used to select an entity mapping variant and returns this builder.</summary>
+    /// <param name="resolver">The non-null resolver to use.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="resolver"/> is <see langword="null"/>.</exception>
+    public DataContextBuilder UseVariantResolver(IEntityVariantResolver resolver)
+    {
+        ArgumentNullException.ThrowIfNull(resolver);
+        _entityVariantResolver = resolver;
+        return this;
+    }
+
+    /// <summary>The topologies routed commands may run on, by name.</summary>
+    internal IReadOnlyDictionary<string, IHostTopology> Topologies => _topologies;
+
+    /// <summary>The routing rules that choose a topology per entity type.</summary>
+    internal RouteTable Routes => _routes;
+
+    /// <summary>
+    /// The topology that serves commands no rule routes, raw SQL and the context transaction, or
+    /// <see langword="null"/> when routing is not configured. Set through <see cref="UseDefaultTopology"/>.
+    /// </summary>
+    public string? DefaultTopologyName => _defaultTopologyName;
+
+    /// <summary>
+    /// Designates a registered topology as the default one. A routed context is created from the builder
+    /// alone, so its own connection comes from this topology; commands no rule routes, raw SQL and the
+    /// context transaction run there.
+    /// </summary>
+    /// <param name="topologyName">The name of the topology registered with <see cref="AddTopology"/>.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    /// <exception cref="ArgumentException"><paramref name="topologyName"/> is empty.</exception>
+    public DataContextBuilder UseDefaultTopology(string topologyName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(topologyName);
+        _defaultTopologyName = topologyName;
+        return this;
+    }
+
+    /// <summary>
+    /// Registers a topology that routing rules can refer to by <see cref="IHostTopology.Name"/>.
+    /// </summary>
+    /// <param name="topology">The topology to register.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="topology"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">
+    /// The topology has no name, or a topology with the same name is already registered.
+    /// </exception>
+    public DataContextBuilder AddTopology(IHostTopology topology)
+    {
+        ArgumentNullException.ThrowIfNull(topology);
+        if (string.IsNullOrWhiteSpace(topology.Name))
+            throw new ArgumentException("A topology must have a non-empty name.", nameof(topology));
+        if (!_topologies.TryAdd(topology.Name, topology))
+            throw new ArgumentException($"A topology named '{topology.Name}' is already registered.", nameof(topology));
+
+        return this;
+    }
+
+    /// <summary>Routes every entity type under <paramref name="namespacePrefix"/> to a topology.</summary>
+    /// <param name="namespacePrefix">The namespace (or namespace prefix) the rule covers.</param>
+    /// <param name="topology">The registered topology name.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    public DataContextBuilder RouteNamespace(string namespacePrefix, string topology)
+    {
+        _routes.AddNamespace(namespacePrefix, topology);
+        return this;
+    }
+
+    /// <summary>Routes every entity type declared in <paramref name="assembly"/> to a topology.</summary>
+    /// <param name="assembly">The assembly the rule covers.</param>
+    /// <param name="topology">The registered topology name.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    public DataContextBuilder RouteAssembly(Assembly assembly, string topology)
+    {
+        _routes.AddAssembly(assembly, topology);
+        return this;
+    }
+
+    /// <summary>Appends a custom routing rule; rules are consulted in registration order.</summary>
+    /// <param name="resolver">The rule that selects a topology for an entity type.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    public DataContextBuilder UseRouteResolver(IEntityRouteResolver resolver)
+    {
+        _routes.AddResolver(resolver);
+        return this;
+    }
+
     //public Dictionary<string, object> Property => _props;
     /// <summary>
     /// Sets the logger factory used for diagnostic logging (SQL text and, when enabled, parameter
@@ -158,6 +267,8 @@ public class DataContextBuilder
     /// MySQL/MariaDB/ClickHouse). A single command can override the setting with
     /// <c>WithQuotedIdentifiers</c>.
     /// </summary>
+    /// <param name="value"><see langword="true"/> to quote identifiers; otherwise, <see langword="false"/>.</param>
+    /// <returns>This builder.</returns>
     public DataContextBuilder UseQuotedIdentifiers(bool value = true)
     {
         QuoteIdentifiers = value;
@@ -172,6 +283,8 @@ public class DataContextBuilder
     /// <see langword="null"/> to emit CLR names verbatim (the default). A single command can override
     /// the setting with <c>WithNamingConvention</c>.
     /// </summary>
+    /// <param name="convention">The convention to apply, or <see langword="null"/> to emit CLR names verbatim.</param>
+    /// <returns>This builder.</returns>
     public DataContextBuilder UseNamingConvention(INamingConvention? convention)
     {
         NamingConvention = convention;

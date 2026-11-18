@@ -1,7 +1,10 @@
 # COALESCE (`??`) and CAST
 
-`a ?? b` maps to the provider's two-argument null replacement. A numeric conversion of a numeric operand
-- a C# cast such as `(double)e.Id`, or a `Convert.ToXxx(value)` call - maps to `cast(x as <type>)`:
+`a ?? b` maps to the provider's two-argument null replacement. A numeric-to-numeric cast, such as
+`(double)e.Id`, or a `Convert.ToXxx(value)` call maps to `cast(x as <type>)`. Inside a database-backed
+query, nextorm emits SQL for these expressions and the database evaluates them; outside the query, C#
+performs the corresponding operations locally. The `SqlFunctions` helpers below express SQL operations
+inside query expressions, not local calculations. For example:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -47,8 +50,14 @@ Numeric cast targets come from [`MakeTypeName`](xref:NextORM.Core.ISqlDialect.Ma
 
 ## Conditional helpers
 
-`SqlFunctions.Sql.nullif` is ANSI and works on every SQL provider; `greatest`/`least` are gated by
-[`SupportsGreatestLeast`](xref:NextORM.Core.ISqlDialect.SupportsGreatestLeast) (PostgreSQL, MySQL/MariaDB, ClickHouse, SQL Server 2022+ and SQLite opt in; SQLite renders `max`/`min`). NULL handling is provider-specific: PostgreSQL, SQL Server 2022+ and ClickHouse 24.12+ ignore NULL arguments and return NULL only when every argument is NULL, while MySQL/MariaDB and SQLite return NULL when any argument is NULL:
+Use `SqlFunctions.Sql.nullif` for SQL `NULLIF`; it works on every SQL provider. `greatest`/`least` are
+available only when the dialect enables
+[`SupportsGreatestLeast`](xref:NextORM.Core.ISqlDialect.SupportsGreatestLeast) (PostgreSQL, MySQL/MariaDB,
+ClickHouse, SQL Server 2022+ and SQLite opt in; SQLite renders `max`/`min`). Check both that capability
+and the provider's NULL policy before using them in a cross-provider query. PostgreSQL, SQL Server 2022+
+and ClickHouse 24.12+ ignore NULL arguments and return NULL only when every argument is NULL; MySQL/MariaDB
+and SQLite return NULL when any argument is NULL. For example, `greatest(NULL, 10)` returns `10` on the
+first group and `NULL` on the second:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -65,6 +74,11 @@ var rows = dataContext.From<IComplexEntity>()
 select nullif(nullableint, 0) as "NoZero", greatest(id, 10) as "Hi", least(id, 10) as "Lo"
  from complex_entity
 ```
+
+For a two-branch choice, use the C# conditional expression (`condition ? a : b`) when its portable
+`CASE` translation fits; use `SqlFunctions.Sql.iif` when you want a function-style helper with the
+dialect's spelling. Use `multi_if` for ClickHouse's native multi-branch form; `choose` remains
+SQL Server-only. The table lists these choices alongside the other conditional helpers:
 
 | C# | SQL |
 |---|---|
@@ -83,7 +97,11 @@ select nullif(nullableint, 0) as "NoZero", greatest(id, 10) as "Hi", least(id, 1
 spelling through [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String)); `choose` remains SQL Server-only
 ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)). Calling `iif` through the specialized
 `SqlFunctions.SqlServer` surface still works by inheritance. The C# ternary `condition ? a : b` is separate
-and always renders the portable `case when ... end`.
+and always renders the portable `case when ... end`. In a database query, a SQL condition that evaluates
+to UNKNOWN (for example, a comparison involving NULL) does not match `WHEN`, so the `ELSE` branch is
+selected. The selected branch is not coalesced: if it returns NULL, the result remains NULL. Because
+`iif` uses the dialect's native spelling, check the target provider's behavior when its condition can be
+NULL.
 
 ClickHouse additionally has the multi-branch `multiIf` surface
 ([`MultiIf`](xref:NextORM.Core.ISqlDialect.MultiIf),

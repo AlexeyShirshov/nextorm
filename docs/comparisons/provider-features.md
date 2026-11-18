@@ -1,9 +1,12 @@
 # Provider features: Nextorm vs linq2db
 
-A dated, per-engine comparison of the **provider-specific API surface**: for each SQL engine both libraries
-support, how much of that engine's own feature set is exposed through a dedicated API wired to the query
-builder. Marks are judgement calls against the public documentation and source of both libraries, as of
-**2026-10-04**.
+Use this page when you need a database-specific feature exposed through a named API that is
+integrated with the query builder. For each SQL engine both libraries support, the table compares
+the breadth of that **dedicated provider API**—not every possible way to express the same SQL. Marks
+are judgements based on both libraries' public documentation and source, as of **2026-10-04**.
+
+The unified vector-search rows are a later Nextorm update; linq2db is marked **not assessed** for those
+rows, and those cells are excluded from the totals.
 
 This page answers a narrower question than [Capabilities](capabilities.md). Capabilities asks whether a
 construct can be expressed; this page asks whether there is a **dedicated provider API** for it. A `no` means
@@ -16,10 +19,13 @@ no dedicated API was found — the construct may still be reachable through raw 
 - **partial** — present with a named limitation, or reachable only through a generic mechanism.
 - **no** — no dedicated provider API found.
 - **n/a** — the feature does not exist on that engine.
+- **not assessed** — no comparison was made for this feature; excluded from totals.
 
-Each table ends with a **Total** row: the yes / partial / no counts per library (`n/a` is excluded).
+Each table ends with a **Total** row: the yes / partial / no counts per library (`n/a` and `not assessed` are excluded).
 
 ## Provider footprint
+
+This table counts supported database engines, not the depth of each engine's feature API.
 
 | Engine | Nextorm | linq2db |
 |---|---|---|
@@ -38,23 +44,26 @@ linq2db models MariaDB as a MySQL version.
 
 ## Key finding
 
-**Nextorm covers provider-specific features more broadly.** Across the six SQL engines both libraries
-support, Nextorm exposes a dedicated provider-specific API on a wider set of surfaces than linq2db: a
-per-provider scalar-function library for every engine, the ClickHouse
-clause/aggregate/table-function/tuple/native-JSON surface, PostgreSQL
-full-text/regex/`jsonb_path_*`/range/data-modifying CTE/table functions, SQL Server sequences and row locking,
-MySQL/MariaDB JSON/regex/sequences, and SQLite JSON1/regex/aggregates/LOB/FTS5 maintenance — all wired to the
-query builder rather than raw SQL.
+**Across the six shared SQL engines, Nextorm exposes dedicated APIs for more of the listed
+provider-specific features.** Examples include a scalar-function library for each engine; ClickHouse
+clauses, aggregates, table functions, tuples, and native JSON; PostgreSQL full-text search, regex,
+`jsonb_path_*`, range operations, data-modifying CTEs, and table functions; SQL Server sequences and
+row locking; MySQL/MariaDB JSON, regex, and sequences; and SQLite JSON1, regex, aggregates, LOB
+streaming, and FTS5 maintenance. These APIs connect to the query builder rather than requiring raw
+SQL.
 
-This is a statement about **per-engine feature depth, not the number of engines**: linq2db connects to more
-database products (Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, Access, SQL CE, DuckDB, Ydb), while
-Nextorm adds an in-memory object context and splits MySQL/MariaDB into separate providers. linq2db remains
-wider on SQL Server scalar-function breadth and hint variety (issue [#182](https://github.com/AlexeyShirshov/nextorm/issues/182)).
+This describes **feature depth per engine, not the number of engines**. linq2db connects to more
+database products (Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, Access, SQL CE, DuckDB, Ydb).
+Nextorm adds an in-memory object context and treats MySQL and MariaDB as separate providers. linq2db
+still has broader SQL Server scalar-function coverage and more hint varieties (issue
+[#182](https://github.com/AlexeyShirshov/nextorm/issues/182)).
 
 ## PostgreSQL
 
 | Feature | Nextorm | linq2db |
 |---|---|---|
+| pgvector value types and operations | supported (PostgreSQL-only `PgVector`, `PgHalfVector`, `PgSparseVector` and `PgBit`; LINQ marker translation for distances, element-wise operators, functions and vector arrays) | no dedicated API found |
+| Unified vector nearest-neighbor search | yes (shared API; PostgreSQL exact guarantees exact results via pgvector distance functions, potentially slower and not ANN-indexable; approximate uses index-eligible distance operators) | not assessed |
 | Arrays + `any`/`all` quantifiers | yes | yes |
 | Range / multirange (operators, mapping) | yes | partial (type mapping only) |
 | Full-text `tsvector`/`tsquery` | yes | no |
@@ -75,7 +84,7 @@ wider on SQL Server scalar-function breadth and hint variety (issue [#182](https
 | Table functions / set-returning functions (`generate_series`, `unnest`, `regexp_matches`, `jsonb_*`, `ts_stat`, ...) | yes | partial (`unnest`/`generate_series` only) |
 | Row locking (`FOR UPDATE` / `FOR SHARE`, per-source `OF`, wait modes) | yes | yes |
 | Session/server identity (`pg_backend_pid`, `inet_*`) | yes | no |
-| **Total** | 20 / 0 / 0 | 8 / 5 / 7 |
+| **Total** | 21 / 0 / 0 | 8 / 5 / 7 |
 
 Net: **Nextorm leads** — full-text, regex, `jsonb_path_*`, range operators, data-modifying CTE,
 sequences/settings, table-valued parameters and the aggregate families have dedicated Nextorm APIs but no
@@ -85,6 +94,7 @@ linq2db ones.
 
 | Feature | Nextorm | linq2db |
 |---|---|---|
+| Vector nearest-neighbor search (`VECTOR_DISTANCE` / `VECTOR_SEARCH`, 2025+) | yes (shared API; approximate search requires a selected grammar, preview features and a matching DiskANN index) | not assessed |
 | `OUTPUT` / `OUTPUT ... INTO` | yes | yes |
 | `MERGE` (branches, `BY SOURCE`) | yes | yes |
 | Hints (table / query / join / tables-in-scope / index) | yes | yes (wider) |
@@ -104,7 +114,7 @@ linq2db ones.
 | Sequences (`NEXT VALUE FOR`) | yes | yes |
 | Row locking (`ForUpdate`/`ForShare`, `LockWaitMode` → `with (updlock)`/`with (holdlock)`) | yes | yes |
 | Session/server identity (`@@SERVERNAME`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) | yes | yes |
-| **Total** | 19 / 0 / 0 | 13 / 4 / 2 |
+| **Total** | 20 / 0 / 0 | 13 / 4 / 2 |
 
 Net: **parity on the audited T-SQL scalar catalogue, with linq2db still wider overall**. Issue
 [#182](https://github.com/AlexeyShirshov/nextorm/issues/182) reconciled 61 pinned linq2db `SqlFn.cs` entries
@@ -250,7 +260,8 @@ sequences, row locking, generic CTAS/temporary tables, index/query hints, named 
 - MySQL and MariaDB are separate Nextorm providers but a single linq2db provider, so the MySQL/MariaDB table
   folds both libraries' shapes into one list.
 - NativeAOT is not a per-provider row: linq2db does not officially support it, while Nextorm's zero-config
-  contract (`PublishAot=true` only) is verified on SQLite today — see the
+  contract (`PublishAot=true` only) is verified on SQLite, PostgreSQL, SQL Server, MySQL, MariaDB and
+  ClickHouse today — see the
   [NativeAOT guide](../infrastructure/05-nativeaot.md).
 
 ## See also

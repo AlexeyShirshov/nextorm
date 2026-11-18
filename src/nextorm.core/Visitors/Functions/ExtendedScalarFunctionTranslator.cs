@@ -137,6 +137,139 @@ internal static class ExtendedScalarFunctionTranslator
     {
         var name = node.Method.Name;
 
+        if (node.Method.DeclaringType == typeof(SqlFunctions)
+            && name is nameof(SqlFunctions.VectorDistance) or nameof(SqlFunctions.VectorSearchDistance))
+        {
+            var isSearchDistance = name == nameof(SqlFunctions.VectorSearchDistance);
+            if (!visitor.Dialect.SupportsVectorSearch)
+            {
+                var unsupportedReason = visitor.Dialect.SqlServerFunctions?.GetUnsupportedReason("vector_distance");
+                throw new NotSupportedException(
+                    unsupportedReason
+                    ?? $"Vector distance and nearest-neighbor search are not supported by the {visitor.Dialect.GetType().Name} provider.");
+            }
+
+            var metricExpression = TypeFacts.UnwrapConvert(node.Arguments[2]);
+            if (metricExpression is not ConstantExpression { Value: VectorDistanceMetric metric })
+                throw new NotSupportedException(
+                    "SqlFunctions.VectorDistance requires a constant VectorDistanceMetric so the provider can select the matching operator.");
+
+            var exactSearch = false;
+            var exactPostgresSearch = false;
+            if (isSearchDistance)
+            {
+                var modeExpression = TypeFacts.UnwrapConvert(node.Arguments[3]);
+                if (modeExpression is not ConstantExpression { Value: VectorSearchMode mode })
+                    throw new NotSupportedException(
+                        "VectorSearch requires a constant VectorSearchMode so the provider can preserve the requested search semantics.");
+
+                exactSearch = mode == VectorSearchMode.Exact;
+                exactPostgresSearch = exactSearch && visitor.Dialect.SupportsExtendedScalarFunctions;
+            }
+
+            if (visitor.Dialect.SqlServerFunctions is { } sqlServerFunctions)
+            {
+                var sqlServerMetric = metric switch
+                {
+                    VectorDistanceMetric.Cosine => "cosine",
+                    VectorDistanceMetric.DotProduct => "dot",
+                    VectorDistanceMetric.Euclidean => "euclidean",
+                    _ => throw new NotSupportedException($"The vector distance metric '{metric}' is not supported by SQL Server.")
+                };
+
+                if (visitor.IsParamMode)
+                {
+                    visitor.Visit(node.Arguments[0]);
+                    visitor.Visit(node.Arguments[1]);
+                }
+                else
+                {
+                    visitor.NeedAliasForColumn = true;
+                    visitor.Builder!.Append(sqlServerFunctions.Render(
+                        "vector_distance",
+                        [
+                            $"'{sqlServerMetric}'",
+                            visitor.VisitToString(node.Arguments[0]),
+                            visitor.VisitToString(node.Arguments[1])
+                        ]));
+                }
+
+                return true;
+            }
+
+            if (exactSearch && !visitor.Dialect.SupportsExtendedScalarFunctions)
+                throw new NotSupportedException(
+                    "Exact vector search requires PostgreSQL pgvector distance functions or SQL Server VECTOR_DISTANCE.");
+
+            if (exactPostgresSearch)
+            {
+                var functionName = metric switch
+                {
+                    VectorDistanceMetric.Cosine => "cosine_distance",
+                    VectorDistanceMetric.Euclidean => "l2_distance",
+                    VectorDistanceMetric.DotProduct => "negative_inner_product",
+                    _ => throw new ArgumentOutOfRangeException(nameof(metric), metric, "The vector distance metric is not supported.")
+                };
+                EmitVectorFunction(visitor, functionName, [node.Arguments[0], node.Arguments[1]]);
+                return true;
+            }
+
+            var sqlOperator = metric switch
+            {
+                VectorDistanceMetric.Cosine => "<=>",
+                VectorDistanceMetric.Euclidean => "<->",
+                VectorDistanceMetric.DotProduct => "<#>",
+                _ => throw new ArgumentOutOfRangeException(nameof(metric), metric, "The vector distance metric is not supported.")
+            };
+            EmitVectorOperator(visitor, sqlOperator, node.Arguments[0], node.Arguments[1]);
+            return true;
+        }
+
+        if (name is nameof(PostgresFunctions.l2_distance) or nameof(PostgresFunctions.cosine_distance)
+            or nameof(PostgresFunctions.negative_inner_product) or nameof(PostgresFunctions.l1_distance)
+            or nameof(PostgresFunctions.hamming_distance) or nameof(PostgresFunctions.jaccard_distance)
+            or nameof(PostgresFunctions.vector_add) or nameof(PostgresFunctions.vector_subtract)
+            or nameof(PostgresFunctions.vector_multiply) or nameof(PostgresFunctions.vector_concat)
+            or nameof(PostgresFunctions.vector_dims) or nameof(PostgresFunctions.vector_norm)
+            or nameof(PostgresFunctions.l2_norm) or nameof(PostgresFunctions.l2_normalize)
+            or nameof(PostgresFunctions.subvector) or nameof(PostgresFunctions.binary_quantize))
+        {
+            if (!visitor.Dialect.SupportsExtendedScalarFunctions)
+                throw new NotSupportedException("pgvector functions require PostgreSQL.");
+
+            if (name is nameof(PostgresFunctions.l2_distance) or nameof(PostgresFunctions.cosine_distance)
+                or nameof(PostgresFunctions.negative_inner_product) or nameof(PostgresFunctions.l1_distance)
+                or nameof(PostgresFunctions.hamming_distance) or nameof(PostgresFunctions.jaccard_distance)
+                or nameof(PostgresFunctions.vector_add) or nameof(PostgresFunctions.vector_subtract)
+                or nameof(PostgresFunctions.vector_multiply) or nameof(PostgresFunctions.vector_concat))
+            {
+                var sqlOperator = name switch
+                {
+                    nameof(PostgresFunctions.l2_distance) => "<->",
+                    nameof(PostgresFunctions.cosine_distance) => "<=>",
+                    nameof(PostgresFunctions.negative_inner_product) => "<#>",
+                    nameof(PostgresFunctions.l1_distance) => "<+>",
+                    nameof(PostgresFunctions.hamming_distance) => "<~>",
+                    nameof(PostgresFunctions.jaccard_distance) => "<%>",
+                    nameof(PostgresFunctions.vector_add) => "+",
+                    nameof(PostgresFunctions.vector_subtract) => "-",
+                    nameof(PostgresFunctions.vector_multiply) => "*",
+                    _ => "||"
+                };
+                EmitVectorOperator(visitor, sqlOperator, node.Arguments[0], node.Arguments[1]);
+            }
+            else
+            {
+                // binary_quantize is the one two-type-parameter marker: the extra argument names the
+                // provider-side bit type and never reaches SQL.
+                EmitVectorFunction(visitor, name, name == nameof(PostgresFunctions.binary_quantize)
+                    ? new[] { node.Arguments[0] }
+                    : node.Arguments);
+            }
+
+            return true;
+        }
+
         ThrowIfRefused(node);
 
         if (MathFunctions.Contains(name))
@@ -354,9 +487,77 @@ internal static class ExtendedScalarFunctionTranslator
     }
 
     /// <summary>
-    /// Renders <c>name(arg, ...)</c> with one argument wrapped in <c>cast(arg as type)</c>. Used for
-    /// the sequence functions (<c>regclass</c>) and <c>date_bin</c> (<c>interval</c>), whose text
-    /// operands are not implicitly coerced by PostgreSQL.
+    /// Renders a pgvector operator. An operand that does not reference the query parameter (a captured
+    /// variable, a constant or a composed value) is cast to its own PostgreSQL type: the driver binds
+    /// pgvector values as untyped text, and an <c>unknown</c> operand does not resolve between the
+    /// <c>vector</c>, <c>halfvec</c> and <c>sparsevec</c> overloads.
+    /// </summary>
+    private static void EmitVectorOperator(BaseExpressionVisitor visitor, string sqlOperator, Expression left, Expression right)
+    {
+        if (!visitor.IsParamMode)
+        {
+            visitor.NeedAliasForColumn = true;
+            visitor.Builder!.Append('(');
+        }
+
+        AppendVectorOperand(visitor, left);
+
+        if (!visitor.IsParamMode)
+            visitor.Builder!.Append(' ').Append(sqlOperator).Append(' ');
+
+        AppendVectorOperand(visitor, right);
+
+        if (!visitor.IsParamMode)
+            visitor.Builder!.Append(')');
+    }
+
+    /// <summary>Renders a pgvector function call, applying the operand cast rule of <see cref="EmitVectorOperator"/>.</summary>
+    private static void EmitVectorFunction(BaseExpressionVisitor visitor, string name, IReadOnlyList<Expression> args)
+    {
+        if (!visitor.IsParamMode)
+        {
+            visitor.NeedAliasForColumn = true;
+            visitor.Builder!.Append(name).Append('(');
+        }
+
+        for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+        {
+            if (!visitor.IsParamMode && i > 0)
+                visitor.Builder!.Append(", ");
+
+            AppendVectorOperand(visitor, args[i]);
+        }
+
+        if (!visitor.IsParamMode)
+            visitor.Builder!.Append(')');
+    }
+
+    private static void AppendVectorOperand(BaseExpressionVisitor visitor, Expression operand)
+    {
+        var realType = Nullable.GetUnderlyingType(operand.Type) ?? operand.Type;
+        if (!visitor.IsParamMode
+            && !operand.Has<ParameterExpression>()
+            && TypeFacts.IsPostgresVectorType(realType))
+        {
+            var typeName = visitor.Dialect.MakeTypeName(realType);
+            // PostgreSQL bit strings and their arrays are left uncast: the type name carries no length,
+            // so `cast(x as bit)` would narrow the value to one bit (and `bit[]` to one bit per element).
+            // The bit operators are unambiguous without the cast.
+            if (typeName is "vector" or "halfvec" or "sparsevec" or "vector[]" or "halfvec[]" or "sparsevec[]")
+            {
+                visitor.Builder!.Append(visitor.Kw("cast("));
+                SqlOperandTranslator.AppendArgument(visitor, operand);
+                visitor.Builder!.Append(visitor.Kw(" as ")).Append(typeName).Append(')');
+                return;
+            }
+        }
+
+        SqlOperandTranslator.AppendArgument(visitor, operand);
+    }
+
+    /// <summary>
+    /// Renders a function over the given arguments, casting the argument at <paramref name="index"/> to
+    /// <paramref name="castType"/> when PostgreSQL does not coerce its untyped text form implicitly.
     /// </summary>
     private static void EmitCastArgument(BaseExpressionVisitor visitor, string name, IReadOnlyList<Expression> args, int index, string castType)
     {

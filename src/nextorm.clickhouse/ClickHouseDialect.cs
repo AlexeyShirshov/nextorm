@@ -12,12 +12,9 @@ namespace NextORM.ClickHouse;
 /// <c>recursive</c> modifier is omitted.
 /// </summary>
 /// <remarks>
-/// The type is deliberately not <see langword="sealed"/>. Subclassing it and overriding
-/// <see cref="ExtremeRowRenderer"/> is the supported external extension boundary (a public
-/// compatibility commitment), so an assembly without <c>InternalsVisibleTo</c> can install its own
-/// public <see cref="IExtremeRowRenderer"/>. The built-in renderer is <c>internal</c> and is not part
-/// of that contract. The public constructor and the shared <see cref="Instance"/> are preserved;
-/// returning <see langword="null"/> from an override keeps the portable window-function lowering.
+/// Derive from this type and override <see cref="ExtremeRowRenderer"/> to provide a custom
+/// <see cref="IExtremeRowRenderer"/>. Return <see langword="null"/> to use the portable window-function
+/// lowering. The built-in renderer is internal; the shared <see cref="Instance"/> remains unchanged.
 /// </remarks>
 public class ClickHouseDialect : SqlDialectBase
 {
@@ -46,10 +43,9 @@ public class ClickHouseDialect : SqlDialectBase
 
     /// <summary>
     /// Creates a dialect bound to an explicitly declared ClickHouse server version. The declaration is
-    /// caller-supplied (there is no server probing): it only widens the capability set for the gates
-    /// whose native function appeared in a later ClickHouse release (currently <c>arrayExcept</c> from
-    /// 25.9). An undeclared dialect keeps the pinned-baseline surface, i.e. the shared
-    /// <see cref="Instance"/> renderers.
+    /// caller-supplied (there is no server probing): it widens the capability set for features introduced
+    /// after the pinned baseline, such as <c>arrayExcept</c> in ClickHouse 25.9. An undeclared dialect
+    /// keeps the pinned-baseline surface provided by the shared <see cref="Instance"/> renderers.
     /// </summary>
     /// <param name="serverVersion">The ClickHouse server version this dialect declares.</param>
     /// <exception cref="ArgumentNullException"><paramref name="serverVersion"/> is <see langword="null"/>; use the parameterless constructor for an undeclared dialect.</exception>
@@ -2608,22 +2604,9 @@ internal sealed class ClickHouseScalarFunctions : IScalarFunctions
             ["reinterpret_as_fixed_string"] = static args => $"reinterpretAsFixedString({args[0]})",
             ["reinterpret_as_uuid"] = static args => $"reinterpretAsUUID({args[0]})",
         }.ToFrozenDictionary(StringComparer.Ordinal);
-    /// <summary>The units <c>toStartOfInterval</c> accepts for a <see cref="DateTime"/> argument.</summary>
-    private static readonly Dictionary<string, string> IntervalUnits = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["second"] = "SECOND",
-        ["minute"] = "MINUTE",
-        ["hour"] = "HOUR",
-        ["day"] = "DAY",
-        ["week"] = "WEEK",
-        ["month"] = "MONTH",
-        ["quarter"] = "QUARTER",
-        ["year"] = "YEAR"
-    };
-
     private static string StartOfIntervalArm(IReadOnlyList<string> args)
     {
-        if (args.Count < 3 || !IntervalUnits.TryGetValue(args[2], out var unit))
+        if (args.Count < 3 || !ClickHouseIntervalUnits.TryGetKeyword(args[2], out var unit))
             throw new NotSupportedException(
                 "The to_start_of_interval unit must be second, minute, hour, day, week, month, quarter " +
                 "or year; ClickHouse rejects sub-second units for a DateTime argument.");

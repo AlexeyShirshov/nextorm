@@ -1,10 +1,13 @@
 # Arrays (PostgreSQL)
 
-PostgreSQL has native array types. An array operand is always passed as a **single parameter** (the
-whole array), never expanded into a value list, so the SQL text does not depend on the number of
-elements and the plan stays cacheable. An array can be a runtime parameter ([`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32))), a
-captured local/field or an inline `new[]`. Only a dialect that opts in with [`SupportsArrays`](xref:NextORM.Core.ISqlDialect.SupportsArrays)
-(PostgreSQL) can render the array surface; every other provider throws `NotSupportedException`.
+PostgreSQL has native array types. When an operand comes from a CLR array—a runtime
+[`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32)), a captured local or field, or
+an inline `new[]`—nextorm binds the whole array as **one PostgreSQL array parameter**; it never expands
+the elements into a value list. The SQL text therefore does not depend on the array length, so the
+query plan remains cacheable. A runtime parameter also lets you prepare the query before you
+know the array value. SQL array columns and expressions are array operands too; they are not CLR
+parameters. Only a dialect that opts in with [`SupportsArrays`](xref:NextORM.Core.ISqlDialect.SupportsArrays)
+(PostgreSQL) can render this array surface; every other provider throws `NotSupportedException`.
 
 `SqlFunctions.Postgres.any` / `SqlFunctions.Postgres.all` accept an array, either as a complete predicate (`column = any(@array)`)
 or as the right-hand side of a comparison:
@@ -44,8 +47,6 @@ var rows = prepared.ToList(new long[] { 1, 2, 3 });
 select id
  from complex_entity where id = any(@norm_p0)
 ```
-
-The array functions and operators map to their PostgreSQL names:
 
 | C# | SQL |
 |---|---|
@@ -161,10 +162,14 @@ select value, ordinality
 
 ## Arrays (ClickHouse)
 
-ClickHouse has a native `Array(T)` type. The array functions operate on array **columns** (or on nested
-array expressions) and are gated by `ISqlDialect.SupportsArrayFunctions`; `arrayJoin` additionally
-requires `SupportsArrayJoin`. `arrayJoin(array)` expands the array into one row per element, so its
-result can be projected like a scalar column.
+Choose the array surface by provider, not by the CLR `T[]` type alone. PostgreSQL `Postgres.any` and
+`Postgres.all` can take a CLR array as one PostgreSQL array parameter. ClickHouse has its own native
+`Array(T)` type: its functions operate on array **columns**, nested array expressions, or bound array
+values. When you bind a CLR array for ClickHouse, its declared element type determines the ClickHouse
+array type (including `Nullable(T)`; see the nullable-element note below), rather than using PostgreSQL's
+array type or SQL syntax. The functions are gated by `ISqlDialect.SupportsArrayFunctions`;
+`arrayJoin` additionally requires `SupportsArrayJoin`. `arrayJoin(array)` expands the array into one row
+per element, so its result can be projected like a scalar column.
 
 | Function | SQL |
 |---|---|

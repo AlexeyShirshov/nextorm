@@ -35,7 +35,7 @@ public readonly record struct PrepareOptions
     /// <summary>
     /// When <see langword="true"/>, prepares a streaming command and creates the row enumerator as part of
     /// preparation; when <see langword="false"/> (the default), prepares a buffered command that needs no
-    /// enumerator. This is the positive form of the removed <c>nonStreamUsing</c> boolean.
+    /// enumerator.
     /// </summary>
     public bool Streaming { get; init; }
 }

@@ -73,6 +73,7 @@ public partial class QueryCommand
         dst._srcType = _srcType;
         dst._dontCache = _dontCache;
         dst._filterScope = _filterScope;
+        dst.MappingVariant = MappingVariant;
         dst.ColumnsPlanHash = ColumnsPlanHash;
         dst.JoinPlanHash = JoinPlanHash;
         dst.WherePlanHash = WherePlanHash;

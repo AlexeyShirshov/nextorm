@@ -11,6 +11,21 @@ namespace NextORM.ClickHouse;
 public static class ClickHouseDataContextOptionsBuilderExtensions
 {
     /// <summary>
+    /// Configures a routed ClickHouse context. Register a topology and select its default before creating
+    /// the context; the host supplies the connection, so this overload takes no connection string.
+    /// </summary>
+    /// <param name="builder">The builder to configure.</param>
+    /// <returns>The same builder, to allow chaining.</returns>
+    public static DataContextBuilder UseClickHouse(this DataContextBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.Factory = (b) => new ClickHouseDataContext(b);
+
+        return builder;
+    }
+
+    /// <summary>
     /// Configures the builder to create ClickHouse contexts that own a connection built from
     /// <paramref name="connectionString"/>.
     /// </summary>

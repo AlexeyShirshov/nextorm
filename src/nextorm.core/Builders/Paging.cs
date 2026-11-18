@@ -3,11 +3,6 @@ namespace NextORM.Core;
 /// <summary>
 /// Limit/offset pair describing a single page request.
 /// </summary>
-/// <remarks>
-/// Was a struct with public mutable fields; the fields are now validated properties so the
-/// invariants (non-negative limit/offset) hold. See <c>docs/specs/design/API-NAMING-REVIEW.md</c>
-/// findings P1-17 and P2-19.
-/// </remarks>
 public struct Paging
 {
     private int _limit;

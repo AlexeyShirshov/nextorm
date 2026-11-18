@@ -33,11 +33,18 @@ select group_concat(somestring, ',')
 | `SqlFunctions.Sql.string_agg(x, delimiter)` | `string_agg(x, delimiter)` / `arrayStringConcat(groupArray(x), delimiter)` / `group_concat(x separator delimiter)` / `group_concat(x, delimiter)` | PostgreSQL, SQL Server, ClickHouse, MySQL/MariaDB, SQLite |
 | `SqlFunctions.Postgres.array_agg(x)` | `array_agg(x)` | PostgreSQL |
 
+The empty-input and all-NULL descriptions below refer to different cases. An ungrouped aggregate query
+returns one row even when its input is empty. An ordinary `GROUP BY` over empty input has no groups and
+returns no rows; a `ROLLUP`, `CUBE` or `GROUPING SETS` query that includes the empty grouping set `()` can
+still produce a grand-total row. An all-NULL group is an existing group whose aggregate argument is NULL
+for every row.
+
 ## SQL Server 2025: `product`
 
 `SqlFunctions.SqlServer.product(value)` renders the SQL Server 2025 `PRODUCT` aggregate in an aggregate
-context. The result keeps the input type (`int?` for an `int` column), NULL rows are ignored, and a
-group with no non-null value has no product (SQL `NULL`):
+context. The result keeps the input type (`int?` for an `int` column), and NULL rows are ignored. If no
+non-NULL value reaches the aggregate—because the ungrouped input is empty or an existing group contains
+only NULLs—the result is SQL `NULL`:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -87,11 +94,11 @@ aggregates spelled `WITHIN GROUP (ORDER BY …)` with no window form, `approx_co
 is offered in the aggregate form only here. `grouping_id` is the analytic member of the family and needs
 a grouped command.
 
-| Member | SQL | CLR result | Empty group / all-NULL group | Requires |
+| Member | SQL | CLR result | Empty input (ungrouped) / all-NULL existing group | Requires |
 |---|---|---|---|---|
 | `approx_count_distinct(value)` | `approx_count_distinct(value)` | `long` (`bigint`) | `0` / `0` | major version 15 (SQL Server 2019) |
 | `checksum_agg(value)` | `checksum_agg(value)` | `int?` (`int`) | `NULL` / `NULL` | every declaration (no version floor) |
-| `grouping_id(expressions...)` | `grouping_id(a, b, …)` | `int` | `0` under a plain `GROUP BY`; the subtotal mask otherwise | every declaration; grouped command only |
+| `grouping_id(expressions...)` | `grouping_id(a, b, …)` | `int` | not an aggregate; `0` under a plain `GROUP BY`, otherwise the subtotal mask | every declaration; grouped command only |
 | `approx_percentile_cont(fraction, value)` | `approx_percentile_cont(f) within group (order by value)` | `double?` (`float(53)`) | `NULL` / `NULL` | major version 16 (SQL Server 2022) |
 | `approx_percentile_disc(fraction, value)` | `approx_percentile_disc(f) within group (order by value)` | `T?` — the sort input type (`int?` for an `int` column) | `NULL` / `NULL` | major version 16 (SQL Server 2022) |
 
@@ -134,21 +141,21 @@ The APPROX_PERCENTILE_CONT function requires SQL Server major version 16 or late
 
 ### `approx_count_distinct`
 
-`approx_count_distinct(value)` returns `long` (`bigint`). NULL rows are not counted, and an empty group
-and an all-NULL group both yield `0` — never SQL NULL. It is an estimate, not the exact
-`count(distinct …)`: keep `SqlFunctions.Sql.count_distinct` when exactness matters. A constant NULL
+`approx_count_distinct(value)` returns `long` (`bigint`). NULL rows are not counted, so both empty
+ungrouped input and an existing all-NULL group yield `0` — never SQL NULL. It is an estimate, not the
+exact `count(distinct …)`: keep `SqlFunctions.Sql.count_distinct` when exactness matters. A constant NULL
 operand renders as `CAST(NULL AS <type>)`, because a bare `NULL` operand is Msg 8117
 (`Operand data type NULL is invalid for approx_count_distinct operator.`). The engine has no `OVER`
 form (Msg 4113), and this surface offers the aggregate context only.
 
 ### `checksum_agg`
 
-`checksum_agg(value)` returns `int?` (`int`). NULL rows are skipped, and an empty or all-NULL group has
-no checksum (`NULL`). The value is order-insensitive but is **not** a stable identity and not a hash for
-equality: identical values cancel (`checksum_agg` over `(5, 5)` is `0`, over `(5)` is `5`, over
-`(5, 6)` is `3`), so it detects change rather than content. There is no version floor: every declared
-SQL Server major version renders it, including an unversioned declaration. A constant NULL operand
-renders as `CAST(NULL AS int)` (a bare `NULL` is Msg 8117, `Operand data type NULL is invalid for
+`checksum_agg(value)` returns `int?` (`int`). NULL rows are skipped. Both empty ungrouped input and an
+existing all-NULL group have no checksum (`NULL`). The value is order-insensitive but is **not** a stable
+identity or a hash for equality: identical values cancel (`checksum_agg` over `(5, 5)` is `0`,
+over `(5)` is `5`, over `(5, 6)` is `3`), so it detects change rather than content. It has no version floor;
+every declared SQL Server major version renders it, including an unversioned declaration. A constant NULL
+operand renders as `CAST(NULL AS int)` (a bare `NULL` is Msg 8117, `Operand data type NULL is invalid for
 checksum_agg operator.`). The aggregate form is the only one offered, although the engine itself would
 accept `checksum_agg(...) over (...)`.
 
@@ -175,8 +182,9 @@ set bit per expression aggregated away, with the **last** argument as the least 
 
 `approx_percentile_cont(fraction, value)` returns `double?` (`float(53)`) and interpolates;
 `approx_percentile_disc(fraction, value)` returns the sort input type (`T?`, for example `int?` for an
-`int` column) and returns an input value. NULL rows are skipped, and an empty or all-NULL group yields
-`NULL` for both. The spelling is `WITHIN GROUP (ORDER BY value)` and the endpoints `0` and `1` are exact.
+`int` column) and returns an input value. NULL rows are skipped; empty ungrouped input and an existing
+all-NULL group both yield `NULL` for either member. The spelling is `WITHIN GROUP (ORDER BY value)` and
+the endpoints `0` and `1` are exact.
 
 The fraction is a `double` in `[0, 1]`, never a 0–100 percentage, and it must be query-independent: a
 literal or a captured scalar. A fraction that depends on a row (`(double)e.Int`) is refused when the SQL
@@ -293,6 +301,12 @@ translation.
 `json_agg`, `jsonb_agg`, `json_object_agg` and `jsonb_object_agg` remain documented with the JSON
 functions in [JSON and JSONB](07-json-and-xml.md).
 
+In the descriptions below, “empty input yields one row” means an ungrouped aggregate query: the query
+returns one result row, whose aggregate value may be SQL `NULL`. An ordinary grouped query over zero
+input rows has no groups and returns no rows; `ROLLUP`, `CUBE` or `GROUPING SETS` can still produce a
+grand-total row when they include the empty grouping set `()`. An all-NULL group is an existing group, so
+its result can differ from the empty-input result.
+
 ### `any_value`
 
 | C# | SQL |
@@ -304,8 +318,8 @@ the argument and the result keep the argument's own type (`integer` stays `integ
 PostgreSQL `pg_proc` aggregate, not the portable `Sql.any_agg`. Because the result is polymorphic,
 nextorm requires a single-column CLR shape — a primitive, string, date/time, decimal, `Guid` or byte
 array — and refuses any other `T` before SQL is emitted; project the value with an explicit conversion
-when needed. A group whose values are all NULL yields NULL, and empty input still produces one NULL
-row.
+when needed. An existing all-NULL group yields SQL `NULL`; an ungrouped aggregate over empty input
+returns one row containing `NULL`.
 
 ### Regression sums (`regr_sxx`, `regr_sxy`, `regr_syy`)
 
@@ -319,8 +333,8 @@ Both operands are generic (`TY?`/`TX?`); PostgreSQL's aggregate overloads take `
 the result is `double precision` (`double?`). `regr_sxx` is
 `sum(X^2) - sum(X)^2/N`, `regr_syy` is the same over `Y`, and `regr_sxy` is
 `sum(X*Y) - sum(X)*sum(Y)/N`. A pair with a NULL operand is skipped; a group with a single non-NULL
-pair yields `0` (measured), and an all-NULL group or empty input yields NULL — empty input still
-produces one row.
+pair yields `0` (measured). An existing all-NULL group yields SQL `NULL`; an ungrouped aggregate over
+empty input returns one row containing `NULL`.
 
 ### `xmlagg`
 
@@ -332,8 +346,8 @@ PostgreSQL has a single `xmlagg(xml) → xml` aggregate: `xmlagg(text)` and `xml
 `42883` "function … does not exist" (measured), so the operand is cast to `xml` and must hold XML
 markup the `xml` type accepts. The result is the concatenation of the group's documents with no
 separator, and Npgsql materialises the `xml` result as `string` (measured), which is what the member
-declares. NULL operands are skipped, a group whose operands are all NULL yields NULL, and empty input
-still produces one NULL row.
+declares. NULL operands are skipped. An existing all-NULL group yields SQL `NULL`; an ungrouped
+aggregate over empty input returns one row containing `NULL`.
 
 ### Strict and unique JSON aggregates
 
@@ -344,11 +358,12 @@ still produces one NULL row.
 | `SqlFunctions.Postgres.json_object_agg_unique(k, v)` | `json_object_agg_unique(k, v)` |
 | `SqlFunctions.Postgres.json_object_agg_unique_strict(k, v)` | `json_object_agg_unique_strict(k, v)` |
 
-PostgreSQL 16 aggregates. The two array forms ignore NULL values: a group whose values are all NULL
-yields `[]` (not an array of nulls, measured), empty input still produces one NULL row, and the
-`json`/`jsonb` result is read back as a string. `json_object_agg_unique` keeps a NULL value as JSON
-`null`, while `json_object_agg_unique_strict` drops a NULL-valued pair; both raise `22030` on a
-duplicate key and `22004` on a NULL key (measured on 17.11), and empty input yields one NULL row.
+PostgreSQL 16 aggregates. The two array forms ignore NULL values: an existing all-NULL group yields
+`[]` (not an array of nulls, measured), while an ungrouped aggregate over empty input returns one row
+containing SQL `NULL`. The `json`/`jsonb` result is read back as a string. `json_object_agg_unique` keeps
+a NULL value as JSON `null`, while `json_object_agg_unique_strict` drops a NULL-valued pair; both raise
+`22030` on a duplicate key and `22004` on a NULL key (measured on 17.11), and an ungrouped aggregate
+over empty input returns one row containing SQL `NULL`.
 
 ### SQL/JSON aggregates (`json_arrayagg`, `json_objectagg`)
 
@@ -361,10 +376,12 @@ duplicate key and `22004` on a NULL key (measured on 17.11), and empty input yie
 | `SqlFunctions.Postgres.jsonb_objectagg(k, v)` | `json_objectagg(k value v returning jsonb)` |
 
 PostgreSQL 17 parser-level constructs with no `pg_proc` row. `json_arrayagg` defaults to
-`ABSENT ON NULL`: NULL values are dropped, an all-NULL group yields `[]`, and empty input yields NULL.
+`ABSENT ON NULL`: NULL values are dropped, an existing all-NULL group yields `[]`, and an ungrouped
+aggregate over empty input returns one row containing SQL `NULL`.
 `json_objectagg` admits exactly one pair per call (`key value value`; the comma-separated two-pair
 form is `42601`) and defaults to `NULL ON NULL` with duplicate keys kept, while `with unique keys`
-raises `22030`; a NULL key raises `22004`, and empty input yields NULL. The key is not cast — the
+raises `22030`; a NULL key raises `22004`, and an ungrouped aggregate over empty input returns one row
+containing SQL `NULL`. The key is not cast — the
 server coerces it to text (measured with an integer key). `jsonb_arrayagg` and `jsonb_objectagg` are
 member names for the `RETURNING jsonb` clauses, since PostgreSQL has no functions of those names. The
 builder has no clause slot for an aggregate's internal argument list, so `ORDER BY …`,
@@ -406,11 +423,12 @@ arguments form the second pair — and the result is normalised to the declared 
 | Sequences | `sequence_count`, `sequence_match_events`, `sequence_next_node` |
 | Time series | `time_series_group_sum`, `time_series_group_rate_sum`, `time_series_instant_rate_to_grid`, `time_series_rate_to_grid`, `time_series_resample_to_grid_with_staleness`; window-only `exponential_time_decayed_sum`/`_max`/`_count`/`_avg` (complete them with `Over(...)`) |
 
-Version facts are pinned, not hidden: `gini`, `student_t_test_one_sample`, `group_format` and
-`quantile_prometheus_histogram` were introduced after 25.8 and `time_series_group_sum`/
-`time_series_group_rate_sum` were removed, so their arms render the vendor name and the live test pins
-`UNKNOWN_FUNCTION`. `sequence_next_node` needs `allow_experimental_funnel_functions` and the time-series
-grids need `allow_experimental_time_series_aggregate_functions`. Three members stay refused
+On the pinned 25.8 baseline, `gini`, `student_t_test_one_sample`, `group_format` and
+`quantile_prometheus_histogram` were introduced after 25.8, while `time_series_group_sum` and
+`time_series_group_rate_sum` have been removed. Their wrappers still render the vendor names, so the
+live test expects `UNKNOWN_FUNCTION` from that baseline server. Separately, `sequence_next_node` needs
+`allow_experimental_funnel_functions`, and the time-series grids need
+`allow_experimental_time_series_aggregate_functions`. Three members stay refused
 (`stochastic_linear_regression`, `stochastic_logistic_regression`, `exponential_moving_average`: opaque
 `AggregateFunction` states) — see
 [ClickHouse-specific SQL › Not yet supported](../guide/provider-specific-sql/clickhouse.md#not-yet-supported).

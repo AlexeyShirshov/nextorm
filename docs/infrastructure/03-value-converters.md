@@ -1,9 +1,8 @@
 # Value converters and JSON columns
 
-A **value converter** maps a property between its CLR model type and the representation actually
-stored in the column. Typical uses are an `enum` stored as text, a `DateTimeOffset` stored in a
-formatted string, a strong-typed value (`Money`) stored as a `decimal`, or an arbitrary object stored
-as JSON.
+Use a **value converter** when a property's CLR type differs from the representation stored in its
+column. Common examples include an `enum` stored as text, a `DateTimeOffset` stored in a formatted
+string, a strongly typed value (`Money`) stored as a `decimal`, or an arbitrary object stored as JSON.
 
 ## Declaring a converter
 
@@ -119,6 +118,8 @@ cast error on first execution instead of at mapping-build time.
 
 `[JsonColumn]` stores any serializable CLR object as JSON. The **storage** is chosen by the dialect:
 
+### Choose a storage mode
+
 - `JsonColumnStorage.Auto` (default) uses the provider's native JSON representation where the provider
   has one (PostgreSQL `jsonb`, ClickHouse object-rooted `JSON`, SQL Server's `json` on a context
   declaring major version 17+ or an Azure/Fabric SQL database engine edition) and a text column
@@ -129,6 +130,8 @@ cast error on first execution instead of at mapping-build time.
   declaration and without a capable engine edition, including the default unversioned construction);
 - `JsonColumnStorage.Text` forces a text column.
 
+### Provider representations
+
 The native provider representation is `JsonElement` on PostgreSQL, `JsonObject` on ClickHouse and the
 plain CLR `string` on SQL Server 2025+ (`json` columns are transported as text there: parameters stay
 `nvarchar`, no DOM value is bound and nothing is serialized twice).
@@ -137,18 +140,24 @@ ClickHouse's native `JSON` is object-rooted, so a model that does not serialize 
 alias is not supported by this integration; see
 [JSON support](../guide/16-json.md#map-a-clr-object-to-a-native-json-column).
 
-**A JSON column type is not a native representation.** MySQL 8 has a real `json` column and MariaDB's
-`JSON` is a `LONGTEXT` alias with a `json_valid()` CHECK, but `MySqlConnector` cannot bind
-`JsonElement`/`JsonDocument`/`JsonNode` parameters (`MySqlDbType.JSON` accepts strings only) and always
-reads a `json` column back as `string`. Both engines are therefore supported through the **text**
-storage — `Auto` and `Text` both produce the JSON text the server parses — and `Native` is refused
-before any command runs. SQL Server is the mirror case: 2016–2022 have no native type and keep JSON in
-`nvarchar`, while 2025+ do have a distinct `json` type — reached only when the context declares a major
-version 17+ or a capable Azure/Fabric engine edition, and transported as text through the same
-converter, so `Auto`, `Text` and `Native` store identical bytes. A native `json` column accepts object/array documents only; the scalar
-roots and the JSON `null` document are rejected by the server (error 13609) and need `Text` storage.
+**A JSON column type is not the same as a native representation.** MySQL 8 has a `json` column, and
+MariaDB's `JSON` is a `LONGTEXT` alias with a `json_valid()` CHECK. However, `MySqlConnector` accepts
+only strings for `MySqlDbType.JSON`; it cannot bind `JsonElement`/`JsonDocument`/`JsonNode` parameters
+and reads a `json` column back as `string`. NextORM therefore supports both engines through **text**
+storage. `Auto` and `Text` both produce the JSON text the server parses, while `Native` is refused
+before any command runs.
+
+SQL Server is the opposite case. Versions 2016–2022 have no native JSON type and store JSON in
+`nvarchar`. Versions 2025+ have a distinct `json` type, which is available only when the context
+declares major version 17+ or a capable Azure/Fabric engine edition. The same converter transports it
+as text, so `Auto`, `Text` and `Native` store identical bytes. A native `json` column accepts only
+object and array documents. The server rejects scalar roots and the JSON `null` document with error
+13609; use `Text` storage for those values.
+
+For example, this model stores an `Address` object in a JSON column:
 
 ```csharp
+// The JSON column stores this serializable object graph.
 public sealed class Address
 {
     public string? City { get; set; }
@@ -176,9 +185,10 @@ b.Property(x => x.Address).JsonColumn(o =>
 });
 ```
 
-The options object is held by reference and must not be mutated after the mapping is built. Source
-generated `JsonTypeInfo<T>` (Native AOT/trimming) is out of scope; use reflection-based serialization.
-See [NativeAOT (partial support)](05-nativeaot.md) for the verified surface.
+The options object is held by reference and must not be mutated after the mapping is built. A NativeAOT
+build gets the contract metadata from a source-generated `JsonSerializerContext` that lists the stored
+models; the compile-time entity description picks it up on its own. See
+[NativeAOT](05-nativeaot.md#json-columns).
 
 Inserting a row serializes the mapped object into the document stored in the column. Members such as
 `DateTimeOffset` need no converter — `System.Text.Json` writes them as ISO 8601:
@@ -213,8 +223,8 @@ Property names follow the serializer options; the default is the CLR name (`City
 `JsonNamingPolicy.CamelCase` if you need camelCase. A JSON value in a `SET` list is converted the same
 way.
 
-Reading is the reverse: the column is planned like any other and the document is deserialized back on
-the client.
+Reading is the reverse: the column is planned like any other, and the client deserializes the document
+back into the model:
 
 ```csharp
 var customer = ctx.From<Customer>().Where(x => x.Id == 1).ToList().Single();
@@ -269,7 +279,7 @@ serialized constant — the serializer options must therefore be stable.
 ## Provider matrix
 
 The converter runs in the application, so it is provider independent; only the provider representation
-must be readable and bindable.
+must be readable and bindable. The following table summarizes the available representations:
 
 | Provider | Native JSON | Text storage | Enum-as-string |
 |---|---|---|---|
@@ -293,7 +303,9 @@ so the column is planned like any other. The examples below use the `Order` enti
 guide and show PostgreSQL output; other dialects differ only in keyword casing and identifier quoting
 (see the [provider matrix](#provider-matrix)).
 
-**Writing.** An insert sends the provider representation as a bound parameter:
+### Write a converted value
+
+An insert sends the provider representation as a bound parameter:
 
 ```csharp
 ctx.CreateInsertBuilder<Order>()
@@ -319,8 +331,9 @@ ctx.CreateUpdateBuilder<Order>()
 update orders set status = @p0 where id = 1
 ```
 
-**Reading.** The engine reads the column as the provider representation and runs `ConvertFromProvider`
-in the application:
+### Read a converted value
+
+The engine reads the column as the provider representation and runs `ConvertFromProvider` in the application:
 
 ```csharp
 var orders = ctx.From<Order>()
@@ -336,8 +349,10 @@ select id, status
 
 `status` is read as `text` and converted to `Status` per row.
 
-**Filtering.** A constant compared against a converted column is converted as well, so the predicate
-binds the stored representation:
+### Filter by a converted value
+
+A constant compared against a converted column is converted as well, so the predicate binds the stored
+representation:
 
 ```csharp
 ctx.From<Order>().Where(x => x.Status == Status.Active).ToList();
@@ -370,8 +385,9 @@ holding `ConvertToProvider(a + b)` (the same for a captured `a ?? b` or conditio
 concatenation). In a `case`/`switch` used as the value side, only the branch values are converted while
 the test keeps its normal SQL.
 
-**Projection.** A scalar projection of a converted property materializes the model value, not the
-provider value:
+### Project a converted property
+
+A scalar projection of a converted property materializes the model value, not the provider value:
 
 ```csharp
 ctx.From<Order>().Where(x => x.Id == 1).Select(x => x.Status).ToList();

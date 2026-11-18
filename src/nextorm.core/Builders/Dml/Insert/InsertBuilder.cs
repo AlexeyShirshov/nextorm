@@ -10,9 +10,10 @@ namespace NextORM.Core;
 /// <see cref="DataContextExtensions.CreateInsertBuilder{TEntity}"/>. It collects the columns and values, renders
 /// them as a parameterised statement through the active dialect and executes it on the context.
 /// <para>
-/// There is deliberately no change tracking: every terminal (<see cref="Insert"/>, <see cref="Returning()"/>,
-/// <see cref="ReturningIdentity{TKey}()"/>, <see cref="ReturningKey{TKey}()"/>) issues one explicit command, as
-/// with linq2db or <c>ExecuteNonQuery</c>. The builder is single-use: values accumulate until a terminal runs.
+/// There is deliberately no change tracking: each execution terminal issues an explicit command, as with
+/// linq2db or <c>ExecuteNonQuery</c>. <see cref="Returning()"/>, <see cref="ReturningIdentity{TKey}()"/> and
+/// <see cref="ReturningKey{TKey}()"/> select a returning terminal but do not execute the insert. A terminal
+/// does not consume or reset the builder's accumulated values, so calling one again submits the insert again.
 /// </para>
 /// </summary>
 /// <typeparam name="TEntity">The mapped entity type inserted.</typeparam>
@@ -20,6 +21,7 @@ public sealed partial class InsertBuilder<TEntity>
 {
     private readonly IDataContext _dataContext;
     private readonly IEntityMetadata _metadata;
+    private MappingVariant _mappingVariant;
     private readonly List<ColumnAccumulator> _columns = [];
     private DynamicColumnSet? _dynamicColumns;
     private int _rowCount;
@@ -46,6 +48,29 @@ public sealed partial class InsertBuilder<TEntity>
     {
         _dataContext = dataContext;
         _metadata = metadata;
+        _mappingVariant = dataContext is DataContext scopedContext
+            ? scopedContext.EntityVariantResolver.Resolve(typeof(TEntity))
+            : MappingVariant.Default;
+    }
+
+    /// <summary>
+    /// Routes the insert to the shard selected by the supplied shard-key values.
+    /// </summary>
+    /// <param name="shardKeyValues">The shard-key values in the order the entity declares them.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The context has no shard router or the entity type is not sharded.
+    /// </exception>
+    public InsertBuilder<TEntity> WithShardKey(params object?[] shardKeyValues)
+    {
+        if (_dataContext is not DataContext dataContext || dataContext.EntityVariantResolver is not IShardRouter router)
+            throw new InvalidOperationException("WithShardKey requires a context configured with a shard router.");
+
+        if (!router.IsSharded(typeof(TEntity)))
+            throw new InvalidOperationException($"Entity '{typeof(TEntity)}' does not declare a shard key.");
+
+        _mappingVariant = router.ResolveShard(typeof(TEntity), shardKeyValues);
+        return this;
     }
 
     /// <summary>The context the insert executes on; used by <see cref="InsertReturningBuilder{TEntity, TResult}"/>.</summary>
@@ -631,10 +656,69 @@ public sealed partial class InsertBuilder<TEntity>
         return accumulator;
     }
 
+    /// <summary>
+    /// Resolves the shard scope from the entity values: every row of one insert must target the same shard.
+    /// </summary>
+    private void ResolveShardScope(IReadOnlyList<TEntity> entities)
+    {
+        if (_mappingVariant != MappingVariant.Default)
+            return;
+
+        if (_dataContext is not DataContext dataContext || dataContext.EntityVariantResolver is not IShardRouter router)
+            return;
+
+        if (!router.IsSharded(typeof(TEntity)))
+            return;
+
+        MappingVariant? resolved = null;
+        for (var index = 0; index < entities.Count; index++)
+        {
+            var entity = entities[index];
+            if (entity is null)
+                throw new ArgumentException($"Entity at index {index} is null.", nameof(entities));
+
+            var scope = router.Resolve(typeof(TEntity), entity);
+            if (resolved is null)
+            {
+                resolved = scope;
+                continue;
+            }
+
+            if (resolved.Value != scope)
+            {
+                throw new InvalidOperationException(
+                    $"Insert rows target different buckets ('{resolved.Value.Key}' and '{scope.Key}'). " +
+                    "One INSERT writes one bucket's table; group the rows by bucket and insert each group separately.");
+            }
+        }
+
+        _mappingVariant = resolved ?? MappingVariant.Default;
+    }
+
+    /// <summary>
+    /// Rejects a sharded insert whose scope was never resolved, for example a column-only insert.
+    /// </summary>
+    private void EnsureShardScopeResolved()
+    {
+        if (_mappingVariant != MappingVariant.Default)
+            return;
+
+        if (_dataContext is not DataContext dataContext || dataContext.EntityVariantResolver is not IShardRouter router)
+            return;
+
+        if (!router.IsSharded(typeof(TEntity)))
+            return;
+
+        throw new InvalidOperationException(
+            $"Entity '{typeof(TEntity)}' is sharded. Insert entity values or call WithShardKey(...) before executing the insert.");
+    }
+
     private InsertCommand BuildCommand(IPropertyMetadata? identityColumn, IReadOnlyList<IPropertyMetadata>? returningColumns = null, OutputIntoClause? outputInto = null)
     {
+        EnsureShardScopeResolved();
+
         if (_source is not null)
-            return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, [], 1, identityColumn, returningColumns, _source, _selectColumns, outputInto: outputInto);
+            return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, [], 1, identityColumn, returningColumns, _source, _selectColumns, outputInto: outputInto) { MappingVariant = _mappingVariant };
 
         if (_columns.Count == 0 && _dynamicColumns is null)
         {
@@ -643,7 +727,7 @@ public sealed partial class InsertBuilder<TEntity>
             if (HasWritableColumns())
                 throw new InvalidOperationException("No values were specified for the insert.");
 
-            return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, [], 1, identityColumn, returningColumns, outputInto: outputInto);
+            return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, [], 1, identityColumn, returningColumns, outputInto: outputInto) { MappingVariant = _mappingVariant };
         }
 
         foreach (var column in _columns)
@@ -656,7 +740,7 @@ public sealed partial class InsertBuilder<TEntity>
         for (var i = 0; i < columns.Length; i++)
             columns[i] = new InsertColumn(_columns[i].Property, _columns[i].Values);
 
-        return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, identityColumn, returningColumns, outputInto: outputInto, dynamicColumns: _dynamicColumns);
+        return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, identityColumn, returningColumns, outputInto: outputInto, dynamicColumns: _dynamicColumns) { MappingVariant = _mappingVariant };
     }
 
     private bool HasWritableColumns()

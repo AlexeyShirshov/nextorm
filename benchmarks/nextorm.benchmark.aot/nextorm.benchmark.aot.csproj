@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>NextORM.Benchmark.Aot</RootNamespace>
+    <!--
+      Deliberate exception to the repository rule that benchmarks run on NextormHostTargetFramework
+      (net11.0): BenchmarkDotNet 0.15.8 exposes NativeAotRuntime only up to Net10_0, and its
+      NativeAOT toolchain refuses to build without a known ILCompiler. Measuring on the net10.0
+      asset — the oldest TFM the packages ship — keeps both arms on the same runtime and the same
+      pre-defined AOT toolchain. The comparison is therefore net10.0 vs net10.0-NativeAOT.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+    <!--
+      Deliberately not referenced by nextorm.slnx: the NativeAOT arms need an ILCompiler toolchain
+      and a five-minute publish, so the project stays an opt-in harness instead of a tax on every
+      solution build. Run it from benchmarks/nextorm.benchmark.aot with `dotnet run -c Release`
+      plus the BenchmarkDotNet filter `*`.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The point of this harness is to measure the real generated materializers, so the generator
+         runs over this assembly exactly as it would in a consumer project. -->
+    <ProjectReference Include="..\..\src\nextorm.core.sourcegenerator\nextorm.core.sourcegenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.sqlite\nextorm.sqlite.csproj" />
+  </ItemGroup>
+
+</Project>

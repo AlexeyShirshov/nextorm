@@ -1,11 +1,14 @@
 # Массивы (PostgreSQL)
 
-В PostgreSQL есть встроенные типы-массивы. Массив всегда передаётся **одним параметром** (целиком), а
-не разворачивается в список значений, поэтому текст SQL не зависит от количества элементов, и план
-запроса остаётся кэшируемым. Массивом может быть runtime-параметр ([`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32))),
-захваченная локальная переменная/поле или встроенный `new[]`. Поверхность массивов умеет рендерить
-только диалект, включивший [`SupportsArrays`](xref:NextORM.Core.ISqlDialect.SupportsArrays) (PostgreSQL); все остальные провайдеры бросают
-`NotSupportedException`.
+В PostgreSQL есть встроенные типы-массивы. Если операндом служит CLR-массив — runtime-параметр
+[`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32)), захваченная локальная
+переменная/поле или встроенный `new[]`, — nextorm связывает весь массив как **один параметр PostgreSQL
+со значением-массивом** и не разворачивает его элементы в список значений. Поэтому текст SQL не зависит
+от длины массива, а план запроса остаётся кэшируемым. Runtime-параметр позволяет подготовить
+запрос до того, как станет известно значение массива. Массивные колонки и выражения SQL тоже являются
+операндами-массивами, но не CLR-параметрами. Эту поверхность может рендерить только диалект, включивший
+[`SupportsArrays`](xref:NextORM.Core.ISqlDialect.SupportsArrays) (PostgreSQL); все остальные провайдеры
+бросают `NotSupportedException`.
 
 `SqlFunctions.Postgres.any` / `SqlFunctions.Postgres.all` принимают массив — либо как готовый предикат (`column = any(@array)`),
 либо как правую часть сравнения:
@@ -45,8 +48,6 @@ var rows = prepared.ToList(new long[] { 1, 2, 3 });
 select id
  from complex_entity where id = any(@norm_p0)
 ```
-
-Функции и операторы для массивов отображаются в свои имена PostgreSQL:
 
 | C# | SQL |
 |---|---|
@@ -164,8 +165,12 @@ select value, ordinality
 
 ## Массивы (ClickHouse)
 
-В ClickHouse есть нативный тип `Array(T)`. Функции массивов работают с array-**колонками** (или
-вложенными array-выражениями) и включаются флагом `ISqlDialect.SupportsArrayFunctions`; для
+Выбирайте поверхность массивов по провайдеру, а не только по CLR-типу `T[]`. `Postgres.any` и
+`Postgres.all` принимают CLR-массив одним параметром PostgreSQL. В ClickHouse свой нативный тип
+`Array(T)`: его функции работают с array-**колонками**, вложенными array-выражениями или связанными
+значениями-массивами. При передаче CLR-массива в ClickHouse объявленный тип его элемента определяет тип
+массива ClickHouse (включая `Nullable(T)`; см. примечание о nullable-элементах ниже), а не тип массива
+или синтаксис SQL PostgreSQL. Функции включаются флагом `ISqlDialect.SupportsArrayFunctions`; для
 `arrayJoin` дополнительно нужен `SupportsArrayJoin`. `arrayJoin(array)` разворачивает массив в одну
 строку на элемент, поэтому его результат можно проецировать как скалярную колонку.
 

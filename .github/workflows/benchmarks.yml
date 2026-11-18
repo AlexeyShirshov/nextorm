@@ -60,6 +60,17 @@ jobs:
           # match SqliteBenchmarkLargeIteration because the type name differs after "SqliteBenchmark".
           # "*SqliteBenchmarkFeaturesFair.*" is the Category A class only: the trailing dot keeps
           # SqliteBenchmarkFeaturesFairCached out of it.
+          classes=(
+            SqliteBenchmarkIteration
+            SqliteBenchmarkLargeIteration
+            SqliteBenchmarkWhere
+            SqliteBenchmarkSimulateWork
+            SqliteBenchmarkAny
+            SqliteBenchmarkFirst
+            SqliteBenchmarkSingle
+            SqliteBenchmarkFeaturesFair
+            SqliteBenchmarkFeaturesFairCached
+          )
           filters=(
             "*SqliteBenchmarkIteration*"
             "*SqliteBenchmarkLargeIteration*"
@@ -71,11 +82,16 @@ jobs:
             "*SqliteBenchmarkFeaturesFair.*"
             "*SqliteBenchmarkFeaturesFairCached*"
           )
-          for filter in "${filters[@]}"; do
+          suite_dates=()
+          for index in "${!filters[@]}"; do
+            filter="${filters[$index]}"
+            class="${classes[$index]}"
+            suite_date="$(date -u +%F)"
             echo "::group::${filter}"
             dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- \
               --filter "${filter}"
             echo "::endgroup::"
+            suite_dates+=(--record-run-date "${class}=${suite_date}")
           done
 
           # A typo in the filter makes BDN exit 0 without running anything; require every report
@@ -92,6 +108,10 @@ jobs:
               exit 1
             fi
           done
+
+          python3 tools/benchmarks/update_benchmark_tables.py \
+            --run-evidence "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            "${suite_dates[@]}"
 
       - name: Regenerate tables from the new reports
         run: python3 tools/benchmarks/update_benchmark_tables.py

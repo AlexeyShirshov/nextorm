@@ -1,7 +1,8 @@
 # System functions
 
-Cross-provider functions that report the current session or server, and provider-specific equivalents
-for the same kind of facts.
+Use this page to find system values and provider-specific functions, especially those that report
+session, server, or catalog state. The tables map API names to SQL spellings; matching names do not
+guarantee identical meaning or trust across database engines.
 
 ## Session and server information (cross-provider)
 
@@ -21,14 +22,14 @@ A provider that cannot express a function throws `NotSupportedException` at tran
 
 ## Session and server identity
 
-The shared `SqlFunctions.Sql` surface carries identity functions gated **per name** through the same
-session-info capability ([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions),
-[`ISessionInfoFunctions.Supports`](xref:NextORM.Core.ISessionInfoFunctions.Supports(System.String))): the PostgreSQL
-backend/network facts (`pg_backend_pid`, `inet_server_addr`, `inet_server_port`, `inet_client_addr`,
-`inet_client_port`), the connection id (`connection_id`) and the client-reported account (`user`).
-Provider-only members live on `SqlFunctions.SqlServer` (gated by
-[`ISqlServerFunctions.SupportsSessionIdentity`](xref:NextORM.Core.ISqlServerFunctions.SupportsSessionIdentity))
-and `SqlFunctions.ClickHouse`:
+The shared `SqlFunctions.Sql` surface exposes the PostgreSQL backend/network facts (`pg_backend_pid`,
+`inet_server_addr`, `inet_server_port`, `inet_client_addr`, `inet_client_port`), the connection id
+(`connection_id`), and the client-reported account (`user`). Each shared member is gated **per name**
+through [`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions) and
+[`ISessionInfoFunctions.Supports`](xref:NextORM.Core.ISessionInfoFunctions.Supports(System.String)).
+SQL Server identity members live on `SqlFunctions.SqlServer` and are gated by
+[`ISqlServerFunctions.SupportsSessionIdentity`](xref:NextORM.Core.ISqlServerFunctions.SupportsSessionIdentity);
+ClickHouse members live on `SqlFunctions.ClickHouse`:
 
 | C# | CLR | PostgreSQL | SQL Server | MySQL/MariaDB | ClickHouse | SQLite |
 |---|---|---|---|---|---|---|
@@ -51,16 +52,17 @@ and `SqlFunctions.ClickHouse`:
 All fifteen are zero-argument. `—` means `NotSupportedException` at translation: there is no SQL
 fallback, and a provider that does not opt in fails closed (SQLite supports none of them).
 
-**Server, client and account.** `server_name()` reports the server instance the client is connected to.
-NextORM renders the documented `@@SERVERNAME`; SQL Server has no native `SERVER_NAME()` function, so
-that name is never emitted. `host_id()`, `host_name()` and `app_name()` describe the **client** host
-and application that the client itself reported when it connected. On ClickHouse, by contrast,
-`host_name()` is the **server** host that answered the query and `tcp_port()` its listening port, so
-SQL Server `host_name()` and ClickHouse `host_name()` are different facts. `user()` is the
-MySQL/MariaDB `user@host` pair of the connecting client and does **not** replace `current_user()`, which
-remains the effective authenticated account; server-side, `current_user()`/`session_user()` are the
-security identity, and the SQL Server pair `suser_name()`/`original_login()` is resolved from the
-security token (`original_login()` survives an `EXECUTE AS` context switch).
+**Read each value by its source.** SQL Server `server_name()` reports the server instance the client
+is connected to; NextORM renders the documented `@@SERVERNAME`, because SQL Server has no native
+`SERVER_NAME()` function.
+SQL Server `host_id()`, `host_name()`, and `app_name()` describe the **client** host and application
+that the client reported when it connected. ClickHouse `host_name()` instead identifies the **server**
+that answered the query, and `tcp_port()` reports its listening port; the two providers' `host_name()`
+values are different facts. MySQL/MariaDB `user()` reports the connecting client's `user@host` pair,
+not the effective authenticated account exposed by `current_user()`. On the server side,
+`current_user()`/`session_user()` identify the security principal, while SQL Server
+`suser_name()`/`original_login()` are resolved from the security token (`original_login()` survives an
+`EXECUTE AS` context switch).
 
 **Null semantics.** `server_name()`, `host_id()`, `host_name()`, `app_name()`, `suser_name()` and
 `original_login()` are `string?` because SQL Server can return SQL NULL (an instance without a
@@ -70,10 +72,13 @@ new CLR network type) and are SQL NULL on a unix-socket connection, so `inet_ser
 `pg_backend_pid()` is a non-null `int`. `connection_id()` is a non-null `ulong` — the server-side
 connection id (not a user id), widened to 64 bits on MySQL/MariaDB and ClickHouse.
 
-**Security caveat.** `host_id()`, `host_name()` and `app_name()` return **client-supplied, untrusted**
-values: they are diagnostic session facts, not a security identity. Only the authenticated identity
-(`current_user()`, `session_user()`, and the token-derived `suser_name()`/`original_login()`) is
-trustworthy for authorization.
+**Security caveat.** Do not use SQL Server `host_id()`, `host_name()`, or `app_name()` for
+authorization: the client reports these untrusted values, so they are diagnostic session facts, not a
+security identity. ClickHouse `host_name()` is server-reported, but identifies the query-serving host,
+not an authenticated account. MySQL/MariaDB `user()` is also not an authorization identity; it reports
+the connecting client's `user@host` pair rather than the effective account. For authorization, use the
+authenticated identity (`current_user()`, `session_user()`, and SQL Server's token-derived
+`suser_name()`/`original_login()`).
 
 ## Provider-specific session and server information
 
@@ -100,22 +105,27 @@ advertised by [`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.S
 each set-returning reader by `SupportsTableFunction`, and any other provider rejects the call with
 `NotSupportedException`. It covers the 79 `pg_*` names of the PostgreSQL 17 system-information expansion:
 56 delivered scalars, 2 tested refusals, the already-covered `pg_backend_pid`, and 20 set-returning
-readers.
+readers. This per-name translation gate does not override native settings, permissions, or session state;
+those can still affect a result or cause a server error.
 
-**Semantics measured on PostgreSQL 17.11.** Results of the OID-alias and transaction types that Npgsql has
-no CLR mapping for — `oid`, `regclass`, `regtype`, `xid8` and `pg_lsn` — are bridged to `text`
-server-side (`cast(... as text)`, or `::text` inside a row projection), and a `text` OID argument is cast
-back to `oid`/`regclass`/`regtype`/`regrole`, because a text parameter does not resolve those overloads.
-`pg_current_logfile()` returns NULL when no log destination is file-based (`logging_collector` off, or
-logging to `syslog`), not an empty string; the named form takes `stderr`, `csvlog` or `jsonlog`, and any
-other value raises on the server. `pg_xact_commit_timestamp` raises SQLSTATE `55000` (`could not
-get commit timestamp data`) when `track_commit_timestamp` is off — it does not return NULL. The
-object-definition helpers return NULL for an argument that names no object instead of raising
+**Type bridge (semantics measured on PostgreSQL 17.11).** Results of the OID-alias and transaction types
+that Npgsql has no CLR mapping for — `oid`, `regclass`, `regtype`, `xid8` and `pg_lsn` — are bridged to
+`text` server-side (`cast(... as text)`, or `::text` inside a row projection). A `text` OID argument is
+cast back to `oid`/`regclass`/`regtype`/`regrole`, because a text parameter does not resolve those
+overloads.
+
+**Runtime conditions.** `pg_current_logfile()` returns NULL when no log destination is file-based
+(`logging_collector` off, or logging to `syslog`), not an empty string. The named form takes `stderr`,
+`csvlog` or `jsonlog`; any other value raises on the server. `pg_xact_commit_timestamp` raises SQLSTATE
+`55000` (`could not get commit timestamp data`) when `track_commit_timestamp` is off; it does not return
+NULL. The object-definition helpers return NULL for an argument that names no object instead of raising
 (`pg_get_indexdef`, `pg_get_viewdef`, `pg_get_ruledef`, `pg_get_triggerdef`, `pg_get_partkeydef`,
-`pg_get_partition_constraintdef`, `pg_get_statisticsobjdef`). The family is read-only: destructive or
-state-changing server controls (`pg_terminate_backend`, `pg_cancel_backend`, `pg_switch_wal`,
-`pg_promote`, `pg_create_restore_point`, `pg_reload_conf`, `pg_rotate_logfile`) are not exposed, and the
-two blocking helpers only report process ids — they never act on a session.
+`pg_get_partition_constraintdef`, `pg_get_statisticsobjdef`).
+
+The family is read-only: destructive or state-changing server controls (`pg_terminate_backend`,
+`pg_cancel_backend`, `pg_switch_wal`, `pg_promote`, `pg_create_restore_point`, `pg_reload_conf`,
+`pg_rotate_logfile`) are not exposed, and the two blocking helpers only report process ids — they never
+act on a session.
 
 #### Session and server identity
 
@@ -398,12 +408,11 @@ are listed in the [MariaDB catalogue](08-reference.md#mariadb-catalogue).
 
 ## Live state (SQL Server)
 
-**Live mutable state is not an exclusion criterion.** The T-SQL names that report the current
-connection-, transaction-, session- or statement-scope state are exposed as-is, with the native SQL
-Server semantics; nextorm makes **no guarantee** of per-row stability, connection continuity between
-queries or identity retrieval. Each value is the native snapshot of the moment the statement runs, and
-the client never invents a guard around it. Use `ReturningIdentity<TKey>()` when a last-insert key is
-required.
+**Live mutable state is not an exclusion criterion.** These T-SQL names expose native
+connection-, transaction-, session-, or statement-scope state at statement execution time. Do not
+treat a result as stable per row or assume a later query uses the same connection; nextorm makes no
+such guarantees. For a last-insert key, use `ReturningIdentity<TKey>()` rather than relying on a
+separate `scope_identity()` query.
 
 | C# | CLR | Caveat |
 |---|---|---|

@@ -23,7 +23,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     // context type (F6). The delegate is handed over once per enumeration, not built per call.
     private IConnectionManager? _connectionManager;
     private Func<DbCommand, string, object?, DbParameter>? _createParam;
-    private Func<DbTransaction?>? _currentTransaction;
+    private Func<IConnectionManager, DbTransaction?>? _currentTransaction;
     private InterceptorHooks? _interceptors;
     private IDataContext? _context;
     private readonly DbPreparedQueryCommand<TResult> _compiledQuery;
@@ -247,7 +247,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
 
         return false;
     }
-    internal void InitEnumerator(IConnectionManager connectionManager, Func<DbCommand, string, object?, DbParameter> createParam, object[]? @params, CancellationToken cancellationToken, Func<DbTransaction?> currentTransaction, InterceptorHooks interceptors, IDataContext context)
+    internal void InitEnumerator(IConnectionManager connectionManager, Func<DbCommand, string, object?, DbParameter> createParam, object[]? @params, CancellationToken cancellationToken, Func<IConnectionManager, DbTransaction?> currentTransaction, InterceptorHooks interceptors, IDataContext context)
     {
         _cancellationToken = cancellationToken;
         _params = @params;
@@ -339,7 +339,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
         // DataContext.EnsureConnectionOpen.
         _connectionManager.EnsureConnectionOpen();
 
-        var lease = _compiledQuery.Acquire(_conn, _createParam!, @params, _currentTransaction?.Invoke(), _onCommandCreated);
+        var lease = _compiledQuery.Acquire(_conn, _createParam!, @params, _currentTransaction?.Invoke(_connectionManager!), _onCommandCreated);
         DbDataReader reader;
         try
         {
@@ -375,7 +375,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
 
         await _connectionManager.EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
 
-        var lease = _compiledQuery.Acquire(_conn, _createParam!, @params, _currentTransaction?.Invoke(), _onCommandCreated);
+        var lease = _compiledQuery.Acquire(_conn, _createParam!, @params, _currentTransaction?.Invoke(_connectionManager!), _onCommandCreated);
         DbDataReader reader;
         try
         {

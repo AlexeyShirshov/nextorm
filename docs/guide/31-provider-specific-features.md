@@ -1,13 +1,12 @@
 # Provider-specific features
 
-> This page covers behaviour that is **provider-dependent rather than portable**: the active dialect
-> has to advertise the matching `Supports*` capability, and the providers that do not opt in reject
-> the construct with `NotSupportedException` (`FOR JSON`/`FOR XML` on SQL Server, row locking on
-> PostgreSQL/MySQL/MariaDB/SQL Server). Features that **every** provider implements — even when the
-> storage or the spelling differs — are documented on concept pages instead, for example
-> [range columns](27-range-columns.md) (a native range type on PostgreSQL, a pair of scalar columns
-> elsewhere) or [JSON support across providers](16-json.md). The closing table lists spelling
-> differences that do not gate a feature at all.
+> This page covers features whose availability depends on the active provider. The active dialect must
+> advertise the matching `Supports*` capability; providers that do not opt in reject the construct
+> with `NotSupportedException`. Examples include `FOR JSON`/`FOR XML` on SQL Server and row locking
+> on PostgreSQL, MySQL, MariaDB and SQL Server. By contrast, features implemented by every provider
+> belong on concept pages even when storage or SQL spelling differs—for example, [range columns](27-range-columns.md)
+> (a native range type on PostgreSQL and a pair of scalar columns elsewhere) and [JSON support across
+> providers](16-json.md). The final table lists spelling differences that do not affect feature support.
 
 ## JSON output (SQL Server)
 
@@ -59,9 +58,10 @@ exclusive; combining them throws `NotSupportedException`.
 
 [`ForUpdate`](xref:NextORM.Core.EntityBuilder`1.ForUpdate) and
 [`ForShare`](xref:NextORM.Core.EntityBuilder`1.ForShare) lock the selected rows until the surrounding
-transaction ends. PostgreSQL, MySQL and MariaDB emit a trailing clause placed last, after `WHERE`,
-`ORDER BY` and a page request; SQL Server attaches a `WITH (updlock)`/`WITH (holdlock)` table hint to
-every physical source of the statement:
+transaction ends.
+
+PostgreSQL, MySQL and MariaDB put the lock clause after `WHERE`, `ORDER BY` and any page request. SQL
+Server instead attaches a `WITH (updlock)` or `WITH (holdlock)` table hint to each physical source:
 
 ```csharp
 var rows = await dataContext.From<SimpleEntity>()
@@ -139,10 +139,11 @@ source: `FromSql`, a query/builder subquery and a CTE source throw `NotSupported
 > `ForUpdate()`/`ForShare()` keep MariaDB's own grammar (`for update`, `lock in share mode`).
 
 
+### Choose how long to wait
+
 Pass a [`LockWaitMode`](xref:NextORM.Core.LockWaitMode) to control what happens when another transaction
-already holds the row: [`NoWait`](xref:NextORM.Core.LockWaitMode.NoWait) fails immediately instead of
-waiting, and [`SkipLocked`](xref:NextORM.Core.LockWaitMode.SkipLocked) leaves the locked rows out of the
-result — the standard way to build a queue or worker pool:
+already holds a selected row. `NoWait` fails immediately; `SkipLocked` leaves locked rows out of the result,
+which is useful when workers claim jobs from a queue:
 
 ```csharp
 var claimed = await dataContext.From<Job>()
@@ -161,13 +162,15 @@ select id
  from job with (updlock, readpast) where (state = 'pending')
 ```
 
-PostgreSQL and MySQL append the trailing `nowait`/`skip locked` (`FOR UPDATE`/`FOR SHARE [NOWAIT | SKIP
-LOCKED]`); a shared lock with a wait mode switches MySQL from `lock in share mode` to `for share`, because
-`LOCK IN SHARE MODE` takes no lock option. MariaDB appends the mode to both `for update` and `lock in
-share mode` (`NOWAIT` on 10.3+, `SKIP LOCKED` on 10.6+). SQL Server adds `nowait` or `readpast` to the
-same table hint (`with (updlock, nowait)` / `with (updlock, readpast)`); `readpast` skips any locked row,
-not only a row locked by another writer, so it approximates rather than exactly matches `SKIP LOCKED`.
-[`Wait`](xref:NextORM.Core.LockWaitMode.Wait) is the default and keeps the blocking behaviour.
+PostgreSQL and MySQL append `nowait` or `skip locked` to the lock clause. MySQL switches a shared lock
+with a wait mode from `lock in share mode` to `for share`, because the former has no lock option. MariaDB
+appends the mode to both `for update` and `lock in share mode` (`NOWAIT` on 10.3+, `SKIP LOCKED` on
+10.6+).
+
+SQL Server adds `nowait` or `readpast` to the table hint (`with (updlock, nowait)` or
+`with (updlock, readpast)`). `readpast` skips any locked row, not only a row locked by another writer, so
+it approximates rather than exactly matches `SKIP LOCKED`. [`Wait`](xref:NextORM.Core.LockWaitMode.Wait)
+is the default and keeps the blocking behaviour.
 
 ## Provider differences
 

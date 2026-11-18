@@ -1,8 +1,30 @@
 # Query sources
 
+Use this page to choose the rows that a query starts from. Most queries start with a mapped entity:
+`From<TEntity>()` selects its mapped table, `Where` filters rows, and `Select` defines the values to read.
+This page covers source selection and source-specific options; use the linked guides for details about
+individual query operators.
+
+## Start with a mapped entity
+
+For a typical query over a mapped table, start with `From<TEntity>()` and add the operators you need:
+
+```csharp
+var rows = dataContext.From<SimpleEntity>()
+    .Where(it => it.Id > 8)
+    .Select(it => new { it.Id })
+    .ToList();
+```
+
+`Where` keeps rows with `Id` greater than 8, `Select` returns only the `Id` value, and `ToList` runs
+the query and returns those values in a list.
+
+Choose another `From` overload when your rows come from a subquery, raw SQL, a common table expression
+(CTE), a temporary table, or a table-valued function.
+
 ## Query sources at a glance
 
-A query begins with a source, and [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) has one overload per kind of source. Every overload returns an [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1), so the full operator set (`Where`/`Join`/`GroupBy`/`Having`/`OrderBy`/`Limit`/`Select`) applies no matter where the rows come from:
+[`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) has an overload for each source type. Every overload returns an [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1), so you can compose the same query operators (`Where`, `Join`, `GroupBy`, `Having`, `OrderBy`, `Limit`, and `Select`) with any source, subject to the source and provider limitations documented for each operator:
 
 | Source | Entry point |
 |---|---|
@@ -14,7 +36,7 @@ A query begins with a source, and [`From`](xref:NextORM.Core.DataContextExtensio
 | Lazy temporary table | [`From(TempTableSource<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.TempTableSource{``0})) — [`AsTempTable`](20-create-table-as.md) |
 | Table-valued function (runtime factory) | [`From(() => ...)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) — [Table-valued functions](13-table-valued-functions.md) |
 
-Every source also accepts a `FromOptions` callback ([`FromOptions`](xref:NextORM.Core.FromOptions)) for per-source modifiers such as `TABLESAMPLE`/`SAMPLE` and table/index hints (see [Table sampling](#table-sampling-tablesample) below). The additive `CreateQueryBuilder*` forwarders mirror these overloads one-to-one (see the [API reference](../advanced/api-reference.md)). Overrides that change the rendered source of an already-chosen entity are described in [Per-query source overrides](#per-query-source-overrides).
+Each source also accepts a `FromOptions` callback ([`FromOptions`](xref:NextORM.Core.FromOptions)) for source-specific modifiers such as `TABLESAMPLE`/`SAMPLE` and table or index hints. See [Table sampling](#table-sampling-tablesample) for an example. The `CreateQueryBuilder*` methods provide matching entry points for these overloads; see the [API reference](../advanced/api-reference.md) for their signatures. To change the table or SQL source for one query, see [Per-query source overrides](#per-query-source-overrides).
 
 ## Subquery as source
 
@@ -44,18 +66,19 @@ Output:
 | 9 |
 | 10 |
 
-Constructing a derived source and materializing it are two different steps. `From(inner)` composes the
-derived table; reading its rows requires an **outer `Select`**, because the enclosing query can only
-address the output columns the derived `SELECT` declares. A bare `From(inner).ToList()` is accepted only
-when the inner projection is already a set of resolved column references (a mapped column, a renamed
-projected member, a computed scalar read through its output name). A projection whose members are
-row-member expressions — an anonymous `new { it.Id }` or a DTO `new Dto { Id = it.Id }` — cannot be
-reused that way and is refused during preparation with a `QueryPreparationException`; the rule is the
-**expression shape** of the inner projection, not the CLR type of its result. Add the outer selection
-(`From(inner).Select(it => it.Id)`, as above) to read such a source.
-This rewrite works with member-init DTO and positional-record projections; the tested
-constructor-only class projection has a known pre-existing failure
-(`Cannot find inner column Id`), so use one of those supported forms instead. See
+Using a query as a source takes two steps. `From(inner)` composes the inner query as a derived table; it
+does not read the rows. Add an outer `Select` to request columns exposed by the inner projection, as the
+example does.
+
+`From(inner).ToList()` without an outer `Select` is accepted only when the inner projection already
+contains resolved column references: a mapped column, a renamed projected member, or a computed scalar
+read through its output name. A projection such as `new { it.Id }` or `new Dto { Id = it.Id }` contains
+row-member expressions and is rejected during preparation with a `QueryPreparationException`. This rule
+depends on the **expression shape** of the inner projection, not the CLR type of its result.
+
+The outer-selection form works with member-init DTOs and positional-record projections. A tested
+constructor-only class projection has a known pre-existing failure (`Cannot find inner column Id`), so
+use one of the supported forms instead. See
 [Limitations](../advanced/limitations.md#limitations). See
 [Subqueries](07-subqueries.md#subquery-as-a-from-source) for the construction/materialization split.
 
@@ -85,14 +108,14 @@ select (c0 * 3)
 
 Output: `6`, `12`.
 
-> The generated output name in the sample (`c0` here) is how the rendered SQL exposes the computed
-> column; it is not a public naming contract. Read the value through the builder (as above) instead of
-> hard-coding the rendered spelling, which is provider-specific and may change.
+> The generated SQL names the computed column `c0`. This alias isn't part of the public API. Read the
+> value through the builder (as above) instead of hard-coding the alias; its spelling depends on the
+> provider and may change.
 
 ## Table function as source
 
-`dataContext.From(() => ...)` uses a runtime table-valued-function factory as the `FROM` source: the
-lambda carries the factory call and its arguments (see
+`dataContext.From(() => ...)` uses a table-valued function (TVF)—a database function that returns rows—as
+the `FROM` source. The lambda carries the function call and its arguments (see
 [Table-valued functions](13-table-valued-functions.md)). The built-in helpers cover the common
 set-returning functions; `SqlFunctions.Postgres.unnest` flattens a PostgreSQL array into one row per
 element:
@@ -159,9 +182,10 @@ primary table only.
 
 ## Per-query source overrides
 
-By default a query reads the table mapped with `EntityMetadataBuilder<T>.Table(...)` (or the name passed
+By default, a query reads the table mapped with `EntityMetadataBuilder<T>.Table(...)` (or the name passed
 to `From("table")`). The `With*` methods on [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1)
-change the rendered source for **this query only**; the metadata and every other query are untouched:
+change which table or SQL expression this query reads from; the metadata and every other query stay
+unchanged:
 
 ```csharp
 public EntityBuilder<TEntity> WithTableName(string name);
@@ -184,8 +208,8 @@ select id
  from sales.orders
 ```
 
-The schema/database/server qualifiers are provider-specific; the levels a provider cannot express are
-rejected with `NotSupportedException` when the SQL is built:
+The provider determines which schema, database, and server name prefixes it supports. SQL generation
+throws `NotSupportedException` for a prefix the provider cannot express:
 
 | Provider | `WithSchema` | `WithDatabase` | `WithServer` |
 |---|---|---|---|
@@ -196,15 +220,15 @@ rejected with `NotSupportedException` when the SQL is built:
 | ClickHouse | `db.table` | `db.table` | rejected |
 | In-memory | rejected | rejected | rejected |
 
-On MySQL, MariaDB, ClickHouse and SQLite the schema and the database name the same single qualifier, so
-only one of the two may be set. The parts are quoted with the provider's delimiter when identifier
-quoting is enabled (see [`WithQuotedIdentifiers`](xref:NextORM.Core.EntityBuilder`1.WithQuotedIdentifiers(System.Boolean))),
-each part separately: `[srv].[db].[sales].[orders]`, `` `db`.`orders` ``, `"sales"."orders"`.
+On MySQL, MariaDB, ClickHouse, and SQLite, schema and database names use the same single qualifier, so
+you can set only one of them. When identifier quoting is enabled, the provider quotes each part
+separately (see [`WithQuotedIdentifiers`](xref:NextORM.Core.EntityBuilder`1.WithQuotedIdentifiers(System.Boolean))):
+`[srv].[db].[sales].[orders]`, `` `db`.`orders` ``, `"sales"."orders"`.
 
-[`WithTableExpression`](xref:NextORM.Core.EntityBuilder`1.WithTableExpression(System.String)) replaces the table access with a raw SQL
-expression rendered as a derived source (`(sql) AS alias`) and cannot be combined with the name
-qualifiers. The fragment is emitted verbatim, so pass only trusted SQL (the caller owns its validity and
-injection safety, as with `WithSql`):
+[`WithTableExpression`](xref:NextORM.Core.EntityBuilder`1.WithTableExpression(System.String)) wraps a raw SQL
+fragment as a derived source (`(sql) AS alias`) and cannot be combined with the name qualifiers. The
+fragment is emitted verbatim, so pass only trusted SQL. As with `WithSql`, you are responsible for its
+validity and injection safety:
 
 ```csharp
 var rows = await dataContext.From<IOrder>()
@@ -219,7 +243,7 @@ select id
  from (select id from orders_2025 union all select id from orders_2026) as "t1"
 ```
 
-The override is part of the plan-cache key, so two queries that differ only in the override never share a
-cached plan; without an override the generated SQL is exactly as before. The in-memory provider has no SQL
-source to rewrite and rejects every override.
+The override is part of the query-plan cache key, so two queries that differ only in the override never
+share a cached plan. Without an override, the generated SQL is unchanged. The in-memory provider has no
+SQL source to rewrite and rejects every override.
 

@@ -7,10 +7,11 @@
 
 ## Динамическая схема результата <a name="dynamic-result-schema"></a>
 
-Табличная функция, форма результата которой предоставляется вызывающим, берёт её из типа строки
-фабрики — `T` в `TvfEntityBuilder<T>`. nextorm рендерит соответствующую нативную колончатую форму из
-`[Column]`-метаданных этого типа и CLR-типов свойств, а каждая форма провайдера выражается
-[`TableFunctionSchema`](xref:NextORM.Core.TableFunctionSchema) в дескрипторе:
+Если вызывающий задаёт выходные колонки табличной функции, опишите их в типе строки фабрики — `T`
+в `TvfEntityBuilder<T>`. nextorm использует `[Column]`-метаданные и CLR-типы свойств, чтобы
+сгенерировать список колонок в формате провайдера. Свойство
+[`TableFunctionSchema`](xref:NextORM.Core.TableFunctionSchema) дескриптора указывает, где этот список
+появляется в SQL:
 
 ```csharp
 public TvfEntityBuilder(
@@ -22,12 +23,14 @@ public TvfEntityBuilder(
     TableFunctionSchema resultSchema);
 ```
 
-Строки по-прежнему материализуются в тот же DTO с `[Column]`, что и у любой другой табличной функции —
-отдельного динамического читателя нет, — а объявленная схема входит в ключ плана запроса, поэтому две
-формы строки никогда не разделяют кэшированный план. `None` — значение по умолчанию, оно ничего не
-рендерит: функция сама предоставляет форму результата.
+Строки материализуются в тот же DTO с `[Column]`, что и строки любой другой табличной функции;
+отдельного динамического читателя нет. Объявленная схема также входит в ключ плана запроса, поэтому
+разные типы строк не используют один кэшированный план. Если функция сама задаёт форму результата,
+оставьте `None`. Это значение по умолчанию, и оно не добавляет схему в SQL.
 
 ## Где рендерится схема
+
+Выберите форму, соответствующую синтаксису SQL, который требует функция:
 
 | `ResultSchema` | Рендеримая форма | Провайдер |
 |---|---|---|
@@ -35,8 +38,9 @@ public TvfEntityBuilder(
 | `LeadingArgument` | квотированная строка структуры как первый аргумент вызова: `values('a UInt8, b String', (1,'x'))` | ClickHouse |
 | `AliasColumnList` | список определений колонок после псевдонима: `jsonb_to_recordset(@json) as "t1"(a integer, b text)` | PostgreSQL |
 
-ClickHouse `values` читает литеральную таблицу из списка кортежей; аргумент `tuples` выводится verbatim,
-поэтому это SQL, написанный разработчиком, — никогда не строите его из пользовательского ввода:
+ClickHouse `values` читает литеральную таблицу из списка кортежей. Аргумент `tuples` выводится verbatim,
+поэтому в нём должен быть только SQL, написанный разработчиком. Не формируйте его из пользовательского
+ввода:
 
 ```csharp
 public interface IPairRow
@@ -58,8 +62,8 @@ select a, b
  from values('a UInt8, b String', (1, 'x'), (2, 'y')) as `t1`
 ```
 
-PostgreSQL `jsonb_to_record`/`jsonb_to_recordset` разворачивают JSON-объект/массив в record, колонки
-которого объявлены типом строки:
+PostgreSQL `jsonb_to_record`/`jsonb_to_recordset` разворачивают JSON-объект или массив в record.
+Колонки задаются типом строки:
 
 ```csharp
 public interface IPairRow
@@ -88,10 +92,10 @@ select a, b
 
 ## Ограничения провайдеров
 
-Провайдер объявляет поддержку конкретной формы, которую может выразить
-([`SupportsResultSchema(TableFunctionSchema)`](xref:NextORM.Core.ISqlDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema)));
-объявленная форма, которую провайдер не реализует, отклоняется с `NotSupportedException` — она никогда
-не выводится как SQL без списка колонок.
+Каждый провайдер объявляет поддерживаемые формы результата через
+[`SupportsResultSchema(TableFunctionSchema)`](xref:NextORM.Core.ISqlDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema)).
+Если запрос задаёт неподдерживаемую форму, nextorm бросает `NotSupportedException`: вызов не будет
+сгенерирован без необходимого списка колонок.
 
 | Провайдер | `None` | `LeadingArgument` | `AliasColumnList` |
 |---|---|---|---|

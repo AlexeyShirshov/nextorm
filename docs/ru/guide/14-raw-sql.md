@@ -6,9 +6,20 @@
 
 ## Обзор
 
-[`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String)) и [`PrepareFromSql`](xref:NextORM.Core.EntityExtensions.PrepareFromSql``1(NextORM.Core.EntityBuilder{``0},System.String)) позволяют сохранить обычный типизированный запрос как **форму результата** и
-подставить необработанную инструкцию для выполнения. Всё остальное — проекция, сопоставление сущности,
-конструирование через инициализацию членов, вложенные DTO — берётся из запроса, построенного до подстановки.
+Используйте [`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String))
+или [`PrepareFromSql`](xref:NextORM.Core.EntityExtensions.PrepareFromSql``1(NextORM.Core.EntityBuilder{``0},System.String)),
+если нужно выполнить написанный вручную SQL, сохранив типизированный запрос как **форму результата**.
+Сначала задайте проекцию: nextorm использует её для сопоставления сущностей, инициализации членов
+и вложенных DTO.
+
+Выберите точку входа по задаче:
+
+* Заменить генерируемую инструкцию типизированного запроса: `WithSql` или `PrepareFromSql`.
+* Включить сырой запрос как источник `FROM` и продолжить строить запрос: `FromSql`.
+* Выполнить отдельную команду или прочитать несколько наборов результатов: `ExecuteRaw`. Для
+  хранимой процедуры используйте `ExecuteProcedure`.
+
+Основные перегрузки для запроса и EntityBuilder:
 
 ```csharp
 // QueryCommand<TResult>
@@ -26,16 +37,23 @@ public static QueryCommand<TResult> WithSql<TResult>(this EntityBuilder<TResult>
 public static IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(this EntityBuilder<TResult> entity, string sql);
 ```
 
-* [`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String)) возвращает [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1), который вы выполняете обычными терминалами
-  ([`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), ...). Он проходит через неявный кэш планов, как и любая другая команда.
-* [`PrepareFromSql`](xref:NextORM.Core.EntityExtensions.PrepareFromSql``1(NextORM.Core.EntityBuilder{``0},System.String)) возвращает [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1); выполняйте его через перегрузки контекста
-  (`dataContext.ToListAsync(prepared, ...)`, `dataContext.FirstAsync(prepared, ...)`, ...).
-* `@params` — это обычный объект. Его **открытые свойства экземпляра** становятся именованными параметрами
-  в порядке свойств, причём имя свойства используется как имя параметра.
-* `mode` — это `[Flags]`-значение: [`None`](xref:NextORM.Core.PrepareFromSqlMode.None) (по умолчанию) — буферизованное/скалярное
-  выполнение (буферизованная форма, которую `Prepare()` без аргументов выбирает по умолчанию), [`Streaming`](xref:NextORM.Core.PrepareFromSqlMode.Streaming) требуется для потокового
-  (небуферизованного) чтения, а [`StoreInCache`](xref:NextORM.Core.PrepareFromSqlMode.StoreInCache) заполняет кэш планов. Все перегрузки по умолчанию
-  используют `None`, поэтому необработанный SQL не заполняет кэш планов без явного запроса.
+* [`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String))
+  возвращает [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1). Выполняйте его обычными
+  терминалами, например [`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[]))
+  или [`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])).
+  Как и другие команды, он использует неявный кэш планов.
+* [`PrepareFromSql`](xref:NextORM.Core.EntityExtensions.PrepareFromSql``1(NextORM.Core.EntityBuilder{``0},System.String))
+  возвращает [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1).
+  Выполняйте его методами контекста, например `dataContext.ToListAsync(prepared, ...)` или
+  `dataContext.FirstAsync(prepared, ...)`.
+* `@params` — обычный объект. Его **открытые свойства экземпляра** становятся именованными
+  параметрами в порядке свойств; имя свойства служит именем параметра.
+* `mode` — значение `[Flags]`. [`None`](xref:NextORM.Core.PrepareFromSqlMode.None) используется
+  по умолчанию для буферизованного или скалярного выполнения. Это соответствует буферизованной форме,
+  которую выбирает `Prepare()` без аргументов. Для потокового (небуферизованного) чтения используйте
+  [`Streaming`](xref:NextORM.Core.PrepareFromSqlMode.Streaming). [`StoreInCache`](xref:NextORM.Core.PrepareFromSqlMode.StoreInCache)
+  заполняет кэш планов. Все перегрузки по умолчанию используют `None`, поэтому подготовленный сырой
+  SQL не попадает в кэш без явного запроса.
 
 Необработанная инструкция передаётся дословно, включая комментарии. Заполнители параметров должны
 соответствовать тому, что ожидает базовый провайдер ADO.NET (`@name` для SQL Server/PostgreSQL;
@@ -51,6 +69,9 @@ Microsoft.Data.Sqlite также принимает `@name`, хотя генер
 > [Row values](../scalar-functions/06-arrays.md)), а не часть сырого SQL.
 
 ## [`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String))
+
+Используйте `WithSql`, чтобы заменить генерируемую инструкцию и выполнить её обычным терминальным
+методом запроса:
 
 ```csharp
 var ids = await dataContext.From<ISimpleEntity>()
@@ -103,8 +124,8 @@ select id from simple_entity where id = @id
 
 ## [`PrepareFromSql`](xref:NextORM.Core.EntityExtensions.PrepareFromSql``1(NextORM.Core.EntityBuilder{``0},System.String))
 
-Подготовьте необработанную инструкцию и выполните её в контексте. Параметры времени выполнения передаются
-во время выполнения точно так же, как для `Prepare(...)`:
+Используйте `PrepareFromSql`, чтобы подготовить необработанную инструкцию и выполнить её через контекст.
+Передавайте параметры времени выполнения методу выполнения, как и для `Prepare(...)`:
 
 ```csharp
 var prepared = dataContext.From<ISimpleEntity>()
@@ -190,16 +211,17 @@ public sealed class IdDto
 | 9 |
 | 10 |
 
-Имена столбцов в необработанном списке `select` сопоставляются с этой проекцией, поэтому они должны точно
-совпадать с сопоставленными именами столбцов (или именами `[Column]`).
+Список `select` определяет, какие элементы проекции nextorm может заполнить. Имена его столбцов должны
+точно совпадать с сопоставленными именами столбцов или именами `[Column]`.
 
 ## Композиция сырого SQL как источника `FROM`
 
-[`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)) использует сырой фрагмент как **источник**
-запроса вместо сопоставленной таблицы, поэтому его можно фильтровать, присоединять, группировать,
-проецировать и постранично листать как любой другой источник. Столбцы читаются через аксессоры
-[`TableAlias`](xref:NextORM.Core.TableAlias) (`t["id"].AsInt`); именованные параметры привязываются по той
-же конвенции объекта `params`.
+Используйте [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)),
+чтобы сделать сырой SQL-фрагмент **источником** запроса вместо сопоставленной таблицы. После этого его
+можно фильтровать, присоединять, группировать, проецировать и разбивать на страницы, как любой другой.
+
+Читайте колонки через аксессоры [`TableAlias`](xref:NextORM.Core.TableAlias), например
+`t["id"].AsInt`. Именованные параметры привязываются по той же конвенции объекта `params`.
 
 ```csharp
 var rows = dataContext
@@ -319,7 +341,9 @@ var ids = dataContext
 
 ## Выполнение сырых команд (`ExecuteRaw`)
 
-[`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String)) и [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)) сохраняют типизированный запрос и подменяют его часть. Когда инструкция вообще не является отображаемым запросом — DDL/DML-команда, хранимая процедура или команда, возвращающая несколько наборов результатов, — используйте `ExecuteRaw` (произвольный текст команды) или `ExecuteProcedure` (процедура по имени), которые выполняют команду и возвращают [`ProcedureResult`](xref:NextORM.Core.ProcedureResult):
+[`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String)) и [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)) сохраняют типизированный запрос и заменяют его часть. Используйте `ExecuteRaw` для отдельной команды DDL/DML, произвольного текста команды или команды с
+несколькими наборами результатов. Для вызова хранимой процедуры по имени используйте `ExecuteProcedure`.
+Оба API возвращают [`ProcedureResult`](xref:NextORM.Core.ProcedureResult):
 
 ```csharp
 // DataContext и роль IRawCommandExecutor на IDataContext
@@ -333,13 +357,36 @@ public Task<ProcedureResult> ExecuteRawAsync(string sql, IReadOnlyList<Procedure
 public static Task<ProcedureResult> ExecuteRawAsync(this IDataContext dataContext, string sql, CancellationToken cancellationToken = default);
 ```
 
-Поскольку `parameters` — это `params`-коллекция, встроенный аргумент принимается в двух эквивалентных формах: развёрнутой `ExecuteRaw(sql, new ProcedureParameter("min", 0))` и коллекционной `ExecuteRaw(sql, [new ProcedureParameter("min", 0)])`. `ExecuteProcedure(name, new ProcedureParameter("a", 1))` работает так же. Параметр `params` обязан быть последним (CS0231), поэтому у асинхронных двойников без токена работает развёрнутый вызов `ExecuteRawAsync(sql, new ProcedureParameter(...))`, а для передачи `CancellationToken` нужна коллекционная форма `ExecuteRawAsync(sql, [p1, p2], cancellationToken)` — совмещать их нельзя. `ExecuteProcedureAsync` ведёт себя так же.
+**Маршрутизированные команды.** `ExecuteRaw`, `ExecuteRawAsync` и `ExecuteProcedure` выполняются на
+собственном соединении контекста и не несут вариант сопоставления, поэтому таблицу бакета на его шарде
+они не адресуют. Бакет адресуется через `FromSql` с вариантом (токен `{qualified}` даёт физическое имя)
+либо через контекст, уже направленный на этот шард — см.
+[«Шардирование и горизонтальное партиционирование»](35-sharding-and-horizontal-partitioning.md).
+
+Поскольку `parameters` — коллекция `params`, параметры можно передать развёрнутым списком или
+коллекцией. Например, `ExecuteRaw(sql, new ProcedureParameter("min", 0))` и
+`ExecuteRaw(sql, [new ProcedureParameter("min", 0)])` эквивалентны.
+`ExecuteProcedure(name, new ProcedureParameter("a", 1))` использует ту же развёрнутую форму.
+
+Параметр `params` должен быть последним (CS0231). Поэтому асинхронные методы принимают развёрнутую
+форму без токена отмены: `ExecuteRawAsync(sql, new ProcedureParameter(...))`. Чтобы передать
+`CancellationToken`, используйте коллекционную форму: `ExecuteRawAsync(sql, [p1, p2], cancellationToken)`.
+Для `ExecuteProcedureAsync` действует то же правило.
 
 Текст инструкции передаётся дословно и **не** проходит через планировщик запросов, поэтому он никогда не переиспользует кэш планов; кэш мапперов результатов ведётся по **форме результата** (упорядоченные имена столбцов читателя и тип результата), а не по тексту SQL, поэтому произвольные инструкции не разрастаются в кэше.
 
 > **SQL-инъекции.** `sql` выполняется дословно; планировщик не параметризует его. Никогда не конкатенируйте недоверенный ввод в текст — передавайте значения через `ProcedureParameter` и ссылайтесь на них плейсхолдерами.
 
-> **Почему `ProcedureParameter`, а не params-объект?** `WithSql`, `PrepareFromSql` и `FromSql` проходят через планировщик, поэтому принимают и его конвенцию params-объекта: обычный объект, публичные свойства которого становятся именованными параметрами, в порядке свойств (`new { id = 1 }`). `ExecuteRaw` намеренно обходит планировщик — текст отправляется дословно, и свойства объекта никто не перебирает, — поэтому параметр задаётся явно, по имени. `ProcedureParameter` — этот явный дескриптор, и он является надмножеством простого входного значения: помимо `Name` и `Value` он несёт ADO.NET `Direction`, `DbType`, `Size` и `TypeName`, а также табличные строки `Table<T>`, поэтому та же форма обслуживает выходные и возвращаемые параметры и `ExecuteProcedure`. Анонимный объект мог бы выражать только входные значения.
+> **Почему `ProcedureParameter`, а не params-объект?** `WithSql`, `PrepareFromSql` и `FromSql`
+> используют планировщик запросов. Они принимают его конвенцию params-объекта: обычного объекта,
+> чьи публичные свойства становятся именованными параметрами в порядке свойств, например
+> `new { id = 1 }`.
+>
+> `ExecuteRaw` обходит планировщик и передаёт текст дословно, поэтому свойства объекта не
+> перечисляются. Объявляйте каждый параметр по имени через `ProcedureParameter`. Помимо `Name` и
+> `Value`, он хранит параметры ADO.NET `Direction`, `DbType`, `Size` и `TypeName`, а также строки
+> табличного параметра `Table<T>`. Этот дескриптор подходит для выходных и возвращаемых параметров
+> и `ExecuteProcedure`; анонимный объект может задавать только входные значения.
 
 `ProcedureResult` удерживает команду и её читатель открытыми до освобождения. В SQL Server **без MARS** открытый читатель блокирует любые другие команды на том же соединении, поэтому освободите результат перед следующей командой в контексте. Итог провайдера по затронутым строкам фиксируется, когда этот читатель освобождается; см. [Затронутые строки (`RecordsAffected`)](#затронутые-строки-recordsaffected).
 

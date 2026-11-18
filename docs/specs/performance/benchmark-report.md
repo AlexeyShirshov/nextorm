@@ -3638,3 +3638,312 @@ As of **2026-11-11**.
 | Nextorm_ToList_3Col   | csv-fixed            | 10000 |  7,891.46 μs |  1.00 | 265.6250 | 171.8750 | 2268.74 KB |        1.00 |
 | Nextorm_WriteCsv_3Col | acceptance,csv-fixed | 10000 |  9,487.49 μs |  1.20 | 203.1250 |        - | 1735.99 KB |        0.77 |
 | Nextorm_WriteCsv_8Col | csv-fixed            | 10000 | 28,434.27 μs |  3.60 | 718.7500 |        - | 5975.07 KB |        2.63 |
+
+# NativeAOT: цена материализатора и A/B-проверка JIT-регрессии (2026-11-15)
+
+Закрытие вопроса производительности кампании #370: сколько стоит интерпретация материализатора под
+NativeAOT, что даёт генерация кода на этапе сборки, и не замедлила ли кампания обычный JIT-путь.
+
+## Методика
+
+Стенд `benchmarks/nextorm.benchmark.aot` (вне `nextorm.slnx`, `net10.0`, потому что BenchmarkDotNet
+0.15.8 знает `NativeAotRuntime` только до `Net10_0`). Команда готовится один раз в `GlobalSetup`, в
+замеренное тело входит только выполнение и материализация: 500 строк на вызов. Четыре плеча в одном
+прогоне: `JIT-compiled`, `JIT-interpreted` (`NEXTORM_EXPRESSION_INTERPRETATION=1`), `AOT-default`
+(настройка не задана — ровно то, что получает потребитель) и `AOT-generated` (сгенерированный
+материализатор через спайк-хук). Аллокации детерминированы и служат доказательством того, что плечо
+действительно исполняло нужный путь.
+
+## Материализатор
+
+Прогон с реальным генератором (`RowMaterializerGenerator`), 500 строк на вызов, подготовленная
+команда:
+
+| Кейс | JIT compiled | JIT interpreted | AOT default | AOT + generated | Сырой `IDataRecord` (AOT) |
+|---|---:|---:|---:|---:|---:|
+| 3 колонки, ctor | 265.3 µs / 39.4 KB | 396.5 µs / 184 KB | 543.6 µs / **246 KB** | **364.2 µs / 39.4 KB** | 268.8 µs / 19.8 KB |
+| 3 колонки, member-init | 281.5 µs / 39.4 KB | 508.1 µs / 161 KB | 629.7 µs / **270 KB** | **405.9 µs / 39.4 KB** | — |
+| 12 колонок, member-init | 743.1 µs / 59.0 KB | 1 156 µs / 286 KB | 1 686 µs / **676 KB** | **959.4 µs / 59.1 KB** | 783.9 µs / 19.8 KB |
+
+Аллокации детерминированы и не зависят от загрузки хоста: сгенерированный материализатор возвращает
+ровно уровень скомпилированного пути (39.4 KB против 39.4 KB на трёх колонках, 59.1 KB против
+59.0 KB на двенадцати), а путь по умолчанию под NativeAOT выделяет в 6–11 раз больше. По времени
+генерация снимает 1.5×, 1.6× и 1.8× от `AOT default`: 543.6 → 364.2, 629.7 → 405.9, 1 686 → 959 µs.
+
+Остаток против `JIT compiled` (1.4×, 1.4×, 1.3×) — это две вещи, обе видимые в данных. Во-первых,
+сам нативный рантайм: сырой `IDataRecord`-floor на тех же строках даёт 268.8 µs под AOT против
+228.3 µs под JIT (+18 %) и 783.9 против 715.9 µs на двенадцати колонках. Во-вторых, диспетчеризация
+по `GetFieldType` в numeric-колонках: провайдер может отдать хранилище уже или шире объявленного типа
+(SQL Server отдаёт `int` для колонки, спроецированной как `long`, и наоборот), поэтому сгенерированный
+материализатор читает runtime-тип поля и применяет типизированный `Convert`, а не фиксированный
+геттер. Это цена корректности, а не интерпретатора: без неё прогон SQL Server падал с
+`InvalidCastException` на 13 тестах.
+
+Разложение по аллокациям: интерпретация вместо компиляции стоит 4–6× и видна уже под JIT, значит это
+свойство интерпретатора, а не NativeAOT; нативный прогон того же интерпретатора добавляет ещё
+1.3–1.4× по времени. Форма дерева тут не при чём: `EmitConvert` не добавляет лишних преобразований,
+колонка — это один `Call(reader.GetInt32, const)`; цена в построчном `object`-диспетчере
+интерпретатора, который боксит каждое прочитанное значение.
+
+## Реальный генератор
+
+Шов `RowMaterializerRegistry` опрашивается в `RowMapperFactory` до построения дерева;
+`RowMaterializerGenerator` эмитит провайдера для всех материализуемых типов сборки (аннотация не
+нужна), а `[ModuleInitializer]` регистрирует его при загрузке. Строка `AOT-generated` в таблице выше —
+снимок на этом генераторе (не заглушка): `364.2 µs / 39.4 KB` против `543.6 µs / 246 KB` у пути по
+умолчанию и `265.3 µs / 39.4 KB` у `JIT compiled`.
+
+Анонимные типы покрываются по форме: имени, которое можно написать в `typeof`, у них нет, поэтому
+провайдер запоминает тип через `new { … }.GetType()` и сравнивает `resultType` с ним. Унификация
+анонимных типов внутри сборки делает такую проверку точной: совпали имена, типы и порядок свойств —
+это тот же тип.
+
+Гейт реестра держит форму честной: колонки с конвертером, streaming LOB, dynamic-column stores,
+range-парами, widened count, duration unit, default-on-null и непростыми CLR-типами генератору не
+предлагаются, поэтому сгенерированный материализатор не может разойтись в NULL- или
+accessor-семантике — такая форма молча остаётся на пути выражений.
+
+## Потоковые писатели: CSV и JSON без дерева
+
+`WriteCsv` и `WriteJson` материализатора не используют, но оба строили на колонку выражение и
+компилировали его — под NativeAOT та же интерпретация, что и у материализатора. Теперь плоская форма
+(scalar-колонки простых типов) пишется уже скомпилированными делегатами: геттер и форматирование
+выбраны один раз при построении плана, построчно дерева нет. Гейт тот же, что у материализатора:
+колонка предлагается только если её mapped accessor — plain-геттер `IDataRecord`; конвертеры,
+`GetFieldValue<T>`-обёртки (`byte[]`, `uint`/`ulong`, `TimeSpan`, `DateTimeOffset`), Base64,
+enum-as-string, default-on-null и вложенные JSON-формы остаются на выражениях. Паритет «прямой писатель
+= выражение» проверяется побайтово в `CsvDirectColumnWriterTests` и `JsonDirectWriterTests`; стоимость
+не замерялась отдельно, потому что плечи писателей не входят в AOT-стенд.
+
+## A/B prepared/cached: регрессии нет
+
+Кампания трогала горячий путь материализации (S2 — метаданные конструктора, S3 — аксессоры чтения,
+S7 — extreme rows, S10/S11 — correlated dispatch), поэтому проверено сравнением с коммитом до
+кампании `7b047a9e` на том же хосте и том же рантайме (`net11.0`): полный job, 8 парных раундов,
+чередование порядка.
+
+| Путь | До кампании, min | Сейчас, min | Сейчас / до |
+|---|---:|---:|---:|
+| `SqliteBenchmarkCachedPlan.Prepared_ToList` | 1 125.1 µs | 1 115.8 µs | **0.99** |
+| `SqliteBenchmarkCachedPlan.Cached_ToList` | 1 706.6 µs | 1 671.2 µs | **0.98** |
+| `SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param` | 365.7 µs | 341.3 µs | **0.93** |
+| `SqliteBenchmarkAny.Nextorm_Cached` | 1 500.0 µs | 1 519.0 µs | **1.01** |
+
+Отслеживаемое отношение `Cached_ToList / Prepared_ToList`: 1.46–1.55 (медиана 1.53) до и 1.26–1.62
+(медиана 1.51) сейчас — роста нет.
+
+Абсолютный `Prepared_ToList` из `acceptance-benchmarks.md` (923.8 µs, отношение 1.87) снят на
+.NET 10.0.12 в сентябре; на текущем хосте .NET 11 **дерево до кампании** показывает те же 1.1–1.5 мс,
+то есть разница объясняется рантаймом и хостом, а не изменениями кампании. Хост шумный (рядом идёт
+чужой прогон тестов), поэтому по-раундовый разброс достигает ±25 %; оценка по минимуму за 8 прогонов
+не завышается нагрузкой.
+
+## Воспроизведение
+
+```bash
+# материализатор (AOT + JIT плечи)
+dotnet run --project benchmarks/nextorm.benchmark.aot -c Release -- --filter '*'
+
+# A/B регрессии, из корня каждой ветки
+cd benchmarks/nextorm.benchmark
+NEXTORM_BENCH_FULL=1 dotnet run -c Release -- --filter '*SqliteBenchmarkCachedPlan*'
+```
+
+# Итерация 20 — локальный полный сравнительный прогон и Tier-1 (2026-11-16)
+
+**Область и методика.** Измерения выполнены на текущем рабочем дереве, а не на опубликованном NuGet
+`1.0.9`: HEAD `ad2d0daeb6e34bcc5b094f0c9b0b1d1205fb8545`, tree `422cc645b20226c1c918d288ae8ec3b182861567`.
+При старте дерево было грязным: 216 изменённых отслеживаемых путей и 9 неотслеживаемых. В число изменений
+входила настройка целей этого запуска; это не снимок чистого HEAD. AMD Ryzen 7 5800HS (8 логических / 4
+физических ядра), Ubuntu 22.04.5 LTS, SDK 11.0.100 / .NET 11.0.0, BenchmarkDotNet 0.15.8, Release.
+SQLite-файл — изолированная копия `data/test.db` под каталогом запуска; SHA-256 совпадает с исходной БД:
+`32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295`.
+
+`NEXTORM_BENCH_FULL=1` выбрал настроенный в проекте `Job.Default.WithToolchain(InProcessEmitToolchain.Instance)`;
+это **полный Default job внутри процесса**, не out-of-process. Из 312 строк отчётов 303 имеют Job ID
+`Job-JWQWGO` / `UnrollFactor=16`; 9 raw-reader строк — специализированный `Job-VLPMSV` /
+`UnrollFactor=1`, их не следует называть неизменённым `Job.Default`. Все 312 строк использовали
+`InProcessEmitToolchain` и runtime .NET 11.0.
+
+- 16/16 групп завершились с exit 0: основной набор — девять групп / 182 строки; Tier-1 — шесть групп /
+  118 строк (`Projection` 7, `Aggregates` 21, `Paging` 7, `Streaming` 22, `WriteJson` 33, `Csv` 28);
+  acceptance — одна группа / 12 строк. Это число строк выгрузок по группам, не утверждение о 312
+  уникальных именованных сценариях. Измерения шли 2026-11-16 17:09:44–18:56:09 UTC (1:46:25).
+- Проверены свежие CSV и соответствующие Markdown-отчёты: все 312 строк имеют конечные `Mean`, `Error`,
+  `StdDev`, `Allocated`; 0 пустых/NA/failed ячеек и 0 проваленных сценариев. Сводка и проверки каждой
+  группы сохранены в `benchmarks/BenchmarkDotNet.Artifacts/iteration20-local-20261116T165837Z/validation.md`
+  и `validation.json`; полные логи — в `.../logs/`.
+- Build: restore exit 0; Release build exit 0, 0 warnings, 0 errors. Логи — `logs/02-restore-local-projects.log`
+  и `logs/03-build-release-local-projects.log`.
+- Предупреждения не скрывались и не считались ошибками: 312 отказов permission denied при попытке поднять
+  приоритет процесса до High; 10 предупреждений `MinIterationTime` (одно в SimulateWork и девять на
+  raw-reader, минимальная рекомендация BDN — 100 ms); 6 `MultimodalDistribution` в Streaming. В логах нет
+  маркеров ошибки/падения бенчмарка. Raw-reader и короткие итерации остаются ограничением точности.
+
+### Текущие результаты — сравнение только внутри одного запуска
+
+Сквозные строки ниже сопоставляют лучший метод каждой библиотеки из того же отчёта; в этих семи случаях
+лучшим co-measured reference ORM был Dapper. Отношение — `Nextorm Mean / Dapper Mean` (меньше 1 означает
+меньшее измеренное среднее в этом запуске), а не изменение относительно предыдущей итерации.
+
+| Сценарий | Nextorm: Mean / Allocated | Dapper: Mean / Allocated | Mean ratio |
+|---|---:|---:|---:|
+| Data fetch | 12.26 μs / 1,080 B | 16.55 μs / 1,848 B | 0.74× |
+| Wide data fetch | 7.921 ms / 2.14 MB | 8.528 ms / 2.59 MB | 0.93× |
+| Where | 1.063 ms / 102.9 KB | 1.503 ms / 179.23 KB | 0.71× |
+| Simulate work | 7.893 ms / 6.21 MB | 24.616 ms / 8.86 MB | 0.32× |
+| Any | 1.059 ms / 84.38 KB | 1.509 ms / 138.29 KB | 0.70× |
+| FirstOrDefault | 107.1 μs / 8.56 KB | 154.6 μs / 16.12 KB | 0.69× |
+| SingleOrDefault | 107.2 μs / 8.28 KB | 148.6 μs / 16.04 KB | 0.72× |
+
+В подготовленной Category A Nextorm был быстрее по Mean во всех 12 сценариях; минимальная разница среди
+них — IN-list: 14.11 μs против 19.66 μs у Dapper (0.72×). Аллокации ниже в 11/12 сценариях; исключение
+тоже IN-list — 1.55 KB у Nextorm против 1.26 KB у Dapper. В cached Category B Nextorm быстрее в 7/12 и
+нигде не имел наименьших аллокаций: крупнейший разрыв — IN-list, 43.73 μs против 19.82 μs (2.21×) и
+8.77 KB против 1.26 KB (6.98×); CTE — 32.56 μs против 22.91 μs (1.42×). Это результаты разных плеч
+Category A/B внутри одного прогона, а не чистая оценка изменения кода между версиями.
+
+Итерация 19 использовала `ShortRun` (3 warmup / 3 измерительных итерации), а эта — `Job.Default`;
+сопоставлять их абсолютные значения или выводить регрессию/улучшение по времени статистически некорректно.
+Поэтому здесь нет delta-таблицы против Итерации 19. Опубликованные таблицы отражают только текущие
+свежие результаты и co-measured сравнения.
+
+### Локальные ссылки проекта и provenance
+
+В `examples/nextorm.examples.postgres.aviasales/nextorm.examples.postgres.aviasales.csproj` параметр
+`NextormBenchmarkUseLocalProjects=true` отключает PackageReference на `nextorm` и `nextorm.postgres` и
+подключает локальные Core, PostgreSQL и source-generator проекты. Существующая ссылка на
+`nextorm.extensions` сохранена. Это позволяет измерять текущие исходники, а не NuGet `1.0.9`; изменение
+csproj и первоначальное грязное состояние зафиксированы в `manifest.md`.
+
+Provenance: 10 уникальных локальных NextORM project outputs в `ReferencePath` / `ReferenceCopyLocalPaths`,
+локальный source-generator analyzer и 11 сверенных строк runtime/generator SHA-256. Файлы:
+`logs/04-compiler-runtime-provenance.json`, `logs/06-runtime-loaded-assemblies.tsv`,
+`logs/07-runtime-copy-provenance.tsv`. Полные сырые отчёты и логи находятся в каталоге запуска и его
+`artifacts/{ci,tier1,acceptance}/results/`.
+
+### Публикация таблиц и воспроизведение
+
+Существующие 18 canonical CSV/Markdown-отчётов сохранены перед заменой в
+`logs/canonical-reports-before/` (манифест SHA-256 — `logs/canonical-reports-before.json`); соответствующие
+свежие девять пар основного набора скопированы в `benchmarks/BenchmarkDotNet.Artifacts/results/`, откуда
+строятся ссылки в таблицах. Генератор обновил только размеченные блоки в `readme.md`,
+`docs/comparisons/benchmarks.md` и `docs/ru/comparisons/benchmarks.md`. Его распознавание job исправлено:
+если BDN не выводит `Job=` в Markdown, `Job.Default` определяется по CSV-параметрам, а неизвестный hashed
+job не подменяется на `ShortRun`.
+
+Команды сборки:
+
+```bash
+dotnet restore benchmarks/nextorm.benchmark -p:NextormBenchmarkUseLocalProjects=true
+dotnet build benchmarks/nextorm.benchmark -c Release --no-restore -p:NextormBenchmarkUseLocalProjects=true
+```
+
+Все 16 фактических команд измерения и их exit code приведены в `manifest.md`; каждая имеет отдельный
+полный лог в `logs/bench-*.log`. Пример команды основного набора:
+
+```bash
+env NEXTORM_BENCH_FULL=1 \
+  NEXTORM_BENCH_DB=benchmarks/BenchmarkDotNet.Artifacts/iteration20-local-20261116T165837Z/db/test.db \
+  dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- \
+  --filter '*SqliteBenchmarkIteration*' \
+  --artifacts benchmarks/BenchmarkDotNet.Artifacts/iteration20-local-20261116T165837Z/artifacts/ci
+```
+
+Таблицы сформированы из явного каталога свежих отчётов и проверены повторным `--check`:
+
+```bash
+python3 tools/benchmarks/update_benchmark_tables.py \
+  --results-dir benchmarks/BenchmarkDotNet.Artifacts/iteration20-local-20261116T165837Z/artifacts/ci/results \
+  --date 2026-11-16
+python3 tools/benchmarks/update_benchmark_tables.py \
+  --results-dir benchmarks/BenchmarkDotNet.Artifacts/iteration20-local-20261116T165837Z/artifacts/ci/results \
+  --date 2026-11-16 --check
+```
+
+Обе команды завершились с exit 0; логи — `logs/11-update-tables.log` и `logs/12-check-tables.log`.
+
+# Итерация 22 — повторный полный прогон после рестарта и raw-recipe gate (2026-11-17…18)
+
+**Область.** Тот же канонический track, что и итерация 20: локальные проекты, не опубликованный NuGet,
+`NEXTORM_BENCH_FULL=1` → `Job.Default.WithToolchain(InProcessEmitToolchain.Instance)`, SDK 11.0.100 /
+.NET 11.0.0, изолированная копия `data/test.db` с SHA-256 `32bf10a0…2295`, конфиг харнесса
+`4b94e908…` (совпадает с итерацией 20; `git diff ad2d0dae..HEAD -- benchmarks/nextorm.benchmark` пуст).
+Измеряемый кандидат: коммит `9226f0415d96eb1c4364c81ac3c4acaa8f9db6a8` (raw-recipe gate для
+непубликуемых value-list) поверх `6135fbff`; замороженное приложение `net11.0` — core
+`f5c6c838…ced4`, sqlite `b2b83108…09fc`, benchmark `37203909…1939`, идентичность сверена по полному
+SHA-256 перед каждой группой.
+
+**Ход и рестарт.** Прогон был прерван рестартом сервера после 12 из 16 групп (9 ci-групп / 182 строки и
+Tier-1 `Projection` / `Aggregates` / `Paging` / 35 строк). Прерванная `tier1/04-streaming` не получила
+`RESULT`; её лог сохранён как `logs/aborted-server-restart/`, в manifest — строка
+`ABORTED_SERVER_RESTART`, и группа перезапущена целиком новым attempt. Оставшиеся четыре группы
+(`04-streaming`, `05-write-json`, `06-csv`, `acceptance/01-any-categories`) выполнены тем же
+замороженным приложением (`--no-build`, identity-gate до каждой группы, без пересборки) в отдельной
+сессии (`setsid`, PID 93482), поэтому рестарт сервера их не затронул. Завершённые 12 групп не
+перезаписывались.
+
+**Результат.** 16/16 групп с exit 0; 312 строк в 22 отчётах (ci 182 / tier1 118 / acceptance 12);
+все `Mean`, `Error`, `StdDev`, `Allocated` конечны и непусты, 0 NA/failed, 0 проваленных сценариев.
+Предупреждения не скрывались: 312 permission-denied High-priority, 10 `MinIterationTime`,
+9 `MultimodalDistribution` (в итерации 20 было 10 / 6; дельта записана как наблюдение, не как gate).
+Проверка: `…/iteration22-local-20261117T172248Z/validation.md` и `validation.json`.
+
+**Case identity (аудит по сырым логам, без новых измерений).** Логи перечисляют дескрипторы с
+параметрами (`… [Rows=1000]`): 303 дескриптора на прогон + 9 raw-reader строк (`Job-VLPMSV`,
+`UnrollFactor=1`, `InvocationCount=1`) = **312**; дедупликация 303 дескрипторов по интервалам даёт
+**296** различных `(класс.метод, параметры, toolchain)`, и **296 + 9 = 305** — это и есть историческое
+число уникальных идентичностей. Наборы дескрипторов итер20 и итер22 совпадают поинтервально (0
+расхождений), т.е. ни один кейс не потерян и не добавлен. Уточнение бухгалтерии: прежнее утверждение
+«305 не воспроизводится» было ошибкой учёта — оно воспроизводится именно по дескрипторам; проекция
+только по CSV даёт 267, потому что параметры (`Rows=…`) есть только в логах, а acceptance повторно
+измеряет часть идентичностей. CSV-строки и число уникальных идентичностей — разные метрики, и первая
+не заменяет вторую.
+
+**Сравнение с итерацией 20 (тот же net11-track).** 267 method-level ключей в каждом прогоне, наборы
+совпадают; медиана по nextorm-плечам **−0.1 %**, по контролям **+1.01 %** (дрейф сессии в пользу
+итерации 20). Cached-IN плечи: `AtIn_Inline −17.7 %`, `AtIn_Captured −17.8 %`,
+`ListContains_Inline −13.5 %`, `ListContains_Captured −10.9 %`; итерация 20 предшествует коммитам
+`6135fbff` и `9226f041`, поэтому это сравнение «два коммита + сессия», не пофакторная атрибуция.
+46 плеч с |Δ| ≥ 8 % — известные высоковариативные мелкие кейсы, репортятся как разброс прогонов.
+
+**Публикация таблиц.** `tools/benchmarks/update_benchmark_tables.py` получил минимальную
+backward-compatible поддержку multi-date Tier-1: прогон, начатый и завершённый в разные даты,
+принимается только через явные `run.groupRuns` (упорядоченные UTC-окна групп, покрывающие общий span);
+same-day контракт не изменён, все проверки hash/freshness/tier1Rows/job-строк сохранены. Тесты
+`tools/benchmarks/tests` — 37/37. Канонические таблицы обновлены в `readme.md`,
+`docs/comparisons/benchmarks.md` и `docs/ru/comparisons/benchmarks.md`; Tier-1 показывает явный
+диапазон `2026-11-17–2026-11-18`, E2E-таблицы — `2026-11-17`. Повторный `--check` — чисто.
+
+**Что осталось необъяснённым.** Cached-IN против исторического proxy: **+5.26…+10.52 %** (после
+raw-recipe gate; guard-вклад ~0.6–2.1 %, шумно, не доказан) — статус *unexplained*, не «исправлено» и не
+«irreducible». S4 `Prepared_SingleOrDefault`: **+4.80 %** (BDN; adjacent +3.51/+6.09 %) и **+5.49 %** в
+независимом harness (10.50 vs 9.95 µs/query при идентичных SQL, нулевых параметрах, одинаковых
+значениях и одинаковом dynamic-маршруте маппера); доминирующего кадра в CPU-профиле нет —
+*unexplained*, безопасного узкого фикса не установлено.
+
+
+**Canonical-контейнер: идентичности и результат.** Нужно различать две идентичности. Бенчмарк-кандидат
+итерации 22 — замороженное приложение коммита `9226f041` (core `f5c6c838…ced4`, sqlite `b2b83108…09fc`,
+benchmark `37203909…1939`, генератор `43619335…`+). Финальный граф интеграционного прогона — `1d70acdd`,
+и он содержит **внешние** изменения (`RawMapperFactory`, восстановленные coverage-тесты); прохождение
+тестов на `1d70acdd` не пересматривает измерения `9226f041` задним числом. Попытки: (1) startup-failure —
+чистый worktree не был собран; (2) **FAIL на `9226f041`**: один тест
+`FilterTupleBranchCoverage5Tests.RawShapeMatches_SelectJoinGroupingHavingInArms_ShouldCompareAndReadLiveRows`
+(`NullReferenceException`, строка 487) — gate изменил внутренний raw-descriptor observable; внешний
+коммит `1d70acdd` законно обновил ожидание под новый контракт raw-capture, т.е. исход **разрешён как
+устаревший тестовый контракт**, но снапшот `9226f041` при этом **не зелёный**; skip 198 vs pinned 197
+остаётся **непроверенным** (детали потеряны вместе с перезаписанным логом), авторитетен только
+собственный budget-check финального прогона; (3) финальный граф `1d70acdd` — вердикт по официальному
+запуску, без изменения бюджета/skip-набора.
+
+**Итог canonical-контейнера (финальный граф `1d70acdd`).** Четвёртый запуск: `rc=0`, total **8793**,
+passed **8596**, failed **0**, skipped **197**; официальный `check-integration-skip-budget.py` —
+**OK: 197 skips match the pinned budget** (exit 0, бюджет не менялся). Предыдущий запуск на том же графе
+дал те же 8793/0 failed, но 198 skip: единственная дельта — отсутствующий опубликованный NativeAOT
+runner в изолированном снапшоте (environmental skip, не capability-изменение); после
+`dotnet publish tests/nextorm.aot.runner -c Release -r linux-x64` бюджет совпал. Полные архивы сохранены только для завершённых
+попыток — `canonical-attempt3/` и `canonical-attempt4/` (raw harness-лог, driver-лог, статус, вывод
+budget-checker, манифест хешей). Для упавшей попытки на `9226f041` каталога нет: сохранены driver-лог с
+counts и описание в `canonical-attempts.md`; per-skip детали утрачены вместе с перезаписанным
+фиксированным логом и помечены как UNVERIFIED.

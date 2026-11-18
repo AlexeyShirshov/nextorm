@@ -20,6 +20,14 @@ namespace NextORM.Core;
 /// a database-backed provider without the capability throws <see cref="NotSupportedException"/> when the
 /// batch renders instead of silently degrading to separate statements.
 /// </para>
+/// <para>
+/// Because it is one session, a batch also runs on one host: the entity types of every step must resolve
+/// to a single topology and a single mapping variant. The first routed step selects the host, a step with
+/// no rule rides along on it, and a step that would need another topology or scope is rejected while the
+/// batch renders (<see cref="BatchBuilder.ToSql"/> fails too). A batch with any side-effecting step asks
+/// the topology for a writer; a batch of result-bearing queries only asks for a reader. See
+/// <c>docs/guide/34-routing-data-to-topologies.md</c>.
+/// </para>
 /// </summary>
 /// <example>
 /// <code>

@@ -7,10 +7,6 @@ namespace NextORM.Core;
 /// <summary>
 /// Supplies the columns available on a query source.
 /// </summary>
-/// <remarks>
-/// Declared in <c>ISourceProvider.cs</c>, which no longer matches the type name — prefer a matching
-/// file name. See <c>docs/specs/design/API-NAMING-REVIEW.md</c> finding P2-20.
-/// </remarks>
 public interface IColumnsProvider
 {
     /// <summary>Whether any column source has been registered.</summary>
@@ -26,10 +22,10 @@ public interface IColumnsProvider
     void Add(QueryCommand queryCommand, bool fromProjection);
 
     /// <summary>
-    /// Registers an entity type as a source bound to <paramref name="sourceParameter"/> (#148-B R2.2).
-    /// The parameter lets <see cref="FindAlias(ParameterExpression, bool)"/> resolve this source by
-    /// occurrence identity, so two same-CLR-type joined sources stay distinct. The default
-    /// implementation ignores the parameter and falls back to the type-keyed registration.
+    /// Registers an entity type as a source bound to <paramref name="sourceParameter"/>. The parameter
+    /// lets <see cref="FindAlias(ParameterExpression, bool)"/> resolve this source by occurrence
+    /// identity, so two same-CLR-type joined sources stay distinct. The default implementation ignores
+    /// the parameter and falls back to the type-keyed registration.
     /// </summary>
     /// <param name="entityType">The CLR type of the source entity.</param>
     /// <param name="fromProjection">Whether the source comes from a projection rather than a table.</param>

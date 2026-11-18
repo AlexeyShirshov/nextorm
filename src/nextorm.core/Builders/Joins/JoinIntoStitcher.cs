@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
 namespace NextORM.Core;
@@ -30,6 +31,13 @@ internal static class JoinIntoProjectionFactory
     /// </param>
     /// <returns>The closed projection type.</returns>
     /// <exception cref="NotSupportedException">More items than the projection arity supports.</exception>
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.PublicProperties, typeof(Projection<,>))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.PublicProperties, typeof(Projection<,,>))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.PublicProperties, typeof(Projection<,,,>))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.PublicProperties, typeof(Projection<,,,,>))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.PublicProperties, typeof(Projection<,,,,,>))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.PublicProperties, typeof(Projection<,,,,,,>))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.PublicProperties, typeof(Projection<,,,,,,,>))]
     public static Type Create(Type parentType, IReadOnlyList<IReadOnlyList<Type>> itemTypesByDeclaration)
     {
         var childCount = 0;
@@ -41,8 +49,17 @@ internal static class JoinIntoProjectionFactory
             throw new NotSupportedException(
                 $"JoinInto supports at most {MaxArity - 1} child collections in one query, but {childCount} were declared.");
 
-        var open = typeof(Projection<,>).Assembly.GetType($"NextORM.Core.Projection`{arity}")
-            ?? throw new InvalidOperationException($"Cannot create projection type of arity {arity}.");
+        var open = arity switch
+        {
+            2 => typeof(Projection<,>),
+            3 => typeof(Projection<,,>),
+            4 => typeof(Projection<,,,>),
+            5 => typeof(Projection<,,,,>),
+            6 => typeof(Projection<,,,,,>),
+            7 => typeof(Projection<,,,,,,>),
+            8 => typeof(Projection<,,,,,,,>),
+            _ => throw new InvalidOperationException($"Cannot create projection type of arity {arity}.")
+        };
 
         var arguments = new Type[arity];
         arguments[0] = parentType;

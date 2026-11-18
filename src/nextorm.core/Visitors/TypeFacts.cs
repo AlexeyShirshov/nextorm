@@ -12,6 +12,13 @@ namespace NextORM.Core;
 /// </summary>
 internal static class TypeFacts
 {
+    /// <summary>
+    /// Every query preparation reaches this type, so its initialization is where the trimming
+    /// requirement for the decimal operators the binary-node rebuild resolves by reflection is declared
+    /// (see <see cref="NumericOperators"/>).
+    /// </summary>
+    static TypeFacts() => NumericOperators.Preserve();
+
     /// <summary>True for a value whose SQL rendering has to be a boolean scalar.</summary>
     internal static bool IsBoolean(Type type) => type == typeof(bool) || type == typeof(bool?);
 
@@ -211,8 +218,49 @@ internal static class TypeFacts
         || type == typeof(decimal)
         || type == typeof(Guid)
         || type == typeof(JsonNode)
+        // A pgvector-backed type is a provider-owned scalar stored in one PostgreSQL column; keep core
+        // independent of the provider assembly while recognizing its stable public type identity.
+        || IsPostgresVectorType(type)
         || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
         || type.IsArray;
+
+    /// <summary>
+    /// True for the shared core vector or a provider-owned pgvector CLR type (<c>PgVector</c>,
+    /// <c>PgHalfVector</c>, <c>PgSparseVector</c>, <c>PgBit</c>), with nullability stripped. Recognized
+    /// by stable public type identity so core stays independent of the PostgreSQL provider assembly.
+    /// </summary>
+    internal static bool IsPostgresVectorType(Type type)
+        => (Nullable.GetUnderlyingType(type) ?? type).FullName is
+            "NextORM.Postgres.PgVector" or "NextORM.Postgres.PgHalfVector"
+            or "NextORM.Postgres.PgSparseVector" or "NextORM.Postgres.PgBit" or "NextORM.Core.Vector";
+
+    /// <summary>
+    /// True when a projection of <paramref name="type"/> has to be projected through PostgreSQL text
+    /// because the driver cannot materialize the extension type: a pgvector scalar (cast to <c>text</c>)
+    /// or a one-dimensional array of one (cast to <c>text[]</c>). The dialect must actually map the type,
+    /// so a non-PostgreSQL provider that happens to see the CLR type is left untouched.
+    /// </summary>
+    /// <param name="dialect">The dialect rendering the projection.</param>
+    /// <param name="type">The projection's CLR type, nullability already stripped.</param>
+    /// <param name="isArray">True when the projection is an array of pgvector scalars.</param>
+    internal static bool IsPostgresVectorProjection(ISqlDialect dialect, Type type, out bool isArray)
+    {
+        isArray = type.IsArray;
+        var candidate = Nullable.GetUnderlyingType(isArray ? type.GetElementType()! : type) ?? (isArray ? type.GetElementType()! : type);
+        if (!IsPostgresVectorType(candidate))
+            return false;
+
+        try
+        {
+            return dialect.MakeTypeName(candidate) is "vector" or "halfvec" or "sparsevec" or "bit";
+        }
+        catch (NotSupportedException)
+        {
+            // Some providers (for example SQL Server) recognise the shared CLR vector but cannot
+            // infer its dimension for generated DDL. That is not a PostgreSQL text projection.
+            return false;
+        }
+    }
 
     /// <summary>
     /// True for the JSON DOM scalar types that are explicitly named as a bare top-level projection

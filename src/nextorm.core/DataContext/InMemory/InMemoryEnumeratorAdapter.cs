@@ -16,6 +16,8 @@ public class InMemoryEnumeratorAdapter<TResult, TEntity> : IAsyncEnumerator<TRes
     private readonly Func<TEntity, TResult> _map;
     private readonly IAsyncEnumerator<TEntity> _inner;
     private readonly HashSet<TResult>? _seen;
+    private TResult _mappedCurrent = default!;
+    private bool _hasMappedCurrent;
 #if PARAM_CONDITION
     private readonly Func<TEntity, object[]?, bool>? _condition;
 #else
@@ -52,7 +54,26 @@ public class InMemoryEnumeratorAdapter<TResult, TEntity> : IAsyncEnumerator<TRes
     /// <summary>
     /// Gets the projection of the current source row.
     /// </summary>
-    public TResult Current => _map(_inner.Current!);
+    public TResult Current
+    {
+        get
+        {
+            if (!_hasMappedCurrent)
+            {
+                _mappedCurrent = _map(_inner.Current!);
+                _hasMappedCurrent = true;
+            }
+
+            return _mappedCurrent;
+        }
+    }
+
+    private void ClearMappedCurrent()
+    {
+        _mappedCurrent = default!;
+        _hasMappedCurrent = false;
+    }
+
     object? IEnumerator.Current => Current;
     /// <summary>
     /// Asynchronously disposes the inner source enumerator.
@@ -60,6 +81,7 @@ public class InMemoryEnumeratorAdapter<TResult, TEntity> : IAsyncEnumerator<TRes
     /// <returns>The task returned by the inner enumerator's dispose operation.</returns>
     public ValueTask DisposeAsync()
     {
+        ClearMappedCurrent();
         GC.SuppressFinalize(this);
 
         return _inner.DisposeAsync();
@@ -74,6 +96,8 @@ public class InMemoryEnumeratorAdapter<TResult, TEntity> : IAsyncEnumerator<TRes
     {
     next:
         var r = await _inner.MoveNextAsync().ConfigureAwait(false);
+        if (r)
+            ClearMappedCurrent();
 
         if (r && _condition is not null
 #if PARAM_CONDITION
@@ -87,7 +111,10 @@ public class InMemoryEnumeratorAdapter<TResult, TEntity> : IAsyncEnumerator<TRes
         }
 
         if (!r)
+        {
+            ClearMappedCurrent();
             return false;
+        }
 
         if (_seen is not null && !_seen.Add(Current))
             goto next;
@@ -107,7 +134,12 @@ public class InMemoryEnumeratorAdapter<TResult, TEntity> : IAsyncEnumerator<TRes
 
     next:
         if (!sync.MoveNext())
+        {
+            ClearMappedCurrent();
             return false;
+        }
+
+        ClearMappedCurrent();
 
 #if PARAM_CONDITION
         if (_condition is not null && !_condition(sync.Current, null))
@@ -131,7 +163,11 @@ public class InMemoryEnumeratorAdapter<TResult, TEntity> : IAsyncEnumerator<TRes
     /// <summary>
     /// Suppresses finalization. The inner source is released by <see cref="DisposeAsync"/>, not here.
     /// </summary>
-    public void Dispose() => GC.SuppressFinalize(this);
+    public void Dispose()
+    {
+        ClearMappedCurrent();
+        GC.SuppressFinalize(this);
+    }
 
     /// <summary>
     /// Returns this instance as a synchronous enumerator. Synchronous moves require the inner source

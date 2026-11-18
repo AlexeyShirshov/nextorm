@@ -474,7 +474,7 @@ public sealed class FilterTupleBranchCoverage5Tests : ProviderTestSuite
         Run(HavingOne()).Should().Equal(new long[] { 3, 7 });
         Run(HavingThree()).Should().BeEmpty();
 
-        // IN-shape arm: the same predicate shape with a different literal list.
+        // Raw value-list IN predicates are ineligible for RawShape descriptors.
         QueryCommand<long> TagInBoth() => Context.From<Ft5Marker>()
             .Where(x => SqlFunctions.Sql.@in(x.Tag, 10, 20))
             .OrderBy(x => x.Id)
@@ -484,7 +484,8 @@ public sealed class FilterTupleBranchCoverage5Tests : ProviderTestSuite
             .OrderBy(x => x.Id)
             .Select(x => x.Id);
 
-        Shape(TagInOne())!.Matches(Shape(TagInBoth())!, TagInOne()).Should().BeFalse("a different IN value-list shape is a different descriptor");
+        Shape(TagInBoth()).Should().BeNull("raw value-list IN predicates are ineligible for RawShape matching");
+        Shape(TagInOne()).Should().BeNull("raw value-list IN predicates are ineligible for RawShape matching");
         Run(TagInBoth()).Should().Equal(new long[] { 1, 2, 3, 4 });
         Run(TagInOne()).Should().Equal(new long[] { 1, 3 });
     }

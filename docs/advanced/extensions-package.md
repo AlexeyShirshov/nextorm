@@ -1,6 +1,6 @@
 # Extensions package (`nextorm.extensions`)
 
-> A separate product package that adds two families of query-component operators — extreme-row selection (`SelectWhereMin` / `SelectWhereMax`) and grouping inferred from a projection (`SelectGroup` / `SelectGroupHaving`) — built entirely on the public query-component layer, next to the frozen built-in `SelectWhereMin` / `SelectWhereMax`.
+> `nextorm.extensions` is a separate package with two families of query-component operators: extreme-row selection (`SelectWhereMin` / `SelectWhereMax`) and grouping inferred from a projection (`SelectGroup` / `SelectGroupHaving`). Both use the public query-component layer and sit alongside the frozen built-in `SelectWhereMin` / `SelectWhereMax`.
 
 **Prerequisites:** [Grouping and aggregates](../guide/05-grouping-and-aggregates.md) (including [keeping the extreme row](../guide/05-grouping-and-aggregates.md#keeping-the-extreme-row-selectwheremax--selectwheremin)) · [Extensibility: custom SQL dialects and renderers](extensibility.md) · [API quick reference](api-reference.md)
 
@@ -136,7 +136,9 @@ The built-in operator stays the default and the baseline. The extension componen
 
 ## Inferred grouping (`SelectGroup` / `SelectGroupHaving`)
 
-`SelectGroup` and `SelectGroupHaving` ship in the same package. They take the same projection lambda as `Select`, but instead of requiring an explicit `GroupBy` they infer the grouping keys from that projection: every aggregate-free expression that depends on the current row becomes a key, and the aggregate calls fold each group. The projection keeps its exact shape — no client-side grouping, no dynamic type and no reflection-emit merging of a flat result type. The full inference rules and the worked quarterly example are in [Grouping and aggregates](../guide/05-grouping-and-aggregates.md#grouping-inferred-from-the-projection-selectgroup).
+`SelectGroup` and `SelectGroupHaving` ship in the same package. Like `Select`, they take a projection lambda, but infer the grouping keys from it instead of requiring an explicit `GroupBy`: every aggregate-free expression that depends on the current row becomes a key, and aggregate calls fold each group.
+
+The projection keeps its exact shape. The operator does not group on the client, create a dynamic type, or use reflection emit to merge a flat result type. See [Grouping and aggregates](../guide/05-grouping-and-aggregates.md#grouping-inferred-from-the-projection-selectgroup) for the inference rules and a worked quarterly example.
 
 ### API
 
@@ -176,7 +178,9 @@ Both return a typed command whose terminal methods (`ToList`, `First`, …) exec
 | aggregates only, no keys | a global aggregation, no `GROUP BY` | exactly one row, with the provider's empty-input behaviour for `count`, `sum` and `NULL` |
 | no keys, no aggregates | `DISTINCT`-like | each distinct value once; an empty source returns zero rows |
 
-`SelectGroupHaving(projection, condition)` uses the same inference and ANDs `condition` into the effective `HAVING`. `condition` is typed on the projection result (`TResult`), never on the source entity: every member of the result is rebound to the projection expression that produces it before validation, so `r => r.Rows > 1` is the same `HAVING` as the underlying `count(...) > 1`, while a scalar projection makes the condition parameter the projected value itself (`f => f > 5`). Keys are inferred **only** from `projection`, and an existing source `Having` is AND-ed with `condition` before validation. A member the projection does not bind, or the result as a whole, throws `QueryPreparationException` before any SQL is produced.
+`SelectGroupHaving(projection, condition)` uses the same inference and ANDs `condition` into the effective `HAVING`. The `condition` parameter is typed on the projection result (`TResult`), not on the source entity. Before validation, nextorm rebinds each result member to the projection expression that produces it. For example, `r => r.Rows > 1` becomes the same `HAVING` as the underlying `count(...) > 1`; with a scalar projection, the condition parameter is the projected value (`f => f > 5`).
+
+Keys are inferred **only** from `projection`; an existing source `Having` is AND-ed with `condition` before validation. If the projection does not bind a referenced member, or the condition uses the result as a whole, nextorm throws `QueryPreparationException` before producing SQL.
 
 ### Validation and rejection boundaries
 

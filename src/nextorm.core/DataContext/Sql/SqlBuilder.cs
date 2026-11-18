@@ -147,7 +147,32 @@ internal readonly struct SqlBuilder
             if (cmd.Paging.HasWithTies && (cmd.IsDistinct || cmd.DistinctOn is not null))
                 throw new BuildSqlCommandException("WITH TIES cannot be combined with DISTINCT or DISTINCT ON.");
 
-            var pageApplied = !_ctx.ParamMode && !(cmd.IgnoreColumns || selectList is null) && cmd.Paging.IsTop && _ctx.Dialect.MakeTop(cmd.Paging.Limit, cmd.Paging.HasWithTies, out topStmt, _ctx.KeywordCase);
+            var approximateTopK = from?.TableFunction?.ApproximateTopK;
+            bool pageApplied;
+            if (approximateTopK is not null)
+            {
+                if (cmd.Paging.Limit <= 0 || cmd.Paging.Offset != 0 || cmd.Paging.HasWithTies)
+                    throw new InvalidOperationException("SQL Server approximate VECTOR_SEARCH requires a positive TOP limit without OFFSET or WITH TIES.");
+
+                var topValue = SqlSourceRenderer.MakeApproximateTopValue(in _ctx, entityType, approximateTopK);
+                if (_ctx.ParamMode)
+                {
+                    pageApplied = false;
+                }
+                else if (cmd.IgnoreColumns || selectList is null)
+                {
+                    throw new InvalidOperationException("SQL Server approximate VECTOR_SEARCH requires a projected result.");
+                }
+                else
+                {
+                    topStmt = _ctx.Dialect.MakeApproximateTop(topValue, _ctx.KeywordCase);
+                    pageApplied = true;
+                }
+            }
+            else
+            {
+                pageApplied = !_ctx.ParamMode && !(cmd.IgnoreColumns || selectList is null) && cmd.Paging.IsTop && _ctx.Dialect.MakeTop(cmd.Paging.Limit, cmd.Paging.HasWithTies, out topStmt, _ctx.KeywordCase);
+            }
 
             var joins = cmd.Joins;
             var hasJoins = joins?.Length > 0;
@@ -698,7 +723,11 @@ internal readonly struct SqlBuilder
                         continue;
                     }
 
-                    var (needAliasForColumn, column) = SqlSourceRenderer.MakeColumn(in _ctx, item, entityType, !needAlias, renameAware: true, selectList: true);
+                    var (needAliasForColumn, column) = SqlSourceRenderer.MakeColumn(
+                        in _ctx, item, entityType, !needAlias, renameAware: true, selectList: true,
+                        bridgeVectorToText: selectInto is null
+                            && !_ctx.RequireDerivedScalarOutputName
+                            && !_ctx.SuppressCtes);
 
                     if (!_ctx.ParamMode)
                     {
@@ -1479,7 +1508,7 @@ internal readonly struct SqlBuilder
             var column = entityColumns[i];
             payload[i] = column.RangeColumns is not null
                 ? column.PropertyName!
-                : column.PropertyInfo!.GetPropertyColumnName(_ctx.NamingConvention);
+                : column.PropertyInfo!.GetPropertyColumnName(_ctx.NamingConvention, column.PropertyInfo!.DeclaringType, _ctx.MappingVariant, _ctx.MetadataProvider);
         }
 
         return (payload, MakeExtremeRowKeyAliases(cmd.ExtremeRowColumns), MakeExtremeRowKeyAliases(cmd.ExtremeRowGroupByColumns));
@@ -1496,7 +1525,7 @@ internal readonly struct SqlBuilder
             if (columns[i].Expression is not MemberExpression { Member: PropertyInfo property })
                 throw new InvalidOperationException("The native extreme-row renderer requires direct mapped key columns.");
 
-            aliases[i] = property.GetPropertyColumnName(_ctx.NamingConvention);
+            aliases[i] = property.GetPropertyColumnName(_ctx.NamingConvention, property.DeclaringType, _ctx.MappingVariant, _ctx.MetadataProvider);
         }
 
         return aliases;

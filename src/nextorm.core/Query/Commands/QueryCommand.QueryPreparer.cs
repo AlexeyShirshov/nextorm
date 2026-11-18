@@ -1900,6 +1900,7 @@ public partial class QueryCommand
                 OutputName = outputName,
                 IsProjectionOutputReference = true,
                 ProviderType = src.ProviderType,
+                ReaderType = src.ReaderType,
                 Converter = src.Converter,
                 DurationUnit = src.DurationUnit,
                 DurationPrecision = src.DurationPrecision,
@@ -1990,6 +1991,7 @@ public partial class QueryCommand
                 OutputName = outputName,
                 IsProjectionOutputReference = true,
                 ProviderType = shape.ProviderType,
+                ReaderType = shape.ReaderType,
                 Converter = shape.Converter,
                 DurationUnit = shape.DurationUnit,
                 DurationPrecision = shape.DurationPrecision,
@@ -2056,7 +2058,15 @@ public partial class QueryCommand
                 // derived/read-CTE item by expanding its readable CLR surface, mirroring
                 // JoinedReturningProjection.ParseIdentity and the mutation's RETURNING list. The gate on
                 // IdentitySlotAliases keeps ordinary joined projection queries on their existing path.
-                if (!TryExpandEntityItem(itemTypes[i], itemExpression, i, srcType.GetProperty(memberName), null, output, cancellationToken, reRoot)
+                IReadOnlyList<JoinIntoLinkKeyColumn>? linkKeyColumns = null;
+                if (i > 0
+                    && cmd._joins is { } projectionJoins
+                    && i - 1 < projectionJoins.Length)
+                {
+                    linkKeyColumns = projectionJoins[i - 1].JoinIntoLinkKeyColumns;
+                }
+
+                if (!TryExpandEntityItem(itemTypes[i], itemExpression, i, srcType.GetProperty(memberName), null, output, cancellationToken, reRoot, linkKeyColumns)
                     && !(cmd.IdentitySlotAliases && TryAppendShapeItem(itemTypes[i], itemExpression, i, srcType.GetProperty(memberName), output)))
                     return false;
             }
@@ -2243,7 +2253,8 @@ public partial class QueryCommand
             CorrelatedQueryExpressionVisitor? visitor,
             List<SelectExpression> output,
             CancellationToken cancellationToken,
-            bool reRoot = true)
+            bool reRoot = true,
+            IReadOnlyList<JoinIntoLinkKeyColumn>? linkKeyColumns = null)
         {
             if (!DataContextCache.Metadata.TryGetValue(itemType, out var metadata) || metadata.Properties.Count == 0)
                 return false;
@@ -2251,6 +2262,27 @@ public partial class QueryCommand
             var (columns, _) = EntitySelectListBuilder.Build(itemType, metadata, cancellationToken);
 
             var group = new ProjectionEntityItem(slot, itemType, member);
+
+            if (linkKeyColumns is not null)
+            {
+                for (var i = 0; i < columns.Length; i++)
+                {
+                    var column = columns[i];
+                    for (var keyIndex = 0; keyIndex < linkKeyColumns.Count; keyIndex++)
+                    {
+                        var key = linkKeyColumns[keyIndex];
+                        if (column.PropertyInfo != key.LinkMember)
+                            continue;
+
+                        column.ReaderType = key.ReaderType;
+                        column.ProviderType = key.ProviderType;
+                        column.Converter = key.Converter;
+                        column.DurationUnit = key.DurationUnit;
+                        column.DurationPrecision = key.DurationPrecision;
+                        break;
+                    }
+                }
+            }
 
             for (var i = 0; i < columns.Length; i++)
             {
@@ -4825,8 +4857,18 @@ public partial class QueryCommand
     /// </summary>
     private sealed class ClosureKeyScan : ExpressionVisitor
     {
+        private enum ScanMember { Other, Condition, Projection, Group }
+
         private readonly List<object> _closures = new();
+        private ScanMember _member;
         internal bool HasCapturedCommand { get; private set; }
+
+        /// <summary>
+        /// Whether the scanned graph carries a value list the raw-recipe publish gate refuses: a filter
+        /// list (top-level) or a captured/tuple list in the projection/grouping (unkeyed). Set during the
+        /// existing scan, so no second expression walk is needed.
+        /// </summary>
+        internal bool HasUnpublishableValueList { get; private set; }
 
         /// <summary>
         /// Order-independent-with-the-list hash of the closure identities added so far, so a caller
@@ -4839,6 +4881,8 @@ public partial class QueryCommand
             _closures.Clear();
             IdentitiesHash = 0;
             HasCapturedCommand = false;
+            HasUnpublishableValueList = false;
+            _member = ScanMember.Other;
         }
 
         internal object[]? Snapshot() => _closures.Count == 0 ? null : _closures.ToArray();
@@ -4856,9 +4900,13 @@ public partial class QueryCommand
         /// </summary>
         internal void ScanCommand(QueryCommand cmd)
         {
+            _member = ScanMember.Projection;
             Scan(cmd._exp);
+            _member = ScanMember.Condition;
             Scan(cmd._condition);
+            _member = ScanMember.Group;
             Scan(cmd._groupExp);
+            _member = ScanMember.Other;
             Scan(cmd._having);
             Scan(cmd._preWhere);
             Scan(cmd.PerParentPartition);
@@ -4901,6 +4949,20 @@ public partial class QueryCommand
                 for (var j = 0; j < selectors.Length; j++)
                     Scan(selectors[j]);
             }
+        }
+
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            if (!HasUnpublishableValueList)
+            {
+                if (_member == ScanMember.Condition && InValues.IsAnyValueListSource(node))
+                    HasUnpublishableValueList = true;
+                else if ((_member == ScanMember.Projection || _member == ScanMember.Group)
+                    && InValues.IsUnkeyedValueListSource(node))
+                    HasUnpublishableValueList = true;
+            }
+
+            return base.VisitMethodCall(node);
         }
 
         protected override Expression VisitMember(MemberExpression node)
@@ -5047,6 +5109,7 @@ public partial class QueryCommand
         scan.Reset();
         scan.ScanCommand(cmd);
         if (scan.HasCapturedCommand) return null;
+        if (scan.HasUnpublishableValueList) return null;
 
         var exp = comparers.Expression;
         XxHash32 hash = new();

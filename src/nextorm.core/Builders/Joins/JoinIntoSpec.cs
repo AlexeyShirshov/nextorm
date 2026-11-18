@@ -27,8 +27,8 @@ internal sealed class JoinIntoIdentity : IEquatable<JoinIntoIdentity>
     public required string[] KeyMembers { get; init; }
 
     /// <summary>
-    /// The junction type of a many-to-many declaration, or <see langword="null"/> for a direct
-    /// (one-to-many) declaration. Two many-to-many declarations that target the same child and
+    /// The junction type of a many-to-many declaration, or <see langword="null"/> for a non-many-to-many
+    /// declaration. Two many-to-many declarations that target the same child and
     /// collection but use different junctions render different SQL and must not share a plan.
     /// </summary>
     public Type? JunctionType { get; init; }
@@ -150,9 +150,8 @@ internal interface IJoinIntoSpec<TEntity>
 
     /// <summary>
     /// Whether this declaration is a many-to-many declaration contributing a link item before the child.
-    /// A scalar junction is supported standalone and through single-query (<c>EagerLoadMode.SingleQuery</c>)
-    /// loading; a composite-junction many-to-many fails closed during SQL generation with a
-    /// <see cref="NotSupportedException"/> pointing at issue #223. Defaults to <see langword="false"/>.
+    /// Scalar and composite junctions are supported standalone and through single-query
+    /// (<c>EagerLoadMode.SingleQuery</c>) loading. Defaults to <see langword="false"/>.
     /// </summary>
     bool IsManyToMany => false;
 

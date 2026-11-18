@@ -1,4 +1,4 @@
-<Project>
+﻿<Project>
 
   <!--
     Nested Directory.Packages.props stops NuGet's upward search, so the repository-wide package
@@ -12,7 +12,7 @@
       double as a real consumer of what ships on nuget.org. Bump this after a release is published,
       to the version that was actually pushed (the git tag without the leading v).
     -->
-    <NextOrmVersion>1.0.9-rc5</NextOrmVersion>
+    <NextOrmVersion>1.0.9</NextOrmVersion>
     <!-- Mirrors the `linq2db` version pinned in the repository-wide Directory.Packages.props. -->
     <Linq2DbVersion>6.5.1</Linq2DbVersion>
   </PropertyGroup>
@@ -20,6 +20,7 @@
   <ItemGroup>
     <PackageVersion Include="nextorm" Version="$(NextOrmVersion)" />
     <PackageVersion Include="nextorm.clickhouse" Version="$(NextOrmVersion)" />
+    <PackageVersion Include="nextorm.extensions" Version="$(NextOrmVersion)" />
     <PackageVersion Include="nextorm.postgres" Version="$(NextOrmVersion)" />
     <PackageVersion Include="nextorm.sqlserver" Version="$(NextOrmVersion)" />
     <PackageVersion Include="nextorm.sqlite" Version="$(NextOrmVersion)" />

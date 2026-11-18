@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "dateBasis": "UTC suite-start date",
+  "suites": {
+    "SqliteBenchmarkIteration": {
+      "asOfDate": "2026-11-17",
+      "sourceEvidence": "benchmarks/BenchmarkDotNet.Artifacts/iteration22-local-20261117T172248Z/validation.md",
+      "reportsSha256": {
+        "NextORM.Benchmark.SqliteBenchmarkIteration-report.csv": "0a4f61c2c7747c8dfe4ab8f653d01a40fd1d718117bf0f27042da8197991a78f",
+        "NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md": "5810701e99cfeedafc4596c90c1a15c9897b7105a4cbb415dc530b958fc5f40e"
+      }
+    },
+    "SqliteBenchmarkLargeIteration": {
+      "asOfDate": "2026-11-17",
+      "sourceEvidence": "benchmarks/BenchmarkDotNet.Artifacts/iteration22-local-20261117T172248Z/validation.md",
+      "reportsSha256": {
+        "NextORM.Benchmark.SqliteBenchmarkLargeIteration-report.csv": "7ece4e93ea39010d99ba4d54b9a2e32e0b48f693c555a17ce4fca3755cef3f0b",
+        "NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md": "ebc1b1fa5812c42622d67e555d182e307242ec6b4312594a6075b19346f1a725"
+      }
+    },
+    "SqliteBenchmarkWhere": {
+      "asOfDate": "2026-11-17",
+      "sourceEvidence": "benchmarks/BenchmarkDotNet.Artifacts/iteration22-local-20261117T172248Z/validation.md",
+      "reportsSha256": {
+        "NextORM.Benchmark.SqliteBenchmarkWhere-report.csv": "06849080f2dd9a68428c8f757d2cec5f2ecc3fdd186fe356e6af79c5600ea712",
+        "NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md": "3e7ae4c8754c4d22de1fb46bf14b0cc021cfbfaae2c289f24ca6a6b023eed4c7"
+      }
+    },
+    "SqliteBenchmarkSimulateWork": {
+      "asOfDate": "2026-11-17",
+      "sourceEvidence": "benchmarks/BenchmarkDotNet.Artifacts/iteration22-local-20261117T172248Z/validation.md",
+      "reportsSha256": {
+        "NextORM.Benchmark.SqliteBenchmarkSimulateWork-report.csv": "b674ddf2d580cdd4ad0c238ba30af4eb4585c6a0a3e225a08528564b233e1a9a",
+        "NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md": "09e6220d5f0316e21ab59f8d9ad257c2a979008226f1179024b53bfb5edb09e2"
+      }
+    },
+    "SqliteBenchmarkAny": {
+      "asOfDate": "2026-11-17",
+      "sourceEvidence": "benchmarks/BenchmarkDotNet.Artifacts/iteration22-local-20261117T172248Z/validation.md",
+      "reportsSha256": {
+        "NextORM.Benchmark.SqliteBenchmarkAny-report.csv": "bae08d4c5eba7c8c4c69fcc462010f7468648f931bc92eeb80a269fbdd2612d9",
+        "NextORM.Benchmark.SqliteBenchmarkAny-report-github.md": "551eec17770c7708b061c65c29be9252505fab52076de71fa6345396ec6d59fc"
+      }
+    },
+    "SqliteBenchmarkFirst": {
+      "asOfDate": "2026-11-17",
+      "sourceEvidence": "benchmarks/BenchmarkDotNet.Artifacts/iteration22-local-20261117T172248Z/validation.md",
+      "reportsSha256": {
+        "NextORM.Benchmark.SqliteBenchmarkFirst-report.csv": "9539eee88ebf3683b9a046680fd065e3c004f9c33f566f3daef9fe2448c09470",
+        "NextORM.Benchmark.SqliteBenchmarkFirst-report-github.md": "ce838ad9a5015fc82cd000c923edb62c7d910caa9308a762c3ba2f8bbdb0becb"
+      }
+    },
+    "SqliteBenchmarkSingle": {
+      "asOfDate": "2026-11-17",
+      "sourceEvidence": "benchmarks/BenchmarkDotNet.Artifacts/iteration22-local-20261117T172248Z/validation.md",
+      "reportsSha256": {
+        "NextORM.Benchmark.SqliteBenchmarkSingle-report.csv": "ec4352f02bda0f577b600957b67a1929a38f1e24e3f6cb64d1c2bf5d6c503698",
+        "NextORM.Benchmark.SqliteBenchmarkSingle-report-github.md": "689449d37ed7c414660cfb63c9ecf0f360897ba3c17f378461a9f05fb63cbcc9"
+      }
+    },
+    "SqliteBenchmarkFeaturesFair": {
+      "asOfDate": "2026-11-17",
+      "sourceEvidence": "benchmarks/BenchmarkDotNet.Artifacts/iteration22-local-20261117T172248Z/validation.md",
+      "reportsSha256": {
+        "NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report.csv": "a60f68da8e3bafd24ac3293fbb971c0ce86878c48594f10d8d0439aa43834ecb",
+        "NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md": "0aec25afe4b1a4f474e5663e14ca93285e67bb90132ad5389feac3956963d608"
+      }
+    },
+    "SqliteBenchmarkFeaturesFairCached": {
+      "asOfDate": "2026-11-17",
+      "sourceEvidence": "benchmarks/BenchmarkDotNet.Artifacts/iteration22-local-20261117T172248Z/validation.md",
+      "reportsSha256": {
+        "NextORM.Benchmark.SqliteBenchmarkFeaturesFairCached-report.csv": "cdc63f4eef88a54e2d5b1e47565b18342c48003725b107b4ccf52b4675c4c165",
+        "NextORM.Benchmark.SqliteBenchmarkFeaturesFairCached-report-github.md": "81ae72307d900934312e1f398f49bd9cd64a571887f3f95c85f5d570b6401d7b"
+      }
+    }
+  }
+}

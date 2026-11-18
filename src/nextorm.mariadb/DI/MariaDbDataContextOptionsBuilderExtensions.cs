@@ -10,6 +10,21 @@ namespace NextORM.MariaDb;
 public static class MariaDbDataContextOptionsBuilderExtensions
 {
     /// <summary>
+    /// Configures a routed MariaDB context. Register a topology and select its default before creating the
+    /// context; the host supplies the connection, so this overload takes no connection string.
+    /// </summary>
+    /// <param name="builder">The builder to configure.</param>
+    /// <returns>The same builder, to allow chaining.</returns>
+    public static DataContextBuilder UseMariaDb(this DataContextBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.Factory = (b) => new MariaDbDataContext(b);
+
+        return builder;
+    }
+
+    /// <summary>
     /// Configures the builder to create MariaDB contexts that own a connection built from
     /// <paramref name="connectionString"/>.
     /// </summary>

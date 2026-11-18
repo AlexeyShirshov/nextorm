@@ -65,7 +65,16 @@ internal static class NativeProjectionRoute
             return;
         }
 
-        // Miss: capture the shape now, before preparation mutates the raw graph.
+        // Miss: capture the shape now, before preparation mutates the raw graph. A captured value list in
+        // the projection or grouping is unkeyed, so Probe.Publish would refuse the shape: skip the capture
+        // instead of building one that can never be stored. Checked here, on the miss path, because a hit
+        // needs no capture and must not pay for this walk.
+        if (HasUnkeyedValueList(command))
+        {
+            probe = default;
+            return;
+        }
+
         var shape = ShapeIdentity.TryCreate(header, condition, group, projection);
         probe = shape is null ? default : new Probe<TResult>(header, shape);
     }
@@ -112,6 +121,12 @@ internal static class NativeProjectionRoute
             return;
         }
 
+        if (HasUnkeyedValueList(command))
+        {
+            probe = default;
+            return;
+        }
+
         var shape = ShapeIdentity.TryCreate(header, condition, group, projection);
         probe = shape is null ? default : new Probe<TResult>(header, shape);
     }
@@ -142,6 +157,9 @@ internal static class NativeProjectionRoute
         if (command.IsPrepared
             || command.HasEverPrepared
             || !command.Cache
+            // The shape header does not carry the mapping variant, so a native hit would execute the
+            // holder compiled for another shard and read the wrong table.
+            || command.MappingVariant != MappingVariant.Default
             || command.CustomData is RawSqlOverride
             || command.HasDataModifyingCte
             || command.HasTemporaryTableSource()
@@ -161,6 +179,14 @@ internal static class NativeProjectionRoute
         if (command.Condition is not (null or LambdaExpression))
             return false;
 
+        // A value list in the filter makes the rendered statement follow the collection (its length and
+        // null layout), which this route's value-agnostic shape cannot carry: Probe.Publish refuses every
+        // such shape, and the filter's list is folded into the normalized plan key instead. Recognizing
+        // that before the probe skips a capture that could never be stored. Metadata-only: no collection
+        // is evaluated and no captured getter runs.
+        if (command.Condition is { } filter && InValues.ContainsAnyInValues(filter))
+            return false;
+
         if (ResolveEntityType(command) is not { } entityType)
             return false;
 
@@ -173,6 +199,18 @@ internal static class NativeProjectionRoute
             NativeSourceStamp.For(command.From));
         return true;
     }
+
+    /// <summary>
+    /// Whether the command carries a value list in an unkeyed position — the projection or the grouping —
+    /// that <see cref="Probe{TResult}.Publish"/> refuses, so a captured shape could never be stored. A
+    /// captured collection follows its contents and a tuple list its arity/null layout, so both are
+    /// matched; an inline scalar list is keyed by the projection graph and deliberately not matched.
+    /// The filter is checked separately, before the probe. Each clause is one metadata-only walk: no
+    /// collection is evaluated and no captured getter runs.
+    /// </summary>
+    private static bool HasUnkeyedValueList(QueryCommand command)
+        => (command.ProjectionExpression is { } projection && InValues.ContainsUnkeyedInValues(projection))
+            || (command.GroupBy is { } grouping && InValues.ContainsUnkeyedInValues(grouping));
 
     /// <summary>
     /// The entity type the command reads from. A projection command created through <c>Select</c> does

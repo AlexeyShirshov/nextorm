@@ -1800,12 +1800,17 @@ namespace NextORM.Core;
         public string? current_setting(string? name) => default!;
 
         /// <summary>
-        /// The current value of the run-time setting <paramref name="name"/>, or null when it does not
-        /// exist if <paramref name="missingOk"/> is true (<c>current_setting(name, missing_ok)</c>).
+        /// The current value of the run-time setting <paramref name="name"/>
+        /// (<c>current_setting(name, missing_ok)</c>). If <paramref name="missingOk"/> is true, returns
+        /// NULL when the setting does not exist; if false, PostgreSQL raises an error.
         /// </summary>
         public string? current_setting(string? name, bool missingOk) => default!;
 
-        /// <summary>Sets the run-time setting <paramref name="name"/> to <paramref name="value"/> (<c>set_config</c>).</summary>
+        /// <summary>
+        /// Sets the run-time setting <paramref name="name"/> to <paramref name="value"/>
+        /// (<c>set_config</c>). If <paramref name="isLocal"/> is true, the change lasts only for the
+        /// current transaction; if false, it lasts for the session. Returns the new setting value.
+        /// </summary>
         public string? set_config(string? name, string? value, bool isLocal) => default!;
 
         /// <summary>The number of null arguments (<c>num_nulls</c>).</summary>
@@ -3065,4 +3070,66 @@ namespace NextORM.Core;
         /// <param name="multirange">The multirange to inspect.</param>
         /// <returns><see langword="true"/> when the upper side is unbounded.</returns>
         public bool upper_inf<T>(Range<T>[] multirange) where T : struct, IComparable<T> => default!;
+
+        /// <summary>Euclidean distance between two pgvector values (<c>&lt;-&gt;</c>).</summary>
+        public double? l2_distance<T>(T left, T right) => default!;
+
+        /// <summary>Cosine distance between two pgvector values (<c>&lt;=&gt;</c>).</summary>
+        public double? cosine_distance<T>(T left, T right) => default!;
+
+        /// <summary>Negative inner product between two pgvector values (<c>&lt;#&gt;</c>).</summary>
+        public double? negative_inner_product<T>(T left, T right) => default!;
+
+        /// <summary>L1 distance between two pgvector values (<c>&lt;+&gt;</c>).</summary>
+        public double? l1_distance<T>(T left, T right) => default!;
+
+        /// <summary>Returns the dimensionality of a pgvector value.</summary>
+        public int? vector_dims<T>(T value) => default!;
+
+        /// <summary>Returns the Euclidean norm of a pgvector value.</summary>
+        public double? vector_norm<T>(T value) => default!;
+
+        /// <summary>Returns the L2-normalized pgvector value.</summary>
+        public T l2_normalize<T>(T value) => default!;
+
+        /// <summary>Hamming distance between two pgvector bit strings (<c>&lt;~&gt;</c>).</summary>
+        public double? hamming_distance<T>(T left, T right) => default!;
+
+        /// <summary>Jaccard distance between two pgvector bit strings (<c>&lt;%&gt;</c>).</summary>
+        public double? jaccard_distance<T>(T left, T right) => default!;
+
+        /// <summary>
+        /// Euclidean norm of a half-precision or sparse pgvector value (<c>l2_norm</c>). PostgreSQL names
+        /// the norm of a plain <c>vector</c> <c>vector_norm</c>, so that function is used for
+        /// <c>vector</c> and this one for <c>halfvec</c>/<c>sparsevec</c>.
+        /// </summary>
+        public double? l2_norm<T>(T value) => default!;
+
+        /// <summary>
+        /// Extracts a contiguous slice of a pgvector value (<c>subvector(value, start, count)</c>). The
+        /// start is one-based, as in PostgreSQL; supported for <c>vector</c> and <c>halfvec</c>.
+        /// </summary>
+        public T subvector<T>(T value, int start, int count) => default!;
+
+        /// <summary>Element-wise addition of two vectors (pgvector's <c>+</c> operator).</summary>
+        public T vector_add<T>(T left, T right) => default!;
+
+        /// <summary>Element-wise subtraction of two vectors (pgvector's <c>-</c> operator).</summary>
+        public T vector_subtract<T>(T left, T right) => default!;
+
+        /// <summary>Element-wise multiplication of two vectors (pgvector's <c>*</c> operator).</summary>
+        public T vector_multiply<T>(T left, T right) => default!;
+
+        /// <summary>Concatenation of two vectors (pgvector's <c>||</c> operator).</summary>
+        public T vector_concat<T>(T left, T right) => default!;
+
+        /// <summary>
+        /// Binary quantization of a vector into a PostgreSQL <c>bit</c> string (<c>binary_quantize</c>).
+        /// The result is the provider's <c>bit</c> type (<c>NextORM.Postgres.PgBit</c>), which core cannot
+        /// name, so the result type is supplied explicitly:
+        /// <c>binary_quantize&lt;PgVector, PgBit&gt;(value)</c>.
+        /// </summary>
+        /// <typeparam name="T">The source vector type.</typeparam>
+        /// <typeparam name="TResult">The provider's <c>bit</c> type; use <c>NextORM.Postgres.PgBit</c>.</typeparam>
+        public TResult? binary_quantize<T, TResult>(T value) => default!;
     }

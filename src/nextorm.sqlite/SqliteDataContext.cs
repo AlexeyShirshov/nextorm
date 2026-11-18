@@ -21,7 +21,7 @@ public class SqliteDataContext : DataContext, IBulkInsertPortableScope
     /// <param name="connectionString">The connection string used to create the <c>SqliteConnection</c>.</param>
     /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
     public SqliteDataContext(string connectionString, DataContextBuilder optionsBuilder)
-        : base(connectionString, null, optionsBuilder)
+        : this(connectionString, null, optionsBuilder)
     {
     }
     /// <summary>
@@ -30,7 +30,23 @@ public class SqliteDataContext : DataContext, IBulkInsertPortableScope
     /// <param name="connection">An already-created <c>DbConnection</c> owned by the caller.</param>
     /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
     public SqliteDataContext(DbConnection connection, DataContextBuilder optionsBuilder)
-        : base(null, connection, optionsBuilder)
+        : this(null, connection, optionsBuilder)
+    {
+    }
+
+    /// <summary>
+    /// Creates a SQLite context from the builder alone. The builder must configure routing and name a
+    /// default topology; its host supplies the connection, so no connection string is passed here.
+    /// </summary>
+    /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
+    /// <exception cref="InvalidOperationException">The builder configures no routing, or no default topology.</exception>
+    public SqliteDataContext(DataContextBuilder optionsBuilder)
+        : this(null, null, optionsBuilder)
+    {
+    }
+
+    private SqliteDataContext(string? connectionString, DbConnection? connection, DataContextBuilder optionsBuilder)
+        : base(connectionString, connection, optionsBuilder)
     {
     }
     /// <summary>Creates a new <c>SqliteConnection</c> for <paramref name="connectionString"/>.</summary>

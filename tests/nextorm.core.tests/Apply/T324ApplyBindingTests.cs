@@ -235,6 +235,7 @@ public class T324ApplyBindingTests
         // The correlation sits two frames deep (inside the derived source of the applied body). It must
         // still name the APPLY's slot-2 occurrence (t2) — never the nested frame's own alias (t4).
         sql.Should().Contain("where t4.Id = t2.Code");
+        sql.Should().NotContain("where t4.Id = 0", "the outer-reference marker's slot index is syntax, not a bound scalar value");
         sql.Should().NotContain("where t4.Id = t4.Code");
         sql.Should().NotContain("where t4.Id = t3.Code");
     }

@@ -1,29 +1,22 @@
 # Sorting and paging
 
-> Order rows with [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32))/[`OrderByDescending`](xref:NextORM.Core.EntityBuilder`1.OrderByDescending(System.Int32)), slice them with [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Offset`](xref:NextORM.Core.Paging.Offset)/[`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)), and read one row or a boolean with the single-row terminals.
+> Order rows with [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32))/[`OrderByDescending`](xref:NextORM.Core.EntityBuilder`1.OrderByDescending(System.Int32)); use [`Limit`](xref:NextORM.Core.Paging.Limit), [`Offset`](xref:NextORM.Core.Paging.Offset), and [`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)) to choose a slice. Use `First` or `Single` to return one row, or [`Any`](xref:NextORM.Core.EntityBuilderExtensions.Any``1(NextORM.Core.EntityBuilder{``0})) to check whether any rows match.
 
 **Prerequisites:** [Querying and projections](../engine/index.md) · [Filtering (WHERE)](03-filtering-where.md)
 
 ## Overview
 
-Ordering and paging are applied to the command before it executes, so they become part of the
-generated statement rather than a client-side operation:
+Ordering and paging are applied to the command before it executes, so the database applies them as part
+of the generated statement rather than to a client-side collection.
 
-* [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) exposes `OrderBy(Expression<Func<TEntity, object?>>, OrderDirection)`,
-  `OrderBy(expr)`, `OrderByDescending(expr)` and the ordinal overloads `OrderBy(int)`,
-  `OrderBy(int, OrderDirection)`, `OrderByDescending(int)`, plus the explicit NULL-placement overloads
-  `OrderBy(expr, NullsPosition)` / `OrderBy(expr, OrderDirection, NullsPosition)` /
-  `OrderByDescending(expr, NullsPosition)` and the `ThenBy`/`ThenByDescending` family (see
-  [NULL ordering and placement](#null-ordering-and-placement)).
-* [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) also exposes `Limit(int)`, `Offset(int)` and `Page(int limit, int offset)`.
-* After [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), the returned [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) mirrors the builder surface: the expression
-  overloads `OrderBy(expr)`, `OrderBy(expr, OrderDirection)` and `OrderByDescending(expr)`, the ordinal
-  overloads `OrderBy(int columnIndex, OrderDirection direction)`, `OrderBy(int)` and `OrderByDescending(int)`,
-  and `Limit(int)`, `Offset(int)` and `Page(int limit, int offset)` (see [Ordering and paging a projected command](#ordering-and-paging-a-projected-command)).
+Choose the section for the result you need:
 
-Each call appends to an immutable builder, so a second [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) adds a tie-break key and leaves the
-first one in place. The terminal method ([`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`AnyAsync`](xref:NextORM.Core.EntityBuilderExtensions.AnyAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), ...) executes the
-command.
+- To sort rows by a property, start with [Ordering by expression](#ordering-by-expression).
+- To order by a column in a projection, see
+  [Ordering by projected column ordinal](#ordering-by-projected-column-ordinal).
+- To return a page of rows, use [Limit and Offset](#limit-and-offset) or [Page](#page).
+- To return one row, see [First, FirstOrDefault, Single, and SingleOrDefault](#first-firstordefault-single-singleordefault).
+- To check whether a matching row exists, use [`Any`](#any).
 
 ## Ordering by expression
 
@@ -39,6 +32,8 @@ var last = await dataContext.From<SimpleEntity>()
 select id
  from simple_entity order by id desc limit 1
 ```
+
+`OrderByDescending` places the largest `Id` first, and `FirstAsync` returns that value.
 
 The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
@@ -63,7 +58,8 @@ select id
  from complex_entity order by nullableint, id desc
 ```
 
-Keys are emitted in the order the calls were made and separated by commas.
+The first key sorts by `Int` in ascending order. The second key sorts by `Id` descending within each
+`Int` value.
 
 A composite selector is accepted by `OrderBy`, `OrderByDescending`, `ThenBy` and
 `ThenByDescending`. The shapes `OrderBy(p => new { p.A, p.B })`,
@@ -137,6 +133,65 @@ limit 10 offset 0
 same bounds as the builder methods (non-negative). `OrderBy(int)`/`OrderByDescending(int)` still take the
 1-based ordinal of an output column, so `.Select(it => it.Id).OrderByDescending(1)` continues to work. A
 sort member that is not part of the projection is rejected while the query is prepared.
+
+## Limit and Offset
+
+`Limit(int)` caps the number of rows and `Offset(int)` skips rows before the result:
+
+```csharp
+var page = await dataContext.From<SimpleEntity>()
+    .Offset(1)
+    .Select(it => it.Id)
+    .FirstAsync();
+```
+
+```sql
+-- SQLite
+select id
+ from simple_entity limit 1 offset 1
+```
+
+Output:
+
+| Id |
+|----|
+| 2 |
+
+[`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) applies its single-row paging limit (`limit 1` on SQLite and PostgreSQL, `top(1)` on
+SQL Server; see below). A plain `Limit(5).Select(it => it.Id)` produces
+`select id from simple_entity limit 5` on SQLite and PostgreSQL, and
+`select top(5) id from simple_entity` on SQL Server.
+
+## Page
+
+`Page(limit, offset)` sets both bounds in one call:
+
+```csharp
+var page = await dataContext.From<SimpleEntity>()
+    .Page(5, 10)
+    .Select(it => it.Id)
+    .ToListAsync();
+```
+
+| Provider | SQL for `Page(5, 10)` |
+|---|---|
+| SQLite | `select id from simple_entity limit 5 offset 10` |
+| PostgreSQL | `select id from simple_entity limit 5 offset 10` |
+| SQL Server | `select id from simple_entity order by (select null as anyorder) offset 10 rows fetch next 5 rows only` |
+
+SQL Server rejects `OFFSET ... FETCH` without an `ORDER BY`, so the provider injects
+`order by (select null as anyorder)` when paging without an explicit sort. When an [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) is
+present it is used instead and nothing is injected.
+
+Offset/limit rendering per provider:
+
+| Provider | `Limit(5)` | `Offset(10)` | `Page(5, 10)` |
+|---|---|---|---|
+| SQLite | `limit 5` | `limit -1 offset 10` | `limit 5 offset 10` |
+| SQL Server | `select top(5) ...` | `offset 10 rows` (plus injected `ORDER BY`) | `offset 10 rows fetch next 5 rows only` (plus injected `ORDER BY`) |
+| PostgreSQL | `limit 5` | `offset 10` | `limit 5 offset 10` |
+
+SQLite has no `OFFSET` without `LIMIT`, so an offset-only query emits the sentinel `limit -1`.
 
 ## NULL ordering and placement
 
@@ -252,65 +307,6 @@ list) and a ClickHouse-style `LIMIT BY`. The placement is never silently dropped
 The in-memory provider honours the same explicit placement with the same semantics and matches the SQL
 result oracle cell by cell. It compares with the CLR default comparer, so strings follow the CLR comparison
 (`Comparer<string>.Default`), **not** the database collation.
-
-## Limit and Offset
-
-`Limit(int)` caps the number of rows and `Offset(int)` skips rows before the result:
-
-```csharp
-var page = await dataContext.From<SimpleEntity>()
-    .Offset(1)
-    .Select(it => it.Id)
-    .FirstAsync();
-```
-
-```sql
--- SQLite
-select id
- from simple_entity limit 1 offset 1
-```
-
-Output:
-
-| Id |
-|----|
-| 2 |
-
-[`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) applies its single-row paging limit (`limit 1` on SQLite and PostgreSQL, `top(1)` on
-SQL Server; see below). A plain `Limit(5).Select(it => it.Id)` produces
-`select id from simple_entity limit 5` on SQLite and PostgreSQL, and
-`select top(5) id from simple_entity` on SQL Server.
-
-## Page
-
-`Page(limit, offset)` sets both bounds in one call:
-
-```csharp
-var page = await dataContext.From<SimpleEntity>()
-    .Page(5, 10)
-    .Select(it => it.Id)
-    .ToListAsync();
-```
-
-| Provider | SQL for `Page(5, 10)` |
-|---|---|
-| SQLite | `select id from simple_entity limit 5 offset 10` |
-| PostgreSQL | `select id from simple_entity limit 5 offset 10` |
-| SQL Server | `select id from simple_entity order by (select null as anyorder) offset 10 rows fetch next 5 rows only` |
-
-SQL Server rejects `OFFSET ... FETCH` without an `ORDER BY`, so the provider injects
-`order by (select null as anyorder)` when paging without an explicit sort. When an [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) is
-present it is used instead and nothing is injected.
-
-Offset/limit rendering per provider:
-
-| Provider | `Limit(5)` | `Offset(10)` | `Page(5, 10)` |
-|---|---|---|---|
-| SQLite | `limit 5` | `limit -1 offset 10` | `limit 5 offset 10` |
-| SQL Server | `select top(5) ...` | `offset 10 rows` (plus injected `ORDER BY`) | `offset 10 rows fetch next 5 rows only` (plus injected `ORDER BY`) |
-| PostgreSQL | `limit 5` | `offset 10` | `limit 5 offset 10` |
-
-SQLite has no `OFFSET` without `LIMIT`, so an offset-only query emits the sentinel `limit -1`.
 
 ## Limit By (ClickHouse)
 
@@ -429,7 +425,7 @@ The limit is how a single row is enforced without a second round trip:
   throws, so [`Single`](xref:NextORM.Core.EntityBuilderExtensions.Single``1(NextORM.Core.EntityBuilder{``0})) can never silently truncate a result set.
 
 These limits are part of the command's shape and of the query-plan cache key, and they are applied
-whether or not the query already had a [`Limit`](xref:NextORM.Core.Paging.Limit)/``
+whether or not the query already had a [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Offset`](xref:NextORM.Core.Paging.Offset).
 
 ## Any
 
@@ -451,6 +447,24 @@ select exists(select *
 SQL Server has no boolean scalar, so it renders the same predicate as
 `select cast(case when exists(...) then 1 else 0 end as bit)`. Unlike [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})), [`Any`](xref:NextORM.Core.EntityBuilderExtensions.Any``1(NextORM.Core.EntityBuilder{``0})) does not need the
 row data, so the projection is discarded and only existence is tested.
+
+## Builder and command overloads
+
+[`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) supports expression-based and ordinal
+`OrderBy`/`OrderByDescending` overloads, explicit NULL placement, and the `ThenBy`/
+`ThenByDescending` family. See [NULL ordering and placement](#null-ordering-and-placement) for the full
+overload list and provider behavior. The builder also supports `Limit(int)`, `Offset(int)`, and
+`Page(int limit, int offset)`.
+
+After [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), the returned
+[`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) also supports expression-based and ordinal
+ordering, `Limit(int)`, `Offset(int)`, and `Page(int limit, int offset)`. See
+[Ordering and paging a projected command](#ordering-and-paging-a-projected-command) for an example.
+
+Each call returns a new immutable builder. Calling [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) again adds a
+tie-break key instead of replacing the first key. The query executes when you call a terminal method such
+as [`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])),
+[`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), or [`AnyAsync`](xref:NextORM.Core.EntityBuilderExtensions.AnyAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])).
 
 ## Provider differences
 

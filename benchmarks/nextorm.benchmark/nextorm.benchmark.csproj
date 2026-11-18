@@ -49,4 +49,18 @@
   <ItemGroup>
     <Compile Remove="acceptance/**/*.cs" />
   </ItemGroup>
+
+  <!--
+    The postgres example is referenced for its query code only (T269AirportOnTimeProbe). Its
+    published `nextorm` package also ships the join-alias source generator, so NuGet would hand this
+    project a second copy of the generator next to the explicit `nextorm.core.sourcegenerator`
+    ProjectReference above and both copies would emit the same `NextORM.Generated.nextorm_benchmark`
+    types (CS0101/CS0111). This compilation's generator comes from the source project only, so drop
+    the package copy.
+  -->
+  <Target Name="DropTransitiveNextormGenerator" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <Analyzer Remove="@(Analyzer)" Condition="'%(Analyzer.NuGetPackageId)' == 'nextorm'" />
+    </ItemGroup>
+  </Target>
 </Project>

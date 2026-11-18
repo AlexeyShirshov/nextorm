@@ -16,7 +16,8 @@
 
 ## Требования
 
-- EF Core **Relational** (`Microsoft.EntityFrameworkCore.Relational`) с одним из поддерживаемых провайдеров: `Npgsql.EntityFrameworkCore.PostgreSQL`, `Microsoft.EntityFrameworkCore.SqlServer`, `Pomelo.EntityFrameworkCore.MySql` (MySQL и MariaDB), Oracle `MySql.EntityFrameworkCore` (MySQL) или `Microsoft.EntityFrameworkCore.Sqlite`. Распознаются оба MySQL-провайдера; поскольку у Pomelo пока нет релиза под EF Core 10, путь общей транзакции на MySQL проверен через Oracle `MySql.EntityFrameworkCore` 10.x (ADO.NET-драйвер `MySql.Data`) — см. [Общее соединение и транзакция](#общее-соединение-и-транзакция).
+- EF Core **Relational** (`Microsoft.EntityFrameworkCore.Relational`) и один поддерживаемый провайдер: `Npgsql.EntityFrameworkCore.PostgreSQL`, `Microsoft.EntityFrameworkCore.SqlServer`, `Pomelo.EntityFrameworkCore.MySql` (MySQL и MariaDB), Oracle `MySql.EntityFrameworkCore` (MySQL) или `Microsoft.EntityFrameworkCore.Sqlite`.
+- Мост распознаёт оба MySQL-провайдера. Поскольку у Pomelo нет релиза под EF Core 10, совместную транзакцию проверяют через Oracle `MySql.EntityFrameworkCore` 10.x и его ADO.NET-драйвер `MySql.Data`. См. [Общее соединение и транзакция](#общее-соединение-и-транзакция).
 - Пакет `nextorm.entityframeworkcore`; он ссылается на `nextorm.core` и четыре провайдерных пакета, поэтому отдельная ссылка на nextorm-провайдер для маппинга не нужна.
 - Нереляционный провайдер EF `InMemory` не поддерживается (см. [Ограничения](#ограничения)).
 
@@ -166,7 +167,13 @@ await tx.RollbackAsync(ct);
 next.From<Row>().Where(r => r.Name == "pending").ToList(); // пусто
 ```
 
-Путь общего соединения/транзакции проверен end-to-end container-backed интеграционными тестами на **PostgreSQL**, **SQL Server** и **MySQL** и локальными тестами на **SQLite**. На PostgreSQL, SQL Server и MySQL публичный мост `CreateNextOrmContext()` прогоняется против живого сервера: nextorm заимствует тот самый `DbConnection`, которым владеет EF, видит незакоммиченные строки EF внутри открытой транзакции, откат EF их удаляет, `CreateInsertBuilder` nextorm внутри транзакции EF виден EF и затем коммитится или откатывается вместе с ней, а освобождение nextorm-контекста оставляет соединение EF открытым, а транзакцию EF — активной. На SQLite тесты покрывают видимость незакоммиченных строк EF и их удаление откатом EF. Проверка PostgreSQL, SQL Server и MySQL требует прогона интеграционной сюиты против поднятых контейнеров (Testcontainers); SQLite-сценарии работают без контейнера.
+Контейнерные интеграционные тесты проверяют публичный мост `CreateNextOrmContext()` на живых серверах **PostgreSQL**, **SQL Server** и **MySQL**. Они подтверждают, что nextorm:
+
+- заимствует тот самый `DbConnection`, которым владеет EF, и видит незакоммиченные строки EF;
+- записывает строки через `CreateInsertBuilder`, которые видны EF, а затем фиксируются или откатываются вместе с транзакцией EF; и
+- при освобождении контекста nextorm оставляет соединение EF открытым, а транзакцию EF — активной.
+
+Тесты SQLite проверяют видимость незакоммиченных строк EF и их удаление при откате EF. Для тестов PostgreSQL, SQL Server и MySQL нужны контейнеры Testcontainers; тесты SQLite запускаются без контейнера.
 
 > **MySQL проверен через провайдер Oracle.** Поскольку у `Pomelo.EntityFrameworkCore.MySql` нет релиза под EF Core 10 (последний 9.0.0 нацелен на EF Core 9), container-backed тесты MySQL выполняются на EF Core 10 с Oracle `MySql.EntityFrameworkCore` 10.0.9 и его ADO.NET-драйвером `MySql.Data`. Мост распознаёт оба имени провайдера — `Pomelo.EntityFrameworkCore.MySql` и `MySql.EntityFrameworkCore`; чтобы обслужить второй драйвер, `nextorm.mysql` создаёт параметры через выполняемую команду (`command.CreateParameter()`), а обычный путь `MySqlConnector` остаётся без изменений. Совместная работа в транзакции EF на MySQL, таким образом, проверена, а не отложена. MariaDB обслуживается только провайдером Pomelo.
 

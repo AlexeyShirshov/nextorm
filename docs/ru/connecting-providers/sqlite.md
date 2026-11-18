@@ -1,8 +1,39 @@
 # Провайдер SQLite
 
-> Используйте `nextorm.sqlite` для файловых или in-memory баз данных SQLite; он отрисовывает параметры `$name`, разбиение на страницы `limit`/`offset`, coalesce `ifnull` и части даты `strftime`, а также регистрирует пользовательские агрегаты `stdev`/`var`.
+> Используйте `nextorm.sqlite` для файловой базы данных или базы в памяти. Провайдер формирует SQL с параметрами `$name`, постраничной выборкой `limit`/`offset`, `ifnull` и частями даты `strftime`, а также регистрирует пользовательские агрегаты `stdev`/`var`.
 
-**Предварительные требования:** [Provider overview](overview.md) · [Quickstart](../getting-started/02-quickstart.md)
+**Перед началом:** [Обзор провайдеров](overview.md) · [Быстрый старт](../getting-started/02-quickstart.md)
+
+## Регистрация провайдера
+
+Выберите перегрузку со строкой подключения, если контекст должен сам создать соединение и владеть
+им. Передайте существующий `DbConnection`, если им владеет приложение. В первом примере используется
+путь к файлу; в сборках `DEBUG` `UseSqlite(string)` также проверяет, что файл существует:
+
+```csharp
+using NextORM.Core;
+using NextORM.Sqlite;
+
+var builder = new DataContextBuilder().UseSqlite("app.db");
+using var ctx = builder.CreateDataContext();
+```
+
+Чтобы повторно использовать соединение, которым владеет вызывающий код, передайте его явно:
+
+```csharp
+using var connection = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=:memory:");
+var builder = new DataContextBuilder().UseSqlite(connection);
+using var ctx = builder.CreateDataContext();
+```
+
+Можно также создать контекст напрямую:
+
+```csharp
+using NextORM.Core;
+using NextORM.Sqlite;
+
+using IDataContext ctx = new SqliteDataContext("Data Source=app.db", new DataContextBuilder());
+```
 
 ## Обзор
 
@@ -12,42 +43,14 @@
 
 [`SqliteDialect`](xref:NextORM.Sqlite.SqliteDialect) (`src/nextorm.sqlite/SqliteDialect.cs`) — это диалект:
 
-- плейсхолдер параметра `$name`;
+- маркер параметра `$name`;
 - конкатенация строк с помощью `||`;
-- [`MakeCoalesce`](xref:NextORM.Core.ISqlDialect.MakeCoalesce(System.String,System.String)) отрисовывает `ifnull(a, b)`;
-- [`MakeNow`](xref:NextORM.Core.ISqlDialect.MakeNow(System.Boolean)) отрисовывает `datetime('now')` и для локального, и для UTC (`SQLite has no now()`);
+- [`MakeCoalesce`](xref:NextORM.Core.ISqlDialect.MakeCoalesce(System.String,System.String)) формирует `ifnull(a, b)`;
+- [`MakeNow`](xref:NextORM.Core.ISqlDialect.MakeNow(System.Boolean)) формирует `datetime('now')` и для локального, и для UTC (`SQLite has no now()`);
 - части даты используют `cast(strftime(...) as integer)` для `year`/`month`/`day`/`hour`/`minute`/`second`
   и `dayofyear` (`%j`), с откатом к ANSI `extract(part from value)` для всего остального;
 - `Math.Log` отображается на `ln(...)` (в SQLite `log()` — это логарифм по основанию 10);
 - разбиение на страницы — `limit n` / `limit n offset m`; offset без limit становится `limit -1 offset m`.
-
-## Регистрация провайдера
-
-На [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) доступны две перегрузки
-(`src/nextorm.sqlite/DI/SqliteDataContextOptionsBuilderExtensions.cs`):
-
-```csharp
-using NextORM.Core;
-using NextORM.Sqlite;
-
-// From a file path (the debug build checks that the file exists).
-var byPath = new DataContextBuilder().UseSqlite("app.db");
-
-// From an existing, caller-owned connection.
-using var connection = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=:memory:");
-var byConnection = new DataContextBuilder().UseSqlite(connection);
-
-using var ctx = byPath.CreateDataContext();   // IDataContext
-```
-
-Вы также можете создать контекст напрямую (это делают тесты провайдера):
-
-```csharp
-using NextORM.Core;
-using NextORM.Sqlite;
-
-using IDataContext ctx = new SqliteDataContext("Data Source=app.db", new DataContextBuilder());
-```
 
 ## Пользовательские агрегатные функции
 
@@ -99,8 +102,8 @@ select cast(strftime('%Y', dt) as integer) as 'Year', ifnull(somestring, '') as 
  from complex_entity
 ```
 
-`SqlFunctions.Sql.like(column, pattern)` и `SqlFunctions.Sql.like(column, pattern, escapeChar)` отрисовывают предикат
-`like`; строковые методы (`Contains`, `StartsWith`, `EndsWith`) транслируются в `like` с
+`SqlFunctions.Sql.like(column, pattern)` и `SqlFunctions.Sql.like(column, pattern, escapeChar)` формируют предикат
+`like`; строковые методы (`Contains`, `StartsWith`, `EndsWith`) преобразуются в `like` с
 соответствующими подстановочными знаками.
 
 ## Разбиение на страницы
@@ -121,10 +124,10 @@ select id
 
 ## Функции, специфичные для SQLite
 
-`SqlFunctions.Sqlite` даёт поверхность, специфичную для SQLite: функции ядра, JSON1, агрегатные
-функции, функции дат, функции математического расширения и поверхность полнотекстового поиска
-FTS3/FTS4/FTS5. `json_each`/`json_tree` и табличный поиск FTS5 доступны как табличные функции. Прочие
-провайдеры отклоняют любой член поверхности с `NotSupportedException`.
+`SqlFunctions.Sqlite` содержит специфичные для SQLite функции: функции ядра, JSON1, агрегаты,
+функции дат, математическое расширение и полнотекстовый поиск FTS3/FTS4/FTS5. `json_each`/`json_tree`
+и поиск FTS5 доступны как табличные функции. Другие провайдеры отклоняют вызов этих функций
+с `NotSupportedException`.
 
 ```csharp
 ctx.From<IComplexEntity>()
@@ -142,17 +145,15 @@ ctx.From<IComplexEntity>()
 
 ### Полнотекстовый поиск (FTS3/FTS4/FTS5)
 
-Члены FTS выполняют запрос к виртуальной таблице FTS, а поверхность команд обслуживания, специфичная
-для SQLite (фабрика `IDataContext.CreateSqliteFts5CommandBuilder(tableName)`, возвращающая
-`SqliteFts5CommandBuilder`), её настраивает; nextorm никогда не создаёт саму таблицу. Поддержка
-запросов существует только когда сборка SQLite содержит соответствующий модуль (поставляемая сборка
-включает `fts3`, `fts4` и `fts5`). Скалярно-табличная поверхность запросов FTS находится на
-`SqlFunctions.Sqlite`; команды обслуживания — отдельная поверхность command-builder'а, а не члены
-`SqlFunctions.Sqlite`. И то и другое отдельно от кросс-провайдерных предикатов
-`SqlFunctions.Sql.contains`/`freetext`: они по-прежнему гейтятся
-[`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText), который на SQLite равен
-`false`, поэтому бросают `NotSupportedException`. Каждый член FTS — SQL-only: in-memory провайдер
-бросает `NotSupportedException`.
+Функции FTS выполняют поиск по виртуальной таблице. Отдельный SQLite-построитель
+`IDataContext.CreateSqliteFts5CommandBuilder(tableName)` возвращает `SqliteFts5CommandBuilder` для её
+обслуживания; nextorm не создаёт саму таблицу. Запросы доступны, только если сборка SQLite содержит
+соответствующий модуль; поставляемая сборка включает `fts3`, `fts4` и `fts5`. Функции запросов FTS
+находятся в `SqlFunctions.Sqlite`, а команды обслуживания — в отдельном построителе.
+Эти функции не связаны с общими для провайдеров предикатами `SqlFunctions.Sql.contains`/`freetext`: в SQLite
+свойство [`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText) равно `false`, поэтому
+эти предикаты вызывают `NotSupportedException`. Функции FTS доступны только для SQL; провайдер в памяти
+также вызывает `NotSupportedException`.
 
 | C# | SQLite | Модуль |
 |---|---|---|
@@ -168,7 +169,7 @@ ctx.From<IComplexEntity>()
 | `FTS3MatchInfo(table[, format])` | `matchinfo(table[, format])` | FTS3/4 |
 | `FTS3Snippet(table, …)` | `snippet(table, …)` | FTS3/4 |
 
-Первый аргумент вспомогательных функций (и токен таблицы у `Match`) — **доверенное константное**
+Первый аргумент вспомогательных функций (и имя таблицы в `Match`) — **доверенная константа**
 имя таблицы; оно подставляется как quoted-идентификатор, поэтому никогда не строите его из
 пользовательского ввода. `query` FTS привязывается как параметр, когда это значение времени выполнения, и подставляется
 литералом, когда оно константно.
@@ -243,11 +244,10 @@ var scores = ctx.From<Article>()
     .ToList();
 ```
 
-Создание и наполнение индекса остаются вне поверхности запросов (создавайте виртуальную таблицу
-сырым SQL), но команды обслуживания/управления FTS5 доступны через специфичный для SQLite command
-builder `IDataContext.CreateSqliteFts5CommandBuilder(string tableName)`:
+Создайте и заполните виртуальную таблицу FTS сырым SQL: nextorm не выполняет эти шаги. Для обслуживания
+FTS5 используйте SQLite-построитель команд `IDataContext.CreateSqliteFts5CommandBuilder(string tableName)`:
 
-| Операция | Рендерящиеся значения | Примечание |
+| Операция | SQL-форма | Примечание |
 |---|---|---|
 | `AutoMerge(value)` | `('automerge', value)` | `value` — 0..16; другие значения бросают |
 | `CrisisMerge(value)` | `('crisismerge', value)` | `value` должен быть неотрицательным; `0`/`1` проходят без изменений |
@@ -256,12 +256,12 @@ builder `IDataContext.CreateSqliteFts5CommandBuilder(string tableName)`:
 | `Rebuild()` | `('rebuild')` | одноколоночная форма; недоступна для contentless-таблиц FTS5 |
 | `IntegrityCheck(checkExternalContent = null)` | `('integrity-check')` / `('integrity-check', 0\|1)` | одноколоночная, когда флаг опущен; при `true` проверяется и внешнее содержимое |
 
-Каждая операция возвращает новый неизменяемый builder; терминалы — `ToSql()` (рендерит, не
-обращаясь к базе), `Execute()` (`int` затронутых строк) и `ExecuteAsync(CancellationToken = default)`
+Каждая операция возвращает новый неизменяемый builder; терминалы — `ToSql()` (генерирует SQL без
+обращения к базе), `Execute()` (`int` затронутых строк) и `ExecuteAsync(CancellationToken = default)`
 (`Task<int>`). Вызов терминала до выбора операции бросает `InvalidOperationException`.
 Двухколоночная форма `"rank"` используется для `automerge`/`crisismerge`/`merge`, одноколоночная —
-для `optimize`/`rebuild` (и для `integrity-check` с опущенным флагом). Это инструкции поверхности
-команд — не скалярные и не табличные функции и не часть `SqlFunctions.Sqlite`. Имя таблицы
+для `optimize`/`rebuild` (и для `integrity-check` с опущенным флагом). Это команды обслуживания, а не
+скалярные или табличные функции и не часть `SqlFunctions.Sqlite`. Имя таблицы
 отклоняется, если оно null, пустое, состоит из пробелов или содержит символ NUL.
 
 ```csharp
@@ -271,7 +271,7 @@ var sql = builder.AutoMerge(4).ToSql();
 var affected = builder.Optimize().Execute();
 ```
 
-Builder — SQLite-only: на любом другом провайдере поверхность бросает
+Этот построитель команд работает только с SQLite: любой другой провайдер вызывает
 `NotSupportedException($"{dialect.GetType().Name} does not support SQLite FTS5 maintenance commands.")`
 до любого доступа к базе. При успехе `Execute`/`ExecuteAsync` возвращают `int` затронутых строк
 драйвера — неотрицательный для успешной команды обслуживания; nextorm не обещает фиксированного
@@ -299,11 +299,32 @@ await ctx.From<ISimpleEntity>()
 [`IntersectAll`](xref:NextORM.Core.QueryCommand`1.IntersectAll``1(NextORM.Core.QueryCommand{``0})) и [`ExceptAll`](xref:NextORM.Core.QueryCommand`1.ExceptAll``1(NextORM.Core.QueryCommand{``0})) отклоняются диалектом с `NotSupportedException`, потому что в SQLite
 нет `intersect all` / `except all`.
 
-Терминалы потокового чтения LOB (`ToStream`/`ToTextReader`) поддерживаются для одной колонки `byte[]`/`string` (бинарной и текстовой). У SQLite нет собственного локатора строк, поэтому `Microsoft.Data.Sqlite` возвращает настоящий потоковый `SqliteBlob` только когда запрос выбирает ещё и `rowid`; диалект добавляет завершающий [`LobLocatorColumn`](xref:NextORM.Core.ISqlDialect.LobLocatorColumn) (`rowid`, payload остаётся на позиции `0`). Поэтому источник обязан быть обычной rowid-таблицей: на `view` или таблице `WITHOUT ROWID` **одноколоночная потоковая** команда падает fail-closed с сырым `Microsoft.Data.Sqlite.SqliteException: no such column: rowid` — буферизованного фолбэка **на этом скалярном/локаторном LOB-пути** нет (многоколоночный `ToDataReader` ниже идёт через отдельный буферизованный шов без локатора). См. [Потоковое чтение больших объектов](../guide/28-large-objects.md).
+Терминалы `ToStream`/`ToTextReader` позволяют читать одну колонку `byte[]`/`string` без загрузки всего
+значения в память. В SQLite нет встроенного локатора строк, поэтому `Microsoft.Data.Sqlite` возвращает
+потоковый `SqliteBlob`, только если запрос также выбирает `rowid`; диалект добавляет его в конец запроса
+через [`LobLocatorColumn`](xref:NextORM.Core.ISqlDialect.LobLocatorColumn), оставляя значение LOB на позиции `0`.
+Поэтому источник должен быть обычной rowid-таблицей. Для `view` или таблицы `WITHOUT ROWID`
+**одноколоночное потоковое** чтение завершается исходным исключением
+`Microsoft.Data.Sqlite.SqliteException: no such column: rowid`: для этого скалярного пути с локатором нет
+буферизованного обходного варианта. Многоколоночный `ToDataReader` ниже использует отдельный
+буферизованный путь без локатора. См. [Потоковое чтение больших объектов](../guide/28-large-objects.md).
 
-Многоколоночный терминал `ToDataReader`/`ToDataReaderAsync` в SQLite **поддерживается**. Он идёт через отдельный шов без локатора (per-call буферизованная подготовка `storeInCache: false`, а не LOB-путь с `SequentialAccess`): локатор `rowid` не добавляется, поэтому `FieldCount` равен числу колонок проекции, а ordinals соответствуют `Select`. Reader **буферизованный**, а не чанковый — колонка `byte[]`/`string` внутри многоколоночной проекции читается целиком в managed-память, — поэтому для одной большой LOB-колонки предпочитайте `ToStream`/`ToTextReader`. Возвращённый reader принадлежит вызывающему: освободите его, чтобы освободить provider-reader и per-call команду; контекст остаётся живым и пригодным.
+Многоколоночный терминал `ToDataReader`/`ToDataReaderAsync` в SQLite **поддерживается**. Он использует
+отдельную буферизованную подготовку для каждого вызова (`storeInCache: false`), а не LOB-путь с
+`SequentialAccess`: `rowid` не добавляется, поэтому `FieldCount` равен числу колонок проекции, а порядковые
+номера соответствуют `Select`. Такой `DbDataReader` буферизует результат целиком, а не читает его частями:
+колонка `byte[]`/`string` внутри многоколоночной проекции полностью загружается в память. Поэтому для
+одной большой LOB-колонки используйте `ToStream`/`ToTextReader`. Возвращённый объект чтения принадлежит
+вызывающему коду: освободите его, чтобы освободить объект чтения провайдера и созданную для вызова команду.
+Контекст при этом остаётся открытым и пригодным для работы.
 
-Собственная поверхность полнотекстового поиска SQLite (`FTS3/FTS4/FTS5`) доступна (см. [Полнотекстовый поиск](#полнотекстовый-поиск-fts3fts4fts5)), как и специфичный для SQLite command builder обслуживания FTS5 (`CreateSqliteFts5CommandBuilder`); за её пределами остаются только кросс-провайдерные предикаты `SqlFunctions.Sql.contains`/`freetext` (гейт [`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText), на SQLite `false`). Поверхность обслуживания отклоняется на любом не-SQLite провайдере через `NotSupportedException`, а `Rebuild` недоступна для contentless-таблиц FTS5.
+Собственный полнотекстовый поиск SQLite (`FTS3/FTS4/FTS5`) доступен (см.
+[Полнотекстовый поиск](#полнотекстовый-поиск-fts3fts4fts5)), как и отдельный SQLite-построитель команд
+обслуживания FTS5 (`CreateSqliteFts5CommandBuilder`). Кросс-провайдерные предикаты
+`SqlFunctions.Sql.contains`/`freetext` на SQLite недоступны: свойство
+[`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText) равно `false`. Другие провайдеры
+отклоняют команды обслуживания с `NotSupportedException`; `Rebuild` недоступна для contentless-таблиц
+FTS5.
 
 ## Массовая вставка
 
@@ -315,10 +336,11 @@ await ctx.From<ISimpleEntity>()
 - Батч делится по `MaxBatchSize`/`MaxParameters`/`MaxSqlLength`; каждый чанк — одно утверждение.
 - `KeepIdentity` пишет явную identity-колонку; `IgnoreDuplicates` использует `INSERT OR IGNORE`, а
   `Returning*` — `RETURNING` (SQLite 3.35+).
-- `CheckConstraints=false` выполняется scoped-прагмой `PRAGMA foreign_keys` вокруг записи и отклоняется внутри
-  активной транзакции (там прагма — no-op); `KeepNulls=false` требует default-equivalent формы, а
+- `CheckConstraints=false` выполняется временной прагмой `PRAGMA foreign_keys` вокруг записи и отклоняется внутри
+  активной транзакции (там прагма не действует); `KeepNulls=false` допускается только для формы, эквивалентной
+  значениям по умолчанию, а
   `TableLock`/`FireTriggers` отклоняются.
-- `DatabaseName` рендерит квалификатор attached/main/temp базы там, где диалект это умеет; `ServerName`
+- `DatabaseName` добавляет квалификатор attached/main/temp базы там, где диалект это поддерживает; `ServerName`
   отклоняется (перенаправления нет).
 - `Timeout` — один бюджет на весь вызов вокруг записей; истёкший бюджет даёт `TimeoutException`, а отмена
   вызывающего всегда побеждает.
@@ -329,9 +351,9 @@ await ctx.From<ISimpleEntity>()
 
 | Аспект | SQLite |
 |---|---|
-| Плейсхолдер параметра | `$name` |
-| Concat | `||` |
-| Coalesce | `ifnull` |
+| Маркер параметра | `$name` |
+| Конкатенация | `||` |
+| Подстановка при `NULL` | `ifnull` |
 | `greatest` / `least` | `max` / `min` (скалярные, 2+ аргумента; возвращают NULL, если хотя бы один аргумент NULL) |
 | Условная функция | `iif(cond, a, b)` (SQLite 3.32+) |
 | Оконные функции | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` поддерживаются |
@@ -341,18 +363,18 @@ await ctx.From<ISimpleEntity>()
 | Псевдоним TVF | не требуется |
 | `*ALL` | не поддерживается |
 | Подзапросы `ANY`/`ALL` | отклоняются базой данных при выполнении |
-| Полнотекстовый поиск | поверхность запросов FTS3/FTS4/FTS5 через `SqlFunctions.Sqlite` (`Match`, FTS5 `FTS5bm25`/`Highlight`/`Snippet`/`Rank`, помощники FTS3/4, табличный `MatchTable` FTS5; FTS3/4 `Rank` требует зарегистрированной на соединении UDF `rank`); плюс специфичный для SQLite command builder обслуживания FTS5 (`CreateSqliteFts5CommandBuilder`: `AutoMerge`/`CrisisMerge`/`Merge`/`Optimize`/`Rebuild`/`IntegrityCheck`, sync/async терминалы, возвращающие `int` затронутых строк); кросс-провайдерные `contains`/`freetext` бросают |
+| Полнотекстовый поиск | Запросы FTS3/FTS4/FTS5 через `SqlFunctions.Sqlite` (`Match`, FTS5 `FTS5bm25`/`Highlight`/`Snippet`/`Rank`, помощники FTS3/4, табличный `MatchTable` FTS5; FTS3/4 `Rank` требует зарегистрированной на соединении UDF `rank`); отдельный SQLite-построитель команд обслуживания FTS5 (`CreateSqliteFts5CommandBuilder`: `AutoMerge`/`CrisisMerge`/`Merge`/`Optimize`/`Rebuild`/`IntegrityCheck`, синхронные и асинхронные терминалы возвращают `int` затронутых строк); кросс-провайдерные `contains`/`freetext` бросают |
 | Потоковое чтение LOB (`ToStream`/`ToTextReader`) | поддерживается (`blob` / `text`; источник должен раскрывать `rowid` — на `view`/`WITHOUT ROWID` падает с `SqliteException: no such column: rowid`) |
 | Многоколоночный reader (`ToDataReader`/`ToDataReaderAsync`) | поддерживается (буферизованный, без локатора; LOB не чанками; не-LOB проекции и LOB-колонка внутри многоколоночного select) |
-| Session/info-функции | `version()` → `sqlite_version()` (нет информации о пользователе/схеме/БД) |
+| Функции сведений о сеансе | `version()` → `sqlite_version()` (нет информации о пользователе/схеме/БД) |
 
 ## См. также
 
-- [Provider overview](overview.md)
+- [Обзор провайдеров](overview.md)
 - [SQL Server](sqlserver.md)
 - [PostgreSQL](postgres.md)
 - [In-memory](in-memory.md)
-- [Limitations and out-of-scope features](../advanced/limitations.md)
+- [Ограничения и неподдерживаемые возможности](../advanced/limitations.md)
 
 ---
 

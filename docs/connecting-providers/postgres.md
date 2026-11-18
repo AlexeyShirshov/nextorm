@@ -2,7 +2,38 @@
 
 > Use `nextorm.postgres` for PostgreSQL; it renders `@name` parameters, `limit`/`offset` paging, `coalesce`, `extract` date parts and `stddev`/`variance` aggregates, supports `INTERSECT ALL`/`EXCEPT ALL`, and requires double-quoted aliases.
 
-**Prerequisites:** [Provider overview](overview.md) · [Quickstart](../getting-started/02-quickstart.md)
+**Before you begin:** [Provider overview](overview.md) · [Quickstart](../getting-started/02-quickstart.md)
+
+## Registering the provider
+
+Use a connection string when the context should create and own its connection:
+
+```csharp
+using NextORM.Core;
+using NextORM.Postgres;
+
+var builder = new DataContextBuilder().UsePostgres(
+    "Host=localhost;Database=app;Username=app;Password=secret");
+using var ctx = builder.CreateDataContext();
+```
+
+To reuse a caller-owned connection, pass it to `UsePostgres`:
+
+```csharp
+using var connection = new Npgsql.NpgsqlConnection("Host=localhost;Database=app;...");
+var builder = new DataContextBuilder().UsePostgres(connection);
+using var ctx = builder.CreateDataContext();
+```
+
+You can also construct the context directly:
+
+```csharp
+using NextORM.Core;
+using NextORM.Postgres;
+
+using IDataContext ctx = new PostgresDataContext(
+    "Host=localhost;Database=app;...", new DataContextBuilder());
+```
 
 ## Overview
 
@@ -93,32 +124,6 @@
 The variability aggregates follow the shared cardinality contract: `Stdev`/`Var` are `null` for zero or
 one contributing value, `Stdevp`/`Varp` are `null` for zero and `0.0` for one. The result is a real
 `Nullable<T>`, so a sample over an empty or single-row set materializes as `null`.
-
-## Registering the provider
-
-Two overloads are available on [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder)
-(`src/nextorm.postgres/DI/PostgresDataContextOptionsBuilderExtensions.cs`):
-
-```csharp
-using NextORM.Core;
-using NextORM.Postgres;
-
-var byString = new DataContextBuilder().UsePostgres("Host=localhost;Database=app;Username=app;Password=secret");
-
-using var connection = new Npgsql.NpgsqlConnection("Host=localhost;Database=app;...");
-var byConnection = new DataContextBuilder().UsePostgres(connection);
-
-using var ctx = byString.CreateDataContext();   // IDataContext
-```
-
-Directly:
-
-```csharp
-using NextORM.Core;
-using NextORM.Postgres;
-
-using IDataContext ctx = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder());
-```
 
 ## Server version
 
@@ -225,6 +230,48 @@ The array functions (`cardinality`, `array_length`, `array_position`, ...) and t
 are documented in [Scalar functions](../scalar-functions/06-arrays.md#arrays-postgresql). Two names are
 refused at preparation even on PostgreSQL: `array_reverse` (no release provides it) and `array_sort`
 below an explicit 18+. Other providers reject the array surface with `NotSupportedException`.
+
+## pgvector
+
+The provider owns four pgvector value types: `NextORM.Postgres.PgVector` (`vector`), `PgHalfVector`
+(`halfvec`), `PgSparseVector` (`sparsevec`) and `PgBit` (`bit`). Each is a `readonly struct` with finite
+coordinates (`PgBit` holds bits), `Dimensions` (or `Length`), a zero-based indexer, `ToArray()`, the
+PostgreSQL text form in `ToString()` and `Parse(string)`; `PgVector` also implements element-wise
+`+`/`-`/`*`, scaling by `float` and `Normalize()`. Values travel as PostgreSQL text, so no `UseVector()`
+data-source plugin is needed. Arrays of these types map to `vector[]`, `halfvec[]`, `sparsevec[]` and
+`bit[]`, and nullable forms map database `NULL` to `null`.
+
+The marker methods in `SqlFunctions.Postgres` translate the distance operators `<->`, `<=>`, `<#>`,
+`<+>`, `<~>` and `<%>`, the element-wise `+`/`-`/`*`/`||` operators and the functions `vector_dims`,
+`vector_norm`, `l2_norm`, `l2_normalize`, `subvector`, `binary_quantize`, `hamming_distance` and
+`jaccard_distance` from LINQ expressions in `SELECT`, `WHERE` and `ORDER BY … Take(k)`. They are
+PostgreSQL-only and are refused during preparation on every other provider. Distance operations require
+equal dimensions and `bit` operations equal lengths; PostgreSQL raises the error otherwise. The pgvector
+extension, the columns and the indexes are managed by the application, not nextorm.
+
+See [PostgreSQL-specific SQL](../guide/provider-specific-sql/postgresql.md#pgvector-values).
+
+### Unified nearest-neighbor API
+
+The core `EntityBuilder<TEntity>.VectorSearch(...)` API accepts the shared `Vector` value and existing
+PostgreSQL `PgVector`, `PgHalfVector` and `PgSparseVector` values when the query-vector type matches the
+mapped property (`PgBit` remains for the PostgreSQL-only bit-distance markers). It returns
+each entity together with `Distance`; lower values are nearer. The shared metrics are cosine,
+Euclidean/L2 and dot product (negative inner product). The PostgreSQL-specific `SqlFunctions.Postgres`
+markers and pgvector types remain available, including their additional L1, Hamming and Jaccard
+operations.
+
+`Exact` uses pgvector's distance-function form (`cosine_distance`, `l2_distance` or
+`negative_inner_product`) for both the projected `Distance` and ordering, guaranteeing exact
+nearest neighbors for the filtered source rows. These functions cannot use HNSW/IVFFlat
+distance-operator indexes, so exact nearest-neighbor search evaluates the distance without ANN index
+ordering and may be slower. `Approximate` uses pgvector's distance operators
+(`<=>`, `<->` or `<#>`), which are eligible for a matching HNSW or IVFFlat index; PostgreSQL's planner
+still decides whether to use an eligible index. SQL Server behavior is unchanged: exact search uses
+`VECTOR_DISTANCE`, and approximate search uses the explicitly selected `VECTOR_SEARCH` grammar.
+Install pgvector, create a compatible vector column and provision any ANN index in application-managed
+DDL. See the
+[unified API and PostgreSQL SQL details](../guide/provider-specific-sql/postgresql.md#unified-nearest-neighbor-api).
 
 ## Range types
 
@@ -427,6 +474,7 @@ See [Bulk insert](../guide/22-bulk-insert.md).
 | Paging | `limit n` / `limit n offset m` / `offset m` |
 | Injected sort when paging | none |
 | Concat | `||` |
+| Unified vector nearest-neighbor search | shared API; exact uses pgvector distance functions (not ANN-indexable), approximate uses distance operators eligible for HNSW/IVFFlat |
 | Coalesce | `coalesce` |
 | Boolean literal | `true` / `false` |
 | Identifier quoting | double quotes (`as "t1"`) |

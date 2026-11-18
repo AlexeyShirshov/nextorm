@@ -29,6 +29,9 @@ defaults that throw. As a result:
 
 ## Providers with an exclusive surface
 
+Use this table to see which constructs tie a query to one provider or provider family. It lists only
+exclusive constructs; shared operations are documented with their concepts below.
+
 | Provider | Exclusive constructs |
 |---|---|
 | [ClickHouse](clickhouse.md) | Arrays and `ARRAY JOIN`, `LIMIT n BY expr`, `GROUP BY ... WITH TOTALS`, `FINAL`/`SAMPLE`/`PREWHERE`/`SETTINGS`, join strictness and `GLOBAL JOIN`, `GLOBAL IN`, `uniq`/`quantile`/`any`/`argMin`/`argMax` aggregates, the `-If` combinators, dictionaries, string-JSON `JSONExtract`, the `numbers`/`zeros` table functions |
@@ -50,8 +53,9 @@ The MySQL/MariaDB guide page also covers the shared constructs of the MySQL fami
 
 ## Portability model
 
-The provider pages describe a construct from the database's point of view; the concept pages carry the
-full, provider-neutral walkthrough:
+Start with a concept page when you need an operation shared across providers; use a provider page to
+check native syntax and provider-specific limits. A construct missing from the exclusive list may still
+have different SQL spellings across databases. The concept pages describe the shared behavior:
 
 * [Filtering (WHERE)](../03-filtering-where.md) — `IN`/`Contains`, full-text predicates;
 * [Joins](../04-joins.md) — join types, APPLY/LATERAL, ClickHouse strictness and `GLOBAL JOIN`;

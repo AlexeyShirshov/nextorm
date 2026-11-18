@@ -1056,7 +1056,7 @@ namespace NextORM.Core;
         /// unversioned declaration is refused before SQL.
         /// </summary>
         /// <param name="value">The <c>int</c> operand.</param>
-        /// <param name="shift">The number of bits to shift; SQL NULL when either operand is NULL.</param>
+        /// <param name="shift">The number of bits to shift.</param>
         /// <returns>The shifted <c>int</c>, or SQL NULL when either operand is NULL.</returns>
         /// <remarks>
         /// <b>Overload resolution.</b> The bit family is one overload set per operand type
@@ -1296,7 +1296,7 @@ namespace NextORM.Core;
         /// </summary>
         /// <param name="value">The <c>tinyint</c> operand.</param>
         /// <param name="offset">The zero-based bit position.</param>
-        /// <param name="bitValue">The bit value to set; SQL NULL when either argument is NULL.</param>
+        /// <param name="bitValue">The bit value to set.</param>
         /// <returns>The value with the bit set, or SQL NULL when any argument is NULL.</returns>
         public byte? set_bit(byte? value, int? offset, bool? bitValue) => default!;
 
@@ -1309,7 +1309,7 @@ namespace NextORM.Core;
         /// </summary>
         /// <param name="value">The <c>smallint</c> operand.</param>
         /// <param name="offset">The zero-based bit position.</param>
-        /// <param name="bitValue">The bit value to set; SQL NULL when either argument is NULL.</param>
+        /// <param name="bitValue">The bit value to set.</param>
         /// <returns>The value with the bit set, or SQL NULL when any argument is NULL.</returns>
         public short? set_bit(short? value, int? offset, bool? bitValue) => default!;
 
@@ -1322,7 +1322,7 @@ namespace NextORM.Core;
         /// </summary>
         /// <param name="value">The <c>int</c> operand.</param>
         /// <param name="offset">The zero-based bit position.</param>
-        /// <param name="bitValue">The bit value to set; SQL NULL when either argument is NULL.</param>
+        /// <param name="bitValue">The bit value to set.</param>
         /// <returns>The value with the bit set, or SQL NULL when any argument is NULL.</returns>
         public int? set_bit(int? value, int? offset, bool? bitValue) => default!;
 
@@ -1335,22 +1335,42 @@ namespace NextORM.Core;
         /// </summary>
         /// <param name="value">The <c>bigint</c> operand.</param>
         /// <param name="offset">The zero-based bit position.</param>
-        /// <param name="bitValue">The bit value to set; SQL NULL when either argument is NULL.</param>
+        /// <param name="bitValue">The bit value to set.</param>
         /// <returns>The value with the bit set, or SQL NULL when any argument is NULL.</returns>
         public long? set_bit(long? value, int? offset, bool? bitValue) => default!;
 
         /// <summary>
         /// <c>TRY_CAST(value AS &lt;type&gt;)</c>: converts <paramref name="value"/> to the SQL Server type
-        /// closed-mapped from <typeparamref name="T"/> and returns SQL NULL when the conversion is invalid
-        /// (malformed text, overflow, an out-of-range value) instead of raising an error. The target map is
-        /// fixed: <c>byte</c>→<c>tinyint</c>, <c>short</c>→<c>smallint</c>, <c>int</c>→<c>int</c>,
-        /// <c>long</c>→<c>bigint</c>, <c>float</c>→<c>real</c>, <c>double</c>→<c>float(53)</c>,
-        /// <c>decimal</c>→<c>decimal(38,10)</c>, <c>bool</c>→<c>bit</c>, <c>Guid</c>→<c>uniqueidentifier</c>,
-        /// <c>DateTime</c>→<c>datetime2(7)</c>, <c>DateTimeOffset</c>→<c>datetimeoffset(7)</c>,
-        /// <c>TimeSpan</c>→<c>time(7)</c>; any other target is refused before the command is prepared. A
-        /// target conversion SQL Server itself prohibits is <b>not</b> suppressed and surfaces as the
-        /// engine error. SQL Server only (declared 16, 17 and unversioned contexts); other providers
-        /// reject the call.
+        /// mapped from <typeparamref name="T"/>. Invalid conversions (malformed text, overflow, or an
+        /// out-of-range value) return SQL NULL instead of raising an error.
+        /// <para>The target map is fixed:</para>
+        /// <list type="bullet">
+        ///   <item>
+        ///     <description>
+        ///       <c>byte</c> to <c>tinyint</c>, <c>short</c> to <c>smallint</c>,
+        ///       <c>int</c> to <c>int</c>, and <c>long</c> to <c>bigint</c>.
+        ///     </description>
+        ///   </item>
+        ///   <item>
+        ///     <description><c>float</c> to <c>real</c> and <c>double</c> to <c>float(53)</c>.</description>
+        ///   </item>
+        ///   <item>
+        ///     <description>
+        ///       <c>decimal</c> to <c>decimal(38,10)</c>, <c>bool</c> to <c>bit</c>, and
+        ///       <see cref="Guid"/> to <c>uniqueidentifier</c>.
+        ///     </description>
+        ///   </item>
+        ///   <item>
+        ///     <description>
+        ///       <see cref="DateTime"/> to <c>datetime2(7)</c>,
+        ///       <see cref="DateTimeOffset"/> to <c>datetimeoffset(7)</c>, and
+        ///       <see cref="TimeSpan"/> to <c>time(7)</c>.
+        ///     </description>
+        ///   </item>
+        /// </list>
+        /// Any other target is refused before the command is prepared. A conversion that SQL Server
+        /// prohibits still surfaces as an engine error. This function is supported only by SQL Server
+        /// contexts (declared 16, 17, and unversioned); other providers reject it.
         /// </summary>
         /// <typeparam name="T">The SQL Server conversion target.</typeparam>
         /// <param name="value">The value to convert.</param>

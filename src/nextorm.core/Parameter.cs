@@ -60,10 +60,6 @@ internal readonly record struct ParameterTypeInfo(System.Data.DbType DbType, byt
 /// <summary>
 /// Name/value pair for a single command parameter.
 /// </summary>
-/// <remarks>
-/// Renamed from <c>Param</c> (<c>Parameter</c> is the full word). See
-/// <c>docs/specs/design/API-NAMING-REVIEW.md</c> finding P1-13.
-/// </remarks>
 public class Parameter(string name, object? value)
 {
     /// <summary>

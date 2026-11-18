@@ -1,9 +1,10 @@
 # ClickHouse-specific SQL
 
-> ClickHouse has the largest provider-exclusive surface in nextorm: native arrays and `ARRAY JOIN`, the
-> `LIMIT n BY expr` and `GROUP BY ... WITH TOTALS` modifiers, the `FINAL`/`SAMPLE`/`PREWHERE`/`SETTINGS`
-> query modifiers, join strictness and `GLOBAL JOIN`, the distributed `GLOBAL IN` predicate, its own
-> aggregate, array, JSON and dictionary functions, and the `numbers`/`zeros` table functions.
+> ClickHouse-specific queries use constructs beyond the shared `nextorm` API: native arrays and
+> `ARRAY JOIN`, the `LIMIT n BY expr` and `GROUP BY ... WITH TOTALS` modifiers,
+> `FINAL`/`SAMPLE`/`PREWHERE`/`SETTINGS`, join strictness and `GLOBAL JOIN`, the distributed `GLOBAL IN`
+> predicate, ClickHouse-specific aggregates and scalar functions for arrays, JSON and dictionaries,
+> and the `numbers`/`zeros` table functions.
 
 **Prerequisites:** [Querying and projections](../../engine/index.md) · [ClickHouse provider](../../connecting-providers/clickhouse.md)
 
@@ -32,10 +33,11 @@ select id
  left array join tags where id > 0
 ```
 
-The scalar `array_join` (one row per element, projectable) and the clause methods
-`ArrayJoin`/`LeftArrayJoin`/`ArrayJoinElement`/`LeftArrayJoinElement` are covered in
-[Arrays (ClickHouse)](../../scalar-functions/06-arrays.md#arrays-clickhouse); the array functions are gated by
-`SupportsArrayFunctions`, the clause by `ArrayJoinClause`.
+Use scalar `array_join` when you need its one-row-per-element result in a projection. Use
+`ArrayJoin`/`LeftArrayJoin`/`ArrayJoinElement`/`LeftArrayJoinElement` to add the array-join clause to a
+query. See [Arrays (ClickHouse)](../../scalar-functions/06-arrays.md#arrays-clickhouse) for both forms.
+The dialect checks their support separately: `SupportsArrayFunctions` covers array functions, while
+`ArrayJoinClause` covers the clause methods.
 
 ## `LIMIT n BY expr`
 
@@ -78,9 +80,9 @@ select nullableint, count(*)
 ```
 
 See [Grouping and aggregates](../05-grouping-and-aggregates.md#with-totals)
-([`SupportsGroupByWithTotals`](xref:NextORM.Core.ISqlDialect.SupportsGroupByWithTotals)). The official
-`ClickHouse.Driver` returns the totals block separately and does not surface it through `IDataReader`, so
-only the group rows are materialised.
+([`SupportsGroupByWithTotals`](xref:NextORM.Core.ISqlDialect.SupportsGroupByWithTotals)). The totals
+row is not included in the materialized result: the official `ClickHouse.Driver` returns its totals
+block separately, outside `IDataReader`. The query above therefore materializes only the group rows.
 
 ## Query modifiers: `FINAL`, `SAMPLE`, `PREWHERE`, `SETTINGS`
 
@@ -101,12 +103,13 @@ select id
  from complex_entity final prewhere (nullableint > 0) settings max_threads = 2
 ```
 
-The `SETTINGS` clause is always emitted last among the clauses the builder appends: after `LIMIT n BY`
-and after `LIMIT`/`OFFSET` (the tail order is `ORDER BY` → `LIMIT ... BY` → `LIMIT`/`OFFSET` →
-`SETTINGS`). ClickHouse parses a `LIMIT` that follows `SETTINGS` as a syntax error (server Code 62),
-so this order is what makes a scalar terminal usable on a settings-bearing query: `First`,
-`FirstOrDefault`, `Single` and `SingleOrDefault` add paging (`limit 1` or `limit 2`), and the settings
-clause follows it.
+The builder puts `SETTINGS` after the other clauses in the query tail. The order is `ORDER BY` →
+`LIMIT ... BY` → `LIMIT`/`OFFSET` → `SETTINGS`. ClickHouse reports a syntax error (server Code 62)
+if `LIMIT` follows `SETTINGS`.
+
+This order also lets scalar terminal operators work on a query with settings. `First`,
+`FirstOrDefault`, `Single` and `SingleOrDefault` add paging (`limit 1` or `limit 2`); the builder then
+places `SETTINGS` after that paging clause.
 
 ```csharp
 var count = dataContext.From<IComplexEntity>()
@@ -147,11 +150,13 @@ select t1.id, t2.somestring
 
 See [Joins](../04-joins.md#provider-specific-join-modifiers-clickhouse)
 ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness)/[`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).
-`ANY` keeps one right-hand row per left-hand row, `ALL` keeps every match and `ASOF` needs one equi-join
-column plus a final inequality; `GLOBAL` broadcasts the right side for distributed queries.
-`SEMI`/`ANTI`/`PASTE` have dedicated builders: `SemiJoin`/`AntiJoin` return only the left-hand columns
-for left rows that do (respectively do not) have a match, and `PasteJoin` pairs the two sources by row
-position with no `ON` ([`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/`SupportsPasteJoin`).
+`ANY` keeps one right-hand row per left-hand row; `ALL` keeps every match. `ASOF` needs one equi-join
+column followed by an inequality, and `GLOBAL` broadcasts the right side for distributed queries.
+
+`SEMI`, `ANTI` and `PASTE` use dedicated builders. `SemiJoin` and `AntiJoin` return only the left-hand
+columns, for left rows that do or do not have a match, respectively. `PasteJoin` pairs the two sources
+by row position and has no `ON` clause
+([`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/`SupportsPasteJoin`).
 
 ## `GLOBAL IN`
 
@@ -176,15 +181,20 @@ See [Filtering](../03-filtering-where.md#global-in-clickhouse)
 
 ## Aggregates
 
-ClickHouse-exclusive aggregates live on [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions)
-and are rejected by every other dialect. Their native result types (`UInt64`, `Float32`, the `-If`
-integer types) do not always match the declared CLR return type, so the dialect wraps them in
-`toInt64(...)`/`toInt32(...)`/`toFloat64(...)` casts that normalise the value to the type the method
-declares:
+ClickHouse-only aggregates are methods on
+[`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions); every other dialect rejects them.
+ClickHouse's native result types (`UInt64`, `Float32` and the `-If` integer types) do not always match
+the CLR return types declared by those methods. The dialect therefore casts results with
+`toInt64(...)`, `toInt32(...)` or `toFloat64(...)` to match the declared type:
 
 * distinct-count aggregates `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12` (`toInt64`);
-* parameterised `quantile(level)(value)`/`quantile_exact`/`quantile_timing` and `median` (`toFloat64`), multi-level `quantiles(level1, level2, ...)(value)` (returns `Array(Float64)`, materialised as a CLR `double[]`; the levels must be an inline array);
-* `median` is the native `quantile`-family aggregate (approximate; one row per group) and the only percentile-shaped name that renders: the generic `SqlFunctions.ClickHouse.percentile` and the window `percentile_cont`/`percentile_disc` throw `NotSupportedException`, and no `quantile*` alias is created for those portable spellings;
+* parameterised `quantile(level)(value)`/`quantile_exact`/`quantile_timing` and `median` (`toFloat64`);
+* multi-level `quantiles(level1, level2, ...)(value)` returns `Array(Float64)`, materialized as a
+  CLR `double[]`; its levels must be an inline array;
+* `median` is the native `quantile`-family aggregate. It is approximate and returns one row per group.
+  It is also the only percentile-shaped name supported here: the generic
+  `SqlFunctions.ClickHouse.percentile` and window `percentile_cont`/`percentile_disc` throw
+  `NotSupportedException`. The portable spellings do not get `quantile*` aliases;
 * the most-frequent `topK(k)(value)`/`topKWeighted(k)(value, weight)` aggregates (return `Array(T)`, materialised as a CLR `T[]`);
 * the last-row arbitrary-value aggregate `any_last` (`anyLast`);
 * the array-returning aggregates `group_array`/`group_uniq_array` (`groupArray`/`groupUniqArray`, materialised as a CLR `T[]`; `groupArray` of an array column yields a nested `T[][]`);
@@ -196,37 +206,44 @@ declares:
   per-key `sum_map`/`sum_map_filtered` (`sumMap`/`sumMapFiltered(keys)(key, value)`, surfaced as a
   `Map`).
 
-Array-returning facades declare a closed CLR array type and the dialect normalises the server result to it
-with exactly one outer `cast(... as Array(...))`: `top_k`, `top_k_weighted`, `group_array`,
-`group_uniq_array`, `retention` (`int[]` → `Array(Int32)`, never `byte[]`), `array_map` and all
-three `range` overloads (`long[]` → `Array(Int64)`). The declared element type follows two rules: a
-**value-type** element is spelled as declared (`int` → `Array(Int32)`, `int?` →
-`Array(Nullable(Int32))`; `byte` stays `UInt8`), while a **reference-type** element is declared
-`Nullable(...)` unconditionally — a CLR nullable annotation on an element is erased at runtime, so it is
-never consulted: `string[]` and `string?[]` both render `Array(Nullable(String))`, and a jagged
-`string[][]` renders `Array(Array(Nullable(String)))` (the array arm is applied first, never
-`Nullable(Array(...))`). A `string[]` result renders `Array(Nullable(String))`; the data, the materialised CLR
-result type (`string[]`) and the public API are the same, and value-type elements (`int[]`,
-`int?[]`, `byte[]`) are unaffected. Otherwise it is a type correction of the rendered call only: it
-changes neither the lambda translation nor the operand rendering, so the higher-order lambda limitations
-described below still apply. Binding is symmetric for input: a **bound** rank-1 array whose declared
-element type is nullable is sent as `Array(Nullable(T))` derived from the declared CLR type, so `null`
-elements and their positions are preserved (see
-[Arrays (ClickHouse)](../../scalar-functions/06-arrays.md#arrays-clickhouse)).
+The array-returning facades declare a specific CLR array type. The dialect uses one outer
+`cast(... as Array(...))` to make the server result match that type. This applies to `top_k`,
+`top_k_weighted`, `group_array`, `group_uniq_array`, `retention` (`int[]` → `Array(Int32)`, never
+`byte[]`), `array_map` and all three `range` overloads (`long[]` → `Array(Int64)`).
 
-Portable aggregates — including `count`, the arbitrary-value `any_agg` (rendered `ANY_VALUE` on MySQL and
-MariaDB) and `corr`/`covar*` — are documented with the concept page, not here. A plain `UInt64` column
-(or any `ulong`/`ulong?` projection) materialises directly through the row reader's
-`DbDataReader.GetFieldValue<ulong>` accessor, so only the function results above need the normalising
-cast.
+The declared CLR element type determines the ClickHouse array element type:
+
+* A **value-type** element keeps its declared nullability: `int` → `Array(Int32)`, `int?` →
+  `Array(Nullable(Int32))`; `byte` stays `UInt8`.
+* A **reference-type** element is always written as `Nullable(...)`. CLR nullable annotations on
+  reference-type elements are erased at runtime, so `string[]` and `string?[]` both become
+  `Array(Nullable(String))`. A jagged `string[][]` becomes `Array(Array(Nullable(String)))`: the
+  array type is applied first, never `Nullable(Array(...))`.
+
+For a `string[]` result, this changes only the SQL type declaration; the data, materialized CLR result
+type (`string[]`) and public API stay the same. Value-type arrays (`int[]`, `int?[]`, `byte[]`) are
+unaffected. This type correction applies to the rendered call only: it does not change lambda
+translation or operand rendering, so the higher-order lambda limitations below still apply.
+
+Input binding follows the same nullable-element rule. A **bound**, one-dimensional (rank-1) array
+with a nullable declared element type is sent as `Array(Nullable(T))`, based on its declared CLR type. This preserves
+both `null` elements and their positions; see
+[Arrays (ClickHouse)](../../scalar-functions/06-arrays.md#arrays-clickhouse).
+
+Portable aggregates — including `count`, the arbitrary-value `any_agg` (rendered as `ANY_VALUE` on MySQL
+and MariaDB) and `corr`/`covar*` — are documented on the concept page, not here.
+
+A plain `UInt64` column, or any `ulong`/`ulong?` projection, needs no normalizing cast. The row reader
+reads it directly with `DbDataReader.GetFieldValue<ulong>`. Only the aggregate results above need the
+casts described here.
 
 See [Grouping and aggregates](../05-grouping-and-aggregates.md).
 
 ## Native scalar functions, maps and hashes
 
-Beyond the cross-provider scalar surface, `ClickHouseFunctions` exposes the native ClickHouse
-functions that have no portable spelling. They render the exact camel-case name and are rejected by
-every other dialect:
+In addition to scalar functions shared across providers, `ClickHouseFunctions` exposes native
+ClickHouse functions with no portable spelling. Each uses its native ClickHouse name in SQL, and every
+other dialect rejects it:
 
 * UTF-8 case, trim and regexp/search strings: `lower_utf8`/`upper_utf8` (`lowerUTF8`/`upperUTF8`),
   `trim_left`/`trim_right`/`trim_both` (`trimLeft`/`trimRight`/`trimBoth`, with an optional character
@@ -254,11 +271,12 @@ every other dialect:
 
 ### Delivered families (#286, T286b)
 
-The tables below complete the native surface. Every member is a typed `ClickHouseFunctions` method that
-renders the exact vendor spelling, declares its CLR result shape explicitly and is rejected with
-`NotSupportedException` by every other dialect (the shared `IScalarFunctions`/capability gate). The
-pinned server is ClickHouse **25.8.33.6** (`clickhouse/clickhouse-server:25.8-alpine`); names introduced
-after that version, and the CLR shapes that cannot be materialised, are listed under
+The tables below list the remaining native functions. Each entry is a typed
+`ClickHouseFunctions` method: it uses the exact ClickHouse name in SQL and declares its CLR result
+shape. A shared `IScalarFunctions` capability check rejects the method with `NotSupportedException`
+on other dialects. The baseline server is ClickHouse **25.8.33.6**
+(`clickhouse/clickhouse-server:25.8-alpine`). Functions introduced later than that version, and result
+shapes the provider cannot materialize, are listed under
 [Not yet supported](#not-yet-supported).
 
 | Family | Members |
@@ -280,18 +298,21 @@ after that version, and the CLR shapes that cannot be materialised, are listed u
 | Window | `non_negative_derivative` (returns `WindowFunction<double>`, complete it with `Over(...)`) |
 | Dictionary | `dict_get_or_null`, `dict_get_all`, `dict_get_descendants`, `region_to_name`, `region_to_city`, `region_to_area`, `region_to_district`, `region_to_country`, `region_to_continent`, `region_to_top_continent`, `region_to_population`, `region_hierarchy`, `region_in` (plus the already shipped `dict_get`, `dict_get_or_default`, `dict_get_hierarchy`, `dict_get_children`, `dict_has`, `dict_is_in`) |
 
-The declared CLR shapes are exact rather than inferred: `UInt64`/`UInt32`/`UInt16` results are surfaced as
-`ulong`/`uint`/`int`, `UInt8` as `byte` or `bool`, `FixedString` dial results as hex text (binary UUID,
-IPv6 and encoding results), `Tuple`/`Array` results as `System.Tuple<...>`/`T[]` with the component types
-spelled out, and every nullable vendor argument propagates `NULL` instead of a default. Version-gated
-members (`array_top_k`, `array_bottom_k`, `array_remove`, `array_transpose`, `gini`,
-`quantile_prometheus_histogram`, `group_format`, the `time_series_*` grids) keep their native arm and pin
-the server gap with a live `UNKNOWN_FUNCTION`/`BAD_ARGUMENTS` negative; `sequence_next_node` and the
-time-series grids need `allow_experimental_funnel_functions` / `allow_experimental_time_series_aggregate_functions`.
+The CLR result types are declared by each method; they are not inferred from the server result.
+`UInt64`/`UInt32`/`UInt16` results use `ulong`/`uint`/`int`, and `UInt8` uses `byte` or `bool`.
+`FixedString` results for binary UUID, IPv6 and encoding values become hexadecimal text.
+`Tuple`/`Array` results use `System.Tuple<...>`/`T[]` with their component types specified. A nullable
+vendor argument propagates `NULL`; it does not substitute a default value.
 
-The six string-returning digests are encoded server-side as lowercase hexadecimal, so a `string?`
-projection receives the digest text rather than the raw `FixedString` bytes (which the driver would
-decode lossily as UTF-8):
+Some functions depend on the server version: `array_top_k`, `array_bottom_k`, `array_remove`,
+`array_transpose`, `gini`, `quantile_prometheus_histogram`, `group_format` and the `time_series_*`
+grids. Live negative tests check the pinned server's `UNKNOWN_FUNCTION`/`BAD_ARGUMENTS` responses for
+these functions. `sequence_next_node` requires `allow_experimental_funnel_functions`; the time-series
+grids require `allow_experimental_time_series_aggregate_functions`.
+
+The six string-returning digests are encoded on the server as lowercase hexadecimal. A `string?`
+projection therefore receives digest text rather than raw `FixedString` bytes, which the driver would
+decode as lossy UTF-8:
 
 | Function | Rendered SQL | Characters |
 |---|---|---:|
@@ -307,8 +328,9 @@ empty string or a default digest — and the value survives ordinary string mate
 through an anonymous projection, a typed projection and `Scalar<string>` (a plain `string`, not a byte
 array).
 
-`array_except` keeps its place in `SqlFunctions.ClickHouse` for API compatibility and is gated by the
-declared server version, because the native `arrayExcept` was introduced in ClickHouse 25.9:
+`array_except` remains in `SqlFunctions.ClickHouse` for API compatibility, but its availability depends
+on the ClickHouse version declared for the context. ClickHouse introduced the native `arrayExcept` in
+version 25.9:
 
 | Declaration | Behaviour |
 |---|---|
@@ -320,10 +342,9 @@ The declaration is per context, so two versions need distinct context subclasses
 [Declaring the server version](../../connecting-providers/clickhouse.md#declaring-the-server-version).
 The other array set operations are unaffected and never consult the version.
 
-A native `Map` result (the `map` constructor, `map_add`, `map_concat`) is surfaced as
-`IDictionary<TKey, TValue>`; combine it with `map_keys`/`map_values` or one of the contains
-predicates when it is projected, because the row mapper does not materialise a bare `IDictionary`
-column.
+A native `Map` result from the `map` constructor, `map_add` or `map_concat` has the CLR type
+`IDictionary<TKey, TValue>`. The row mapper cannot materialize a bare `IDictionary` column. When you
+project a map, select `map_keys`/`map_values` or use a `map_contains_*` predicate instead.
 
 ```csharp
 var rows = dataContext.From<Event>()
@@ -336,8 +357,9 @@ var rows = dataContext.From<Event>()
     .ToList();
 ```
 
-The five higher-order helpers are public LINQ helpers whose declared CLR result type is part of the
-contract; only `map_all` and `map_exists` keep a native server function:
+Five public LINQ helpers accept lambdas for map operations; their declared CLR result types are part of
+the contract. `map_filter`, `map_apply` and `map_sort` are translated into array operations. Only
+`map_all` and `map_exists` keep native server functions:
 
 * `map_filter` — the entries matching the predicate, as `Tuple<TKey, TValue>[]`. Lowered to
   `arrayFilter(_t -> predicate, arrayZip(mapKeys(map), mapValues(map)))`, with the lambda's key and
@@ -349,11 +371,12 @@ contract; only `map_all` and `map_exists` keep a native server function:
 * `map_all`/`map_exists` — `bool`. Kept native and rendered as
   `mapAll((k, v) -> predicate, map)` / `mapExists((k, v) -> predicate, map)`, lambda first.
 
-The lowered filter, apply and sort expression is wrapped in a cast of the **declared** result type, not
-of the type the server would infer from the operand — `Tuple<string, int>[]` becomes
-`cast(... as Array(Tuple(String, Int32)))`, a `long` apply result becomes
-`cast(... as Array(Int64))` — so the server reports exactly the element type the declaration promises
-instead of a narrower one. Two rules decide that element:
+The translated `map_filter`, `map_apply` and `map_sort` expressions are wrapped in a SQL `CAST` to the
+**declared** result type, not the type the server would infer from the input. For example,
+`Tuple<string, int>[]` becomes `cast(... as Array(Tuple(String, Int32)))`, and a `long` result from
+`map_apply` becomes `cast(... as Array(Int64))`. This makes the server return the element type promised
+by the method declaration, even when its inferred type would be narrower. The element type follows two
+rules:
 
 * a **value-type** apply result stays bare — `int` → `Array(Int32)`;
 * a **reference-type** apply result is spelled `Nullable(...)` — `string` → `Array(Nullable(String))` —
@@ -388,12 +411,14 @@ cast(arrayMap((k, v) -> k,
 `map_filter` returns `Tuple<TKey, TValue>[]`, because a map cannot be materialised from a projected
 expression. `map_sort` returns a tuple array and `map_apply` returns `TResult[]`.
 
-No public path turns a filtered map back into a server-side `Map`: `mapFilter` is only reached through
-the `map_*` lowering, `map_keys`/`map_values` require an `IDictionary` and therefore reject the tuple
-array at compile time, and the higher-order array lambdas refuse member access on their parameter, so
-`arrayMap(t => t.Item2, ...)` cannot be expressed. Read the returned tuples directly — plain LINQ
-over the array once it is materialised: `filtered.Select(t => t.Item2)` for the values, or
-`filtered.ToDictionary(t => t.Item1, t => t.Item2)` for a dictionary on the client.
+There is no public operation that converts a filtered map back into a server-side `Map`.
+`mapFilter` is reached only through the `map_*` translation. `map_keys`/`map_values` require an
+`IDictionary`, so they reject the returned tuple array at compile time. Higher-order array lambdas also
+do not allow member access on their parameter, so you cannot express `arrayMap(t => t.Item2, ...)`.
+
+After the array is materialized, use ordinary LINQ to read the returned tuples:
+`filtered.Select(t => t.Item2)` gets the values, and
+`filtered.ToDictionary(t => t.Item1, t => t.Item2)` creates a dictionary on the client.
 
 The native `Map` surface — `map_keys`/`map_values`, `map_contains_key`/`map_contains_value`,
 `map_add`/`map_concat` and the `map` constructor — stays `IDictionary<TKey, TValue>`-based and is
@@ -403,23 +428,23 @@ See [Scalar functions](../../scalar-functions/index.md).
 
 ## JSON, dictionaries and array functions
 
-* string-JSON extractors `JSONExtractString`/`JSONExtractInt`/`JSONExtractFloat`/`JSONExtractBool`/
+* For JSON stored as a string, use the extractors `JSONExtractString`/`JSONExtractInt`/`JSONExtractFloat`/`JSONExtractBool`/
   `JSONExtractRaw`/`JSONHas`/`JSONType`, `json_length`, and the flat-JSON `visitParamExtract*`;
-* array-returning `JSONExtractKeys`/`JSONExtractArrayRaw` (`json_extract_keys`/`json_extract_array_raw`,
+* Array-returning JSON functions include `JSONExtractKeys`/`JSONExtractArrayRaw` (`json_extract_keys`/`json_extract_array_raw`,
   projecting as `string[]`) and `JSONExtractKeysAndValues` (`json_extract_keys_and_values<T>`, projecting
   as `Tuple<string, T>[]`; `T` must be a non-nullable ClickHouse type);
-* JSONPath scalars `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (over string JSON);
-* native-JSON functions `json_all_paths`/`json_all_paths_with_types` (`JSONAllPaths`/
+* JSONPath functions `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` operate on JSON stored as a string;
+* For a native `JSON` value, use `json_all_paths`/`json_all_paths_with_types` (`JSONAllPaths`/
   `JSONAllPathsWithTypes`; the former projects as `string[]`, the latter's native `Map(String, String)`
   as `Dictionary<string, string>`; both take a native `JSON` value) and `to_json_string`
   (`toJSONString`);
-* dictionary lookups `dict_get`/`dict_get_or_default`/`dict_has` and the hierarchy
+* Dictionary lookups include `dict_get`/`dict_get_or_default`/`dict_has` and the hierarchy
   `dict_get_hierarchy`/`dict_get_children`/`dict_is_in` (need a configured `CREATE DICTIONARY`);
-* array functions `length`/`has`/`index_of`/`has_any`/`has_all`/`starts_with`/`ends_with`/`has_substr`/
+* Array functions include `length`/`has`/`index_of`/`has_any`/`has_all`/`starts_with`/`ends_with`/`has_substr`/
   `array_string_concat`/`split_by_char`/`array_sort`/`array_reverse`/`array_distinct`/`range`/
   `array_enumerate`/`array_cum_sum`/`array_slice`/`array_push_back`;
-* tuple constructor and element access: `System.Tuple.Create(a, b)` renders `tuple(a, b)` and
-  `System.Tuple<...>.ItemN` renders `tupleElement(t, n)` (a whole `Tuple(...)` projects as
+* Tuple construction and element access: `System.Tuple.Create(a, b)` becomes `tuple(a, b)`, and
+  `System.Tuple<...>.ItemN` becomes `tupleElement(t, n)` (a whole `Tuple(...)` projects as
   `System.Tuple<...>`); `untuple` is not supported.
 
 See [Scalar functions](../../scalar-functions/index.md) and [JSON support](../16-json.md)
@@ -427,13 +452,13 @@ See [Scalar functions](../../scalar-functions/index.md) and [JSON support](../16
 
 ## Table functions
 
-`numbers`/`numbers_mt`, the row-count generators `zeros`/`zeros_mt`, `generate_random` and `values`
-are available through
-[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) with a runtime-factory call,
-as are the server/cluster sources `url`, `s3`, `file`, `remote`, `remote_secure`, `cluster` and
-`cluster_all_replicas`. Exactly these thirteen names are what `ISqlDialect.SupportsTableFunction`
-accepts. The `number` `UInt64` column is cast to `Int64` inside a wrapping subquery so it materialises
-as a CLR `long`; `zeros` materialises directly as `byte`:
+To query these sources, pass a factory lambda to
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})): `numbers`/`numbers_mt`,
+the row-count generators `zeros`/`zeros_mt`, `generate_random`, `values`, and the server/cluster
+sources `url`, `s3`, `file`, `remote`, `remote_secure`, `cluster` and `cluster_all_replicas`. The
+dialect's `SupportsTableFunction` check accepts exactly these thirteen names. The `number` column is
+`UInt64`; a wrapping subquery casts it to `Int64` so it materializes as a CLR `long`. The `zeros` result
+materializes directly as `byte`:
 
 ```csharp
 var rows = dataContext.From(() => SqlFunctions.ClickHouse.zeros(3))
@@ -441,49 +466,61 @@ var rows = dataContext.From(() => SqlFunctions.ClickHouse.zeros(3))
     .ToList();
 ```
 
-The external-engine table functions (`mysql`, `postgresql`, `sqlite`, `jdbc`, `odbc`, `mongodb`,
+Other table functions connect to external engines or I/O systems: `mysql`, `postgresql`, `sqlite`,
+`jdbc`, `odbc`, `mongodb`,
 `redis`, `hdfs`, `s3Cluster`, `azureBlobStorage`, `deltaLake`, `iceberg`, `hudi`, `paimon`, `bigquery`,
 `gcs`, `ytsaurus`, `arrowFlight`, `prometheusQuery`, `input`, `view`, `format`, `null`, `executable`,
-`primes`, `merge`, `dictionary`, `eval`, `loop`, `fuzzJSON`, `fuzzQuery`) are **not** modelled: they
-belong to the external-I/O boundary documented as §4 of the coverage catalog and are reachable only
-through raw SQL or a `[SqlFunction]` wrapper. The dialect rejects every one of them, and a live
-boundary test sweeps every function the server exposes in `system.table_functions` to prove that only
-the thirteen names above are accepted.
+`primes`, `merge`, `dictionary`, `eval`, `loop`, `fuzzJSON` and `fuzzQuery` are not modeled by the
+provider. They belong to the external-I/O boundary documented as §4 of the coverage catalog and are
+reachable only through raw SQL or a `[SqlFunction]` wrapper. The dialect rejects all of them. A live
+boundary test checks every function in the server's `system.table_functions` and verifies that only the
+thirteen names above are accepted.
 
 See [Table-valued functions](../13-table-valued-functions.md).
 
 ## Native JSON columns
 
-ClickHouse's native `JSON` column is **object-rooted** (arrays and scalar roots are rejected). A
-`[JsonColumn]` property (`Auto` or `Native` storage) maps an object-root POCO, `JsonObject`,
-`JsonDocument` or `JsonElement` to it for both read and write; `Text` keeps a `String` column, and a
-model that does not serialize to an object fails closed with `NotSupportedException`. Bare object-root
-`JsonObject`/`JsonDocument`/`JsonElement` values also map for projection and parameter (the driver
-surfaces `JSON` as `JsonObject`, and `JsonDocument`/`JsonElement` are adapted from it). Project through
-a named shape (`Select(x => new { x.Doc })` or a DTO): a bare top-level scalar `Select(x => x.Doc)` is
-not handled by the core projection classifier. An empty `{}` stays a non-null value, while SQL `NULL`
-in a `Nullable(JSON)` column stays distinct from it (`null`, or `default`/`Undefined` for the value-type
-`JsonElement`). A bare `string` read over a `JSON` column and the legacy `Object('json')` alias are not
-supported; the alias can be created only with a connection-level `allow_experimental_object_type`, which
-nextorm never sets, and even then reads materialize as `Tuple<SByte,String>` rather than through the
+ClickHouse's native `JSON` column requires an **object root**; it rejects array and scalar roots.
+
+For mapped properties, `[JsonColumn]` with `Auto` or `Native` storage maps an object-root POCO,
+`JsonObject`, `JsonDocument` or `JsonElement` to the native column on both reads and writes. `Text`
+storage keeps a `String` column. If a model does not serialize to an object, nextorm throws
+`NotSupportedException`.
+
+Bare object-root `JsonObject`, `JsonDocument` and `JsonElement` values also work in projections and as
+parameters. The driver returns `JSON` as `JsonObject`; nextorm adapts that value to `JsonDocument` or
+`JsonElement` when needed. Project through a named shape, such as `Select(x => new { x.Doc })` or a
+DTO. The core projection classifier does not handle a bare top-level scalar projection
+(`Select(x => x.Doc)`).
+
+An empty `{}` remains a non-null value. SQL `NULL` in a `Nullable(JSON)` column remains distinct: it
+reads as `null`, or as `default`/`Undefined` for the value-type `JsonElement`.
+
+Reading a bare `string` from a `JSON` column is unsupported. The legacy `Object('json')` alias is also
+unsupported: creating it requires the connection-level `allow_experimental_object_type` setting, which
+nextorm never sets. Even with that setting, reads materialize as `Tuple<SByte,String>`, not through the
 native `JsonObject` transport. See
 [JSON support](../16-json.md#map-a-clr-object-to-a-native-json-column).
 
 ## Null-safe comparison
 
-ClickHouse has no usable scalar native form: `isNotDistinctFrom(...)` and the `<=>` operator are accepted
-only in a `JOIN ON` section and fail elsewhere on 25.8 with server error Code 48 `NOT_IMPLEMENTED`
-("Function isNotDistinctFrom can be used only in the JOIN ON section"), so both helpers are emulated as a
-guarded predicate: `((a is null and b is null) or (a is not null and b is not null and a = b))`, with
-`is_distinct_from` as its `not (...)` complement. No sentinel normalisation is used, so `NULL` never
-compares equal to a real value (including `0`), and the scalar result is already `UInt8`. See
+ClickHouse accepts `isNotDistinctFrom(...)` and the `<=>` operator only in a `JOIN ON` section. Outside
+that section, both fail on version 25.8 with server error Code 48 `NOT_IMPLEMENTED`
+("Function isNotDistinctFrom can be used only in the JOIN ON section").
+
+The scalar helpers therefore use this predicate instead:
+`((a is null and b is null) or (a is not null and b is not null and a = b))`.
+`is_distinct_from` is its `not (...)` complement. This form does not replace values with a sentinel:
+`NULL` never compares equal to a real value, including `0`. The scalar result already has type `UInt8`.
+See
 [Null-safe comparison](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-comparison-is-not-distinct-from).
 
 ## Not yet supported
 
-The catalog closes the residual §3 set on the pinned **25.8.33.6** server: the members below exist as
-typed refusal methods on `ClickHouseFunctions` and fail closed with a precise `NotSupportedException`
-before any SQL reaches the provider — they are never silently rewritten, defaulted or truncated.
+The entries below complete the remaining §3 set for the pinned **25.8.33.6** server. They exist as
+typed methods on `ClickHouseFunctions`, but deliberately throw a precise `NotSupportedException`
+before sending SQL to the provider. nextorm does not silently rewrite them, substitute defaults or
+truncate their results.
 
 | Family | Refused member | Tested reason |
 |---|---|---|

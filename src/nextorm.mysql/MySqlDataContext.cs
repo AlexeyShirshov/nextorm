@@ -12,10 +12,10 @@ namespace NextORM.MySql;
 /// renders SQL through <c>MySqlDialect</c>.
 /// </summary>
 /// <remarks>
-/// The bulk-insert executor is re-implemented here (the base hook cannot carry the whole-invocation
-/// budget or the explicit option presence) so <see cref="BulkInsertMode"/> is resolved by the provider,
-/// the native <c>MySqlBulkCopy</c> prerequisites are checked read-only before a row is read, and
-/// MariaDB (its derived context) can add its scoped session controls.
+/// Native bulk inserts use <c>MySqlBulkCopy</c> and require local-file loading on both client and server.
+/// When a local-file prerequisite is missing, <see cref="BulkInsertMode.Auto"/> uses portable
+/// <c>INSERT ... VALUES</c> statements, while <see cref="BulkInsertMode.Native"/> reports the missing
+/// prerequisite. nextorm does not change either setting.
 /// </remarks>
 public class MySqlDataContext : DataContext, IBulkInsertExecutor, IBulkInsertNativeOptions, IBulkInsertPortableScope
 {
@@ -37,6 +37,17 @@ public class MySqlDataContext : DataContext, IBulkInsertExecutor, IBulkInsertNat
     /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
     public MySqlDataContext(DbConnection connection, DataContextBuilder optionsBuilder)
         : base(null, connection, optionsBuilder)
+    {
+    }
+
+    /// <summary>
+    /// Creates a MySQL context from the builder alone. The builder must configure routing and name a
+    /// default topology; its host supplies the connection, so no connection string is passed here.
+    /// </summary>
+    /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
+    /// <exception cref="InvalidOperationException">The builder configures no routing, or no default topology.</exception>
+    public MySqlDataContext(DataContextBuilder optionsBuilder)
+        : this(null, null, optionsBuilder, null)
     {
     }
 
@@ -73,10 +84,9 @@ public class MySqlDataContext : DataContext, IBulkInsertExecutor, IBulkInsertNat
         "TimeOnly projection refused for MySQL: TIME is a duration; use TimeSpan or an explicit value converter.";
 
     /// <summary>
-    /// Creates a <c>MySqlConnector</c> parameter, mapping a <see langword="null"/> value to
-    /// <c>DBNull.Value</c> because <c>MySqlConnector</c> rejects an unset parameter value. This is the
-    /// public 2-arg factory; the execution paths use the command-aware overloads below so a command
-    /// from the active connection's driver mints the parameter.
+    /// Creates a <c>MySqlConnector</c> parameter with the given name and value. A
+    /// <see langword="null"/> value is bound as <c>DBNull.Value</c>. Command-aware execution creates
+    /// parameters from the active connection's driver instead.
     /// </summary>
     /// <param name="name">The parameter name, without the provider prefix.</param>
     /// <param name="value">The parameter value, or <see langword="null"/>.</param>
@@ -85,10 +95,9 @@ public class MySqlDataContext : DataContext, IBulkInsertExecutor, IBulkInsertNat
         => new MySqlParameter(name, value ?? DBNull.Value);
 
     /// <summary>
-    /// Mints the parameter through the executing command so it belongs to the connection's actual
-    /// driver: <c>MySql.Data</c> (the driver of Oracle's EF Core provider) rejects a
-    /// <c>MySqlConnector.MySqlParameter</c> in its parameter collection, and vice versa. No throwaway
-    /// command is created: the active command owns the parameter and the execution layer adds it.
+    /// Creates a parameter through <paramref name="command"/> so it uses the command's driver. This
+    /// keeps the parameter compatible with connections created by either <c>MySqlConnector</c> or
+    /// <c>MySql.Data</c>.
     /// </summary>
     /// <param name="command">The executing command the parameter will be added to.</param>
     /// <param name="name">The parameter name, without the provider prefix.</param>

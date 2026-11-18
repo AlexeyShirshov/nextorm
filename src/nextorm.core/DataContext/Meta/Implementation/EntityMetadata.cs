@@ -7,10 +7,11 @@ internal class EntityMetadata : IEntityMetadata
     private readonly IReadOnlyList<IPropertyMetadata> _propertiesMeta;
     private readonly Dictionary<PropertyInfo, IPropertyMetadata> _propertiesByInfo;
 
-    public EntityMetadata(string? tableName, IReadOnlyList<IPropertyMetadata> propertiesMetas, bool isTableNameAuto = false, IPropertyMetadata? dynamicColumnsStore = null, IReadOnlyList<IQueryFilterMetadata>? filters = null, IReadOnlyList<IRelationshipMetadata>? relationships = null)
+    public EntityMetadata(string? tableName, IReadOnlyList<IPropertyMetadata> propertiesMetas, bool isTableNameAuto = false, IPropertyMetadata? dynamicColumnsStore = null, IReadOnlyList<IQueryFilterMetadata>? filters = null, IReadOnlyList<IRelationshipMetadata>? relationships = null, string? schema = null)
     {
         _propertiesMeta = propertiesMetas;
         TableName = tableName;
+        Schema = schema;
         IsTableNameAuto = isTableNameAuto;
         DynamicColumnsStore = dynamicColumnsStore;
         Filters = filters ?? Array.Empty<IQueryFilterMetadata>();
@@ -30,6 +31,7 @@ internal class EntityMetadata : IEntityMetadata
 
     public IReadOnlyList<IPropertyMetadata> Properties => _propertiesMeta;
     public string? TableName { get; }
+    public string? Schema { get; }
     public bool IsTableNameAuto { get; }
 
     public IPropertyMetadata? DynamicColumnsStore { get; }

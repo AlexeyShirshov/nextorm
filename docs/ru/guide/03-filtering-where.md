@@ -1,29 +1,54 @@
 # Фильтрация (WHERE)
 
-> Стройте предикаты SQL `WHERE` из операторов C#, проверок на null, условных выражений и параметризованных списков значений.
+Используйте `Where`, чтобы оставить только строки, соответствующие условию C#. Первый пример
+использует таблицу `orders` из [быстрого старта](../getting-started/02-quickstart.md) и созданные там
+`dataContext` с сущностью `IOrder`. В справочных примерах ниже используются тестовые сущности и данные,
+указанные рядом с результатами.
 
-**Предварительные требования:** [Запросы и проекции](../engine/index.md) · [Сущности и метаданные](../getting-started/03-entities-and-metadata.md)
+**Перед началом:** пройдите [быстрый старт](../getting-started/02-quickstart.md).
 
 ## Обзор
 
-[`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) принимает логическое выражение и возвращает новый [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1); как и любой метод
-построителя, он неизменяемый, поэтому исходный объект не меняется. Повторный вызов [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) объединяет
-предикаты с помощью `and`:
+[`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) оставляет строки, для которых условие истинно.
+Добавляйте его после
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
+и до терминального метода запроса. Запрос выполняется при вызове терминального метода, например
+[`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])).
+Каждый вызов `Where` возвращает новый построитель запроса, не меняя исходный. Несколько вызовов
+`Where` объединяют условия через `and`; в одном вызове объединяйте условия с помощью `&&` или `||`.
+
+То же условие можно выполнить для базы данных или провайдера in-memory. Провайдер in-memory
+компилирует выражение и вычисляет его по своим данным.
+
+## Найдите заказы по статусу
+
+Если статус может меняться между вызовами, сохраните его в локальной переменной. Следующий запрос
+возвращает идентификаторы и суммы оплаченных заказов:
 
 ```csharp
-public EntityBuilder<TEntity> Where(Expression<Func<TEntity, bool>> condition)
+var status = "Paid";
+var rows = await dataContext.From<IOrder>()
+    .Where(order => order.Status == status)
+    .OrderBy(order => order.Id)
+    .Select(order => new { order.Id, order.TotalCents })
+    .ToListAsync();
 ```
 
-Лямбда транслируется в предложение `WHERE`, и ничего не выполняется, пока не вызван терминальный метод,
-такой как [`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])). То же дерево выражений также компилирует и выполняет in-memory провайдер,
-поэтому запрос, работающий с реальной базой данных, можно прогнать и в памяти.
+Запрос возвращает:
 
-Два вида значений по-разному попадают в базу данных:
+| Id | TotalCents |
+|---:|-----------:|
+| 1 | 2550 |
+| 3 | 4250 |
 
-* **Захваченная локальная переменная** (переменная из внешней области видимости) и [`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32))
-  становятся параметрами команды, поэтому план может повторно использоваться при выполнениях с разными
-  значениями.
-* **Литеральная константа**, записанная непосредственно в лямбде, подставляется в текст SQL как есть.
+Пример использует строки, созданные в [быстром старте](../getting-started/02-quickstart.md).
+О том, как NextORM передаёт значение `status` в базу, см. раздел
+[Захваченные параметры и `Parameter`](#захваченные-параметры-и-parameter).
+
+В следующих справочных примерах используется отдельная тестовая модель `SimpleEntity` и
+`ComplexEntity`, а не сущность `IOrder` из быстрого старта. Таблицы результатов используют тестовые
+данные интеграционных тестов. О сопоставлении собственных сущностей см. раздел
+[Сущности и метаданные](../getting-started/03-entities-and-metadata.md).
 
 ## Операторы сравнения
 
@@ -345,7 +370,9 @@ switch, в котором сравнение является вызовом м�
 
 ## Захваченные параметры и [`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32))
 
-Захваченная локальная переменная извлекается как именованный параметр команды:
+Захваченная локальная переменная извлекается как именованный параметр команды. Константа, записанная
+непосредственно в лямбде, остаётся в тексте SQL. Захваченные значения и
+[`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32)) позволяют базе повторно использовать план запроса с разными значениями:
 
 ```csharp
 var threshold = 5L;
@@ -626,6 +653,11 @@ SQLite и завершаются ошибкой при выполнении оп
 | MariaDB | То же, что MySQL: параметры `@`, `coalesce`, логические `1` / `0`, `any` / `all` недоступны. |
 | ClickHouse | Параметры используют `@` (драйвер переписывает их в `{name:Type}`); `??` - это `coalesce`; логические литералы - `true` / `false`; `any` / `all` недоступны; `global_in` добавляет распределённый предикат `GLOBAL IN`. |
 | In-memory | Предикаты компилируются как делегаты .NET; префикса параметров и генерации SQL нет. |
+
+## Что дальше
+
+Продолжите с раздела [Проекции](02-projections.md), чтобы выбрать возвращаемые поля, или перейдите к
+[соединениям](04-joins.md), чтобы объединить строки связанных таблиц.
 
 ## См. также
 

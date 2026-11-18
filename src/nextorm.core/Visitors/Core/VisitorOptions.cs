@@ -9,8 +9,8 @@ namespace NextORM.Core;
 /// derived from it) grouped into a single value, replacing the long constructor parameter list.
 /// </summary>
 /// <remarks>
-/// Immutable after construction. The record shape allows derived visitors and internal translators to
-/// create a variant with <c>with</c> (for example a child visitor with a different
+/// Its properties are init-only after construction. The record shape lets derived visitors and internal
+/// translators create a variant with <c>with</c> (for example, a child visitor with a different
 /// <see cref="Dim"/>) without repeating every collaborator.
 /// </remarks>
 public sealed record VisitorOptions(
@@ -65,6 +65,9 @@ public sealed record VisitorOptions(
     /// init-only property so the record's primary constructor stays source-compatible.
     /// </summary>
     public string ParameterNamePrefix { get; init; } = string.Empty;
+
+    internal MappingVariant MappingVariant { get; init; } = MappingVariant.Default;
+    internal IEntityMetadataProvider? MetadataProvider { get; init; }
 
     /// <summary>
     /// The render-local capture of planner-owned parameter occurrences, or <see langword="null"/> when

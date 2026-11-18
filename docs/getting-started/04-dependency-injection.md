@@ -1,23 +1,25 @@
 # Dependency injection
 
-> Register NextORM contexts with [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions.AddNextOrmContext(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{NextORM.Core.DataContextBuilder})), configure the provider and logging on a scoped [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder), and resolve a single context instance per scope.
+> Register NextORM contexts with [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions.AddNextOrmContext``1(Microsoft.Extensions.DependencyInjection.IServiceCollection)), configure the provider and logging on a scoped [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder), and resolve a single context instance per scope.
 
 **Prerequisites:** [Installation](01-installation.md) · [Quickstart](02-quickstart.md).
 
 ## Overview
 
-DI registration lives in [`NextORM.Core`](xref:NextORM.Core) ([`ServiceCollectionExtensions`](xref:NextORM.Core.ServiceCollectionExtensions)) and works with any
-`Microsoft.Extensions.DependencyInjection` container. There are two registration paths:
+Use the options path to configure a SQL provider with `Use…`. Use the type path when the container can
+construct the context directly, as it can with
+[`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext). Both paths are available through
+[`ServiceCollectionExtensions`](xref:NextORM.Core.ServiceCollectionExtensions) in
+[`NextORM.Core`](xref:NextORM.Core), and work with any
+`Microsoft.Extensions.DependencyInjection` container.
 
-* **Type path** - [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions.AddNextOrmContext(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{NextORM.Core.DataContextBuilder})) registers the concrete context type as scoped and
-  forwards [`IDataContext`](xref:NextORM.Core.IDataContext) to it. The container constructs `TContext`, so its constructor must be
-  resolvable from the container (for example the parameterless [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext)).
-* **Options path** - `AddNextOrmContext(Action<DataContextBuilder>)` (or the
-  `Action<IServiceProvider, DataContextBuilder>` overload) registers a **scoped [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder)** that
-  the options delegate configures, plus an [`IDataContext`](xref:NextORM.Core.IDataContext) factory that calls
-  `` This is the path used with the provider `Use…` methods.
+The options path registers a scoped [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) and an
+[`IDataContext`](xref:NextORM.Core.IDataContext) factory. The factory calls
+[`CreateDataContext`](xref:NextORM.Core.DataContextBuilder.CreateDataContext). The type path registers
+the concrete context as scoped and forwards `IDataContext` to that instance. The container constructs
+`TContext`, so it must be able to resolve the context's constructor.
 
-The guarantees come from the XML docs on [`ServiceCollectionExtensions`](xref:NextORM.Core.ServiceCollectionExtensions):
+These registrations guarantee:
 
 * a concrete context type is registered **once per scope**, and resolving the concrete type and
   [`IDataContext`](xref:NextORM.Core.IDataContext) yields the **same instance**;
@@ -30,29 +32,17 @@ so several differently-configured contexts can coexist.
 
 ## Registering a context
 
-The generic registration is the shortest form:
+For a SQL provider, configure the builder in the options delegate:
 
 ```csharp
 var services = new ServiceCollection();
 
-services.AddNextOrmContext<InMemoryDataContext>();
-
-using var provider = services.BuildServiceProvider();
-using var scope = provider.CreateScope();
-
-var viaInterface = scope.ServiceProvider.GetRequiredService<IDataContext>();
-var viaConcrete = scope.ServiceProvider.GetRequiredService<InMemoryDataContext>();
-// viaInterface and viaConcrete are the same instance
-```
-
-To configure a database provider, use the options overload:
-
-```csharp
 services.AddNextOrmContext(builder => builder.UseSqlite("app.db"));
+
 ```
 
-The `IServiceProvider` overload lets you pull dependencies such as `ILoggerFactory` out of the
-container while configuring:
+Use the `IServiceProvider` overload when the provider configuration needs another service, such as an
+`ILoggerFactory`:
 
 ```csharp
 services.AddNextOrmContext((sp, builder) =>
@@ -64,22 +54,42 @@ services.AddNextOrmContext((sp, builder) =>
 });
 ```
 
-A keyed registration keeps multiple contexts apart:
+Use keyed registrations when an application needs multiple differently configured contexts:
 
 ```csharp
 services.AddKeyedNextOrmContext(builder => builder.UsePostgres(reportingConnectionString), "reporting");
 services.AddKeyedNextOrmContext<InMemoryDataContext>("audit"); // generic keyed type path
 ```
 
+Build the provider after registering both contexts, then resolve a keyed context from a scope:
+
 ```csharp
+using var provider = services.BuildServiceProvider();
 using var scope = provider.CreateScope();
 var reporting = scope.ServiceProvider.GetRequiredKeyedService<IDataContext>("reporting");
 ```
 
-> **Note:** the options path registers only [`IDataContext`](xref:NextORM.Core.IDataContext) (and the scoped [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder)); it does
-> not register the concrete [`SqliteDataContext`](xref:NextORM.Sqlite.SqliteDataContext)/[`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext)/[`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext) type. Resolve
-> [`IDataContext`](xref:NextORM.Core.IDataContext) from the options path. The type path is the one that makes the concrete type and the
-> interface resolve to the same instance.
+The options path registers only [`IDataContext`](xref:NextORM.Core.IDataContext) and the scoped
+[`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder). It does not register a concrete provider
+type such as [`SqliteDataContext`](xref:NextORM.Sqlite.SqliteDataContext),
+[`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext), or
+[`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext). Resolve `IDataContext` from this
+path.
+
+For a context the container can construct directly, use the type path. Resolving the concrete type and
+`IDataContext` in the same scope returns the same instance:
+
+```csharp
+var typeServices = new ServiceCollection();
+typeServices.AddNextOrmContext<InMemoryDataContext>();
+
+using var typeProvider = typeServices.BuildServiceProvider();
+using var typeScope = typeProvider.CreateScope();
+
+var viaInterface = typeScope.ServiceProvider.GetRequiredService<IDataContext>();
+var viaConcrete = typeScope.ServiceProvider.GetRequiredService<InMemoryDataContext>();
+// viaInterface and viaConcrete are the same instance
+```
 
 ## DI-registered interceptors
 

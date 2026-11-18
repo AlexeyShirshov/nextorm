@@ -23,6 +23,7 @@ public sealed class SqlServerDialect : SqlDialectBase
     private readonly SqlServerSpecificFunctions _sqlServerFunctions;
     private readonly int? _serverMajorVersion;
     private readonly SqlServerEngineEdition? _engineEdition;
+    private readonly SqlServerVectorSearchSyntax _vectorSearchSyntax;
 
     /// <summary>The declared server major version, or <see langword="null"/> when unset.</summary>
     internal int? DeclaredMajorVersion => _serverMajorVersion;
@@ -33,9 +34,8 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// supported server.
     /// </summary>
     public SqlServerDialect()
+        : this(null, null, SqlServerVectorSearchSyntax.TopN)
     {
-        _pivot = new SqlServerPivotRenderer(this);
-        _sqlServerFunctions = new SqlServerSpecificFunctions(this);
     }
 
     /// <summary>
@@ -46,7 +46,7 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <param name="serverVersion">The SQL Server version the context declared.</param>
     /// <exception cref="ArgumentNullException"><paramref name="serverVersion"/> is <see langword="null"/>.</exception>
     internal SqlServerDialect(Version serverVersion)
-        : this(ValidateServerVersion(serverVersion), engineEdition: null)
+        : this(ValidateServerVersion(serverVersion), engineEdition: null, SqlServerVectorSearchSyntax.TopN)
     {
     }
 
@@ -59,12 +59,39 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <param name="engineEdition">The declared engine edition, or <see langword="null"/> when unset.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="engineEdition"/> is not a defined <see cref="SqlServerEngineEdition"/> value.</exception>
     internal SqlServerDialect(Version? serverVersion, SqlServerEngineEdition? engineEdition)
+        : this(serverVersion, engineEdition, SqlServerVectorSearchSyntax.TopN)
+    {
+    }
+
+    /// <summary>
+    /// Creates a dialect from the immutable server declaration and the explicitly selected
+    /// <c>VECTOR_SEARCH</c> grammar.
+    /// </summary>
+    /// <param name="serverVersion">The declared server version, or <see langword="null"/> when unset.</param>
+    /// <param name="engineEdition">The declared engine edition, or <see langword="null"/> when unset.</param>
+    /// <param name="vectorSearchSyntax">The SQL grammar to emit for approximate vector search.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="engineEdition"/> or <paramref name="vectorSearchSyntax"/> is undefined.</exception>
+    internal SqlServerDialect(
+        Version? serverVersion,
+        SqlServerEngineEdition? engineEdition,
+        SqlServerVectorSearchSyntax vectorSearchSyntax)
     {
         ValidateEngineEdition(engineEdition);
+        ValidateVectorSearchSyntax(vectorSearchSyntax);
         _serverMajorVersion = serverVersion?.Major;
         _engineEdition = engineEdition;
+        _vectorSearchSyntax = vectorSearchSyntax;
         _pivot = new SqlServerPivotRenderer(this);
         _sqlServerFunctions = new SqlServerSpecificFunctions(this);
+    }
+
+    private static void ValidateVectorSearchSyntax(SqlServerVectorSearchSyntax vectorSearchSyntax)
+    {
+        if (!Enum.IsDefined(vectorSearchSyntax))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(vectorSearchSyntax), vectorSearchSyntax, "Undefined SqlServerVectorSearchSyntax value.");
+        }
     }
 
     private static Version ValidateServerVersion(Version serverVersion)
@@ -327,6 +354,9 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// </summary>
     public override bool SupportsSqlServer2025Functions => _serverMajorVersion >= 17;
 
+    /// <summary>True when the declared SQL Server major version is 17 or later and vector search is available.</summary>
+    public override bool SupportsVectorSearch => _serverMajorVersion >= 17;
+
     /// <summary>
     /// True when the declared server major version is 16 or later: the 2022 function surface
     /// (<c>LEFT_SHIFT</c>/<c>RIGHT_SHIFT</c>) is available.
@@ -556,6 +586,8 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>Maps the CLR type to its SQL Server column type (<c>tinyint</c>, <c>smallint</c>, <c>int</c>, <c>bigint</c>, <c>real</c>, <c>float</c>, <c>decimal</c>).</summary>
     public override string MakeTypeName(Type type) => type switch
     {
+        _ when typeof(IVectorValue).IsAssignableFrom(type) => throw new NotSupportedException(
+            $"SQL Server cannot generate a vector column for CLR type '{type.Name}' without a declared dimension. Create the column explicitly as VECTOR(n)."),
         _ when type == typeof(byte) => "tinyint",
         _ when type == typeof(short) => "smallint",
         _ when type == typeof(int) => "int",
@@ -968,6 +1000,19 @@ public sealed class SqlServerDialect : SqlDialectBase
         return true;
     }
 
+    /// <summary>Returns <c>TOP_N</c> when the selected approximate vector-search grammar needs it.</summary>
+    public override string? ApproximateVectorSearchTopNArgumentName
+        => _vectorSearchSyntax == SqlServerVectorSearchSyntax.TopN ? "TOP_N" : null;
+
+    /// <summary>Renders the explicitly selected SQL Server approximate vector-search TOP form.</summary>
+    public override string MakeApproximateTop(string limitSql, KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        var top = Kw(keywordCase, "top (") + limitSql + ")";
+        return _vectorSearchSyntax == SqlServerVectorSearchSyntax.WithApproximate
+            ? top + Kw(keywordCase, " with approximate")
+            : top;
+    }
+
     // T-SQL has no RECURSIVE keyword: a recursive CTE is declared with `with` alone, so the flag is
     // intentionally ignored.
     /// <summary>T-SQL has no <c>RECURSIVE</c> keyword, so the flag is ignored and <c>with</c> is always rendered.</summary>
@@ -1363,6 +1408,7 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
             "next_value_for" or "nextval" or
             "try_cast" or "try_convert")
         || (name == "regexp_count" && _dialect.SupportsSqlServer2025Functions)
+        || (name == "vector_distance" && _dialect.SupportsVectorSearch)
         || ((name is "regexp_substr" or "regexp_instr" or "regexp_matches"
                 or "edit_distance" or "edit_distance_similarity"
                 or "jaro_winkler_distance" or "jaro_winkler_similarity")
@@ -1373,6 +1419,7 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
     /// <inheritdoc/>
     public string? GetUnsupportedReason(string name) => name switch
     {
+        "vector_distance" => Unsupported("VECTOR_DISTANCE", requiredMajor: 17, _dialect.SupportsVectorSearch),
         "regexp_count" => Unsupported("REGEXP_COUNT", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
         "regexp_substr" => Unsupported("REGEXP_SUBSTR", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
         "regexp_instr" => Unsupported("REGEXP_INSTR", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
@@ -1407,6 +1454,7 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
     {
+        "vector_distance" => $"VECTOR_DISTANCE({args[0]}, {args[1]}, {args[2]})",
         // SQL Server 2025 regex scalar: int count of the non-overlapping matches (0 when none, NULL
         // when the input is NULL).
         "regexp_count" => $"regexp_count({args[0]}, {args[1]})",

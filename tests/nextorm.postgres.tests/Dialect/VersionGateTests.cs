@@ -9,6 +9,7 @@ namespace NextORM.Postgres.Tests;
 /// context type, and the plan cache does not leak a warmed filtered plan into a version that must
 /// refuse it.
 /// </summary>
+[Collection("Query plan cache")]
 public class VersionGateTests
 {
     private static IDataContext Context<TMarker>(Version? serverVersion)

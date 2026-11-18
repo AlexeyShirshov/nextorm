@@ -444,6 +444,32 @@ public sealed class CachedPreparationRecipeTests
         byId.Should().NotBe(byName, "two different ORDER BY members are two different raw graphs");
     }
 
+    [Fact]
+    public void Fingerprint_FilterValueList_IsIneligibleForRawRecipe()
+    {
+        using var ctx = CreateSqlServerContext();
+        _ = ctx.From<SimpleEntity>();
+
+        QueryCommand.ComputeRawFingerprint(
+                ctx.From<SimpleEntity>().Where(x => new int[] { 1, 3, 10 }.Contains(x.Id)).Select(x => x.Id))
+            .Should().BeNull("a filter value list can never be published by the raw-recipe gate");
+
+        var values = new int[] { 1, 3, 10 };
+        QueryCommand.ComputeRawFingerprint(
+                ctx.From<SimpleEntity>().Where(x => values.Contains(x.Id)).Select(x => x.Id))
+            .Should().BeNull("a captured filter list can never be published by the raw-recipe gate");
+
+        QueryCommand.ComputeRawFingerprint(ctx.From<SimpleEntity>().Where(x => x.Id > 0).Select(x => x.Id))
+            .Should().NotBeNull("a non-value-list filter remains eligible");
+
+        QueryCommand.ComputeRawFingerprint(ctx.From<SortProbeEntity>().Where(x => x.Name!.Contains("df")).Select(x => x.Id))
+            .Should().NotBeNull("a scalar string Contains is not a value-list membership");
+
+        QueryCommand.ComputeRawFingerprint(
+                ctx.From<SimpleEntity>().Select(x => new { Has = new int[] { 1, 3 }.Contains(x.Id) }))
+            .Should().NotBeNull("an inline scalar list in the projection is keyed and remains publishable");
+    }
+
     /// <summary>Probe entity with two sortable columns (the shared test entity has only <c>Id</c>).</summary>
     private sealed class SortProbeEntity
     {

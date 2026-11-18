@@ -205,6 +205,9 @@ public class PostgresDialect : SqlDialectBase
     /// <returns>The PostgreSQL type name.</returns>
     public override string MakeTypeName(Type type)
     {
+        if (PostgresVectorTypes.NameFor(type) is { } vectorTypeName)
+            return vectorTypeName;
+
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Range<>))
             return PostgresRangeTypes.NameFor(type.GetGenericArguments()[0]);
 
@@ -642,6 +645,9 @@ public class PostgresDialect : SqlDialectBase
     // bool/bit/statistical/ordered-set aggregate surface.
     /// <inheritdoc/>
     public override bool SupportsExtendedScalarFunctions => true;
+
+    /// <summary>PostgreSQL uses pgvector distance functions for exact and operators for approximate unified vector search.</summary>
+    public override bool SupportsVectorSearch => true;
 
     /// <summary>PostgreSQL has the standalone session random seed <c>setseed</c>.</summary>
     public override bool SupportsRandomSeed => true;

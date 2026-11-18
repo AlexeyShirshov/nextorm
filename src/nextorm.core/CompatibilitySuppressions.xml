@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 1.0.10 replaces the reflection-based outer-reference API with OuterReference.Create. -->
+<Suppressions>
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:NextORM.Core.OuterRefMarker`1</Target>
+    <Left>lib/net10.0/nextorm.core.dll</Left>
+    <Right>lib/net10.0/nextorm.core.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:NextORM.Core.OuterRefMarker`1</Target>
+    <Left>lib/net11.0/nextorm.core.dll</Left>
+    <Right>lib/net11.0/nextorm.core.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:NextORM.Core.ReplaceConstantsExpressionVisitor.GetOuterRefMarkerCI(System.Type)</Target>
+    <Left>lib/net10.0/nextorm.core.dll</Left>
+    <Right>lib/net10.0/nextorm.core.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:NextORM.Core.ReplaceConstantsExpressionVisitor.GetOuterRefMarkerCI(System.Type)</Target>
+    <Left>lib/net11.0/nextorm.core.dll</Left>
+    <Right>lib/net11.0/nextorm.core.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+</Suppressions>

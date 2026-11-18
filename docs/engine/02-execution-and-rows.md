@@ -1,18 +1,22 @@
 # Execution and rows
 
-> What happens after SQL exists: the `DbCommand` is executed, the `DbDataReader` is read, and the result is shaped — materialized into objects or collections, collapsed to a single row or an aggregate, streamed, serialized to JSON/CSV, or handed back raw. See the [engine overview](index.md) for the whole picture.
+> After SQL generation, a terminal determines how the result is consumed. `QueryExecutor` runs the `DbCommand`, the `DbDataReader` exposes rows, and the terminal returns them as objects or collections, a single row or aggregate, a stream, JSON/CSV, or a raw reader or stream. See the [engine overview](index.md) for the whole route.
 
 ## Executing the command
 
-The prepared SQL text is bound to a provider `DbCommand` (created by `DataContext.CreateCommand`, with the parameters added in order) and run by `QueryExecutor` through ADO.NET `ExecuteReader`. The command and the resulting `DbDataReader` are owned together (a `CommandReaderOwner`), so the reader and its command are disposed as one unit.
+`DataContext.CreateCommand` creates the provider's `DbCommand` and binds the prepared SQL text and parameters in order. `QueryExecutor` runs it through ADO.NET `ExecuteReader`, which returns a `DbDataReader` over the rows. A `CommandReaderOwner` owns the command and reader together, so they are disposed as one unit.
 
 ## Materialization
 
-When the projection needs objects, a row mapper compiled by `RowMapperFactory` reads each row from the `DbDataReader` and builds the entity, DTO, record, tuple or anonymous type — the shapes are covered under [Projections](../guide/02-projections.md). The mapper is compiled once per plan shape and reused for every row.
+When the projection needs objects, `RowMapperFactory` compiles a row mapper that reads each row from the `DbDataReader` and builds an entity, DTO, record, tuple, or anonymous type. See [Projections](../guide/02-projections.md) for those shapes. NextORM compiles the mapper once per plan shape and reuses it for every row.
 
-A nullable aggregate scalar is materialized as `null`. When the projection is a nullable value type — the four variability families (`Stdev`/`Stdevp`/`Var`/`Varp`) are the first aggregates that return `T?` — the mapper's nullable read path guards the value getter with `IsDBNull`, so a SQL `NULL` reaches the caller as `null` instead of throwing from an unguarded getter. The terminal's declared `T?` and the nullable projection are one decision: `AggregateTerminalRewriter` projects the aggregate as `Nullable<T>` whenever the aggregate's parameter is `T?`.
+A nullable aggregate scalar is materialized as `null`. The four variability aggregates (`Stdev`/`Stdevp`/`Var`/`Varp`) are the first aggregates that return `T?`. For a nullable value-type projection, the mapper checks `IsDBNull` before calling the value getter, so SQL `NULL` reaches the caller as `null` instead of causing an exception.
+
+The terminal's declared `T?` and the nullable projection are one decision. `AggregateTerminalRewriter` projects the aggregate as `Nullable<T>` whenever the aggregate's parameter is `T?`.
 
 ## Terminals and their output shapes
+
+Choose a terminal by the result shape you need:
 
 | Terminal | Output |
 |---|---|
@@ -25,9 +29,13 @@ A nullable aggregate scalar is materialized as `null`. When the projection is a 
 | `ToDataReader` / `ToStream` / `ToTextReader` | **Raw**: the underlying `DbDataReader`, `Stream` or `TextReader` is handed to the caller, who owns and disposes it. |
 | `Prepare` | **Compiled, not executed**: returns an `IPreparedQueryCommand<TResult>` (see [plan cache and reuse](03-plan-cache-and-reuse.md)). |
 
-All terminals come in synchronous and asynchronous form (`ToList`/`ToListAsync`, `ToEnumerable`/`ToAsyncEnumerable`, `WriteJson`/`WriteJsonAsync`, ...); `Prepare` is the only one without an asynchronous twin. Apart from `Prepare`, they take the query parameters positionally. The buffered and streamed terminals reuse the same plan and differ only in when rows are materialized; the serializing terminals bypass the row mapper entirely. The aggregate terminals are declared on the entity builder (`ctx.From<T>()`), where they take the entity selector — `Count()`/`LongCount()` take none — while `ToDataReader`, `ToStream`, `ToTextReader` and `Pipeline` are declared on the `QueryCommand<TResult>` that `Select` returns.
+All terminals have synchronous and asynchronous forms (`ToList`/`ToListAsync`, `ToEnumerable`/`ToAsyncEnumerable`, `WriteJson`/`WriteJsonAsync`, ...), except `Prepare`, which has no asynchronous twin. All terminals except `Prepare` take query parameters positionally.
 
-The mutation builders (`CreateInsertBuilder`/`CreateUpdateBuilder`/`CreateDeleteBuilder`/`CreateMergeBuilder`/`CreateBulkInsertBuilder`) expose the same idea from the other side: `ToSql()` renders the statement without executing it, while `Insert()`/`Update()`/`Delete()`/`Merge()`/`BulkInsert()` are their executing terminals — see the Guide pages linked from [builder entry points](index.md#builder-entry-points).
+Buffered and streamed terminals reuse the same plan; they differ in when rows are materialized. Serializing terminals bypass the row mapper entirely.
+
+Aggregate terminals are declared on the entity builder (`ctx.From<T>()`) and take the entity selector; `Count()` and `LongCount()` take no selector. `ToDataReader`, `ToStream`, `ToTextReader`, and `Pipeline` are declared on the `QueryCommand<TResult>` returned by `Select`.
+
+Mutation builders (`CreateInsertBuilder`/`CreateUpdateBuilder`/`CreateDeleteBuilder`/`CreateMergeBuilder`/`CreateBulkInsertBuilder`) follow the same distinction from the other side. `ToSql()` renders a statement without executing it; `Insert()`/`Update()`/`Delete()`/`Merge()`/`BulkInsert()` execute it. See the Guide pages linked from [builder entry points](index.md#builder-entry-points).
 
 ## In-memory
 

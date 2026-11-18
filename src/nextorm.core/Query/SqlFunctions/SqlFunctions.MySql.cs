@@ -1,21 +1,25 @@
 namespace NextORM.Core;
 
 /// <summary>
-/// MySQL/MariaDB-only SQL surface: the native string/conditional idioms (<c>find_in_set</c>,
-/// <c>field</c>, <c>elt</c>, <c>substring_index</c>, <c>format</c>), the <c>%</c>-templated date
-/// conversion and Unix-epoch functions, the hexadecimal hash functions, the IPv4 conversion pair, the
-/// JSON mutation family, the binary UUID pair and the MariaDB-only names (extended regexp,
-/// <c>nvl</c>/<c>nvl2</c>, the Oracle-compatible date/number conversions, <c>kdf</c>, <c>xxh3</c>/
-/// <c>xxh32</c>, <c>json_detailed</c>/<c>json_compact</c>, the JSON canonicalisation pair
-/// <c>json_equals</c>/<c>json_normalize</c> and sequence access). It also carries the MySQL 8.4
-/// JSON constructor/query catalogue and the <c>-&gt;</c>/<c>-&gt;&gt;</c>/<c>MEMBER OF</c> operators
-/// (with the <c>JSON_TABLE</c> shape refusal), the
-/// string, numeric and bit catalogue: <c>bin</c>, <c>export_set</c>, <c>hex</c>, <c>make_set</c>,
-/// <c>oct</c>, <c>ord</c>, <c>quote</c>, <c>soundex</c>, <c>strcmp</c>, the Base64/hex codecs,
+/// Defines the MySQL and MariaDB SQL function surface. It includes native string and conditional
+/// functions (<c>find_in_set</c>, <c>field</c>, <c>elt</c>, <c>substring_index</c>, <c>format</c>),
+/// <c>%</c>-templated date conversion and Unix-epoch functions, hexadecimal hashes, IPv4 conversion,
+/// JSON mutation, and binary UUID conversion.
+/// <para>
+/// MariaDB adds extended regular expressions, <c>nvl</c>/<c>nvl2</c>, Oracle-compatible date and
+/// number conversions, <c>kdf</c>, <c>xxh3</c>/<c>xxh32</c>, <c>json_detailed</c>/<c>json_compact</c>,
+/// <c>json_equals</c>/<c>json_normalize</c>, and sequence access.
+/// </para>
+/// <para>
+/// MySQL 8.4 adds its JSON constructors and queries, the <c>-&gt;</c>/<c>-&gt;&gt;</c>/
+/// <c>MEMBER OF</c> operators, and the <c>JSON_TABLE</c> shape refusal. Its string, numeric, and bit
+/// functions include <c>bin</c>, <c>export_set</c>, <c>hex</c>, <c>make_set</c>, <c>oct</c>,
+/// <c>ord</c>, <c>quote</c>, <c>soundex</c>, <c>strcmp</c>, the Base64/hex codecs,
 /// <c>weight_string</c>, <c>conv</c>, <c>crc32</c>, <c>log2</c>, <c>rand</c>, <c>truncate</c>,
-/// <c>bit_count</c> and the <c>bit_and</c>/<c>bit_or</c>/<c>bit_xor</c> aggregates, and the
-/// <c>date</c>/<c>time</c> catalogue (<c>adddate</c>/<c>subdate</c>, <c>addtime</c>/<c>subtime</c>,
-/// <c>convert_tz</c>, <c>get_format</c>, <c>time_to_sec</c> and the remaining temporal accessors).
+/// <c>bit_count</c>, and the <c>bit_and</c>/<c>bit_or</c>/<c>bit_xor</c> aggregates. Its date/time
+/// functions include <c>adddate</c>/<c>subdate</c>, <c>addtime</c>/<c>subtime</c>, <c>convert_tz</c>,
+/// <c>get_format</c>, <c>time_to_sec</c>, and the remaining temporal accessors.
+/// </para>
 /// <para>
 /// Exposed through <see cref="SqlFunctions.MySql"/>; every member is gated per name by the dialect's
 /// <see cref="IMySqlFunctions"/> capability object and rejected by providers that do not opt in.
@@ -264,12 +268,14 @@ public class MySqlFunctions : CommonFunctions
 
     /// <summary>
     /// <c>json_storage_free(json)</c>: the bytes freed in the binary representation of a MySQL
-    /// <c>JSON</c> column value after it was updated in place by <c>JSON_SET</c>, <c>JSON_REPLACE</c> or
-    /// <c>JSON_REMOVE</c>. Returns <c>0</c> for a literal, a captured value or a column whose update
-    /// freed nothing, and <c>null</c> when <paramref name="json"/> is SQL NULL; an argument that is not
-    /// valid JSON fails on the server. Server-side only: the count describes MySQL's binary JSON
-    /// storage, not a portable JSON-text length, and providers that cannot express the operation reject
-    /// the call with <see cref="NotSupportedException"/>.
+    /// <c>JSON</c> column value after an in-place update by <c>JSON_SET</c>, <c>JSON_REPLACE</c>, or
+    /// <c>JSON_REMOVE</c>. Returns <c>0</c> for a literal, a captured value, or a column whose update
+    /// freed no bytes; returns <c>null</c> when <paramref name="json"/> is SQL NULL.
+    /// <para>
+    /// The server rejects an argument that is not valid JSON. This function runs on the server: its
+    /// result describes MySQL's binary JSON storage, not a portable JSON-text length. Providers that
+    /// cannot express the operation reject the call with <see cref="NotSupportedException"/>.
+    /// </para>
     /// </summary>
     public long? json_storage_free(string? json) => default!;
 
@@ -283,11 +289,13 @@ public class MySqlFunctions : CommonFunctions
     public string? json_type(string? json) => default!;
 
     /// <summary>
-    /// <c>JSON_TABLE(...)</c> is a table-producing construct, not a scalar function: it requires a
-    /// <c>FROM</c>/join position and a <c>COLUMNS</c> definition list, so no scalar expression can
-    /// reference it. The member exists only to carry the refusal; calling it throws
-    /// <see cref="NotSupportedException"/> in the body as well as when the expression is translated,
-    /// so a projection the planner folds client-side cannot silently evaluate to <c>null</c>.
+    /// <c>JSON_TABLE(...)</c> produces rows, not a scalar value. It requires a <c>FROM</c>/join position
+    /// and a <c>COLUMNS</c> definition list, so a scalar expression cannot reference it.
+    /// <para>
+    /// This member exists only to carry the refusal. Its body and expression translation both throw
+    /// <see cref="NotSupportedException"/>, so a projection folded client-side by the planner cannot
+    /// silently evaluate to <c>null</c>.
+    /// </para>
     /// </summary>
     public static object? json_table() => throw new NotSupportedException(JsonTableRefusal);
 
@@ -1048,14 +1056,18 @@ public class MySqlFunctions : CommonFunctions
     public long? yearweek(DateTime? date, int? mode) => default!;
 
     /// <summary>
-    /// <c>percentile_cont(0.5) within group (order by value) over (...)</c>: the median as the native
-    /// analytic composition (neither MySQL nor MariaDB has a <c>median</c> function). Complete the call
-    /// with <c>Over(...)</c>: a partition-only window (or an empty <c>over ()</c>) is supported, while a
-    /// window <c>ORDER BY</c> or a frame is refused. The result keeps one row per input row, unlike an
-    /// aggregate. MariaDB supports the form (MariaDB 10.3+, <c>double(18,10)</c>); MySQL has neither the
-    /// function nor the <c>WITHIN GROUP</c> grammar and refuses the call with
-    /// <see cref="NotSupportedException"/> naming MySQL. Requires
-    /// <see cref="ISqlDialect.SupportsPercentileWindow"/>.
+    /// <c>percentile_cont(0.5) within group (order by value) over (...)</c>: computes the median as an
+    /// analytic composition because neither MySQL nor MariaDB has a <c>median</c> function. Complete
+    /// this call with <c>Over(...)</c>.
+    /// <para>
+    /// A partition-only window, including an empty <c>over ()</c>, is supported; a window
+    /// <c>ORDER BY</c> or frame is refused. Unlike an aggregate, this form keeps one row per input row.
+    /// </para>
+    /// <para>
+    /// MariaDB supports this form (MariaDB 10.3+, <c>double(18,10)</c>). MySQL has neither the function
+    /// nor the <c>WITHIN GROUP</c> grammar and refuses the call with <see cref="NotSupportedException"/>
+    /// naming MySQL. The dialect must support <see cref="ISqlDialect.SupportsPercentileWindow"/>.
+    /// </para>
     /// </summary>
     /// <typeparam name="T">The value expression's type.</typeparam>
     /// <param name="value">The value to take the median of.</param>
@@ -1063,12 +1075,15 @@ public class MySqlFunctions : CommonFunctions
     public WindowFunction<double?> median<T>(T? value) => default!;
 
     /// <summary>
-    /// <c>percentile</c>: not supported by MySQL or MariaDB. The native spellings are the window
-    /// <c>CommonFunctions.percentile_cont</c> (interpolated) and
-    /// <c>CommonFunctions.percentile_disc</c> (an input value) completed with <c>Over(...)</c>, which
-    /// differ in whether the result is interpolated; a generic alias would hide that difference.
-    /// Referencing this member throws <see cref="NotSupportedException"/> at translation time, naming the
-    /// actual provider. The <paramref name="fraction"/> is a fraction in <c>[0, 1]</c>, not a percentage.
+    /// <c>percentile</c> is not supported by MySQL or MariaDB. Use the window
+    /// <c>CommonFunctions.percentile_cont</c> for an interpolated result or
+    /// <c>CommonFunctions.percentile_disc</c> for an input value, and complete either call with
+    /// <c>Over(...)</c>. A generic alias would hide the difference between these results.
+    /// <para>
+    /// Referencing this member throws <see cref="NotSupportedException"/> at translation time and names
+    /// the actual provider. The <paramref name="fraction"/> is a fraction in <c>[0, 1]</c>, not a
+    /// percentage.
+    /// </para>
     /// </summary>
     /// <typeparam name="T">The value expression's type.</typeparam>
     /// <param name="fraction">The percentile fraction, in <c>[0, 1]</c>.</param>

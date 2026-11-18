@@ -1,20 +1,18 @@
 # Специфичный для SQL Server SQL
 
-> SQL Server даёт условную функцию `CHOOSE`, библиотеку скаляров, специфичных для T-SQL
-> (`PATINDEX`, `QUOTENAME`, `SOUNDEX`, `DIFFERENCE`, `STRING_ESCAPE`, `UNICODE`, `NCHAR`, `FORMAT`,
-> тригонометрические функции, `DATENAME`, `DATE_BUCKET`, `HASHBYTES`, `NEWSEQUENTIALID`, семейство
-> дат часов/смещения/`*FROMPARTS`, скаляры `CHECKSUM`/`COMPRESS`/`RAND`/`STUFF`, функции метаданных и
-> конструкторы/агрегаты SQL/JSON), хинты инструкции/таблицы и форму результата `FOR JSON`/`FOR XML`,
-> методы типа XML (`value`/`query`/`exist` и rowset `nodes`), нативные конструкции источника
-> `PIVOT`/`UNPIVOT`, а также табличные функции `string_split`/`openjson`.
+> Функции и конструкции SQL Server, которых нет в общем кросс-провайдерном API, сгруппированы здесь
+> по месту использования: скалярные значения для каждой строки, агрегаты для группы и функции,
+> добавляющие строки в источник `FROM`. Для функций с версионным ограничением отдельно указаны
+> дополнительные требования к базе данных.
 
 **Что нужно знать:** [Запросы и проекции](../../engine/index.md) · [Провайдер SQL Server](../../connecting-providers/sqlserver.md)
 
 ## `CHOOSE`
 
-`SqlFunctions.SqlServer.choose(index, v1, v2, ...)` рендерит `CHOOSE(index, v1, v2, ...)` и гейтится
-[`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose) (только SQL Server; все остальные
-провайдеры выбрасывают исключение).
+`SqlFunctions.SqlServer.choose(index, v1, v2, ...)` формирует SQL-вызов
+`CHOOSE(index, v1, v2, ...)`. Диалект разрешает его только при
+[`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose) — то есть только для SQL Server;
+остальные провайдеры выбрасывают исключение.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -33,7 +31,7 @@ select choose(2, 'a', 'b', 'c') as [Label]
 
 [`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[])) привязывает табличный хинт к таблице `FROM`
 запроса ([`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints)), а хинт запроса
-рендерит завершающую клаузу `OPTION (...)`, например `OPTION (RECOMPILE)`
+добавляет в конец SQL клаузу `OPTION (...)`, например `OPTION (RECOMPILE)`
 ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints)); параметр CTE
 `maxRecursion` отображается в `option (maxrecursion n)`. См.
 [Хинты запросов](../15-query-hints.md).
@@ -55,7 +53,7 @@ select id
  from simple_entity with (updlock)
 ```
 
-`ForUpdate` рендерит `updlock` (блокировка обновления до конца транзакции), а `ForShare` — `holdlock`
+`ForUpdate` добавляет `updlock` (блокировка обновления до конца транзакции), а `ForShare` — `holdlock`
 (разделяемая блокировка). Хинт блокировки комбинируется с
 [`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[])): `dataContext.From<ISimpleEntity>(o => o.WithTableHint("rowlock")).ForUpdate()` даёт
 `with (rowlock, updlock)`. См.
@@ -72,7 +70,7 @@ XML-документом
 ## Методы типа XML
 
 `SqlFunctions.SqlServer.xml_value<T>(xml, xpath, sqlType)`, `xml_query(xml, xpath)` и
-`xml_exist(xml, xpath)` рендерят постфиксные методы T-SQL
+`xml_exist(xml, xpath)` формируют вызовы постфиксных методов T-SQL
 ([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)); XQuery и
 SQL-тип обязаны быть строковыми литералами, а `xml_exist` возвращает `bit` (в предикатном контексте
 сравнивается с `1`).
@@ -94,7 +92,7 @@ select payload.value('(/root/item)[1]', 'nvarchar(100)') as [Value],
 ```
 
 Строковый метод `.nodes` — коррелированный источник `CrossApply`/`OuterApply`: `xml_nodes(xml, xpath)`
-разворачивает XML-значение в строки (по одной на узел) и рендерит
+разворачивает XML-значение в строки (по одной на узел) и формирует SQL
 `<xml>.nodes('xpath') as [alias]([value])`, после чего развёрнутый `IXmlNodesRow.Value` проецируется
 скалярными методами выше. Операнд обязан быть колонкой внешней строки, а XQuery — строковым литералом.
 
@@ -116,7 +114,7 @@ select t2.value.value('(.)[1]/@id', 'int') as [Id]
 ## Табличные функции
 
 `string_split(...)` и `openjson(...)` доступны через
-[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) с вызовом runtime-фабрики. См.
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) с передачей вызова фабрики табличного источника. См.
 [Табличные функции](../13-table-valued-functions.md) и
 [Поддержка JSON в разных провайдерах](../16-json.md).
 
@@ -173,18 +171,19 @@ var stacked = ctx.From<Quarterly>()
 
 **Сырые имена, всегда безопасно квотируемые.** Строки-идентификаторы этих API — это исходные
 неэкранированные имена, а не SQL: `PivotValue.Create` несёт **значение данных** pivot, `UnpivotColumn.Create` —
-имя исходной колонки, а сведённые/сложенные колонки результата читаются по имени. Каждое выведенное
+имя исходной колонки, а сведённые/сложенные колонки результата читаются по имени — через методы
+чтения значения, например `GetString` или `SqlFunctions.Column<T>`. Каждое выведенное
 вхождение проходит ровно одну стадию квотирования провайдера, независимо от опции контекста
 [`UseQuotedIdentifiers`](xref:NextORM.Core.DataContextBuilder.UseQuotedIdentifiers(System.Boolean)) —
-при выключенном квотировании доступ по имени всё равно рендерит `[1]` в SQL Server / `"1"` в
+при выключенном квотировании доступ по имени всё равно формирует `[1]` в SQL Server / `"1"` в
 PostgreSQL и SQLite / `` `1` `` в MySQL и ClickHouse. Точка — литеральный символ имени (никогда не
 квалификатор schema/alias), SQL-подобная пунктуация остаётся внутри одного квотированного
 идентификатора, а ручное предварительное квотирование **не** поддерживается: `Column(t, "[1]")` — это
-литеральное трёхсимвольное имя `[1]` (рендерится `[[1]]]` в SQL Server), поэтому для колонки с именем
+литеральное трёхсимвольное имя `[1]` (в SQL Server получается `[[1]]]`), поэтому для колонки с именем
 `1` пишите `Column(t, "1")` — именно поэтому пример выше читает сведённые колонки через
 [`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions.Column``1(System.Object,System.String)), а не
 `GetNullableDecimal("[1]")`. В SQL Server встроенная `]` удваивается, поэтому значение pivot `a]b`
-рендерится `[a]]b]` и в списке `IN (...)`, и в ссылке проекции.
+в SQL получается `[a]]b]` и в списке `IN (...)`, и в ссылке проекции.
 
 Производный запрос может быть источником разворота — тогда во вход `PIVOT` попадают join'ы и
 вычисляемые aggregate/`FOR`-колонки (эквивалент разворота CTE):
@@ -255,7 +254,7 @@ select category, [Q1], [Q2]
 ```
 
 Типизированные члены — это **псевдонимы** над сведёнными колонками
-(`Q1 = pivot.Value<decimal?>("1")` рендерит `[1] as [Q1]`), поэтому форма может переименовывать
+(`Q1 = pivot.Value<decimal?>("1")` формирует SQL `[1] as [Q1]`), поэтому форма может переименовывать
 ячейки и располагать их иначе, чем в списке `IN`. Группирующий член — любой другой прямой член
 внутреннего источника (`s.Category`); члены, которые проекция не упоминает, остаются входом
 группировки. `Value<T>` требует CLR-тип явно — вывода нет и nullability не выводится автоматически:
@@ -295,17 +294,19 @@ var stacked = ctx.From<Quarterly>()
     .ToList();
 ```
 
-Строки значений и ролей — **рантайм-идентификаторы** и **сырые имена**: они не проверяются ни против данных, ни против
-внутреннего маппинга на этапе компиляции, и каждое выводится как один безопасно квотированный
+Строки значений и ролей — **идентификаторы, проверяемые во время выполнения**, и **сырые имена**: они не проверяются ни против данных, ни против
+описания столбцов внутренней модели на этапе компиляции, и каждое выводится как один безопасно квотированный
 идентификатор независимо от опции контекста
 [`UseQuotedIdentifiers`](xref:NextORM.Core.DataContextBuilder.UseQuotedIdentifiers(System.Boolean)) —
 точка литеральна, а встроенные скобки не являются предварительно квотированной формой, поэтому
-`Value("[1]")` называет колонку `[1]` (рендерится `[[1]]]` в SQL Server), а не молча `1`. Отсутствующее значение PIVOT всё равно рендерит свою
-колонку, но даёт SQL `NULL`, поэтому non-nullable ячейка упадёт при материализации — объявляйте её
+`Value("[1]")` называет колонку `[1]` (в SQL Server получается `[[1]]]`), а не молча `1`. Отсутствующее
+значение PIVOT всё равно добавляет свою колонку, но даёт SQL `NULL`, поэтому ячейка, объявленная
+non-nullable (не допускающая `null`), упадёт при материализации — объявляйте её
 nullable; неверное имя или несовместимый тип ячейки могут упасть при подготовке или материализации
 запроса, а не на компиляции. По-настоящему динамический PIVOT, список значений которого известен
-только в рантайме, нельзя выразить типизированной формой — он остаётся на нетипизированной
-перегрузке `TableAlias`. Типизированная проекция fail-closed: дублирующееся значение, проекция без
+только во время выполнения, нельзя выразить типизированной формой — он остаётся на нетипизированной
+перегрузке `TableAlias`. Типизированная проекция отклоняет некорректные формы вместо генерации
+неверного SQL: дублирующееся значение, проекция без
 значений, неконстантное имя значения, группирующий член, совпадающий с агрегатом или `FOR`-колонкой,
 пустой список колонок UNPIVOT, отсутствующая роль UNPIVOT и конфликтующие идентификаторы ролей
 выбрасывают `ArgumentException` (или `NotSupportedException` при чтении внутреннего источника
@@ -314,12 +315,12 @@ nullable; неверное имя или несовместимый тип яч�
 **Варианты и границы.** Типизированные операторы покрывают те же внутренние источники, что и
 нетипизированные — обычную таблицу/сущность, **табличную функцию** или производный запрос, поэтому
 `ctx.From(() => Db.MyTvf()).Pivot(...)` разворачивает вызов функции так же, как таблицу.
-Строки значений остаются **рантайм-идентификаторами** (сырыми именами, всегда безопасно квотируемыми, как выше): опечатка или отсутствующее значение не
-проверяются на этапе компиляции, поэтому её колонка всё равно рендерится, а ячейка, которой не
+Строки значений остаются **идентификаторами, проверяемыми во время выполнения** (сырыми именами, всегда безопасно квотируемыми, как выше): опечатка или отсутствующее значение не
+проверяются на этапе компиляции, поэтому её колонка всё равно попадает в SQL, а ячейка, которой не
 соответствует ни одна строка источника, даёт SQL `NULL` (объявляйте ячейку nullable). По-настоящему
-**динамический PIVOT** — список значений, известный только в рантайме — не имеет типизированной формы и
+**динамический PIVOT** — список значений, известный только во время выполнения — не имеет типизированной формы и
 остаётся на нетипизированной перегрузке [`TableAlias`](xref:NextORM.Core.TableAlias), которая не
-менялась. Оба оператора сохраняют гвард eager-load: вызов на builder'е с состоянием
+менялась. Оба оператора проверяют ограничение eager-load: вызов на builder'е с состоянием
 `LoadWith`/single-query бросает `NotSupportedException` (композиция его не переживает), а чередующиеся
 типизированные запросы не делят между собой залипшее состояние команды или кэша планов.
 
@@ -327,7 +328,7 @@ nullable; неверное имя или несовместимый тип яч�
 
 [`FromOptions.TableSample`](xref:NextORM.Core.FromOptions.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) добавляет модификатор `TABLESAMPLE` к
 основной таблице запроса ([`TableSample`](xref:NextORM.Core.ISqlDialect.TableSample));
-необязательный seed делает выборку воспроизводимой. SQL Server рендерит
+необязательный seed делает выборку воспроизводимой. SQL Server формирует
 `tablesample (10 percent)` / `tablesample (10 percent) repeatable (3)`
 (`ITableSampleMethods.Render`).
 
@@ -349,14 +350,47 @@ SQL Server поддерживает только метод `System`
 
 ## Полнотекстовый поиск
 
-Кросс-провайдерные boolean-предикаты `contains`/`freetext` рендерят `CONTAINS`/`FREETEXT`. Для
+Кросс-провайдерные boolean-предикаты `contains`/`freetext` преобразуются в `CONTAINS`/`FREETEXT`. Для
 ранжирования `SqlFunctions.SqlServer.containstable`/`freetexttable` отдают ключ совпавшей строки и
 оценку `RANK` через `SqlFunctions.IKeyRankRow<TKey>`; см.
 [Табличные функции](../13-table-valued-functions.md#встроенные-табличные-функции).
 
+## Поиск ближайших соседей по векторам
+
+Общий API `EntityBuilder<TEntity>.VectorSearch(...)` поддерживает SQL Server 2025 (major-версия 17) и
+новее. Точный поиск сортирует по скалярному результату `VECTOR_DISTANCE` и ограничивает число строк
+значением `topK`:
+
+```sql
+select top (10) id, embedding,
+       VECTOR_DISTANCE('cosine', embedding, @queryVector) as [distance]
+  from dbo.document
+ order by [distance]
+```
+
+Приближённый поиск использует `VECTOR_SEARCH` как источник `FROM` и возвращаемый им столбец
+`distance`. Грамматика SQL Server выбирается явно в контексте и не выводится из версии сервера.
+`TopN` (грамматика по умолчанию) выдаёт `TOP (k)` вместе с `TOP_N = k`; `WithApproximate` выдаёт
+`TOP (k) WITH APPROXIMATE` без `TOP_N`. В обеих формах `distance` сортируется по возрастанию.
+Настройка грамматики и требования к базе приведены на странице [провайдера SQL Server — поиск по векторам](../../connecting-providers/sqlserver.md#поиск-по-векторам).
+
+Общие метрики: косинусная (`'cosine'`), евклидова/L2 (`'euclidean'`) и скалярное произведение
+(`'dot'`, **отрицательное** скалярное произведение); для всех трёх меньшая дистанция означает
+более близкий вектор. `Exact` использует `VECTOR_DISTANCE`, а `Approximate` — `VECTOR_SEARCH` и не
+переключается молча на точный путь. Скалярный маркер `SqlFunctions.VectorDistance(...)` переводится
+в `VECTOR_DISTANCE` на SQL Server. Approximate требует положительный `topK`, прямой физический
+источник-таблицу сущности и отсутствие пользовательской сортировки, paging, соединений, группировки,
+`DISTINCT` и производного источника: табличная функция сама задаёт top-k и сортировку distance по
+возрастанию. PostgreSQL-only метрики L1, Hamming и Jaccard на SQL Server не подменяются.
+Неподдерживаемые метрики, незаданная версия или версия ниже 17,
+а также провайдеры без поддержки векторного поиска явно отклоняются до отправки команды.
+
+Общий контракт векторов и конвейер эмбеддингов/поиска на уровне приложения описаны в руководстве
+[«ИИ и векторный поиск»](../../guide/36-ai-and-vector-search.md).
+
 ## Последовательности
 
-`SqlFunctions.SqlServer.next_value_for(sequence)` и его псевдоним `nextval(sequence)` рендерят
+`SqlFunctions.SqlServer.next_value_for(sequence)` и его псевдоним `nextval(sequence)` формируют
 T-SQL-выражение `NEXT VALUE FOR` и возвращают CLR `long`. Имя должно быть константной строкой,
 записанной одной компонентой (`name`) или двумя (`schema.name`); компоненты квотируются квадратными
 скобками отдельно, а встроенная `]` удваивается, поэтому текст имени не может выйти за пределы
@@ -381,25 +415,31 @@ select next value for [dbo].[order_seq] as [Next]
 
 ## Версионно-зависимые функции (2022 и 2025)
 
-Имена [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) ниже закрыты **объявленной
-мажорной версией сервера**. Гейт версионный: в отличие от нативного типа хранения JSON
-(`SupportsJson`, [#345](https://github.com/AlexeyShirshov/nextorm/issues/345)), который также учитывает
-allowlist edition, потому что некоторые продукты Azure/Fabric имеют этот тип, сообщая меньшую мажорную
-версию, доступность функций следует самой мажорной версии движка. Объявление edition здесь никогда не
-подменяет версию, а неверсионированный контекст отклоняет их до SQL.
+Доступность имён [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) проверяется по **мажорной
+версии сервера, объявленной в конфигурации провайдера**. Это только проверка указанной версии:
+провайдер не подключается к базе, чтобы узнать её реальную версию или проверить настройки базы.
+Поэтому дополнительные требования к уровню совместимости, preview-функциям и коллации из таблицы
+нужно обеспечить отдельно. В отличие от проверки функций, нативный тип хранения JSON
+(`SupportsJson`, [#345](https://github.com/AlexeyShirshov/nextorm/issues/345)) также учитывает список
+разрешённых редакций продукта: некоторые продукты Azure/Fabric имеют этот тип, хотя сообщают меньшую
+мажорную версию. Для функций доступность определяется мажорной версией движка; редакция продукта её не заменяет, а
+контекст без указанной версии отклоняет такие вызовы до SQL.
 
-| Член | SQL | Требование |
-|---|---|---|
-| `SqlFunctions.SqlServer.left_shift` / `right_shift` / `bit_count` / `get_bit` / `set_bit` (набор перегрузок по типу операнда `byte`/`short`/`int`/`long`) | `CASE WHEN … THEN CAST(NULL AS <тип операнда>) ELSE left_shift(cast(value as tinyint\|smallint\|int\|bigint), cast(shift as bigint)) END`; `bit_count` → `bigint`, `get_bit` → `bit` | мажорная версия 16 (SQL Server 2022) |
-| `SqlFunctions.SqlServer.regexp_count(input, pattern)` | `regexp_count(input, pattern)` | мажорная версия 17 (SQL Server 2025); уровень совместимости не требуется |
-| `SqlFunctions.SqlServer.regexp_substr(input, pattern[, start[, occurrence[, match_type]]])` / `regexp_instr(input, pattern[, start[, occurrence[, return_option[, match_type]]]])` | нативный вызов; `0` для `regexp_instr` без совпадения; match type — аргумент `varchar` и рендерится как `cast(… as varchar(4000))` (аргумент `nvarchar` даёт Msg 8116) | мажорная версия 17; уровень совместимости не требуется |
-| `SqlFunctions.SqlServer.regexp_matches(input, pattern[, match_type])` | источник `FROM`; строки — `match_id bigint`, `start_position`/`end_position int`, `match_value`, `substring_matches` (полный JSON-текст захватов) | мажорная версия 17 **и** уровень совместимости БД 170 |
-| `SqlFunctions.SqlServer.edit_distance(input, pattern[, maximum_distance])` / `edit_distance_similarity` / `jaro_winkler_distance` / `jaro_winkler_similarity` | нативный вызов; ограниченная форма `edit_distance` возвращает `maximum_distance + 1`, когда расстояние больше предела | мажорная версия 17 **и** уровень совместимости 170 **и** `PREVIEW_FEATURES = ON` **и** Windows-коллация |
-| `SqlFunctions.SqlServer.product(value)` | `product(value)` (только агрегатный контекст — без `OVER`) | мажорная версия 17 |
-| `SqlFunctions.SqlServer.regexp_split_to_table(input, pattern)` | источник `FROM`; строки — `value` и one-based `ordinal bigint` | мажорная версия 17 **и** уровень совместимости БД 170 |
-| `SqlFunctions.SqlServer.approx_count_distinct(value)` | `approx_count_distinct(value)` (агрегатный контекст; `0` для пустой группы и группы из NULL) | мажорная версия 15 (SQL Server 2019) |
-| `SqlFunctions.SqlServer.checksum_agg(value)` / `grouping_id(expressions...)` | `checksum_agg(value)`; `grouping_id(a, b, …)` в списке `SELECT`, в `HAVING` или в `ORDER BY` сгруппированной команды | версионного порога нет; `GROUPING_ID` требует контекста `GROUP BY`, и каждый аргумент должен быть выражением группировки (оба условия проверяются до SQL) |
-| `SqlFunctions.SqlServer.approx_percentile_cont(fraction, value)` / `approx_percentile_disc(fraction, value)` | `approx_percentile_cont(f) within group (order by value)`; форма `_disc` возвращает тип входного выражения сортировки | мажорная версия 16 (SQL Server 2022); формы `OVER` нет |
+Столбец **Форма запроса** подсказывает, где использовать член: скаляр даёт значение для каждой строки,
+агрегат обобщает группу строк, а табличная функция добавляет строки в источник `FROM`.
+
+| Член | Форма запроса | SQL | Требование |
+|---|---|---|---|
+| `SqlFunctions.SqlServer.left_shift` / `right_shift` / `bit_count` / `get_bit` / `set_bit` (набор перегрузок по типу операнда `byte`/`short`/`int`/`long`) | Скаляр | `CASE WHEN … THEN CAST(NULL AS <тип операнда>) ELSE left_shift(cast(value as tinyint\|smallint\|int\|bigint), cast(shift as bigint)) END`; `bit_count` → `bigint`, `get_bit` → `bit` | мажорная версия 16 (SQL Server 2022) |
+| `SqlFunctions.SqlServer.regexp_count(input, pattern)` | Скаляр | `regexp_count(input, pattern)` | мажорная версия 17 (SQL Server 2025); уровень совместимости не требуется |
+| `SqlFunctions.SqlServer.regexp_substr(input, pattern[, start[, occurrence[, match_type]]])` / `regexp_instr(input, pattern[, start[, occurrence[, return_option[, match_type]]]])` | Скаляр | нативный вызов; `0` для `regexp_instr` без совпадения; match type — аргумент `varchar`, в SQL он записывается как `cast(… as varchar(4000))` (аргумент `nvarchar` даёт Msg 8116) | мажорная версия 17; уровень совместимости не требуется |
+| `SqlFunctions.SqlServer.regexp_matches(input, pattern[, match_type])` | Табличная функция (`FROM`) | строки — `match_id bigint`, `start_position`/`end_position int`, `match_value`, `substring_matches` (полный JSON-текст захватов) | мажорная версия 17 **и** уровень совместимости БД 170 |
+| `SqlFunctions.SqlServer.edit_distance(input, pattern[, maximum_distance])` / `edit_distance_similarity` / `jaro_winkler_distance` / `jaro_winkler_similarity` | Скаляр | нативный вызов; ограниченная форма `edit_distance` возвращает `maximum_distance + 1`, когда расстояние больше предела | мажорная версия 17 **и** уровень совместимости 170 **и** `PREVIEW_FEATURES = ON` **и** Windows-коллация |
+| `SqlFunctions.SqlServer.product(value)` | Агрегат | `product(value)` (только агрегатный контекст — без `OVER`) | мажорная версия 17 |
+| `SqlFunctions.SqlServer.regexp_split_to_table(input, pattern)` | Табличная функция (`FROM`) | строки — `value` и порядковый номер `ordinal bigint`, начиная с 1 | мажорная версия 17 **и** уровень совместимости БД 170 |
+| `SqlFunctions.SqlServer.approx_count_distinct(value)` | Агрегат | `approx_count_distinct(value)` (`0` для пустой группы и группы из NULL) | мажорная версия 15 (SQL Server 2019) |
+| `SqlFunctions.SqlServer.checksum_agg(value)` / `grouping_id(expressions...)` | Агрегат / выражение сгруппированного запроса | `checksum_agg(value)`; `grouping_id(a, b, …)` в списке `SELECT`, в `HAVING` или в `ORDER BY` сгруппированной команды | версионного порога нет; `GROUPING_ID` требует контекста `GROUP BY`, и каждый аргумент должен быть выражением группировки (оба условия проверяются до SQL) |
+| `SqlFunctions.SqlServer.approx_percentile_cont(fraction, value)` / `approx_percentile_disc(fraction, value)` | Упорядоченный агрегат | `approx_percentile_cont(f) within group (order by value)`; форма `_disc` возвращает тип входного выражения сортировки | мажорная версия 16 (SQL Server 2022); формы `OVER` нет |
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -420,58 +460,73 @@ var fragments = dataContext
 ```
 
 Контекст, объявленный для 15, 16 или 17, разрешает ровно те строки, которые перечисляет его мажорная
-версия; всё, что ниже или не версионировано, отклоняется **до SQL**, например:
+версия; всё, что ниже или не версионировано, отклоняется **до SQL**. Проверяется объявленная версия,
+а не подключение к реальной базе. Например:
 
 ```text
 The LEFT_SHIFT function requires SQL Server major version 16 or later; declared major version: 15.
 The REGEXP_SPLIT_TO_TABLE function requires SQL Server major version 17 or later; declared major version: 16.
 ```
 
-Битовое семейство типизирует каждый аргумент внутри вызова и закрывает NULL-операнд, сдвиг, смещение или
-значение бита типизированным NULL, потому что «голый» `left_shift(NULL, …)` даёт Msg 8116; тип самого
-операнда выбирает `tinyint`/`smallint`/`int`/`bigint`, `bit_count` возвращает `bigint` (`long?`), а
-`get_bit` — `bit` (`bool?`). `right_shift` — логический (zero-fill) сдвиг движка: `right_shift(-8, 1)`
-равно `2147483644`. Поскольку семейство — набор перегрузок по типу операнда, нетипизированная константа
-привязывается к наименьшей перегрузке (`left_shift(1, 2)` → `byte?`/`tinyint`, `left_shift(-8, 1)` →
-`short?`): приводите операнд (`left_shift((int?)1, 2)`), когда нужен конкретный тип SQL.
-`regexp_split_to_table` — реальный гейт по двум осям: на уровне совместимости 160 движок мажорной версии
-17 сообщает, что функции нет (Msg 208), поэтому условие 170 проверяется вживую, а не предполагается.
-`product` предлагается только в агрегатном контексте.
+**Битовые функции.** Они задают тип каждого аргумента внутри вызова. Если операнд, сдвиг, смещение
+или значение бита равно NULL, функция использует типизированный NULL: «голый»
+`left_shift(NULL, …)` без типа даёт Msg 8116. Тип операнда выбирает
+`tinyint`/`smallint`/`int`/`bigint`; `bit_count` возвращает `bigint`
+(`long?`), а `get_bit` — `bit` (`bool?`). `right_shift` — логический сдвиг, при котором освободившиеся
+биты заполняются нулями:
+`right_shift(-8, 1)` равно `2147483644`. Для каждого типа операнда есть свой набор перегрузок, поэтому
+нетипизированная константа привязывается к наименьшей (`left_shift(1, 2)` → `byte?`/`tinyint`,
+`left_shift(-8, 1)` → `short?`). Приведите операнд (`left_shift((int?)1, 2)`), если нужен конкретный
+тип SQL.
 
-Regex-скаляры U3 и fuzzy-семейство выполнены на протестированной базовой сборке `17.0.5005.3`:
-`regexp_substr`/`regexp_instr` работают на уровнях совместимости **160 и 170**, тогда как
-`regexp_matches` исчезает на 160 (Msg 208), а четырём fuzzy-именам нужны совместимость 170,
-`PREVIEW_FEATURES = ON` (по умолчанию выключен) и Windows-коллация (коллация `SQL_*` даёт Msg 9847, а
-отсутствие preview-флага — Msg 195). Это рантайм-предусловия, которые диалект не может прочитать,
-поэтому они документируются и проверяются вживую; версионный флаг обещает только гейт мажорной версии,
-и обещаний для будущих сборок не даётся.
+**Табличная функция и уровень совместимости.** `regexp_split_to_table` требует одновременно мажорную
+версию 17 и уровень совместимости 170. На уровне 160 движок версии 17 сообщает, что функции нет
+(Msg 208), поэтому требование 170 проверяется на реальной базе, а не выводится из её мажорной версии.
 
-Семейство агрегатов U4 существует только в агрегатном контексте. `approx_count_distinct` — это `long`
-(`bigint`), и для пустой группы и группы из NULL он считает `0`, а не `NULL`; `checksum_agg` — `int?` и
-возвращает там `NULL`; приблизительные квантили — `double?` и тип входного выражения сортировки
-соответственно, и тоже возвращают `NULL`. Постоянный NULL-операнд рендерится как типизированный
-`CAST(NULL AS <тип>)` («голый» `NULL` даёт Msg 8117); дробь квантиля должна быть независимым от строки
-литералом или захваченной переменной в `[0, 1]`, зависящая от строки дробь отклоняется до SQL, а
-литеральный или NULL-ключ `WITHIN GROUP` отклоняется до SQL, потому что движок отвечает Msg 5309.
-Обязанности `GROUPING_ID` по контексту группировки и по списку группировки проверяются до выполнения при
-нуле отправленных операторов; ни у одного приблизительного квантиля нет перегрузки `OVER`
-(упорядоченные агрегаты, только `WITHIN GROUP`), а форма `OVER`, сконструированная другим способом,
-отвергается движком с Msg 4113 (`checksum_agg` — единственное имя, чью нативную форму `OVER` движок
-принимает, но здесь предоставляется только агрегатная форма). Оба квантиля и подсчёт
-различных значений приблизительны: вендор документирует ошибку ранга около 1,33 % при 99 % доверия для
-квантилей, и это статистическая граница, а не детерминированный допуск.
+**Агрегаты.** `product`, `approx_count_distinct`, `checksum_agg` и приблизительные квантили применяются
+к группе строк, а не отдельно к каждой строке. `GROUPING_ID` — выражение сгруппированного запроса, а не
+обычный построчный скаляр; см. ограничения в таблице.
+
+**Регулярные выражения и функции нечёткого сравнения (fuzzy): требования базы.** Скаляры U3 и эти функции проверены на
+базовой сборке `17.0.5005.3`: `regexp_substr`/`regexp_instr` работают при уровнях совместимости
+**160 и 170**, а `regexp_matches` отсутствует на уровне 160 (Msg 208). Четырём функциям нечёткого сравнения нужны
+уровень совместимости 170, `PREVIEW_FEATURES = ON` (по умолчанию выключен) и Windows-коллация.
+Коллация `SQL_*` даёт Msg 9847, а отсутствие preview-флага — Msg 195. Диалект не может проверить эти
+настройки базы, поэтому они указаны здесь и проверены на реальной базе. Объявленная версия включает
+только проверку мажорной версии; обещаний для будущих сборок нет.
+
+**Агрегатные результаты и ограничения.** `approx_count_distinct` возвращает `long` (`bigint`) и считает
+`0`, а не `NULL`, для пустой группы и группы из NULL. `checksum_agg` возвращает `int?` и в этих случаях
+даёт `NULL`. Приблизительные квантили возвращают `double?` и тип входного выражения сортировки
+соответственно; они тоже дают `NULL`.
+
+Постоянный NULL-операнд записывается в SQL как `CAST(NULL AS <тип>)` («голый» `NULL` даёт Msg 8117).
+Дробь квантиля должна быть независимым от строки литералом или захваченной переменной в `[0, 1]`;
+зависящая от строки дробь отклоняется до SQL. Литеральный или NULL-ключ `WITHIN GROUP` тоже
+отклоняется до SQL, потому что движок отвечает Msg 5309. Требования `GROUPING_ID` к контексту и списку
+группировки проверяются до выполнения, пока не отправлено ни одного оператора.
+
+У приблизительных квантилей нет формы `OVER`: это упорядоченные агрегаты, которые используют только
+`WITHIN GROUP`. Движок отвергает форму `OVER`, собранную другим способом, с Msg 4113. Движок принимает
+`OVER` для `checksum_agg`, но этот API предоставляет только агрегатную форму. Квантили и подсчёт
+различных значений приблизительны. Вендор указывает для квантилей ошибку ранга около 1,33 % при
+доверии 99 %; это статистическая граница, а не детерминированный допуск.
 
 ## Скаляры T-SQL
 
-`SqlFunctions.SqlServer` открывает скалярные функции, специфичные для T-SQL, через
+`SqlFunctions.SqlServer` предоставляет функции SQL Server через
 [`ISqlDialect.SqlServerFunctions`](xref:NextORM.Core.ISqlDialect.SqlServerFunctions)
 ([`ISqlServerFunctions`](xref:NextORM.Core.ISqlServerFunctions)); SQL Server — единственный
-провайдер, который её реализует, поэтому все остальные провайдеры для этих членов бросают
-`NotSupportedException`. Переносимых аналогов у них нет: кросс-провайдерные `ascii`/`char`/`translate`
-живут в [`SqlFunctions.Sql`](../../scalar-functions/01-string-functions.md#кросс-провайдерные-скалярные-функции), а
-`Math.Log10` и так рендерит T-SQL `LOG10`.
+провайдер с этой частью API; остальные провайдеры для этих членов бросают `NotSupportedException`.
+Большинство функций ниже — скаляры: они дают значение для каждой строки проекции. Агрегаты и
+ограничения на место вызова отмечены отдельно. Переносимых аналогов у этих функций нет:
+кросс-провайдерные `ascii`/`char`/`translate` находятся в
+[`SqlFunctions.Sql`](../../scalar-functions/01-string-functions.md#кросс-провайдерные-скалярные-функции), а
+`Math.Log10` и так преобразуется в T-SQL `LOG10`.
 
-Функции можно использовать как обычные значения (и как предикаты там, где форма T-SQL — условие):
+Большинство функций можно проецировать как значения; функции, чья форма T-SQL является условием,
+можно также использовать в предикате. Для некоторых членов действуют более узкие ограничения, которые
+указаны в списке:
 
 ```csharp
 var data = System.Text.Encoding.UTF8.GetBytes("abc");
@@ -517,52 +572,68 @@ select patindex('%a%', somestring) as [Pos],
  from complex_entity
 ```
 
-* **Строковые:** `patindex(pattern, expression)`, `quotename(value)` / `quotename(value, quote)`,
-  `soundex(value)`, `difference(first, second)`, `string_escape(value, type)`, `unicode(value)`,
-  `nchar(code)`, `format(value, format)` / `format(value, format, culture)` и
-  `stuff(value, start, length, newValue)` (только строка — T-SQL `STUFF` неявно преобразует бинарные аргументы в символьные, поэтому перегрузка `byte[]` не открыта). `format` — нативный
-  T-SQL `FORMAT`, не путать с трансляцией CLR `string.Format`; `str(value[, length[, decimals]])` —
-  преобразование числа с плавающей точкой в строку фиксированной ширины. Апостроф как разделитель —
-  обычный строковый аргумент: `quotename("abc", "'")` рендерится в `quotename(N'abc', N'''')`, а сервер
-  возвращает `'abc'`. Текстовые литералы — юникодные литералы `N'…'` с удвоенными внутренними
-  апострофами (`O'Brien` превращается в `N'O''Brien'`), а значение, содержащее символ NUL, рендерится как
-  составное выражение над `NCHAR(0)`, а не как один литерал, поэтому значение передаётся как есть и никогда
-  не экранируется вызывающим кодом заранее. Этот абзац описывает только SQL Server и не является
-  кросс-провайдерной гарантией.
+* **Строковые:**
+  * `patindex(pattern, expression)`, `quotename(value)` / `quotename(value, quote)`, `soundex(value)`,
+    `difference(first, second)`, `string_escape(value, type)`, `unicode(value)` и `nchar(code)` —
+    строковые функции T-SQL.
+  * `format(value, format)` / `format(value, format, culture)` вызывают нативную T-SQL `FORMAT`; это не
+    трансляция CLR `string.Format`. `str(value[, length[, decimals]])` преобразует число с плавающей
+    точкой в строку фиксированной ширины.
+  * `stuff(value, start, length, newValue)` работает только со строками. T-SQL `STUFF` неявно
+    преобразует бинарные аргументы в символьные, поэтому перегрузка `byte[]` не предоставляется.
+  * Апостроф как разделитель — обычный строковый аргумент: `quotename("abc", "'")` формирует SQL
+    `quotename(N'abc', N'''')`, а сервер возвращает `'abc'`. Текстовые литералы записываются в
+    Unicode-форме `N'…'` с удвоенными апострофами (`O'Brien` становится `N'O''Brien'`). Значение с
+    символом NUL записывается составным выражением с `NCHAR(0)`, а не одним литералом. Передавайте
+    значение как есть, не экранируйте его заранее. Эти правила относятся только к SQL Server.
 * **Числовые:** `acos`, `asin`, `atan`, `atn2(y, x)`, `square` (`cot`/`degrees`/`radians`/`pi` переносимы — см. [`SqlFunctions.Sql`](../../scalar-functions/02-math-functions.md)) и `rand()` / `rand(seed)` (без seed — недетерминирован).
-* **Дата/время:** `datename(datepart, date)` (часть — константа), `date_bucket(datepart, width, date[, origin])` (SQL Server 2022+), серверные часы `sysdatetime`/`sysdatetimeoffset`/`sysutcdatetime`, функции смещения `switchoffset(value, offset)`/`todatetimeoffset(value, offset)` (строка вида `"+02:00"` или минуты со знаком) и семейство конструкторов `timefromparts`/`smalldatetimefromparts`/`datetimefromparts`/`datetime2fromparts`/`datetimeoffsetfromparts`. Завершающая точность `*FROMPARTS` должна быть константой `0..7` (неконстантное, `null` или выходящее за диапазон значение бросает исключение до генерации SQL).
-* **Бинарные/системные:** `hashbytes(algorithm, data)` (алгоритм — константа, например `SHA2_256`), `newsequentialid()` (допустим только как `DEFAULT` столбца, но не в обычном `SELECT`), `checksum(values...)`/`binary_checksum(values...)` (минимум одно значение; форма `checksum(*)` не открыта) и `compress(value)`/`decompress(value)` (GZIP над `varbinary(max)`).
-* **Метаданные:** `col_length`, `col_name`, `ident_incr`/`ident_seed`, `index_col`, `object_definition`/`object_id`/`object_name`/`object_schema_name`, `stats_date`, `db_id`/`db_name`/`original_db_name`, `schema_id`/`schema_name`, `type_id`/`type_name`, `filegroup_id`/`filegroup_name`/`file_id`/`file_idex`/`file_name`, `current_timezone`/`current_timezone_id`, `getansinull`, `parsename` и `publishingservername`. Отсутствующий объект/столбец/индекс/статистика даёт `null`, как и нативная функция.
+* **Дата/время:**
+  * `datename(datepart, date)` требует константную часть даты. `date_bucket(datepart, width, date[, origin])` доступна в SQL Server 2022 и новее.
+  * Серверные часы: `sysdatetime`/`sysdatetimeoffset`/`sysutcdatetime`. Функции `switchoffset(value, offset)` и `todatetimeoffset(value, offset)` принимают строку смещения, например `"+02:00"`, или число минут со знаком.
+  * Конструкторы: `timefromparts`/`smalldatetimefromparts`/`datetimefromparts`/`datetime2fromparts`/`datetimeoffsetfromparts`. Последний аргумент точности `*FROMPARTS` должен быть константой `0..7`; неконстантное, `null` или выходящее за диапазон значение вызывает исключение до генерации SQL.
+* **Бинарные/системные:**
+  * `hashbytes(algorithm, data)` требует константный алгоритм, например `SHA2_256`.
+  * `newsequentialid()` допустима только как `DEFAULT` столбца, но не в обычном `SELECT`.
+  * `checksum(values...)` / `binary_checksum(values...)` требуют хотя бы одно значение; форма `checksum(*)` не предоставляется. `compress(value)` / `decompress(value)` используют GZIP над `varbinary(max)`.
+* **Метаданные:**
+  * Объекты, столбцы и индексы: `col_length`, `col_name`, `index_col`, `object_definition`/`object_id`/`object_name`/`object_schema_name`, `stats_date`. `ident_incr`/`ident_seed` сообщают настройки identity-столбца.
+  * База, схема и типы: `db_id`/`db_name`/`original_db_name`, `schema_id`/`schema_name`, `type_id`/`type_name`.
+  * Файлы и сервер: `filegroup_id`/`filegroup_name`/`file_id`/`file_idex`/`file_name`, `current_timezone`/`current_timezone_id`, `getansinull`, `parsename`, `publishingservername`.
+  * Если объект, столбец, индекс или статистика не найдены, функция возвращает `null`, как и нативная функция.
 * **Живое состояние:** `current_request_id()` (`short?`, NULL вне запроса), `current_transaction_id()`
   (`long?`, NULL вне транзакции), `xact_state()` (нативный `smallint` 0/1/-1), `ident_current(table)`
   (`decimal?`, последняя identity таблицы в **любой** сессии — гонка, не API последней вставки),
   `min_active_rowversion()` (нативный `binary(8)`, не счётчик), `rowcount_big()` (предыдущая инструкция
   того же соединения) и `scope_identity()` (`decimal?`, только в том же батче, что и `INSERT`).
-* **Преобразование/логика:** `isdate(value)`/`isnumeric(value)` возвращают нативный T-SQL `int` (1/0), а не `bit`, поэтому остаются целочисленными значениями, а не материализованными предикатами; `formatmessage(messageOrId, args...)` принимает не более 20 аргументов форматирования. `try_cast<T>(value)`/`try_convert<T>(value[, style])` (плюс перегрузки с целью `string` поверх `nvarchar(4000)`) рендерят T-SQL `TRY_CAST`/`TRY_CONVERT` через **закрытое** отображение CLR→SQL и не версионно-зависимы: неверное значение даёт SQL NULL, NULL-стиль даёт SQL NULL даже для конвертируемого значения, а цель вне отображения отклоняется до SQL. См. [TRY_CAST и TRY_CONVERT](../../scalar-functions/04-conditionals-and-conversion.md#sql-server-try_cast-и-try_convert).
+* **Преобразование/логика:**
+  * `isdate(value)` / `isnumeric(value)` возвращают нативный T-SQL `int` (1/0), а не `bit`, поэтому это целочисленные значения, а не материализуемые предикаты. `formatmessage(messageOrId, args...)` принимает не более 20 аргументов форматирования.
+  * `try_cast<T>(value)` / `try_convert<T>(value[, style])` (а также перегрузки с целью `string` поверх `nvarchar(4000)`) формируют T-SQL `TRY_CAST` / `TRY_CONVERT` через **закрытое** отображение типов CLR в типы SQL и не зависят от версии. Неверное значение даёт SQL `NULL`; NULL-стиль даёт SQL `NULL` даже для конвертируемого значения; цель вне отображения отклоняется до SQL. См. [TRY_CAST и TRY_CONVERT](../../scalar-functions/04-conditionals-and-conversion.md#sql-server-try_cast-и-try_convert).
 
-Переносимые BASE64 и crypto на этом провайдере требуют SQL Server 2025: `SqlFunctions.Sql.base64_encode` рендерится как `BASE64_ENCODE(value)` над `varbinary`, `base64_decode` — как `BASE64_DECODE(value)` над `varchar` (столбец `nvarchar` нужно привести), а `crypt_gen_random` рендерит типизированную обёртку `CASE WHEN length IS NULL THEN CAST(NULL AS varbinary(8000)) ELSE CRYPT_GEN_RANDOM(length) END`, поэтому NULL-длина остаётся типизированным NULL. Compatibility level и preview-флаг не нужны.
-* **JSON:** `json_array(value, ...)` и `json_object(key, value, ...)` (SQL Server 2022+),
-  `json_objectagg(key, value)` и `json_arrayagg(value)` (SQL Server 2025+),
-  `json_path_exists(json, path)` (SQL Server 2022+) и `json_contains(json, searchValue, path)`
-  (SQL Server 2025+). Два предиката материализуются в `bit`, как `isjson`.
+* **BASE64/криптография:** Переносимые функции требуют SQL Server 2025 на этом провайдере. `SqlFunctions.Sql.base64_encode` формирует `BASE64_ENCODE(value)` для `varbinary`, а `base64_decode` — `BASE64_DECODE(value)` для `varchar` (столбец `nvarchar` нужно привести). `crypt_gen_random` формирует типизированное выражение `CASE WHEN length IS NULL THEN CAST(NULL AS varbinary(8000)) ELSE CRYPT_GEN_RANDOM(length) END`, поэтому NULL-длина остаётся типизированным NULL. Уровень совместимости и preview-флаг не нужны.
+* **JSON:**
+  * `json_array(value, ...)` и `json_object(key, value, ...)` — конструкторы SQL Server 2022 и новее.
+  * `json_objectagg(key, value)` и `json_arrayagg(value)` — агрегаты SQL Server 2025 и новее: они обобщают значения группы, а не создают отдельное значение для каждой строки.
+  * `json_path_exists(json, path)` доступна с SQL Server 2022, а `json_contains(json, searchValue, path)` — с SQL Server 2025. Результат каждого предиката представлен типом `bit`, как и у `isjson`.
 
-Живое изменяемое состояние **не** является критерием исключения: семь имён, сообщающих живое
-состояние соединения, транзакции, сессии или инструкции, открыты как есть, с нативной семантикой SQL
-Server и оговорками выше. nextorm не гарантирует построчную стабильность, непрерывность соединения
-между запросами и получение identity — отдельный вызов `SCOPE_IDENTITY`/`IDENT_CURRENT` не является
-API последней вставки, поэтому для ключа используйте `ReturningIdentity<TKey>()`. Стабильные
+Семь функций живого состояния доступны, хотя их результаты зависят от текущего соединения, транзакции,
+сессии или инструкции. Они сохраняют поведение SQL Server и ограничения, перечисленные выше. nextorm
+не гарантирует построчную стабильность, непрерывность соединения между запросами или получение
+identity: отдельный вызов `SCOPE_IDENTITY`/`IDENT_CURRENT` не является API последней вставки, поэтому
+для ключа используйте `ReturningIdentity<TKey>()`. Стабильные
 конфигурационные константы и константы идентичности той же области (`CURRENT_TIMEZONE`/
 `CURRENT_TIMEZONE_ID`, `SERVER_NAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`,
-`ORIGINAL_LOGIN`) остаются на той же поверхности.
+`ORIGINAL_LOGIN`) также входят в этот набор методов.
 
 ## Null-safe-сравнение
 
 В нижней границе поддерживаемых версий SQL Server нет `IS [NOT] DISTINCT FROM`, поэтому оба помощника
-эмулируются поверх обычного равенства всегда двузначным охраняемым предикатом:
+строятся на обычном равенстве и предикате, который всегда возвращает `TRUE` или `FALSE`, но не
+неопределённое значение:
 `((a is not null and b is not null and a = b) or (a is null and b is null))`, а `is_distinct_from` —
-его дополнение `not (...)`. Логическая проекция легализуется как
+его дополнение `not (...)`. Логическое значение в проекции преобразуется в
 `cast(case when ... then 1 else 0 end as bit)`. Поскольку операнды сравниваются дважды, захваченному
-null-операнду нужен SQL-тип, выведенный из метаданных; операнд без маппинга отклоняется до выполнения с
+null-операнду нужен SQL-тип, который можно определить по метаданным; если тип определить нельзя,
+запрос отклоняется до выполнения с
 `Null-safe comparison requires a SQL Server type mapping for null operands.` См.
 [Null-safe-сравнение](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-сравнение-is-not-distinct-from).
 
@@ -570,11 +641,11 @@ null-операнду нужен SQL-тип, выведенный из мета�
 
 [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) закрыт для этого среза:
 **22 поставлено / 0 имён поставки осталось / 11 протестированных отказов**. Одиннадцать отказов — часть
-поверхности: вызываемые члены `SqlFunctions.SqlServer`, бросающие `NotSupportedException` с одним
+доступного API: вызываемые члены `SqlFunctions.SqlServer`, бросающие `NotSupportedException` с одним
 стабильным сообщением на член
 (`SqlFunctions.SqlServer.<member> (<TOKEN>) is refused: <reason>`) на границе команды SQL-билдера, до
 генерации SQL и до создания любой команды. Это не отложенные имена: это детерминированные,
-протестированные отказы, и каждый сохраняет рендеринг поддерживаемых соседей той же поверхности
+протестированные отказы, и каждый оставляет работающими поддерживаемые соседние методы того же API
 (`rowcount_big`, `xact_state`, `scope_identity`, `db_name`, `current_user`, …).
 
 | Член | Токен SQL | Вид и причина |
@@ -591,10 +662,11 @@ null-операнду нужен SQL-тип, выведенный из мета�
 | `error_procedure()` | `ERROR_PROCEDURE` | Область: та же область только `CATCH`. |
 | `any_value(value)` | `ANY_VALUE` | Отклонение движком: сборка SQL Server `17.0.5005.3` отклонила её с `Msg 195` в агрегатной форме и в форме `OVER ()`, на совместимости 160/170 и при `PREVIEW_FEATURES = ON`; поддерживаемый контракт выполнения для SQL Server не установлен. |
 
-Два вида остаются различимыми: десять системных имён — это **ограничения области/CLR** (область
-инструкции или `CATCH`, либо `sql_variant` без достоверного носителя CLR), кроме `SESSION_ID`, который —
-как и `ANY_VALUE` — является **наблюдаемым отклонением движком**. `ANY_VALUE` — не версионный пробел,
-который закроет будущий релиз nextorm, а переносимый `CommonFunctions.any_agg` не затронут на
+Причины отказа делятся на два вида. Большинство системных имён ограничены **контекстом выполнения или
+типом CLR**: им нужна область инструкции или `CATCH`, либо они возвращают `sql_variant`, которому не
+соответствует надёжный тип CLR. `SESSION_ID` и `ANY_VALUE` — **наблюдаемые отказы движка**.
+`ANY_VALUE` — не пробел по версии, который закроет будущий релиз nextorm; переносимый
+`CommonFunctions.any_agg` не затронут на
 провайдерах, которые его включают. См.
 [Ограничения и возможности вне области охвата](../../advanced/limitations.md) и
 [системные функции](../../scalar-functions/09-system-functions.md#отклонённые-имена-инструкций-и-области-ошибок-sql-server).

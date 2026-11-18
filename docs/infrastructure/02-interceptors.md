@@ -6,14 +6,20 @@
 
 ## Overview
 
-An interceptor is a small object registered on a context that receives callbacks around the work the context performs. nextorm ships two of them:
+An interceptor is a small object registered on a context that receives callbacks around the work the context performs. nextorm ships two interceptor interfaces.
 
-| Interface | Observes | Callbacks |
+The following table shows what each interface observes and which callbacks it receives:
+
+ | Interface | Observes | Callbacks |
 |---|---|---|
 | [`IQueryInterceptor`](xref:NextORM.Core.IQueryInterceptor) | command execution | `CommandInitialized`, `CommandExecuting`, `CommandExecuted`, `CommandFailed` |
 | [`IConnectionInterceptor`](xref:NextORM.Core.IConnectionInterceptor) | connection open | `ConnectionOpening`, `ConnectionOpened` |
 
-A callback receives an event payload ([`CommandEventData`](xref:NextORM.Core.CommandEventData) / [`ConnectionEventData`](xref:NextORM.Core.ConnectionEventData)) plus the ADO.NET object involved (`DbCommand` / `DbConnection`). The events are raised by the **context's execution and connection axes**, not by the command: a `DbCommand` is a data structure and cannot log or profile itself.
+Each callback receives an event payload ([`CommandEventData`](xref:NextORM.Core.CommandEventData) or
+[`ConnectionEventData`](xref:NextORM.Core.ConnectionEventData)) and the ADO.NET object involved
+(`DbCommand` or `DbConnection`). The context raises events while it executes commands or opens
+connections; the command itself does not raise them. A `DbCommand` is a data structure and cannot log
+or profile itself.
 
 Typical uses are timing and metrics, structured logging of the executed SQL, and provider-specific command options (a command timeout, for example).
 
@@ -51,13 +57,27 @@ services.AddNextOrmContext(builder => builder
     .AddInterceptor<TimingInterceptor>()); // or .AddInterceptor(typeof(TimingInterceptor))
 ```
 
-`AddInterceptor<T>()` and `AddInterceptor(Type)` resolve the service with `GetRequiredService` **once per context creation**, from the scope that created the builder. Container lifetimes therefore apply unchanged: a scoped interceptor is reused within the scope and differs across scopes, a singleton is shared, and a transient is resolved per context. The container owns the interceptor and disposes it; the builder never disposes a resolved instance.
+`AddInterceptor<T>()` and `AddInterceptor(Type)` resolve the service with `GetRequiredService` once
+per context creation, from the scope that created the builder. Container lifetimes apply unchanged:
+a scoped interceptor is reused within its scope but differs across scopes; a singleton is shared; and
+a transient is resolved for each context. The container owns and disposes the interceptor. The builder
+never disposes an instance resolved from the container.
 
-The resolved object is attached to every interceptor interface it implements, so a class implementing both [`IQueryInterceptor`](xref:NextORM.Core.IQueryInterceptor) and [`IConnectionInterceptor`](xref:NextORM.Core.IConnectionInterceptor) is observed by both pipelines. The type must be a closed reference type assignable to one of the two interfaces: an open generic or a value-type `Type` is rejected immediately with `ArgumentException`, and a `null` argument with `ArgumentNullException`.
+The resolved object is attached to every interceptor interface it implements. A class that implements
+both [`IQueryInterceptor`](xref:NextORM.Core.IQueryInterceptor) and
+[`IConnectionInterceptor`](xref:NextORM.Core.IConnectionInterceptor) is observed by both pipelines.
+The type must be a closed reference type that implements at least one of these interfaces. An open
+generic type or a value-type `Type` is rejected immediately with `ArgumentException`; a `null`
+argument is rejected with `ArgumentNullException`.
 
-Registration is deduplicated by exact key - `instance.GetType()` for an instance, the supplied `Type` for a type entry - and the first registration wins, including when instance and type entries are mixed. Registering the same type twice therefore resolves and invokes it once.
+Registration is deduplicated by an exact key: `instance.GetType()` for an instance and the supplied
+`Type` for a type entry. The first registration wins, even when instance and type entries are mixed.
+Registering the same type twice therefore resolves and invokes it only once.
 
-A type registration needs a DI-backed builder. On a standalone `new DataContextBuilder()` the failure surfaces at `CreateDataContext()` as `InvalidOperationException`, and a service that is not registered fails with the container's own `GetRequiredService` error. In both cases the failure happens **before** the context factory runs, so no context is partially constructed.
+A type registration requires a builder created through dependency injection. With a standalone
+`new DataContextBuilder()`, `CreateDataContext()` throws `InvalidOperationException`. If the service
+isn't registered, the container throws its own `GetRequiredService` error. Both failures happen
+**before** the context factory runs, so no context is partially constructed.
 
 The EF Core bridge (`CreateNextOrmContext`) builds its context from a standalone builder, so it has no captured provider: registering an interceptor by type there fails at context creation with the same `InvalidOperationException`. Register an instance instead (`configure: builder => builder.AddInterceptor(new TimingInterceptor())`).
 
@@ -71,6 +91,8 @@ ctx.AddInterceptor(new AuditInterceptor());
 `AddInterceptor` is available on [`DataContext`](xref:NextORM.Core.DataContext), not on the [`IDataContext`](xref:NextORM.Core.IDataContext) facade, so cast the context when you hold the interface.
 
 ## A query interceptor
+
+This example logs the SQL before execution, the elapsed time after success, and the exception type after failure:
 
 ```csharp
 using System.Data.Common;
@@ -101,6 +123,8 @@ CommandInitialized -> CommandExecuting -> CommandExecuted
 * `CommandExecuted` carries the elapsed `TimeSpan`; `CommandFailed` carries the provider exception, which is then rethrown unchanged.
 
 ## A connection interceptor
+
+This example logs the connection type and data source as the connection opens:
 
 ```csharp
 public sealed class AuditConnectionInterceptor : IConnectionInterceptor

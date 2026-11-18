@@ -12,6 +12,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using NextORM.Core;
+using NextORM.Extensions;
 using NextORM.Sqlite;
 
 var opts = Options.Parse(args);
@@ -76,13 +77,7 @@ if (opts.Agent is not null)
 // Агрегация в SQL: model — JSON, поэтому ключ группы извлекается json_extract,
 // а не сравнивается как текст (иначе одна модель распадается на несколько групп).
 var byModel = await aggQuery
-    .GroupBy(s => new
-    {
-        Provider = SqlFunctions.Sqlite.json_extract<string>(s.Model, "$.providerID"),
-        Id = SqlFunctions.Sqlite.json_extract<string>(s.Model, "$.id"),
-        s.IdleOutcome,
-    })
-    .Select(s => new
+    .SelectGroup(s => new
     {
         Provider = SqlFunctions.Sqlite.json_extract<string>(s.Model, "$.providerID"),
         Id = SqlFunctions.Sqlite.json_extract<string>(s.Model, "$.id"),

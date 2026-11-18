@@ -40,7 +40,9 @@ internal static class ExtremeRowReflection
     internal static readonly MethodInfo ColumnDefinition =
         RequireMethod(typeof(SqlFunctions), "Column", BindingFlags.Public | BindingFlags.Static);
 
-    internal static readonly MethodInfo ColumnOfInt = ColumnDefinition.MakeGenericMethod(typeof(int));
+    // The closed instantiation is referenced as a method group, so the compiler and NativeAOT see it
+    // statically: no run-time MakeGenericMethod over a Type the trimmer cannot follow.
+    internal static readonly MethodInfo ColumnOfInt = ((Func<object, string, int>)SqlFunctions.Column<int>).Method;
 
     internal static readonly MethodInfo Over = RequireMethod(
         typeof(WindowFunction<int>),
@@ -86,9 +88,10 @@ internal static class ExtremeRowReflection
 }
 
 /// <summary>
-/// Extension methods that attach the <c>nextorm.extensions</c> extreme-row component: they keep the
-/// row(s) holding the smallest or greatest value, globally or per group, exactly like the built-in
-/// <c>SelectWhereMin</c>/<c>SelectWhereMax</c> but built entirely on the public query-component layer.
+/// Adds query operations that keep rows with the smallest or greatest selected value, either across
+/// the whole query or within groups. Use <c>ExtremeRowTies</c> to keep one row or all tied rows.
+/// The non-projection overloads return a builder for further composition; projection overloads return
+/// a typed query command.
 /// </summary>
 public static class ExtremeRowExtensions
 {
@@ -140,7 +143,7 @@ public static class ExtremeRowExtensions
     /// <param name="projection">The projection applied to each surviving row; it never participates in winner selection.</param>
     /// <param name="ties">Whether to keep one row or every row tied on the extreme value.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole source.</param>
-    /// <returns>The projected query command.</returns>
+    /// <returns>A query command that returns each surviving row projected as <typeparamref name="TResult"/>.</returns>
     public static QueryCommand<TResult> SelectWhereMin<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] TEntity, TValue, TResult>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
@@ -165,7 +168,7 @@ public static class ExtremeRowExtensions
     /// <param name="projection">The projection applied to each surviving row; it never participates in winner selection.</param>
     /// <param name="ties">Whether to keep one row or every row tied on the extreme value.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole source.</param>
-    /// <returns>The projected query command.</returns>
+    /// <returns>A query command that returns each surviving row projected as <typeparamref name="TResult"/>.</returns>
     public static QueryCommand<TResult> SelectWhereMax<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] TEntity, TValue, TResult>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
@@ -180,10 +183,9 @@ public static class ExtremeRowExtensions
 }
 
 /// <summary>
-/// The public query component behind <see cref="ExtremeRowExtensions.SelectWhereMin{TEntity, TValue}(EntityBuilder{TEntity}, Expression{Func{TEntity, TValue}}, ExtremeRowTies, Expression{Func{TEntity, object?}})"/>
-/// and its siblings: an exclusive row-source reshape that keeps the extreme row(s). The extension
-/// methods construct and attach it; a caller that needs the component directly passes
-/// <see cref="ExtremeKind"/> explicitly.
+/// Keeps rows with the minimum or maximum value selected by its value selector, optionally within
+/// groups. <see cref="ExtremeRowExtensions"/> provides methods that construct and attach this component;
+/// pass <see cref="ExtremeKind"/> when constructing it directly to choose the direction.
 /// </summary>
 /// <typeparam name="TEntity">The mapped entity type the selectors are written over.</typeparam>
 public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] TEntity> : IQueryComponent, IQueryComponentShape
@@ -193,9 +195,7 @@ public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyA
     private readonly ExtremeRowTies _ties;
     private readonly Expression<Func<TEntity, object?>>? _groupBy;
 
-    /// <summary>
-    /// Creates the component for one direction and one selection state.
-    /// </summary>
+    /// <summary>Creates the component with the selected direction and tie policy.</summary>
     /// <param name="kind">Whether the component keeps the minimum or the maximum value.</param>
     /// <param name="valueSelector">The value selector; its single parameter must be typed <typeparamref name="TEntity"/>.</param>
     /// <param name="ties">Whether to keep one row or every tied row.</param>
@@ -227,8 +227,8 @@ public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyA
     public QueryComponentContribution Contribution => QueryComponentContribution.ExclusiveRowSource;
 
     /// <summary>
-    /// The scalar half of the pre-preparation structural identity used by the engine's raw recipe cache:
-    /// the direction and the tie policy. Selectors travel through <see cref="GetShapeSelector"/>.
+    /// The direction and tie policy included in the component's cached query shape. The selector
+    /// expressions are exposed separately by <see cref="GetShapeSelector"/>.
     /// </summary>
     public object? ShapeState => new ExtremeRowShape(_kind, _ties);
 
@@ -237,7 +237,7 @@ public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyA
 
     /// <summary>Cached shape selectors.</summary>
     private LambdaExpression[]? _shapeSelectors;
-    /// <summary>Cached shape selectors.</summary>
+    /// <summary>The value selector and optional group key, cached in selector order.</summary>
     public LambdaExpression[] ShapeSelectors
     {
         get
@@ -320,10 +320,10 @@ public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyA
         => new($"SelectWhereMax/SelectWhereMin cannot be combined with {modifier}.");
 
     /// <summary>
-    /// Validates the component against the command and returns the immutable descriptor that joins the
-    /// plan key: the direction, the tie policy and both selectors, compared with the engine's expression
-    /// comparer. Preparation is also where the in-memory provider and the unsupported modifiers are
-    /// rejected.
+    /// Validates the component against the command and returns an immutable descriptor used in the plan key.
+    /// It includes the direction, tie policy, value selector and optional group key, compared with the
+    /// engine's expression comparer. Preparation also rejects the in-memory provider and unsupported
+    /// modifiers.
     /// </summary>
     /// <param name="context">The command being prepared and the engine expression comparer.</param>
     /// <returns>The component's structural descriptor.</returns>
@@ -361,10 +361,11 @@ public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyA
     }
 
     /// <summary>
-    /// Builds the component's structural contribution into the command. Runs on a plan-cache miss only:
-    /// <see cref="ExtremeRowTies.One"/> becomes a ranked derived source filtered on rank 1. Under
-    /// <see cref="ExtremeRowTies.All"/>, floating value keys and nullable group keys on dialects whose
-    /// public capabilities indicate risky join semantics use the rank window; other cases use aggregate+join.
+    /// Adds the component's query-shape changes when the engine builds the query plan.
+    /// <see cref="ExtremeRowTies.One"/> uses a ranking window and keeps rank 1. With
+    /// <see cref="ExtremeRowTies.All"/>, floating-point value keys use a rank window. Nullable group keys
+    /// also use one when the dialect capabilities indicate that an aggregate join may be unsafe; other
+    /// cases use aggregate-and-join.
     /// </summary>
     /// <param name="context">The command being built and the engine expression comparer.</param>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
@@ -417,7 +418,7 @@ public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyA
         {
             innerFilter = innerFilter is null ? existingCondition : Expression.AndAlso(innerFilter, existingCondition);
         }
-        inner.SetComponentPreparedCondition(innerFilter is null ? null : Expression.Lambda(innerFilter, entityParam));
+        inner.SetComponentPreparedCondition(innerFilter is null ? null : Expression.Lambda<Func<TEntity, bool>>(innerFilter, entityParam));
 
         var sqlProperty = Expression.Property(null, typeof(SqlFunctions), "Sql");
         var rankMethod = _ties == ExtremeRowTies.All
@@ -484,7 +485,7 @@ public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyA
 
         var outerParam = Expression.Parameter(entityType, "o");
         var columnCall = Expression.Call(null, ExtremeRowReflection.ColumnOfInt, outerParam, Expression.Constant(rankAlias));
-        var rankFilter = Expression.Lambda(Expression.Equal(columnCall, Expression.Constant(1)), outerParam);
+        var rankFilter = Expression.Lambda<Func<TEntity, bool>>(Expression.Equal(columnCall, Expression.Constant(1)), outerParam);
         cmd.SetComponentPreparedCondition(rankFilter);
     }
 
@@ -610,7 +611,7 @@ public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyA
         var preparedCondition = cmd.GetComponentPreparedCondition();
         LambdaExpression? userLambda = preparedCondition as LambdaExpression;
         if (userLambda is null && preparedCondition is not null)
-            userLambda = Expression.Lambda(preparedCondition, xParam);
+            userLambda = Expression.Lambda<Func<TEntity, bool>>(preparedCondition, xParam);
         // The condition belongs to the aggregated source only. Leaving it on the outer command would
         // render the same predicate a second time around the reshape, duplicating its parameters; the
         // rank-window path replaces the outer condition the same way.
@@ -693,7 +694,7 @@ public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyA
                     : userLambda.Body;
                 stageCombined = stageCombined is null ? userOverX : Expression.AndAlso(stageCombined, userOverX);
             }
-            var stageConditionLambda = stageCombined is null ? null : Expression.Lambda(stageCombined, xParam);
+            var stageConditionLambda = stageCombined is null ? null : Expression.Lambda<Func<TEntity, bool>>(stageCombined, xParam);
 
             JoinExpression[]? joins = null;
             if (k > 1 && lastStage is not null)
@@ -719,7 +720,7 @@ public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyA
                     joinBody = joinBody is null ? cond : Expression.AndAlso(joinBody, cond);
                 }
 
-                var joinLambda = Expression.Lambda(joinBody!, xParam, prevParam);
+                var joinLambda = Expression.Lambda<Func<TEntity, TEntity, bool>>(joinBody!, xParam, prevParam);
                 var join = new JoinExpression(joinLambda, JoinType.Inner)
                 {
                     From = new FromExpression(lastStage),
@@ -763,7 +764,7 @@ public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyA
             outerBody = outerBody is null ? cond : Expression.AndAlso(outerBody, cond);
         }
 
-        var outerJoinLambda = Expression.Lambda(outerBody!, outerX, outerP);
+        var outerJoinLambda = Expression.Lambda<Func<TEntity, TEntity, bool>>(outerBody!, outerX, outerP);
         var outerJoin = new JoinExpression(outerJoinLambda, JoinType.Inner)
         {
             From = new FromExpression(lastStage!),

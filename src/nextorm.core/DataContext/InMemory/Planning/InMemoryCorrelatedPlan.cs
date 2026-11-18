@@ -315,13 +315,22 @@ internal static class InMemoryCorrelatedEvaluator
 }
 
 /// <summary>
-/// Rewrites <c>OuterRefMarker&lt;T&gt;(idx).Ref</c> nodes into <see cref="SqlFunctions.Parameter{T}(int)"/>
+/// Rewrites <c>(T)OuterRefMarker(idx).Ref</c> nodes into <see cref="SqlFunctions.Parameter{T}(int)"/>
 /// placeholders, so an inner correlated command prepared for the in-memory provider reads the outer
 /// values from the runtime parameter array instead of the marker's unset <c>Ref</c>.
 /// </summary>
 internal sealed class OuterReferenceToParameterVisitor : ExpressionVisitor
 {
     private static readonly MethodInfo ParameterMI = typeof(SqlFunctions).GetMethod(nameof(SqlFunctions.Parameter))!;
+
+    /// <inheritdoc/>
+    protected override Expression VisitUnary(UnaryExpression node)
+    {
+        if (OuterReference.TryGetValue(node, out var index, out var valueType))
+            return Expression.Call(ParameterMI.MakeGenericMethod(valueType), Expression.Constant(index));
+
+        return base.VisitUnary(node);
+    }
 
     /// <inheritdoc/>
     protected override Expression VisitMember(MemberExpression node)
@@ -332,23 +341,10 @@ internal sealed class OuterReferenceToParameterVisitor : ExpressionVisitor
         return base.VisitMember(node);
     }
 
-    /// <summary>Recognises the <c>new OuterRefMarker&lt;T&gt;(idx).Ref</c> shape and extracts its type and index.</summary>
-    internal static bool TryGetMarker(MemberExpression node, out Type markerType, out int index)
-    {
-        markerType = null!;
-        index = 0;
-
-        if (node.Member.Name != nameof(OuterRefMarker<int>.Ref))
-            return false;
-        if (node.Expression is not NewExpression { Type.IsGenericType: true } creation)
-            return false;
-        if (creation.Type.GetGenericTypeDefinition() != typeof(OuterRefMarker<>))
-            return false;
-        if (creation.Arguments is not [ConstantExpression { Value: int i }])
-            return false;
-
-        markerType = creation.Type.GetGenericArguments()[0];
-        index = i;
-        return true;
-    }
+    /// <summary>
+    /// Recognises the <c>(T)OuterRefMarker(idx).Ref</c> value — or the bare marker member an identity
+    /// conversion leaves — and extracts the element type and index.
+    /// </summary>
+    internal static bool TryGetMarker(Expression node, out Type markerType, out int index)
+        => OuterReference.TryGetValue(node, out index, out markerType);
 }

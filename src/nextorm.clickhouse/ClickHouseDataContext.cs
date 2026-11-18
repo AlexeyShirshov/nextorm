@@ -19,10 +19,10 @@ namespace NextORM.ClickHouse;
 /// and parameters and renders SQL through <c>ClickHouseDialect</c>.
 /// </summary>
 /// <remarks>
-/// The bulk-insert executor is re-implemented here (the base hook cannot carry the whole-invocation
-/// budget or the explicit option presence) so <see cref="BulkInsertMode"/> resolves against the native
-/// <c>InsertBinaryAsync</c> prerequisites, the session/parallelism request is validated before a row is
-/// read, and the portable path is entered only for the equivalent single-stream request.
+/// Native bulk inserts use <c>InsertBinaryAsync</c> when a ClickHouse client is available. If it is not,
+/// <see cref="BulkInsertMode.Auto"/> can use portable <c>INSERT ... VALUES</c> statements when the
+/// request is compatible with a single stream on the context connection. Unsupported session or
+/// parallelism requests are rejected before the source is read.
 /// </remarks>
 public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInsertNativeOptions, IBulkInsertPortableScope
 {
@@ -31,6 +31,15 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
     private static readonly MethodInfo ToJsonDocumentMI = typeof(ClickHouseDataContext).GetMethod(nameof(ToJsonDocument), BindingFlags.NonPublic | BindingFlags.Static)!;
     private static readonly MethodInfo ToJsonElementMI = typeof(ClickHouseDataContext).GetMethod(nameof(ToJsonElement), BindingFlags.NonPublic | BindingFlags.Static)!;
     private static readonly MethodInfo ToDateTimeOffsetMI = typeof(ClickHouseDataContext).GetMethod(nameof(ToDateTimeOffset), BindingFlags.NonPublic | BindingFlags.Static)!;
+
+    /// <summary>
+    /// Declares the driver's parameter-type-resolution reflection dependency before any command runs.
+    /// See <see cref="ClickHouseTrimContracts"/>.
+    /// </summary>
+    static ClickHouseDataContext()
+    {
+        ClickHouseTrimContracts.PreserveParameterTupleRegistration();
+    }
 
     // The settings of a client/data-source-built context: the context creates its own connection from a
     // copy so the ADO connection and the client share one actual ClickHouse session id. Null for the
@@ -63,8 +72,8 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
     /// <summary>
     /// Creates a ClickHouse context bound to an explicitly declared server version that owns a
     /// connection built lazily from <paramref name="connectionString"/>. The version is a caller
-    /// declaration (there is no server probing): it enables the capabilities introduced after the
-    /// pinned baseline (currently the native <c>arrayExcept</c>, ClickHouse 25.9).
+    /// declaration (there is no server probing): it enables capabilities introduced after the pinned
+    /// baseline, such as the native <c>arrayExcept</c> function in ClickHouse 25.9.
     /// </summary>
     /// <param name="serverVersion">The ClickHouse server version this context declares.</param>
     /// <param name="connectionString">The connection string used to create the <c>ClickHouseConnection</c>.</param>
@@ -84,6 +93,17 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
     /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
     public ClickHouseDataContext(DbConnection connection, DataContextBuilder optionsBuilder)
         : this(null, connection, optionsBuilder, null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a ClickHouse context from the builder alone. The builder must configure routing and name a
+    /// default topology; its host supplies the connection, so no connection string is passed here.
+    /// </summary>
+    /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
+    /// <exception cref="InvalidOperationException">The builder configures no routing, or no default topology.</exception>
+    public ClickHouseDataContext(DataContextBuilder optionsBuilder)
+        : this(null, null, optionsBuilder, null)
     {
     }
 
@@ -216,14 +236,13 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
         "TimeOnly projection refused for ClickHouse: there is no native time-of-day type and TimeOnly is bound as String; use an explicit value converter.";
 
     /// <summary>
-    /// Materializes a projected native ClickHouse <c>JSON</c> column. A bare <see cref="JsonObject"/> is
-    /// read as-is; a bare <see cref="JsonDocument"/>/<see cref="JsonElement"/> is adapted from the driver's
-    /// object-root <see cref="JsonObject"/> transport. A SQL <c>NULL</c> becomes a null reference (or
-    /// <see langword="default"/> for the value-type <see cref="JsonElement"/>), which stays distinct from an
-    /// empty object. A <see cref="DateTimeOffset"/> projection is adapted from the driver's
-    /// <see cref="DateTime"/> transport (see <see cref="MapDateTimeOffsetColumn"/>). Every other column is
-    /// mapped by the base implementation, which also resolves a <c>[JsonColumn]</c> converter (its provider
-    /// type is <see cref="JsonObject"/> on ClickHouse).
+    /// Builds an expression to read a projected native ClickHouse <c>JSON</c> column. Bare
+    /// <see cref="JsonObject"/> values are read as-is; <see cref="JsonDocument"/> and
+    /// <see cref="JsonElement"/> values are adapted from the driver's object-root <see cref="JsonObject"/>.
+    /// SQL <c>NULL</c> maps to a null reference, a null nullable <see cref="JsonElement"/>, or
+    /// <see langword="default"/> for a non-nullable <see cref="JsonElement"/>. A
+    /// <see cref="DateTimeOffset"/> projection is adapted from the driver's <see cref="DateTime"/> value.
+    /// Other columns use the base implementation, including its <c>[JsonColumn]</c> converter handling.
     /// </summary>
     /// <param name="column">The projected column being read.</param>
     /// <param name="param">The data-reader expression the accessor is built from.</param>
@@ -231,6 +250,14 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
     public override Expression MapColumnExpression(SelectExpression column, Expression param)
     {
         var realType = Nullable.GetUnderlyingType(column.PropertyType) ?? column.PropertyType;
+
+        // Fail closed before the reader is opened. ClickHouse.Driver materializes a native Tuple(...)
+        // column into System.Tuple<...> by looking up the closed generic constructor at run time
+        // (TupleType.Read -> Activator.CreateInstance), which a trimmed/native image does not keep;
+        // the raw outcome is an opaque driver TypeInitializationException before any row is mapped.
+        // Under JIT the same shape works, so only the dynamic-code-free runtime is refused.
+        ThrowIfDriverTuple(column, realType, System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported);
+
         // A converter (for example [JsonColumn]) keeps its own storage policy; the native-mapping
         // shortcut applies to a bare JSON projection only.
         if (column.Converter is null
@@ -241,6 +268,52 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
             return MapDateTimeOffsetColumn(column, param);
 
         return base.MapColumnExpression(column, param);
+    }
+
+    /// <summary>
+    /// Whether a projected column must be refused before the reader opens because the driver can only
+    /// produce it through its run-time tuple construction. Split from
+    /// <see cref="MapColumnExpression"/> so both branches are unit-testable: the refusal applies only when
+    /// the runtime has no dynamic code (a trimmed/native image).
+    /// </summary>
+    /// <param name="propertyType">The column's declared CLR type (already nullable-unwrapped).</param>
+    /// <param name="dynamicCodeSupported"><see cref="System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported"/>.</param>
+    /// <returns><see langword="true"/> when the column must be refused.</returns>
+    internal static bool ShouldRefuseDriverTuple(Type propertyType, bool dynamicCodeSupported)
+        => !dynamicCodeSupported && IsDriverMaterializedTupleShape(propertyType);
+
+    /// <summary>Throws the actionable pre-reader refusal for a tuple column the driver cannot materialize.</summary>
+    /// <param name="column">The projected column being mapped.</param>
+    /// <param name="realType">The column's declared CLR type (already nullable-unwrapped).</param>
+    /// <param name="dynamicCodeSupported">Whether the runtime can compile code at run time.</param>
+    /// <exception cref="NotSupportedException">The column is a tuple shape and the runtime cannot compile code.</exception>
+    internal static void ThrowIfDriverTuple(SelectExpression column, Type realType, bool dynamicCodeSupported)
+    {
+        if (column.Converter is not null || !ShouldRefuseDriverTuple(realType, dynamicCodeSupported))
+            return;
+
+        throw new NotSupportedException(
+            $"ClickHouse Tuple column '{column.PropertyName ?? $"#{column.Index}"}' cannot be materialized in a trimmed or native image: "
+            + "ClickHouse.Driver builds System.Tuple<...> for a Tuple(...) column through a run-time constructor lookup "
+            + "(TupleType.Read -> Activator.CreateInstance) that trimming removes. "
+            + "Project the tuple elements as separate scalar columns (tupleElement(tuple, 1), ...) or read the whole tuple as text (toString(tuple)) "
+            + "and parse it on the client; the declared Tuple property cannot be read natively.");
+    }
+
+    // The CLR shapes ClickHouse.Driver can only produce through its run-time tuple construction: the
+    // reference and value tuple families (arity 1..8), directly or as the element of an array column.
+    private static bool IsDriverMaterializedTupleShape(Type type)
+    {
+        while (type.IsArray)
+            type = type.GetElementType()!;
+
+        if (!type.IsGenericType)
+            return false;
+
+        var name = type.GetGenericTypeDefinition().FullName;
+        return name is not null
+            && (name.StartsWith("System.Tuple`", StringComparison.Ordinal)
+                || name.StartsWith("System.ValueTuple`", StringComparison.Ordinal));
     }
 
     // The ClickHouse.Driver surfaces DateTime64 as System.DateTime, so the generic typed reader's
@@ -326,14 +399,11 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
     private static JsonElement ToJsonElement(JsonObject value) => JsonSerializer.SerializeToElement(value);
 
     /// <summary>
-    /// Creates a <c>ClickHouseDbParameter</c>. The driver rewrites the ADO-style <c>@name</c>
-    /// placeholder to <c>{name:Type}</c> and infers the ClickHouse type from the CLR value, so the
-    /// stored name omits the <c>@</c> prefix. A <see cref="JsonObject"/>, and an object-root
-    /// <see cref="JsonElement"/>/<see cref="JsonDocument"/>, are bound as the native ClickHouse
-    /// <c>JSON</c> type; a rank-1 CLR array whose declared element type is nullable
-    /// (<see cref="Nullable{T}"/> or <see cref="string"/>) is bound as <c>Array(Nullable(T))</c> so its
-    /// null elements survive the driver's non-nullable inference. Any other value keeps its existing
-    /// binding.
+    /// Creates a ClickHouse parameter. The driver stores its name without the <c>@</c> prefix and
+    /// infers the ClickHouse type from the CLR value. <see cref="JsonObject"/> and object-root
+    /// <see cref="JsonElement"/> or <see cref="JsonDocument"/> values bind as native <c>JSON</c>.
+    /// One-dimensional arrays with supported nullable element types bind as
+    /// <c>Array(Nullable(T))</c>, preserving null elements. Other values keep their existing binding.
     /// </summary>
     /// <param name="name">The parameter name, without the provider prefix.</param>
     /// <param name="value">The parameter value, or <see langword="null"/>.</param>
@@ -429,11 +499,10 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
 
 
     /// <summary>
-    /// Creates a <c>ClickHouseDbParameter</c> for a descriptor. A <see cref="TableParameterValue"/> is
-    /// emulated with a native array expanded server-side with <c>arrayJoin(@p)</c>: a scalar row type
-    /// binds as an <c>Array(T)</c> and an entity row type as an <c>Array(Tuple(...))</c> whose tuple
-    /// elements follow the resolved column order. A <see cref="ProcedureParameter.TypeName"/> is SQL
-    /// Server only and is rejected.
+    /// Creates a ClickHouse parameter from a descriptor. A <see cref="TableParameterValue"/> is
+    /// represented by a native array expanded with <c>arrayJoin(@p)</c>: scalar rows bind as
+    /// <c>Array(T)</c>, and entity rows bind as <c>Array(Tuple(...))</c> in resolved column order.
+    /// <see cref="ProcedureParameter.TypeName"/> is SQL Server only and is rejected.
     /// </summary>
     /// <param name="parameter">The parameter descriptor.</param>
     /// <returns>A new ClickHouse parameter configured from <paramref name="parameter"/>.</returns>

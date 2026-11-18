@@ -1,23 +1,18 @@
 # Быстрый старт
 
-> Определите сущность, создайте контекст SQLite, выполните типизированный запрос и выведите строки - самая маленькая сквозная программа на NextORM.
+Выполните типизированный запрос к SQLite в памяти и выведите результат. Эта страница предназначена для разработчиков на .NET, которые установили NextORM и хотят увидеть полный пример запроса до знакомства с его возможностями.
 
 **Предварительные требования:** [Установка](01-installation.md).
 
-## Обзор
-
-Запрос NextORM всегда состоит из четырёх частей:
-
-1. **сущность** (класс или интерфейс), свойства которой отображаются на столбцы;
-2. **контекст** ([`IDataContext`](xref:NextORM.Core.IDataContext)), созданный из подключения или строки подключения;
-3. **запрос**, построенный с помощью [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)), [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) и так далее;
-4. **терминальный метод**, такой как [`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})), [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})), [`Any`](xref:NextORM.Core.EntityBuilderExtensions.Any``1(NextORM.Core.EntityBuilder{``0})) или [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])), который его выполняет.
-
-[`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) также регистрирует метаданные `T` при первом обращении. Контекст поддерживает освобождение: контекст, созданный из строки подключения, владеет подключением и закрывает его, тогда как контекст, созданный из переданного `DbConnection`, оставляет это подключение открытым.
-
 ## Полная минимальная программа
 
-Следующая программа самодостаточна. Она создаёт базу данных SQLite в памяти, наполняет одну таблицу, строит контекст с помощью [`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions.UseSqlite(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) и возвращает строки как анонимный тип.
+Создайте консольный проект .NET и замените содержимое его файла `Program.cs` этим кодом. Оставьте
+объявления интерфейсов сущностей после операторов верхнего уровня, как в примере: в C# операторы
+верхнего уровня должны идти перед объявлениями типов.
+
+Программа создаёт таблицы `orders` и `customers`, добавляет три заказа и читает идентификатор и
+статус каждого заказа. Используется SQLite в памяти, поэтому сервер базы данных не нужен. Сначала
+установите в консольный проект пакеты `nextorm` и `nextorm.sqlite`:
 
 ```csharp
 using System.ComponentModel.DataAnnotations;
@@ -26,52 +21,99 @@ using Microsoft.Data.Sqlite;
 using NextORM.Core;
 using NextORM.Sqlite;
 
-var connection = new SqliteConnection("Data Source=:memory:");
+using var connection = new SqliteConnection("Data Source=:memory:");
 connection.Open();
 
 using (var setup = connection.CreateCommand())
 {
     setup.CommandText =
-        "create table simple_entity (id integer primary key);" +
-        "insert into simple_entity (id) values (1), (2), (3);";
+        "create table customers (id integer primary key, name text not null);" +
+        "create table orders (id integer primary key, customer_id integer not null, " +
+        "status text not null, total_cents integer not null);" +
+        "insert into customers (id, name) values (1, 'Amina'), (2, 'Ravi');" +
+        "insert into orders (id, customer_id, status, total_cents) values " +
+        "(1, 1, 'Paid', 2550), (2, 2, 'Pending', 1800), (3, 1, 'Paid', 4250);";
     setup.ExecuteNonQuery();
 }
 
 var builder = new DataContextBuilder().UseSqlite(connection);
 using var dataContext = builder.CreateDataContext();
 
-await foreach (var row in dataContext.From<ISimpleEntity>()
-                                   .Select(entity => new { Id = (long)entity.Id })
-                                   .ToAsyncEnumerable())
+var orders = await dataContext.From<IOrder>()
+    .OrderBy(order => order.Id)
+    .Select(order => new { order.Id, order.Status })
+    .ToListAsync();
+
+foreach (var order in orders)
 {
-    Console.WriteLine($"Id = {row.Id}");
+    Console.WriteLine($"Order {order.Id}: {order.Status}");
 }
 
-// The entity can live in its own file. In a single-file top-level program the type
-// declaration must come after the top-level statements.
-[SqlTable("simple_entity")]
-public interface ISimpleEntity
+[SqlTable("orders")]
+public interface IOrder
 {
     [Key]
     [Column("id")]
     int Id { get; set; }
+
+    [Column("customer_id")]
+    int CustomerId { get; set; }
+
+    [Column("status")]
+    string Status { get; set; }
+
+    [Column("total_cents")]
+    int TotalCents { get; set; }
+}
+
+[SqlTable("customers")]
+public interface ICustomer
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+
+    [Column("name")]
+    string Name { get; set; }
 }
 ```
 
-Вывод:
+Из каталога проекта запустите программу:
+
+```bash
+dotnet run
+```
+
+Программа выведет:
 
 ```text
-Id = 1
-Id = 2
-Id = 3
+Order 1: Paid
+Order 2: Pending
+Order 3: Paid
 ```
 
-Сгенерированный SQL - это обычный `select` по отображённым таблице и столбцу:
+Запрос выбирает две сопоставленные колонки из таблицы `orders`:
 
 ```sql
-select id
- from simple_entity
+select id, status
+ from orders
+ order by id
 ```
+
+## Обзор
+
+Запрос использует сущность с сопоставлением, контекст и последовательность операций. В этом примере
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
+выбирает источник `orders`, [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}}))
+задаёт возвращаемые значения, а
+[`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[]))
+выполняет запрос и возвращает список.
+
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
+также регистрирует метаданные сущности при первом обращении. Контекст можно освободить. Контекст,
+созданный из строки подключения, владеет подключением и закрывает его; контекст, созданный из
+переданного `DbConnection`, оставляет подключение открытым. В этом примере подключение передаётся
+отдельно и освобождается отдельно.
 
 ## Использование строки подключения
 
@@ -89,7 +131,10 @@ using var dataContext = builder.CreateDataContext();
 
 ## Чтение данных
 
-В запросе выше используется [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])). Другие распространённые терминальные методы:
+В примере используется `ToListAsync`, чтобы собрать строки в список. Чтобы читать результат
+потоком, используйте
+[`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])).
+Другие распространённые терминальные методы:
 
 | Терминал | Результат |
 |---|---|
@@ -104,6 +149,9 @@ using var dataContext = builder.CreateDataContext();
 
 ## См. также
 
+* [Фильтрация строк](../guide/03-filtering-where.md) - добавление условий перед выборкой результата.
+* [Выбор нужных полей](../guide/02-projections.md) - формирование возвращаемых строк.
+* [Соединение таблиц](../guide/04-joins.md) - добавление сведений о клиентах к заказам.
 * [Сущности и метаданные](03-entities-and-metadata.md) - атрибуты, отображение интерфейс/класс,
   режим [`TableAlias`](xref:NextORM.Core.TableAlias) без сущностей и fluent-конфигурация.
 * [Внедрение зависимостей](04-dependency-injection.md) - зарегистрируйте контекст вместо его ручного
@@ -111,9 +159,7 @@ using var dataContext = builder.CreateDataContext();
 
 ---
 
-Source: `tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:9`,
-`tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:20`,
-`tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:37`;
-`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs:32`;
-`tests/nextorm.sqlite.tests/Raw/ConnectionManagementTests.cs:115`;
-generated SQL: `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:111`.
+В быстром старте используются SQLite-подключение и API запросов. См.
+[`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions.UseSqlite(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection))
+и примеры в разделах [Фильтрация](../guide/03-filtering-where.md),
+[Проекции](../guide/02-projections.md) и [Соединения](../guide/04-joins.md).

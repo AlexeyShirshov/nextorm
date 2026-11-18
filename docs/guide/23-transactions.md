@@ -1,30 +1,21 @@
 # Transactions
 
-> A nextorm context can run its queries inside a database transaction: either one it starts itself, or one owned by EF Core, Dapper or raw ADO.NET that it enlists in. The role is separate from the query surface, so a context without a connection (the in-memory one) does not implement it, and ClickHouse — which speaks HTTP and has no transaction — rejects it. There is no change tracking and no `SaveChanges`: writes stay explicit commands.
+> Use a transaction when several commands must share one commit or rollback. A
+> nextorm context can start its own transaction or enlist in one owned by EF
+> Core, Dapper, or raw ADO.NET. The context binds its commands to the active
+> transaction but does not track changes or provide `SaveChanges`. The
+> in-memory context has no connection and does not implement the transaction
+> role; ClickHouse has no transaction support.
 
 **Prerequisites:** [Connections](../infrastructure/01-connections.md) · [Data modification (INSERT)](17-insert-statement.md) · [Provider overview](../connecting-providers/overview.md)
 
 ## Overview
 
-[`ITransactionManager`](xref:NextORM.Core.ITransactionManager) is the transaction axis of [`DataContext`](xref:NextORM.Core.DataContext), symmetric with [`IConnectionManager`](xref:NextORM.Core.IConnectionManager). Cast the context to the role to start a transaction or to enlist in an existing one; every command the context runs on the connection is then bound to the active transaction.
-
-```csharp
-public interface ITransactionManager
-{
-    DbTransaction? CurrentTransaction { get; }
-    DbTransaction BeginTransaction();
-    DbTransaction BeginTransaction(IsolationLevel isolationLevel);
-    Task<DbTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default);
-    Task<DbTransaction> BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken = default);
-    void UseTransaction(DbTransaction? transaction);
-    void CreateSavepoint(string name);
-    Task CreateSavepointAsync(string name, CancellationToken cancellationToken = default);
-    void RollbackToSavepoint(string name);
-    Task RollbackToSavepointAsync(string name, CancellationToken cancellationToken = default);
-    void ReleaseSavepoint(string name);
-    Task ReleaseSavepointAsync(string name, CancellationToken cancellationToken = default);
-}
-```
+[`ITransactionManager`](xref:NextORM.Core.ITransactionManager) is the transaction role of
+[`DataContext`](xref:NextORM.Core.DataContext), alongside
+[`IConnectionManager`](xref:NextORM.Core.IConnectionManager). Cast the context to this role to start a
+transaction or enlist in an existing one. The context then binds each command on its connection to the
+active transaction.
 
 ## Starting a transaction
 
@@ -170,6 +161,29 @@ that supports savepoints.
   every savepoint call throws `NotSupportedException`.
 * A rollback to a savepoint keeps the rows and `NULL` values written before it and discards the later
   work; only the surrounding commit or rollback ends the transaction.
+
+## ITransactionManager API
+
+The role exposes the following members. The returned `DbTransaction` provides the commit and rollback
+operations:
+
+```csharp
+public interface ITransactionManager
+{
+    DbTransaction? CurrentTransaction { get; }
+    DbTransaction BeginTransaction();
+    DbTransaction BeginTransaction(IsolationLevel isolationLevel);
+    Task<DbTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default);
+    Task<DbTransaction> BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken = default);
+    void UseTransaction(DbTransaction? transaction);
+    void CreateSavepoint(string name);
+    Task CreateSavepointAsync(string name, CancellationToken cancellationToken = default);
+    void RollbackToSavepoint(string name);
+    Task RollbackToSavepointAsync(string name, CancellationToken cancellationToken = default);
+    void ReleaseSavepoint(string name);
+    Task ReleaseSavepointAsync(string name, CancellationToken cancellationToken = default);
+}
+```
 
 ## Provider support
 

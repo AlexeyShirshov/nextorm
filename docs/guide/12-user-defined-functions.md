@@ -7,8 +7,11 @@
 
 ## Overview
 
-[`SqlFunctionAttribute`](xref:NextORM.Core.SqlFunctionAttribute) maps a CLR method to a database scalar function. Apply it to a placeholder
-method, or to the declaring type to map every method of that type by name:
+Use [`SqlFunctionAttribute`](xref:NextORM.Core.SqlFunctionAttribute) to call an existing database scalar
+function from a LINQ query. Map a CLR method to the SQL function name, then call that method in your
+expression. nextorm translates the call instead of executing the method body.
+
+The attribute accepts these forms and properties:
 
 ```csharp
 [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
@@ -22,22 +25,25 @@ public sealed class SqlFunctionAttribute : Attribute
 }
 ```
 
-The placeholder body is **never executed** - it only has to satisfy the compiler, so
-`=> throw new NotSupportedException()` or `=> default!` is enough. The call is translated to
-`[schema.]name(arg1, arg2, ...)`:
+Keep the method body as a placeholder: the query translator never executes it. Use
+`=> throw new NotSupportedException()` or `=> default!` to satisfy the compiler. In SQL, the call has
+the form `[schema.]name(arg1, arg2, ...)`:
 
-* `Name` overrides the emitted function name; without it the CLR method name is used (this is also the
-  behaviour when the attribute is on the declaring type).
+* `Name` overrides the SQL function name. Without it, nextorm uses the CLR method name, including
+  when the attribute is on the declaring type.
 * `Schema` prefixes the name as `schema.name`.
-* arguments are rendered through the regular expression visitor, so a **captured value becomes a
-  parameter** exactly like anywhere else;
-* for an **instance** method the target (`node.Object`) is emitted as the **first argument**, before the
+* The expression visitor renders arguments normally, so a captured value becomes a parameter.
+* For an instance method, the receiver (`node.Object`) becomes the first SQL argument, before the
   method arguments.
 
-The built-in `string`/`Math`/`DateTime` translations run first, so `[SqlFunction]` cannot change their
-behaviour. nextorm only emits the call; the function must already exist in the target database.
+Built-in `string`, `Math`, and `DateTime` translations run first, so `[SqlFunction]` cannot replace
+them. nextorm emits the call but does not create the database function; it must already exist in the
+target database.
 
 ## Mapping a static method
+
+To map a scalar function, decorate a static placeholder method with `[SqlFunction]` and call it from
+the query:
 
 ```csharp
 private static class Udf

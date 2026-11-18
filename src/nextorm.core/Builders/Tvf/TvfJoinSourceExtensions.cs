@@ -32,7 +32,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<TEntity, TJoinEntity> Join<TEntity, TJoinEntity>(this EntityBuilder<TEntity> builder, Expression<Func<EntityBuilder<TJoinEntity>>> source, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
         => builder.Join(builder.DataProvider.From(source), joinCondition);
@@ -59,7 +59,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<TEntity, TJoinEntity> LeftJoin<TEntity, TJoinEntity>(this EntityBuilder<TEntity> builder, Expression<Func<EntityBuilder<TJoinEntity>>> source, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
         => builder.LeftJoin(builder.DataProvider.From(source), joinCondition);
@@ -86,7 +86,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<TEntity, TJoinEntity> RightJoin<TEntity, TJoinEntity>(this EntityBuilder<TEntity> builder, Expression<Func<EntityBuilder<TJoinEntity>>> source, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
         => builder.RightJoin(builder.DataProvider.From(source), joinCondition);
@@ -113,7 +113,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<TEntity, TJoinEntity> FullJoin<TEntity, TJoinEntity>(this EntityBuilder<TEntity> builder, Expression<Func<EntityBuilder<TJoinEntity>>> source, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
         => builder.FullJoin(builder.DataProvider.From(source), joinCondition);
@@ -181,7 +181,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<TableAlias, TJoinEntity> Join<TJoinEntity>(this EntityBuilder builder, Expression<Func<EntityBuilder<TJoinEntity>>> source, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
         => builder.Join(builder.DataProvider.From(source), joinCondition);
@@ -206,7 +206,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<TableAlias, TJoinEntity> LeftJoin<TJoinEntity>(this EntityBuilder builder, Expression<Func<EntityBuilder<TJoinEntity>>> source, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
         => builder.LeftJoin(builder.DataProvider.From(source), joinCondition);
@@ -231,7 +231,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<TableAlias, TJoinEntity> RightJoin<TJoinEntity>(this EntityBuilder builder, Expression<Func<EntityBuilder<TJoinEntity>>> source, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
         => builder.RightJoin(builder.DataProvider.From(source), joinCondition);
@@ -256,7 +256,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<TableAlias, TJoinEntity> FullJoin<TJoinEntity>(this EntityBuilder builder, Expression<Func<EntityBuilder<TJoinEntity>>> source, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
         => builder.FullJoin(builder.DataProvider.From(source), joinCondition);
@@ -322,7 +322,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3> Join<T1, T2, T3>(this JoinedEntityBuilder<T1, T2> builder, Expression<Func<EntityBuilder<T3>>> source, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition)
         => builder.Join(builder.DataProvider.From(source), joinCondition);
@@ -351,7 +351,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3> LeftJoin<T1, T2, T3>(this JoinedEntityBuilder<T1, T2> builder, Expression<Func<EntityBuilder<T3>>> source, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition)
         => builder.LeftJoin(builder.DataProvider.From(source), joinCondition);
@@ -380,7 +380,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3> RightJoin<T1, T2, T3>(this JoinedEntityBuilder<T1, T2> builder, Expression<Func<EntityBuilder<T3>>> source, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition)
         => builder.RightJoin(builder.DataProvider.From(source), joinCondition);
@@ -409,7 +409,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3> FullJoin<T1, T2, T3>(this JoinedEntityBuilder<T1, T2> builder, Expression<Func<EntityBuilder<T3>>> source, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition)
         => builder.FullJoin(builder.DataProvider.From(source), joinCondition);
@@ -484,7 +484,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3, T4> Join<T1, T2, T3, T4>(this JoinedEntityBuilder<T1, T2, T3> builder, Expression<Func<EntityBuilder<T4>>> source, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition)
         => builder.Join(builder.DataProvider.From(source), joinCondition);
@@ -515,7 +515,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3, T4> LeftJoin<T1, T2, T3, T4>(this JoinedEntityBuilder<T1, T2, T3> builder, Expression<Func<EntityBuilder<T4>>> source, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition)
         => builder.LeftJoin(builder.DataProvider.From(source), joinCondition);
@@ -546,7 +546,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3, T4> RightJoin<T1, T2, T3, T4>(this JoinedEntityBuilder<T1, T2, T3> builder, Expression<Func<EntityBuilder<T4>>> source, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition)
         => builder.RightJoin(builder.DataProvider.From(source), joinCondition);
@@ -577,7 +577,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3, T4> FullJoin<T1, T2, T3, T4>(this JoinedEntityBuilder<T1, T2, T3> builder, Expression<Func<EntityBuilder<T4>>> source, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition)
         => builder.FullJoin(builder.DataProvider.From(source), joinCondition);
@@ -657,7 +657,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5> Join<T1, T2, T3, T4, T5>(this JoinedEntityBuilder<T1, T2, T3, T4> builder, Expression<Func<EntityBuilder<T5>>> source, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition)
         => builder.Join(builder.DataProvider.From(source), joinCondition);
@@ -690,7 +690,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5> LeftJoin<T1, T2, T3, T4, T5>(this JoinedEntityBuilder<T1, T2, T3, T4> builder, Expression<Func<EntityBuilder<T5>>> source, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition)
         => builder.LeftJoin(builder.DataProvider.From(source), joinCondition);
@@ -723,7 +723,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5> RightJoin<T1, T2, T3, T4, T5>(this JoinedEntityBuilder<T1, T2, T3, T4> builder, Expression<Func<EntityBuilder<T5>>> source, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition)
         => builder.RightJoin(builder.DataProvider.From(source), joinCondition);
@@ -756,7 +756,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5> FullJoin<T1, T2, T3, T4, T5>(this JoinedEntityBuilder<T1, T2, T3, T4> builder, Expression<Func<EntityBuilder<T5>>> source, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition)
         => builder.FullJoin(builder.DataProvider.From(source), joinCondition);
@@ -841,7 +841,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> Join<T1, T2, T3, T4, T5, T6>(this JoinedEntityBuilder<T1, T2, T3, T4, T5> builder, Expression<Func<EntityBuilder<T6>>> source, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition)
         => builder.Join(builder.DataProvider.From(source), joinCondition);
@@ -876,7 +876,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> LeftJoin<T1, T2, T3, T4, T5, T6>(this JoinedEntityBuilder<T1, T2, T3, T4, T5> builder, Expression<Func<EntityBuilder<T6>>> source, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition)
         => builder.LeftJoin(builder.DataProvider.From(source), joinCondition);
@@ -911,7 +911,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> RightJoin<T1, T2, T3, T4, T5, T6>(this JoinedEntityBuilder<T1, T2, T3, T4, T5> builder, Expression<Func<EntityBuilder<T6>>> source, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition)
         => builder.RightJoin(builder.DataProvider.From(source), joinCondition);
@@ -946,7 +946,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> FullJoin<T1, T2, T3, T4, T5, T6>(this JoinedEntityBuilder<T1, T2, T3, T4, T5> builder, Expression<Func<EntityBuilder<T6>>> source, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition)
         => builder.FullJoin(builder.DataProvider.From(source), joinCondition);
@@ -1036,7 +1036,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> Join<T1, T2, T3, T4, T5, T6, T7>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> builder, Expression<Func<EntityBuilder<T7>>> source, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition)
         => builder.Join(builder.DataProvider.From(source), joinCondition);
@@ -1073,7 +1073,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> LeftJoin<T1, T2, T3, T4, T5, T6, T7>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> builder, Expression<Func<EntityBuilder<T7>>> source, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition)
         => builder.LeftJoin(builder.DataProvider.From(source), joinCondition);
@@ -1110,7 +1110,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> RightJoin<T1, T2, T3, T4, T5, T6, T7>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> builder, Expression<Func<EntityBuilder<T7>>> source, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition)
         => builder.RightJoin(builder.DataProvider.From(source), joinCondition);
@@ -1147,7 +1147,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> FullJoin<T1, T2, T3, T4, T5, T6, T7>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> builder, Expression<Func<EntityBuilder<T7>>> source, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition)
         => builder.FullJoin(builder.DataProvider.From(source), joinCondition);
@@ -1242,7 +1242,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> Join<T1, T2, T3, T4, T5, T6, T7, T8>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> builder, Expression<Func<EntityBuilder<T8>>> source, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition)
         => builder.Join(builder.DataProvider.From(source), joinCondition);
@@ -1281,7 +1281,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> LeftJoin<T1, T2, T3, T4, T5, T6, T7, T8>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> builder, Expression<Func<EntityBuilder<T8>>> source, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition)
         => builder.LeftJoin(builder.DataProvider.From(source), joinCondition);
@@ -1320,7 +1320,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> RightJoin<T1, T2, T3, T4, T5, T6, T7, T8>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> builder, Expression<Func<EntityBuilder<T8>>> source, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition)
         => builder.RightJoin(builder.DataProvider.From(source), joinCondition);
@@ -1359,7 +1359,7 @@ public static class TvfJoinSourceExtensions
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="joinCondition">The join predicate over the two sources.</param>
     /// <returns>A builder over the joined projection.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
     public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> FullJoin<T1, T2, T3, T4, T5, T6, T7, T8>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> builder, Expression<Func<EntityBuilder<T8>>> source, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition)
         => builder.FullJoin(builder.DataProvider.From(source), joinCondition);

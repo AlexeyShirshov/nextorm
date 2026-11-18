@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -13,8 +12,6 @@ namespace NextORM.Core;
 /// </summary>
 internal static class RowMaterializerBuilder
 {
-    private static readonly ConcurrentDictionary<Type, ConstructorInfo> RangeCtorCache = new();
-
     /// <summary>
     /// Picks the longest constructor of <paramref name="resultType"/> and returns either a
     /// constructor call (when it takes exactly one argument per selected column) or a
@@ -188,9 +185,7 @@ internal static class RowMaterializerBuilder
                 : BuildNonItemValue(columns[0], selectList, mapColumn, mapDynamicColumns, dynamicColumns, starStart);
         }
 
-        var ctorInfo = resultType.GetConstructors()
-            .OrderByDescending(it => it.GetParameters().Length)
-            .FirstOrDefault()
+        var ctorInfo = ConstructorInfoResolver.GetLongestPublicConstructor(resultType)
             ?? throw new QueryPreparationException($"Cannot get ctor from {resultType}");
         var ctorParams = ctorInfo.GetParameters();
 
@@ -209,7 +204,7 @@ internal static class RowMaterializerBuilder
         // to be assembled member by member. That requires a parameterless constructor: invoking the
         // parameterful ctor with no arguments would throw while building the tree. A shape that offers
         // neither a matching constructor nor a parameterless one is rejected with a preparation error.
-        var parameterlessCtor = resultType.GetConstructor(Type.EmptyTypes)
+        var parameterlessCtor = ConstructorInfoResolver.GetParameterlessConstructor(resultType)
             ?? throw new QueryPreparationException(
                 $"The projection type {resultType.Name} has {ctorParams.Length} constructor parameter(s), but the projection materializes {values.Length} item(s); map it to a parameterless constructor or to a constructor whose parameters match the projected items.");
 
@@ -314,9 +309,7 @@ internal static class RowMaterializerBuilder
         Func<SelectExpression, Expression> mapColumn,
         Func<SelectExpression, int, DynamicColumns, Expression>? mapDynamicColumns)
     {
-        var ctorInfo = resultType.GetConstructors()
-            .OrderByDescending(it => it.GetParameters().Length)
-            .FirstOrDefault()
+        var ctorInfo = ConstructorInfoResolver.GetLongestPublicConstructor(resultType)
             ?? throw new QueryPreparationException($"Cannot get ctor from {resultType}");
         var ctorParams = ctorInfo.GetParameters();
 
@@ -338,7 +331,7 @@ internal static class RowMaterializerBuilder
             if (mapDynamicColumns is null)
                 throw new NotSupportedException($"The provider cannot materialize the dynamic-columns store of {resultType.Name}.");
 
-            var parameterlessCtor = resultType.GetConstructor(Type.EmptyTypes)
+            var parameterlessCtor = ConstructorInfoResolver.GetParameterlessConstructor(resultType)
                 ?? throw new QueryPreparationException($"The entity {resultType.Name} declares a dynamic-columns store but has no parameterless constructor; map it to a parameterless constructor.");
             return BuildMemberInit(resultType, parameterlessCtor, selectList, mapColumn, mapDynamicColumns);
         }
@@ -404,7 +397,7 @@ internal static class RowMaterializerBuilder
             return Expression.New(ctorInfo, arguments);
         }
 
-        var parameterlessCtor = resultType.GetConstructor(Type.EmptyTypes);
+        var parameterlessCtor = ConstructorInfoResolver.GetParameterlessConstructor(resultType);
         if (parameterlessCtor is not null)
             return BuildMemberInit(resultType, parameterlessCtor, selectList, mapColumn);
 
@@ -492,7 +485,7 @@ internal static class RowMaterializerBuilder
     {
         var ownerType = lower.PropertyInfo!.PropertyType;
         var rangeType = Nullable.GetUnderlyingType(ownerType) ?? ownerType;
-        var ctor = RangeCtorCache.GetOrAdd(rangeType, static type => type.GetConstructors().Single(c => c.GetParameters().Length == 7));
+        var ctor = ConstructorInfoResolver.GetRangeConstructor(rangeType)!;
         var rangeColumns = lower.RangeColumns!;
 
         var lowerValue = mapColumn(lower);

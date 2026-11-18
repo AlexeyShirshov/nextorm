@@ -11,9 +11,8 @@ using NextORM.SqlServer;
 namespace NextORM.EntityFrameworkCore;
 
 /// <summary>
-/// Bridges an EF Core <see cref="DbContext"/> to a nextorm <see cref="IDataContext"/>: the nextorm
-/// context runs on the same connection, enlists EF's active transaction, and reads its mapping from
-/// the EF model.
+/// Creates a nextorm <see cref="IDataContext"/> from an EF Core <see cref="DbContext"/>, using its
+/// relational connection and model and joining its current transaction when one exists.
 /// </summary>
 /// <remarks>
 /// The bridge shares EF Core's connection and, when EF has one active, its transaction: nextorm reads

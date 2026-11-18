@@ -63,6 +63,8 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
 
         if (x.ProviderType != y.ProviderType) return false;
 
+        if (x.ReaderType != y.ReaderType) return false;
+
         // The projection-item grouping decides how the flattened columns are rebuilt into an entity
         // (and into null on the missing side of an outer join), so it must be part of the plan identity
         // exactly as it is part of the row-mapper signature. The group is compared by shape (entity type
@@ -116,6 +118,8 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
             hash.Add(obj.DurationUnit);
 
             hash.Add(obj.ProviderType);
+
+            hash.Add(obj.ReaderType);
 
             hash.Add(obj.ProjectionItem is { } item ? item.EntityType.GetHashCode() * 31 + item.Slot : 0);
 

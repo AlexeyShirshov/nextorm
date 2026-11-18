@@ -4,11 +4,6 @@ namespace NextORM.Core;
 /// <summary>
 /// A single <c>ORDER BY</c> key: an expression or a resolved column index together with its direction.
 /// </summary>
-/// <remarks>
-/// Was a struct with public mutable fields; <see cref="Direction"/> and <see cref="PreparedExpression"/>
-/// are now properties (with private backing fields). See <c>docs/specs/design/API-NAMING-REVIEW.md</c>
-/// findings P1-17 and P2-19.
-/// </remarks>
 public struct Sorting
 {
     private readonly Expression? _expression;

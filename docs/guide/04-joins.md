@@ -1,8 +1,43 @@
 # Joins
 
-> Combine rows from two or more entities, derived queries or raw tables with [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})), [`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})), [`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})), [`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})), [`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})), [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) and [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})).
+A join combines rows from tables. For example, you can link an order to its customer by matching their
+customer IDs. This page starts with that example, then covers outer joins, subqueries, and
+provider-specific forms.
 
-**Prerequisites:** [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Querying and projections](../engine/index.md) · [Filtering (WHERE)](03-filtering-where.md)
+**Before you begin:** Complete the [quickstart](../getting-started/02-quickstart.md), which defines the
+`IOrder` and `ICustomer` entities and sample tables used below.
+
+## Join orders to customers
+
+The order table stores a customer ID. Match it to the customer's ID, then select a name from each
+side:
+
+```csharp
+var rows = await dataContext.From<IOrder>()
+    .Join(dataContext.From<ICustomer>(),
+        (order, customer) => order.CustomerId == customer.Id)
+    .OrderBy(pair => pair.Item1.Id)
+    .Select(pair => new
+    {
+        OrderId = pair.Item1.Id,
+        CustomerName = pair.Item2.Name,
+    })
+    .ToListAsync();
+```
+
+The query returns:
+
+```text
+OrderId | CustomerName
+1 | Amina
+2 | Ravi
+3 | Amina
+```
+
+`From<IOrder>()` is the left side, and `ICustomer` is the right side. In the join condition,
+`order` refers to the left side and `customer` to the right. After the join, `pair.Item1` is the order
+and `pair.Item2` is the customer. This is an inner join, so an order without a matching customer
+doesn't appear. Use [`LeftJoin`](#outer-joins) when you need to keep every order.
 
 ## Overview
 
@@ -20,30 +55,14 @@ The right-hand side can be:
   the [`TableAlias`](xref:NextORM.Core.TableAlias) indexer (`t["id"]`).
 * a mapped entity named by its type, without passing a source builder — see [Source-less (type-only) joins](#source-less-type-only-joins);
 
-**A per-parent collection is not a join.** A projection member that names a declared collection navigation —
-`Select(p => new { p.Id, p.Comments })` or its `AsEntityBuilder<T>() … ToList()` adapter — returns each parent's
-collection without a `JOIN`: the graph is loaded by the eager-loading route and the collection is projected in
-memory, so the statement gains no extra select-list columns and the parent rows are not multiplied. See
-[Collection-valued projection slots](../relationships/collection-projection.md).
-
-Two things are important before looking at the examples:
-
-1. **Join arity has a flat arity-chain scope bound of eight tables.** The first join returns
-   [`JoinedEntityBuilder<T1, T2>`](xref:NextORM.Core.JoinedEntityBuilder`2), the next [`JoinedEntityBuilder<T1, T2, T3>`](xref:NextORM.Core.JoinedEntityBuilder`3), and so on up to `JoinedEntityBuilder<T1..T8>`.
-   Beyond this point no further [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))
-   methods, and `Projection<T1..T8>` does not implement [`IExtendableProjection`](xref:NextORM.Core.IExtendableProjection), so the flat typed chain
-   stops there. That is a scope bound, **not** a compile-time rejection: `JoinedEntityBuilder<T1..T8>` still
-   inherits the generic-base `EntityBuilder<Projection<T1..T8>>` members, so a further source-less (and
-   source-explicit) join does compile, wrapping the accumulated eight-table projection as `Item1`. Name the
-   projection with
-   [`As`](xref:NextORM.Core.EntityBuilder`1.As``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) (see [Naming an intermediate projection](#naming-an-intermediate-projection-as)) to keep the shape clean.
-2. **The accumulated projection is addressed as `p.Item1`, `p.Item2`, … `p.Item8`.** After the first join the
-   condition receives that projection instead of the plain entity, so a chained join references the
-   tables already joined through `p.tN`.
-
 The generated SQL references each table under a positional alias: `t1` for the base table and `t2`,
 `t3`, … for the joined tables, in the order they were added. Aliases are quoted per provider
 (`'t1'` on SQLite, `[t1]` on SQL Server, `"t1"` on PostgreSQL).
+
+The reference examples below switch to the separate `ISimpleEntity` and `IComplexEntity` test model;
+they don't use the quickstart's `IOrder` and `ICustomer` entities. The output tables use the
+integration-test fixture data. For information about mapping your own entities, see
+[Entities and metadata](../getting-started/03-entities-and-metadata.md).
 
 ## Inner join
 
@@ -1015,12 +1034,24 @@ var sql = dataContext.From<ISimpleEntity>()
                        E = p.Item5.Id, F = p.Item6.Id, G = p.Item7.Id, H = p.Item8.Id });
 ```
 
+The flat typed chain has a scope bound of eight sources. The first join returns
+`JoinedEntityBuilder<T1, T2>`, and each next join adds a source through `JoinedEntityBuilder<T1..T8>`.
+At eight sources, `Projection<T1..T8>` doesn't implement `IExtendableProjection`, so the declared
+flat chain stops. This is a scope bound, not a compile-time rejection: the eight-source builder
+inherits `EntityBuilder<Projection<T1..T8>>`, whose source-explicit and source-less join members still
+compile. A further join wraps the accumulated projection as `Item1`. Use
+[`As`](xref:NextORM.Core.EntityBuilder`1.As``1(System.Linq.Expressions.Expression{System.Func{`0,``0}}))
+to name an intermediate projection and keep a longer query readable.
+
+After the first join, `Item1` is the original source, `Item2` is the first joined source, and each
+later `ItemN` is the source added at that position. A chained join condition receives the accumulated
+projection and the new source.
+
 The direct [`Cte<T>`](xref:NextORM.Core.Cte`1) overloads are also available at every continuation: each
 [`JoinedEntityBuilder<T1..Tn>`](xref:NextORM.Core.JoinedEntityBuilder`2) (receiver arities 2–7) takes a typed CTE in place of
 the `EntityBuilder<T>` source for all seven operators, so a CTE can be joined at any step. The
 flat typed chain still stops at eight slots — no further join case is *declared* at arity eight — and a
-`Cte<T>` does not change that scope bound; the inherited generic-base joins remain reachable (see
-[Overview](#overview)).
+`Cte<T>` does not change that scope bound; the inherited generic-base joins remain reachable.
 
 ## Naming an intermediate projection: `As`
 
@@ -1148,6 +1179,21 @@ select t1.id
 every other provider and the in-memory context reject them with `NotSupportedException`. See
 [Provider-specific SQL](provider-specific-sql/overview.md) for the full catalogue.
 
+## Collection navigation isn't a join
+
+A projection can return a declared collection navigation, such as
+`Select(order => new { order.Id, order.Lines })`, without adding a SQL `JOIN`. NextORM loads the entity
+graph through eager loading and projects the collection in memory. The query doesn't add columns to
+the select list or multiply parent rows. For the supported collection shapes and loading behavior, see
+[Collection-valued projection slots](../relationships/collection-projection.md).
+
+## Routed joins
+
+A routed statement runs on one host. Every routed join source must resolve to the same topology;
+sources without a routing rule follow that topology, and a sharded source carries its bucket variant.
+See [Routing data to topologies](34-routing-data-to-topologies.md) and
+[Sharding and horizontal partitioning](35-sharding-and-horizontal-partitioning.md).
+
 ## Provider differences
 
 | Provider | Positional SQL table aliases | Derived-table alias | Outer joins | APPLY / LATERAL |
@@ -1165,6 +1211,11 @@ it supports [`Inner`](xref:NextORM.Core.JoinType.Inner), [`Left`](xref:NextORM.C
 `tests/nextorm.core.tests/InMemory/Queries/InMemoryJoinTests.cs`). [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) are SQL-only and throw
 `NotSupportedException` on the in-memory provider, like the other unsupported join types. Joins through
 `JoinedEntityBuilder<T1..T8>` are resolved at query build time on every provider.
+
+## What's next
+
+Continue with [grouping and aggregates](05-grouping-and-aggregates.md) or
+[sorting and paging](06-sorting-and-paging.md).
 
 ## See also
 

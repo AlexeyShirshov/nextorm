@@ -11,13 +11,14 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!--
       Package validation is the packaged-output half of the API gate (issue #53): it compares the
-      package's own assets (net10.0 vs net11.0) and, once a stable baseline exists, the published
-      package it replaces. The source-tree half is PublicAPI.Shipped/Unshipped.txt next to each
-      library .csproj. Baseline validation is skipped for prerelease baselines, so
-      PackageValidationBaselineVersion is added when the first stable release (1.0.9) is on
-      nuget.org: the next release is then gated against it.
+      package's own assets (net10.0 vs net11.0) and the published package it replaces. The
+      source-tree half is PublicAPI.Shipped/Unshipped.txt next to each library .csproj.
+      The baseline is the first stable release, 1.0.9 (issue #389): removing or changing a public
+      member that shipped there fails `dotnet pack` with CP0002/CP0001. A conscious break is
+      suppressed explicitly through CompatibilitySuppressions.xml, never by dropping the baseline.
     -->
     <EnablePackageValidation>true</EnablePackageValidation>
+    <PackageValidationBaselineVersion>1.0.9</PackageValidationBaselineVersion>
     <!--
       Published packages ship one asset per supported consumer runtime. A net10.0 asset is also
       loadable from a net11.0 application, but multi-targeting keeps the packages buildable against

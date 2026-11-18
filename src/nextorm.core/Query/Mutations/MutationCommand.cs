@@ -50,6 +50,21 @@ internal abstract class MutationCommand
     public Type EntityType { get; }
 
     /// <summary>
+    /// The mapping variant (bucket) the mutation was built for; it selects the shard connection that
+    /// executes the statement. The default scope keeps the context connection.
+    /// </summary>
+    internal MappingVariant MappingVariant { get; set; } = MappingVariant.Default;
+
+    /// <summary>
+    /// The entity types the statement reads or writes, when they are not just <see cref="EntityType"/>.
+    /// A materialisation writes a literal table name and reads its source query, so it is routed by the
+    /// entities of that query instead of by its projected row type. <see langword="null"/> routes the
+    /// statement by <see cref="EntityType"/> alone.
+    /// </summary>
+    internal IReadOnlyList<Type>? RouteSources { get; set; }
+
+
+    /// <summary>
     /// The mapped columns the statement returns through <c>RETURNING</c>/<c>OUTPUT</c>, or
     /// <see langword="null"/> when the statement only reports the affected-row count. Overridden by the
     /// commands whose builders expose a <c>Returning</c> terminal.
@@ -236,6 +251,7 @@ internal sealed class InsertCommand : MutationCommand
         OutputInto = outputInto;
         DynamicColumns = dynamicColumns;
         IsBulkReturning = isBulkReturning;
+        MappingVariant = MappingVariant.Default;
     }
 
     /// <summary>The mapped table name, before the naming convention and identifier quoting are applied.</summary>
@@ -304,4 +320,5 @@ internal sealed class InsertCommand : MutationCommand
     /// single-row <c>InsertBuilder.Returning()</c>, leaves it <see langword="false"/>.
     /// </summary>
     public bool IsBulkReturning { get; }
+
 }

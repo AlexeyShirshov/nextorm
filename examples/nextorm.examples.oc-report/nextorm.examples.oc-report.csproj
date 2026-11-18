@@ -45,6 +45,7 @@
       ProjectReference is needed any more.
     -->
     <PackageReference Include="nextorm" />
+    <PackageReference Include="nextorm.extensions" />
     <PackageReference Include="nextorm.sqlite" />
   </ItemGroup>
 
