@@ -29,7 +29,7 @@ with no change tracking and no mandatory entity class.
   No `InternalsVisibleTo`, no translator registry and no global mutable state.
 * **NativeAOT** — enable `PublishAot=true` without a separate compiled model or manual query
   registration. Representative scenarios are verified for all six database providers on
-  .NET 11 `linux-x64`; see the
+  .NET 11 `linux-x64`, and 40 SQLite scenarios also pass on Windows `win-x64`; see the
   [NativeAOT guide](https://alexeyshirshov.github.io/nextorm/infrastructure/05-nativeaot.html).
 
 ## Installation
@@ -133,7 +133,9 @@ is [Extensibility](https://alexeyshirshov.github.io/nextorm/advanced/extensibili
 ## NativeAOT
 
 Native binaries run against SQLite, PostgreSQL, SQL Server, MySQL, MariaDB, and ClickHouse on
-`net11.0` (`linux-x64`). Native-versus-JIT checks cover representative scenarios, including
+`net11.0` (`linux-x64`); Windows x64 (`win-x64`) is also verified with 40 SQLite scenarios.
+Server providers have not been verified on Windows in that run.
+Native-versus-JIT checks cover representative scenarios, including
 writes, bulk insert, raw SQL row mapping, streaming, and eager loading. The EF Core bridge
 requires JIT. See the [NativeAOT guide](https://alexeyshirshov.github.io/nextorm/infrastructure/05-nativeaot.html)
 for the tested scope, JSON serialization requirements, and limitations.

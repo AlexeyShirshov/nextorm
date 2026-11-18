@@ -1,4 +1,4 @@
-﻿using NextORM.Core;
+using NextORM.Core;
 using NextORM.Sqlite;
 
 namespace NextORM.Integration.Tests;
@@ -119,6 +119,8 @@ public sealed class SqliteTestProvider : ITestProvider
 
         public void Dispose()
         {
+            using var connection = new Microsoft.Data.Sqlite.SqliteConnection(string.Format(ConnectionString, DatabasePath));
+            Microsoft.Data.Sqlite.SqliteConnection.ClearPool(connection);
             foreach (var suffix in new[] { "", "-journal", "-wal", "-shm" })
             {
                 var path = DatabasePath + suffix;

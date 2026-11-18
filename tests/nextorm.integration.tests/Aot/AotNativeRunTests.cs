@@ -46,12 +46,15 @@ public sealed class AotNativeRunTests
     public async Task PublishedNativeRunner_UsesParentSqliteDatabase_AndReportsEveryScenario()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var binaryPath = Path.Combine(repositoryRoot, "tests", "nextorm.aot.runner", "bin", "linux", "Release", "net11.0", "linux-x64", "publish", "nextorm.aot.runner");
+        var hostOs = OperatingSystem.IsWindows() ? "windows" : "linux";
+        var runtimeIdentifier = OperatingSystem.IsWindows() ? "win-x64" : "linux-x64";
+        var executableName = OperatingSystem.IsWindows() ? "nextorm.aot.runner.exe" : "nextorm.aot.runner";
+        var binaryPath = Path.Combine(repositoryRoot, "tests", "nextorm.aot.runner", "bin", hostOs, "Release", "net11.0", runtimeIdentifier, "publish", executableName);
         // The NativeAOT runner is a published evidence artifact, not part of the ordinary build:
         // `dotnet build` never produces it. The CI job `aot` publishes it and runs this harness with
         // NEXTORM_AOT_EVIDENCE=1; a local run without that variable skips when the binary is absent,
         // while the explicit opt-in path never degrades into a silent skip.
-        const string publishCommand = "dotnet publish tests/nextorm.aot.runner -c Release -r linux-x64";
+        var publishCommand = $"dotnet publish tests/nextorm.aot.runner -c Release -r {runtimeIdentifier}";
         if (!File.Exists(binaryPath))
         {
             if (Environment.GetEnvironmentVariable("NEXTORM_AOT_EVIDENCE") == "1")

@@ -1,6 +1,6 @@
-﻿# NativeAOT
+# NativeAOT
 
-> For .NET 11 applications targeting `linux-x64`, enable native publishing with
+> For .NET 11 applications targeting `linux-x64` or `win-x64`, enable native publishing with
 > `<PublishAot>true</PublishAot>`. You don't need a compiled model, separate query generation, or
 > hand-written code.
 
@@ -8,8 +8,11 @@
 
 ## Enabling it
 
-Before publishing, install the NativeAOT prerequisites for the target RID: `clang`, `zlib1g-dev`, and a
-native toolchain.
+Before publishing, install the NativeAOT prerequisites on the build host:
+
+- **Linux x64:** `clang`, `zlib1g-dev`, and a native toolchain.
+- **Windows x64:** Visual Studio or Visual Studio Build Tools with the **Desktop development with C++**
+  workload, including the MSVC x64 toolchain and Windows SDK. Publish on Windows for `win-x64`.
 
 Add these properties to your project file:
 
@@ -25,6 +28,15 @@ Then publish the application:
 ```bash
 dotnet publish -c Release
 ```
+
+For Windows, set `RuntimeIdentifier` to `win-x64`, or override the RID when publishing:
+
+```powershell
+dotnet publish -c Release -r win-x64
+```
+
+Run the resulting `.exe` from the publish directory. SQLite needs no database server or containers;
+server providers require a live database, which may be local, remote, or container-hosted.
 
 Entity mappings are compiled as well: the package ships a source generator that describes every
 `[SqlTable]`/`[Table]` entity declared in your assembly — table, columns, keys, precision, collation,
@@ -57,6 +69,33 @@ provider's live database; they include single-query eager-loading graphs with on
 compare their results with a genuine JIT run. This coverage is representative, not exhaustive or an
 automatic compatibility guarantee for every query combination. Test your own query set against the
 native build before shipping.
+
+### Windows verification
+
+On 2026-11-18, the repository's `nextorm.aot.runner` was published and executed on Windows x64 with
+.NET SDK 11.0.100 (`win-x64`). All **40 SQLite scenarios** passed and matched their JIT controls
+against the same seeded database. They cover projections, aggregates, correlated subqueries, joins,
+CTEs, window functions, converters, relationships, streaming, raw SQL, DML, and bulk insert.
+
+This verifies the current source checkout, not a separate run against the published NuGet packages.
+Server providers were not exercised on Windows in this run; their Linux coverage must not be read
+as Windows verification. Publication succeeded with trim/AOT analysis warnings, not warning-free.
+
+To reproduce from the repository root on Windows:
+
+```powershell
+dotnet publish tests/nextorm.aot.runner -c Release -r win-x64
+dotnet build tests/nextorm.integration.tests -c Debug
+$env:DOTNET_SYSTEM_GLOBALIZATION_INVARIANT = "1"
+$env:NEXTORM_AOT_EVIDENCE = "1"
+$env:NEXTORM_AOT_EVIDENCE_DIR = Join-Path $env:TEMP ("nextorm-aot-" + [guid]::NewGuid())
+dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class NextORM.Integration.Tests.AotNativeRunTests -noColor
+```
+
+Use a dedicated PowerShell session: the environment variables apply to subsequent child processes.
+The native runner uses invariant globalization, so the JIT control must use it too; otherwise decimal
+formatting can differ (`1.5` versus `1,5`) even when the numeric results agree. The evidence directory
+contains `native-run.log` and `oracle.md`. No containers are needed for this check.
 
 ## JSON columns
 
