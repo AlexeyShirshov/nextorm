@@ -131,8 +131,8 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-Nextorm is stable and targets .NET 10 and .NET 11. Package validation checks the public API against
-1.0.9, the first stable release.
+Nextorm is stable and targets .NET 10 and .NET 11. Package validation checks public API compatibility
+against a published baseline.
 
 ## Installation
 

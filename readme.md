@@ -194,8 +194,8 @@ The full comparison — capabilities and benchmarks, with methodology — is in 
 
 ## Status
 
-Stable. The packages target .NET 10 and .NET 11, and package validation checks the public API
-against 1.0.9, the first stable release. See the
+Stable. The packages target .NET 10 and .NET 11. Package validation checks public API compatibility
+against a published baseline. See the
 [release notes](https://alexeyshirshov.github.io/nextorm/#releases) and
 [roadmap](https://github.com/AlexeyShirshov/nextorm/milestones).
 
