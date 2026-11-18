@@ -5348,8 +5348,6 @@ public partial class QueryCommand
         var applied = Prepared;
         applied.WhereBasePlanHash = clone.Prep?.WhereBasePlanHash ?? 0;
         applied.PreparedArrayJoin = clone.Prep?.PreparedArrayJoin;
-        // Preparation-derived terminal shape read on the later uncached/render path.
-        OneColumn = clone.OneColumn;
     }
 
     /// <summary>The transformed raw edges an apply overwrites, so a rejected fast path can be undone.</summary>

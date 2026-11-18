@@ -423,8 +423,10 @@ public sealed class ShardQueryExecutionTests
         var source = new EntityBuilder<ProbeRow>(context);
         int[] buckets = [2, 0, 1];
         var owners = new Dictionary<int, string> { [2] = "owner-a", [0] = "owner-b", [1] = "owner-a" };
-        var unprojected = new ShardQuery<ProbeRow>(source, buckets, owners, parallelism: 2);
-        var projected = new ShardQuery<ProbeRow, int>(source, static row => row.Id * 10, buckets, owners, parallelism: 2);
+        // AcrossBuckets requires a sharded SQL context. This fixture calls the internal
+        // constructors only to verify the facades' results, not concurrent use of an in-memory context.
+        var unprojected = new ShardQuery<ProbeRow>(source, buckets, owners, parallelism: 1);
+        var projected = new ShardQuery<ProbeRow, int>(source, static row => row.Id * 10, buckets, owners, parallelism: 1);
 
         var rows = unprojected.ToList();
         rows.Should().HaveCount(3);
