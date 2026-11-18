@@ -746,6 +746,8 @@ internal static class RawValueConverter
         if (value is null)
             return null;
 
+        target = Nullable.GetUnderlyingType(target) ?? target;
+
         if (target.IsInstanceOfType(value))
             return value;
 
