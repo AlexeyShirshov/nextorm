@@ -10,11 +10,11 @@ Job=Job-JWQWGO  Toolchain=InProcessEmitToolchain  Categories=csv
 ```
 | Method                            | Mean      | Ratio | Gen0     | Gen1     | Gen2    | Allocated  | Alloc Ratio |
 |---------------------------------- |----------:|------:|---------:|---------:|--------:|-----------:|------------:|
-| Nextorm_StringProjection_ToList   |  2.763 ms |  0.33 | 121.0938 |  70.3125 |       - | 1018.12 KB |        0.45 |
-| Nextorm_StringProjection_WriteCsv |  3.469 ms |  0.42 | 113.2813 |        - |       - |   949.1 KB |        0.42 |
-| Nextorm_ToList                    |  8.336 ms |  1.00 | 265.6250 | 156.2500 |       - | 2266.74 KB |        1.00 |
-| Nextorm_ToList_ManualCsv          |  9.694 ms |  1.16 | 531.2500 | 453.1250 |       - | 4375.43 KB |        1.93 |
-| Nextorm_WriteCsv                  | 10.095 ms |  1.21 | 203.1250 |        - |       - | 1733.92 KB |        0.76 |
-| Linq2Db_ToList_ManualCsv          | 12.945 ms |  1.55 | 562.5000 | 281.2500 | 78.1250 | 4087.58 KB |        1.80 |
-| Dapper_ToList_ManualCsv           | 13.250 ms |  1.59 | 687.5000 | 359.3750 | 93.7500 | 5100.61 KB |        2.25 |
-| EFCore_ToList_ManualCsv           | 14.824 ms |  1.78 | 890.6250 | 359.3750 | 93.7500 | 6751.01 KB |        2.98 |
+| Nextorm_StringProjection_ToList   |  2.617 ms |  0.34 | 121.0938 |  70.3125 |       - | 1018.15 KB |        0.45 |
+| Nextorm_StringProjection_WriteCsv |  3.302 ms |  0.42 | 113.2813 |        - |       - |  949.13 KB |        0.42 |
+| Nextorm_ToList                    |  7.805 ms |  1.00 | 265.6250 | 156.2500 |       - | 2266.74 KB |        1.00 |
+| Nextorm_ToList_ManualCsv          |  9.237 ms |  1.18 | 531.2500 | 421.8750 |       - | 4375.42 KB |        1.93 |
+| Nextorm_WriteCsv                  |  9.480 ms |  1.21 | 203.1250 |        - |       - | 1733.92 KB |        0.76 |
+| Linq2Db_ToList_ManualCsv          | 11.925 ms |  1.53 | 562.5000 | 281.2500 | 78.1250 | 4087.51 KB |        1.80 |
+| Dapper_ToList_ManualCsv           | 12.323 ms |  1.58 | 687.5000 | 359.3750 | 93.7500 | 5100.61 KB |        2.25 |
+| EFCore_ToList_ManualCsv           | 13.288 ms |  1.70 | 890.6250 | 359.3750 | 93.7500 | 6750.96 KB |        2.98 |

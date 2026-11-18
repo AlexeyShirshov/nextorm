@@ -1071,6 +1071,57 @@ def _tier1_markdown_table(headers: tuple[str, ...], rows: list[tuple[str, ...]])
     return "\n".join(lines)
 
 
+def _metadata_timestamp(value, label: str, path: Path) -> dt.datetime:
+    if not isinstance(value, str):
+        raise TableError(f"{path.name}: {label} must be an ISO UTC timestamp")
+    try:
+        parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise TableError(f"{path.name}: invalid {label} {value!r}") from exc
+    if parsed.tzinfo is None:
+        raise TableError(f"{path.name}: {label} must include a timezone")
+    return parsed
+
+
+def _validate_group_runs(path: Path, run: dict, started: dt.datetime, finished: dt.datetime) -> None:
+    """Represent a resumed Tier-1 run explicitly through its ordered per-group UTC windows.
+
+    A run that finished on a later date than it started (for example a resumed session) carries
+    ``run.groupRuns``: the actual window of every group, in execution order. Same-day runs keep the
+    previous single-date contract and must not carry the field.
+    """
+    same_day = started.date() == finished.date()
+    if same_day:
+        if "groupRuns" in run:
+            raise TableError(f"{path.name}: groupRuns is only meaningful for a multi-date run")
+        return
+    groups = run.get("groupRuns")
+    if not isinstance(groups, list) or not groups:
+        raise TableError(
+            f"{path.name}: Tier-1 run spans multiple dates; add run.groupRuns with the actual per-group UTC windows"
+        )
+    labels: list[str] = []
+    previous_end = None
+    for index, entry in enumerate(groups):
+        if not isinstance(entry, dict):
+            raise TableError(f"{path.name}: groupRuns[{index}] must be an object")
+        label = entry.get("group")
+        if not isinstance(label, str) or not label:
+            raise TableError(f"{path.name}: groupRuns[{index}].group must be a non-empty string")
+        group_start = _metadata_timestamp(entry.get("startedUtc"), f"groupRuns[{index}].startedUtc", path)
+        group_end = _metadata_timestamp(entry.get("finishedUtc"), f"groupRuns[{index}].finishedUtc", path)
+        if group_end < group_start:
+            raise TableError(f"{path.name}: groupRuns[{index}] ({label}) ends before it starts")
+        if previous_end is not None and group_start < previous_end:
+            raise TableError(f"{path.name}: groupRuns must be ordered and non-overlapping ({label})")
+        previous_end = group_end
+        labels.append(label)
+    if len(set(labels)) != len(labels):
+        raise TableError(f"{path.name}: duplicate group labels in groupRuns")
+    if groups[0].get("startedUtc") != run["startedUtc"] or groups[-1].get("finishedUtc") != run["finishedUtc"]:
+        raise TableError(f"{path.name}: groupRuns must cover the overall run window exactly")
+
+
 def _tier1_run_metadata(results_dir: Path, measurements: dict) -> dict:
     path = results_dir / TIER1_RUN_METADATA
     if not path.is_file():
@@ -1156,8 +1207,7 @@ def _tier1_run_metadata(results_dir: Path, measurements: dict) -> dict:
         raise TableError(f"{path.name}: invalid UTC run timestamps") from exc
     if started.tzinfo is None or finished.tzinfo is None or finished < started:
         raise TableError(f"{path.name}: run timestamps must be ordered and include a timezone")
-    if started.date() != finished.date():
-        raise TableError(f"{path.name}: Tier-1 run spans multiple dates; represent its dates explicitly")
+    _validate_group_runs(path, run, started, finished)
 
     all_measurements = [
         measurement for group in measurements.values() for measurement in group
@@ -1207,14 +1257,20 @@ def _tier1_run_metadata(results_dir: Path, measurements: dict) -> dict:
         raise TableError(f"{path.name}: job row counts do not sum to tier1Rows")
     if run["failedRows"] != 0:
         raise TableError(f"{path.name}: published Tier-1 snapshot has failed rows")
-    return {**metadata, "asOfDate": started.date().isoformat()}
+    as_of_date = started.date().isoformat()
+    if started.date() != finished.date():
+        as_of_date = f"{as_of_date}–{finished.date().isoformat()}"
+    return {**metadata, "asOfDate": as_of_date}
 
 
 def _build_tier1_run_info(run: dict, lang: str) -> str:
     info = run["run"]
     started = dt.datetime.fromisoformat(info["startedUtc"].replace("Z", "+00:00"))
     finished = dt.datetime.fromisoformat(info["finishedUtc"].replace("Z", "+00:00"))
-    interval = f"{started.strftime('%H:%M:%S')}–{finished.strftime('%H:%M:%S')} UTC"
+    if started.date() == finished.date():
+        interval = f"{started.strftime('%H:%M:%S')}–{finished.strftime('%H:%M:%S')} UTC"
+    else:
+        interval = f"{started.strftime('%Y-%m-%d %H:%M:%S')}–{finished.strftime('%Y-%m-%d %H:%M:%S')} UTC"
     local_source_en = (
         f"built from {info['localNextormProjects']} local NextORM project references and "
         + ("the local source-generator analyzer" if info["localSourceGenerator"] else "no local source-generator analyzer")

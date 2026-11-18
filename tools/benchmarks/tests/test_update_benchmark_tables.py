@@ -482,6 +482,96 @@ class Tier1TableTests(unittest.TestCase):
         self.assertEqual(len(blocks["tier1-write-json"].splitlines()), 13)
         self.assertEqual(len(blocks["tier1-csv"].splitlines()), 10)
 
+    @staticmethod
+    def _resumed_tier1_dir(temp: str, *, groups=None, **overrides) -> Path:
+        results = Path(temp)
+        for filename in tables.TIER1_REQUIRED_REPORTS:
+            shutil.copy2(tables.DEFAULT_RESULTS_DIR / filename, results / filename)
+        metadata = json.loads(
+            (tables.DEFAULT_RESULTS_DIR / tables.TIER1_RUN_METADATA).read_text(encoding="utf-8")
+        )
+        run = metadata["run"]
+        run["startedUtc"] = "2026-11-17T18:38:46Z"
+        run["finishedUtc"] = "2026-11-18T02:56:28Z"
+        run["groupRuns"] = [
+            {"group": "projection", "startedUtc": "2026-11-17T18:38:46Z", "finishedUtc": "2026-11-17T18:46:00Z"},
+            {"group": "aggregates", "startedUtc": "2026-11-17T18:46:00Z", "finishedUtc": "2026-11-17T18:53:03Z"},
+            {"group": "paging", "startedUtc": "2026-11-17T18:53:03Z", "finishedUtc": "2026-11-17T19:00:05Z"},
+            {"group": "streaming", "startedUtc": "2026-11-18T02:22:17Z", "finishedUtc": "2026-11-18T02:29:56Z"},
+            {"group": "write-json", "startedUtc": "2026-11-18T02:29:56Z", "finishedUtc": "2026-11-18T02:47:27Z"},
+            {"group": "csv", "startedUtc": "2026-11-18T02:47:27Z", "finishedUtc": "2026-11-18T02:56:28Z"},
+        ]
+        if groups is not None:
+            run["groupRuns"] = groups
+        run.update(overrides)
+        (results / tables.TIER1_RUN_METADATA).write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+        return results
+
+    def test_tier1_resumed_multi_date_run_renders_the_actual_range(self):
+        with tempfile.TemporaryDirectory() as temp:
+            results = self._resumed_tier1_dir(temp)
+            for lang in ("en", "ru"):
+                with self.subTest(lang=lang):
+                    info = tables.build_tier1_blocks(results, lang)["tier1-run-info"]
+                    self.assertIn("2026-11-17–2026-11-18", info)
+                    self.assertIn("2026-11-17 18:38:46", info)
+                    self.assertIn("2026-11-18 02:56:28", info)
+
+    def test_tier1_multi_date_run_requires_explicit_group_windows(self):
+        with tempfile.TemporaryDirectory() as temp:
+            results = self._resumed_tier1_dir(temp, groups=[])
+            with self.assertRaises(tables.TableError):
+                tables.build_tier1_blocks(results, "en")
+
+    def test_tier1_group_windows_must_be_ordered_and_non_overlapping(self):
+        groups = [
+            {"group": "projection", "startedUtc": "2026-11-17T18:38:46Z", "finishedUtc": "2026-11-17T18:46:00Z"},
+            {"group": "aggregates", "startedUtc": "2026-11-17T18:40:00Z", "finishedUtc": "2026-11-17T18:53:03Z"},
+            {"group": "csv", "startedUtc": "2026-11-18T02:47:27Z", "finishedUtc": "2026-11-18T02:56:28Z"},
+        ]
+        with tempfile.TemporaryDirectory() as temp:
+            results = self._resumed_tier1_dir(temp, groups=groups)
+            with self.assertRaises(tables.TableError):
+                tables.build_tier1_blocks(results, "en")
+
+    def test_tier1_group_window_cannot_end_before_it_starts(self):
+        groups = [
+            {"group": "projection", "startedUtc": "2026-11-17T18:38:46Z", "finishedUtc": "2026-11-17T18:30:00Z"},
+            {"group": "csv", "startedUtc": "2026-11-18T02:47:27Z", "finishedUtc": "2026-11-18T02:56:28Z"},
+        ]
+        with tempfile.TemporaryDirectory() as temp:
+            results = self._resumed_tier1_dir(temp, groups=groups)
+            with self.assertRaises(tables.TableError):
+                tables.build_tier1_blocks(results, "en")
+
+    def test_tier1_group_windows_must_cover_the_overall_run(self):
+        groups = [
+            {"group": "projection", "startedUtc": "2026-11-17T18:40:00Z", "finishedUtc": "2026-11-17T18:46:00Z"},
+            {"group": "csv", "startedUtc": "2026-11-18T02:47:27Z", "finishedUtc": "2026-11-18T02:56:28Z"},
+        ]
+        with tempfile.TemporaryDirectory() as temp:
+            results = self._resumed_tier1_dir(temp, groups=groups)
+            with self.assertRaises(tables.TableError):
+                tables.build_tier1_blocks(results, "en")
+
+    def test_tier1_same_day_run_keeps_the_single_date_contract(self):
+        with tempfile.TemporaryDirectory() as temp:
+            results = self._resumed_tier1_dir(
+                temp,
+                startedUtc="2026-11-17T18:38:46Z",
+                finishedUtc="2026-11-17T19:00:05Z",
+            )
+            with self.assertRaises(tables.TableError):
+                tables.build_tier1_blocks(results, "en")
+
+    def test_tier1_resumed_run_still_validates_report_hashes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            results = self._resumed_tier1_dir(temp)
+            victim = results / tables.TIER1_REQUIRED_REPORTS[0]
+            victim.write_bytes(victim.read_bytes() + b" ")
+            with self.assertRaises(tables.TableError):
+                tables.build_tier1_blocks(results, "en")
+
     def test_tier1_hash_manifest_accepts_lf_and_crlf_reports(self):
         for line_ending in (b"\n", b"\r\n"):
             with self.subTest(line_ending=line_ending), tempfile.TemporaryDirectory() as temp:
@@ -508,9 +598,13 @@ class Tier1TableTests(unittest.TestCase):
                 tables.DEFAULT_RESULTS_DIR / tables.TIER1_RUN_METADATA,
                 results / tables.TIER1_RUN_METADATA,
             )
-            report = results / "NextORM.Benchmark.SqliteBenchmarkProjection-report.csv"
+            # Mutate a report independently of any particular measurement value: a hard-coded
+            # iteration-20 number would silently become a no-op once the snapshot is refreshed. The
+            # Markdown twin is part of the same hash inventory and is not parsed as a CSV, so the
+            # freshness gate is what must reject the change.
+            report = results / "NextORM.Benchmark.SqliteBenchmarkProjection-report-github.md"
             report.write_text(
-                report.read_text(encoding="utf-8").replace("3.923 ms", "3.924 ms"),
+                report.read_text(encoding="utf-8") + "tampered report line\n",
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(tables.TableError, "SHA-256 differs"):

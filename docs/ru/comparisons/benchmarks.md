@@ -7,8 +7,8 @@
 Условия: провайдер SQLite (`Microsoft.Data.Sqlite`) у всех участников; асинхронные запросы; в ячейке — **самый
 быстрый метод** этой библиотеки в связанном отчёте BenchmarkDotNet. Машина: AMD Ryzen 7 5800HS with Radeon
 Graphics (8 логических / 4 физических ядер), .NET 11.0.0, BenchmarkDotNet 0.15.8 (`Job.Default` +
-`InProcessEmitToolchain`). На **2026-11-16** для таблиц сквозных сценариев и аллокаций; категория B запущена
-**2026-11-16**. Категория A и раздел tier-1 сохраняют даты своих прогонов. В каждой строке лидирующая ячейка
+`InProcessEmitToolchain`). На **2026-11-17** для таблиц сквозных сценариев и аллокаций; категория B запущена
+**2026-11-17**. Категория A и раздел tier-1 сохраняют даты своих прогонов. В каждой строке лидирующая ячейка
 выделена **полужирным** — быстрейшая в таблицах времени и с наименьшей аллокацией в таблице аллокаций.
 <!-- benchmarks:conditions:end -->
 
@@ -21,13 +21,13 @@ Graphics (8 логических / 4 физических ядер), .NET 11.0.0
 <!-- benchmarks:e2e:start -->
 | Метод | Nextorm | Dapper | linq2db | EF Core |
 |---|:---:|:---:|:---:|:---:|
-| [Выборка данных](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md) | **12.26 μs** | 16.55 μs | 17.17 μs | 38.08 μs |
-| [Широкая выборка данных](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md) | **7.921 ms** | 8.528 ms | 8.647 ms | 9.152 ms |
-| [Where](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md) | **1.063 ms** | 1.503 ms | 1.553 ms | 3.386 ms |
-| [Simulate work](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md) | **7.893 ms** | 24.616 ms | 364.543 ms | 108.639 ms |
-| [Any](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md) | **1.059 ms** | 1.509 ms | 1.663 ms | 3.660 ms |
-| [FirstOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFirst-report-github.md) | **107.1 μs** | 154.6 μs | 366.3 μs | 355.7 μs |
-| [SingleOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSingle-report-github.md) | **107.2 μs** | 148.6 μs | 370.8 μs | 337.2 μs |
+| [Выборка данных](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md) | **11.75 μs** | 16.40 μs | 16.84 μs | 35.90 μs |
+| [Широкая выборка данных](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md) | **8.030 ms** | 8.799 ms | 9.140 ms | 9.611 ms |
+| [Where](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md) | **1.038 ms** | 1.526 ms | 1.526 ms | 3.347 ms |
+| [Simulate work](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md) | **8.425 ms** | 24.088 ms | 358.743 ms | 113.061 ms |
+| [Any](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md) | **1.066 ms** | 1.574 ms | 1.695 ms | 3.725 ms |
+| [FirstOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFirst-report-github.md) | **107.0 μs** | 150.8 μs | 368.8 μs | 344.6 μs |
+| [SingleOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSingle-report-github.md) | **107.4 μs** | 150.6 μs | 359.6 μs | 350.6 μs |
 <!-- benchmarks:e2e:end -->
 
 ### Аллокации
@@ -37,10 +37,10 @@ Graphics (8 логических / 4 физических ядер), .NET 11.0.0
 <!-- benchmarks:allocations:start -->
 | Метод | Nextorm | Dapper | linq2db | EF Core |
 |---|:---:|:---:|:---:|:---:|
-| Выборка данных | **1,080 B** | 1,848 B | 2,080 B | 9,776 B |
-| Широкая выборка данных | **2.14 MB** | 2.59 MB | **2.14 MB** | 4.28 MB |
-| Where | **102.90 KB** | 179.23 KB | 252.74 KB | 745.41 KB |
-| Simulate work | **6.21 MB** | 8.86 MB | 108.02 MB | 13.57 MB |
+| Выборка данных | **968 B** | 1,848 B | 2,456 B | 9,776 B |
+| Широкая выборка данных | 2.21 MB | 2.59 MB | **2.14 MB** | 4.28 MB |
+| Where | **117.42 KB** | 179.23 KB | 252.75 KB | 745.41 KB |
+| Simulate work | **6.21 MB** | 8.86 MB | 107.98 MB | 13.57 MB |
 | Any | **84.38 KB** | 138.29 KB | 232.82 KB | 763.30 KB |
 | FirstOrDefault | **8.56 KB** | 16.12 KB | 159.77 KB | 76.03 KB |
 | SingleOrDefault | **8.28 KB** | 16.04 KB | 159.77 KB | 76.03 KB |
@@ -70,22 +70,22 @@ Graphics (8 логических / 4 физических ядер), .NET 11.0.0
 ### Категория A — prepared против compiled и raw
 
 <!-- benchmarks:category-a:start -->
-На **2026-11-16**.
+На **2026-11-17**.
 
 | Фича | Nextorm (prepared) | Dapper | linq2db (compiled) | EF Core (compiled) |
 |---|---|---|---|---|
-| `CASE WHEN` | **10.79 μs / 664 B** | 15.22 μs / 1.34 KB | 16.10 μs / 1.59 KB | 35.25 μs / 7.46 KB |
-| CTE | **11.35 μs / 752 B** | 23.01 μs / 1.56 KB | 23.50 μs / 1.77 KB | — |
-| `SELECT DISTINCT` | **12.66 μs / 665 B** | 18.81 μs / 1.44 KB | 18.85 μs / 1.59 KB | 40.43 μs / 7.23 KB |
-| `EXCEPT` | **12.56 μs / 680 B** | 18.52 μs / 1.43 KB | 21.50 μs / 1.67 KB | 42.52 μs / 8.38 KB |
-| IN-list | **14.11 μs / 1.55 KB** | 19.66 μs / 1.26 KB | 45.78 μs / 13.63 KB | 62.91 μs / 14.34 KB |
-| `INTERSECT` | **12.13 μs / 665 B** | 17.51 μs / 1.28 KB | 20.79 μs / 1.62 KB | 42.32 μs / 7.50 KB |
-| Join по 4 таблицам | **14.58 μs / 1.03 KB** | 27.04 μs / 2.02 KB | 24.96 μs / 2.06 KB | 48.61 μs / 8.05 KB |
-| `LEFT JOIN` | **14.15 μs / 1.16 KB** | 21.17 μs / 2.21 KB | 21.46 μs / 2.31 KB | 41.92 μs / 9.48 KB |
-| Рекурсивный CTE | **14.06 μs / 672 B** | 25.65 μs / 1.52 KB | 26.92 μs / 1.77 KB | — |
-| Строковые функции | **10.81 μs / 656 B** | 15.30 μs / 1.27 KB | 15.85 μs / 1.63 KB | 34.86 μs / 7.05 KB |
-| UDF | **10.84 μs / 688 B** | 15.78 μs / 1.27 KB | 15.53 μs / 1.63 KB | 34.45 μs / 7.05 KB |
-| Оконные функции | **15.75 μs / 793 B** | 30.19 μs / 1.54 KB | 32.76 μs / 1.74 KB | — |
+| `CASE WHEN` | **10.83 μs / 664 B** | 15.95 μs / 1.34 KB | 16.68 μs / 1.59 KB | 34.79 μs / 7.46 KB |
+| CTE | **11.42 μs / 752 B** | 23.07 μs / 1.56 KB | 23.69 μs / 1.77 KB | — |
+| `SELECT DISTINCT` | **12.77 μs / 665 B** | 19.00 μs / 1.44 KB | 19.22 μs / 1.59 KB | 40.17 μs / 7.23 KB |
+| `EXCEPT` | **12.48 μs / 680 B** | 18.69 μs / 1.43 KB | 22.23 μs / 1.67 KB | 42.63 μs / 8.38 KB |
+| IN-list | **13.89 μs / 1.55 KB** | 19.98 μs / 1.26 KB | 44.56 μs / 13.63 KB | 60.86 μs / 14.34 KB |
+| `INTERSECT` | **11.89 μs / 665 B** | 17.81 μs / 1.28 KB | 21.82 μs / 1.62 KB | 47.57 μs / 7.50 KB |
+| Join по 4 таблицам | **14.31 μs / 1.03 KB** | 27.18 μs / 2.02 KB | 25.21 μs / 2.06 KB | 47.08 μs / 8.05 KB |
+| `LEFT JOIN` | **14.07 μs / 1.16 KB** | 21.87 μs / 2.21 KB | 22.42 μs / 2.31 KB | 43.28 μs / 9.48 KB |
+| Рекурсивный CTE | **13.93 μs / 672 B** | 26.17 μs / 1.52 KB | 28.02 μs / 1.77 KB | — |
+| Строковые функции | **10.68 μs / 656 B** | 15.48 μs / 1.27 KB | 16.35 μs / 1.63 KB | 35.02 μs / 7.05 KB |
+| UDF | **10.87 μs / 688 B** | 15.24 μs / 1.27 KB | 16.21 μs / 1.63 KB | 38.27 μs / 7.05 KB |
+| Оконные функции | **15.98 μs / 808 B** | 31.75 μs / 1.53 KB | 34.00 μs / 1.73 KB | — |
 <!-- benchmarks:category-a:end -->
 
 В подготовленном варианте Nextorm быстрее **на каждой** проверенной возможности и создаёт меньше
@@ -98,18 +98,18 @@ Graphics (8 логических / 4 физических ядер), .NET 11.0.0
 <!-- benchmarks:category-b:start -->
 | Фича | Nextorm (cached) | Dapper | linq2db | EF Core |
 |---|---|---|---|---|
-| `CASE WHEN` | **13.63 μs / 2.06 KB** | 15.59 μs / 1.34 KB | 25.31 μs / 3.77 KB | 57.41 μs / 11.46 KB |
-| CTE | 32.56 μs / 9.49 KB | **22.91 μs / 1.56 KB** | 56.53 μs / 9.37 KB | — |
-| `SELECT DISTINCT` | **17.52 μs / 3.06 KB** | 18.67 μs / 1.44 KB | 30.84 μs / 3.88 KB | 63.18 μs / 11.70 KB |
-| `EXCEPT` | **18.34 μs / 4.23 KB** | 18.92 μs / 1.43 KB | 38.30 μs / 5.01 KB | 71.39 μs / 14.73 KB |
-| IN-list | 43.73 μs / 8.77 KB | **19.82 μs / 1.26 KB** | 68.29 μs / 17.28 KB | 102.95 μs / 22.05 KB |
-| `INTERSECT` | **17.51 μs / 4.22 KB** | 18.01 μs / 1.28 KB | 39.05 μs / 4.96 KB | 70.88 μs / 13.81 KB |
-| Join по 4 таблицам | 35.68 μs / 10.02 KB | **27.48 μs / 2.02 KB** | 65.00 μs / 14.14 KB | 114.91 μs / 23.90 KB |
-| `LEFT JOIN` | 26.32 μs / 5.74 KB | **21.79 μs / 2.21 KB** | 69.49 μs / 8.94 KB | 98.61 μs / 19.77 KB |
-| Рекурсивный CTE | 36.53 μs / 10.10 KB | **26.70 μs / 1.52 KB** | 63.08 μs / 8.43 KB | — |
-| Строковые функции | **15.34 μs / 2.81 KB** | 16.34 μs / 1.27 KB | 31.89 μs / 4.74 KB | 66.92 μs / 12.74 KB |
-| UDF | **15.71 μs / 2.90 KB** | 16.26 μs / 1.27 KB | 50.07 μs / 6.75 KB | 66.85 μs / 12.74 KB |
-| Оконные функции | **31.01 μs / 4.09 KB** | 31.99 μs / 1.53 KB | 61.46 μs / 5.79 KB | — |
+| `CASE WHEN` | **13.75 μs / 2.06 KB** | 15.62 μs / 1.34 KB | 25.27 μs / 3.77 KB | 58.57 μs / 11.46 KB |
+| CTE | 33.40 μs / 9.45 KB | **23.32 μs / 1.56 KB** | 58.62 μs / 9.02 KB | — |
+| `SELECT DISTINCT` | **16.95 μs / 3.06 KB** | 19.08 μs / 1.44 KB | 30.79 μs / 3.88 KB | 61.85 μs / 11.81 KB |
+| `EXCEPT` | **18.67 μs / 4.23 KB** | 18.92 μs / 1.43 KB | 38.77 μs / 5.01 KB | 70.70 μs / 14.73 KB |
+| IN-list | 36.00 μs / 7.09 KB | **20.18 μs / 1.26 KB** | 72.71 μs / 17.28 KB | 106.60 μs / 22.19 KB |
+| `INTERSECT` | 18.17 μs / 4.22 KB | **17.45 μs / 1.28 KB** | 37.52 μs / 4.96 KB | 71.44 μs / 13.81 KB |
+| Join по 4 таблицам | 37.27 μs / 10.21 KB | **26.64 μs / 2.02 KB** | 66.56 μs / 14.15 KB | 114.57 μs / 24.38 KB |
+| `LEFT JOIN` | 25.62 μs / 5.71 KB | **21.45 μs / 2.21 KB** | 70.01 μs / 9.05 KB | 94.82 μs / 19.91 KB |
+| Рекурсивный CTE | 35.58 μs / 10.10 KB | **26.75 μs / 1.52 KB** | 61.96 μs / 8.31 KB | — |
+| Строковые функции | **15.45 μs / 2.81 KB** | 15.73 μs / 1.27 KB | 31.82 μs / 4.74 KB | 66.82 μs / 12.74 KB |
+| UDF | **15.68 μs / 2.90 KB** | 15.88 μs / 1.27 KB | 49.42 μs / 6.75 KB | 65.46 μs / 12.74 KB |
+| Оконные функции | **30.89 μs / 4.09 KB** | 32.76 μs / 1.53 KB | 62.60 μs / 5.95 KB | — |
 <!-- benchmarks:category-b:end -->
 
 При повторных запросах с кэшем Nextorm быстрее Dapper на `CASE WHEN` и `SELECT DISTINCT` и идёт
@@ -139,15 +139,15 @@ JSON-класс заполняет собственную таблицу `json_b
 `complex_entity`=3; 10 000 строк относятся к `large_table`, а не к этим фикстурам.
 
 <!-- benchmarks:tier1-run-info:start -->
-Снимок на **2026-11-16** (замеры **18:10:43–18:51:54 UTC**, по журналу прогона). Шесть отчётов ниже содержат
-98 корректных строк. Весь прогон включал 118 сценариев, в том числе 20 дополнительных диагностических случаев
-CSV, которые здесь не сравниваются между библиотеками. Машина: AMD Ryzen 7 5800HS with Radeon Graphics (8
-логических / 4 физических ядер), SDK .NET 11.0.100, runtime .NET 11.0.0, BenchmarkDotNet 0.15.8. 89 строк
-отчётов сняты с параметрами `Job.Default` (UnrollFactor=16); 9 строк raw-reader — со специализированными
-InvocationCount=1 и UnrollFactor=1. Все строки использовали `InProcessEmitToolchain`. Источник: HEAD
-`ad2d0daeb6e34bcc5b094f0c9b0b1d1205fb8545`; сборка использовала 10 локальных ссылок на проекты NextORM и
-локальный source-generator analyzer; все 11 хеш-строк сборки/runtime совпали с этими выходными файлами.
-Рабочее дерево исходников содержало незакоммиченные изменения.
+Снимок на **2026-11-17–2026-11-18** (замеры **2026-11-17 18:38:46–2026-11-18 02:56:28 UTC**, по журналу
+прогона). Шесть отчётов ниже содержат 98 корректных строк. Весь прогон включал 118 сценариев, в том числе 20
+дополнительных диагностических случаев CSV, которые здесь не сравниваются между библиотеками. Машина: AMD
+Ryzen 7 5800HS with Radeon Graphics (8 логических / 4 физических ядер), SDK .NET 11.0.100, runtime .NET
+11.0.0, BenchmarkDotNet 0.15.8. 89 строк отчётов сняты с параметрами `Job.Default` (UnrollFactor=16); 9 строк
+raw-reader — со специализированными InvocationCount=1 и UnrollFactor=1. Все строки использовали
+`InProcessEmitToolchain`. Источник: HEAD `9226f0415d96eb1c4364c81ac3c4acaa8f9db6a8`; сборка использовала 10
+локальных ссылок на проекты NextORM и локальный source-generator analyzer; все 11 хеш-строк сборки/runtime
+совпали с этими выходными файлами. Рабочее дерево исходников было чистым.
 <!-- benchmarks:tier1-run-info:end -->
 
 Категории переиспользования те же, что в сравнении возможностей: **категория A** сравнивает Nextorm
@@ -174,7 +174,7 @@ DTO и чтение через `DbDataReader` **без создания объе
 > **Как читать результаты tier-1.** `Job.Default` с `InProcessEmitToolchain` — это запуск внутри процесса;
 > различия меньше ~20% считайте шумом и проверяйте error, стандартное отклонение и аллокации в полном
 > отчёте. В 9 замерах чтения через reader сработало предупреждение о слишком коротком времени итерации
-> (рекомендация — не менее 100 мс); в 6 сценариях стриминга — предупреждение о мультимодальном
+> (рекомендация — не менее 100 мс); в 5 сценариях стриминга — предупреждение о мультимодальном
 > распределении. Ошибочных случаев: 0.
 <!-- benchmarks:tier1-caveats:end -->
 
@@ -186,13 +186,13 @@ DTO и чтение через `DbDataReader` **без создания объе
 <!-- benchmarks:tier1-projection:start -->
 | Арм | Категория | Mean | Allocated |
 | --- | --- | ---: | ---: |
-| A_Nextorm_Prepared_ToListAsync | A | 3.923 ms | 1.3 MB |
-| A_EFCore_Compiled_ToListAsync | A | 4.849 ms | 3.36 MB |
-| A_Linq2Db_Compiled_ToList | A | 5.431 ms | 1.47 MB |
-| A_Dapper_ToListAsync | A+B | 6.637 ms | 1.7 MB |
-| B_Nextorm_Cached_ToListAsync | B | 3.970 ms | 1.3 MB |
-| B_Linq2Db_ToListAsync | B | 5.779 ms | 1.48 MB |
-| B_EFCore_ToListAsync | B | 8.510 ms | 3.62 MB |
+| A_Nextorm_Prepared_ToListAsync | A | 4.433 ms | 1.3 MB |
+| A_EFCore_Compiled_ToListAsync | A | 4.979 ms | 3.36 MB |
+| A_Linq2Db_Compiled_ToList | A | 6.528 ms | 1.47 MB |
+| A_Dapper_ToListAsync | A+B | 7.363 ms | 1.7 MB |
+| B_Nextorm_Cached_ToListAsync | B | 4.401 ms | 1.3 MB |
+| B_Linq2Db_ToListAsync | B | 6.069 ms | 1.48 MB |
+| B_EFCore_ToListAsync | B | 9.262 ms | 3.62 MB |
 <!-- benchmarks:tier1-projection:end -->
 
 ### Агрегаты — SQL-side `Count` / `Sum` / `GroupBy → Count`
@@ -203,27 +203,27 @@ DTO и чтение через `DbDataReader` **без создания объе
 <!-- benchmarks:tier1-aggregates:start -->
 | Операция | Арм | Категория | Mean | Allocated |
 | --- | --- | --- | ---: | ---: |
-| Count | A_Nextorm_Prepared_Count | A | 15.11 μs | 400 B |
-| Count | A_Linq2Db_Compiled_Count | A | 19.05 μs | 1,272 B |
-| Count | A_EFCore_Compiled_Count | A | 36.69 μs | 7,296 B |
-| Sum | A_Nextorm_Prepared_Sum | A | 274.59 μs | 403 B |
-| Sum | A_Linq2Db_Compiled_Sum | A | 297.32 μs | 1,283 B |
-| Sum | A_EFCore_Compiled_Sum | A | 315.38 μs | 7,323 B |
-| GroupBy→Count | A_Nextorm_Prepared_GroupByCount | A | 1,297.07 μs | 4,698 B |
-| GroupBy→Count | A_Linq2Db_Compiled_GroupByCount | A | 1,331.58 μs | 7,018 B |
-| GroupBy→Count | A_EFCore_Compiled_GroupByCount | A | 1,419.58 μs | 32,642 B |
-| Count | Dapper_Count | A+B | 19.55 μs | 936 B |
-| Sum | Dapper_Sum | A+B | 290.92 μs | 947 B |
-| GroupBy→Count | Dapper_GroupByCount | A+B | 1,336.72 μs | 12,322 B |
-| Count | B_Nextorm_Cached_Count | B | 15.99 μs | 400 B |
-| Count | B_Linq2Db_Count | B | 24.88 μs | 2,848 B |
-| Count | B_EFCore_Count | B | 49.82 μs | 9,616 B |
-| Sum | B_Nextorm_Cached_Sum | B | 282.05 μs | 963 B |
-| Sum | B_Linq2Db_Sum | B | 305.87 μs | 3,475 B |
-| Sum | B_EFCore_Sum | B | 334.58 μs | 10,515 B |
-| GroupBy→Count | B_Nextorm_Cached_GroupByCount | B | 1,342.22 μs | 8,650 B |
-| GroupBy→Count | B_Linq2Db_GroupByCount | B | 1,377.85 μs | 11,514 B |
-| GroupBy→Count | B_EFCore_GroupByCount | B | 1,426.02 μs | 42,154 B |
+| Count | A_Nextorm_Prepared_Count | A | 15.27 μs | 400 B |
+| Count | A_Linq2Db_Compiled_Count | A | 19.70 μs | 1,272 B |
+| Count | A_EFCore_Compiled_Count | A | 39.61 μs | 7,296 B |
+| Sum | A_Nextorm_Prepared_Sum | A | 282.65 μs | 403 B |
+| Sum | A_Linq2Db_Compiled_Sum | A | 294.11 μs | 1,283 B |
+| Sum | A_EFCore_Compiled_Sum | A | 314.81 μs | 7,323 B |
+| GroupBy→Count | A_Nextorm_Prepared_GroupByCount | A | 1,338.19 μs | 4,698 B |
+| GroupBy→Count | A_Linq2Db_Compiled_GroupByCount | A | 1,369.71 μs | 7,018 B |
+| GroupBy→Count | A_EFCore_Compiled_GroupByCount | A | 1,401.89 μs | 32,642 B |
+| Count | Dapper_Count | A+B | 18.55 μs | 936 B |
+| Sum | Dapper_Sum | A+B | 295.30 μs | 947 B |
+| GroupBy→Count | Dapper_GroupByCount | A+B | 1,486.63 μs | 12,322 B |
+| Count | B_Nextorm_Cached_Count | B | 15.41 μs | 400 B |
+| Count | B_Linq2Db_Count | B | 26.00 μs | 2,848 B |
+| Count | B_EFCore_Count | B | 47.36 μs | 9,616 B |
+| Sum | B_Nextorm_Cached_Sum | B | 279.90 μs | 963 B |
+| Sum | B_Linq2Db_Sum | B | 306.10 μs | 3,475 B |
+| Sum | B_EFCore_Sum | B | 325.55 μs | 10,515 B |
+| GroupBy→Count | B_Nextorm_Cached_GroupByCount | B | 1,340.93 μs | 8,730 B |
+| GroupBy→Count | B_Linq2Db_GroupByCount | B | 1,391.61 μs | 11,738 B |
+| GroupBy→Count | B_EFCore_GroupByCount | B | 1,454.86 μs | 42,155 B |
 <!-- benchmarks:tier1-aggregates:end -->
 
 ### Пагинация — `OrderBy(Id).Offset(5000).Limit(100)`
@@ -234,13 +234,13 @@ DTO и чтение через `DbDataReader` **без создания объе
 <!-- benchmarks:tier1-paging:start -->
 | Арм | Категория | Mean | Allocated |
 | --- | --- | ---: | ---: |
-| A_Nextorm_Prepared_PageAsync | A | 89.99 μs | 13.95 KB |
-| A_Linq2Db_Compiled_Page | A | 107.29 μs | 17.6 KB |
-| A_EFCore_Compiled_PageAsync | A | 128.99 μs | 44.37 KB |
-| A_Dapper_PageAsync | A+B | 101.65 μs | 18.14 KB |
-| B_Nextorm_Cached_PageAsync | B | 100.22 μs | 19.4 KB |
-| B_Linq2Db_PageAsync | B | 135.85 μs | 22.71 KB |
-| B_EFCore_PageAsync | B | 183.08 μs | 56.28 KB |
+| A_Nextorm_Prepared_PageAsync | A | 90.91 μs | 13.95 KB |
+| A_Linq2Db_Compiled_Page | A | 124.58 μs | 17.6 KB |
+| A_EFCore_Compiled_PageAsync | A | 131.03 μs | 44.37 KB |
+| A_Dapper_PageAsync | A+B | 112.87 μs | 18.14 KB |
+| B_Nextorm_Cached_PageAsync | B | 118.32 μs | 19.43 KB |
+| B_Linq2Db_PageAsync | B | 149.24 μs | 22.6 KB |
+| B_EFCore_PageAsync | B | 215.39 μs | 56.39 KB |
 <!-- benchmarks:tier1-paging:end -->
 
 ### Стриминг — buffered / unbuffered DTO и zero-materialization reader
@@ -253,13 +253,13 @@ DTO и чтение через `DbDataReader` **без создания объе
 <!-- benchmarks:tier1-streaming-buffered:start -->
 | Арм | Категория | Mean | Allocated |
 | --- | --- | ---: | ---: |
-| A_Nextorm_Prepared_ToList_Dto | A | 4,119.13 μs | 1,360,688 B |
-| Linq2Db_Compiled_ToList_Dto | A | 5,720.83 μs | 1,544,457 B |
-| A_EFCore_Compiled_ToList_Dto | A | 8,678.39 μs | 3,789,917 B |
-| Dapper_ToList_Dto | A+B | 6,793.55 μs | 1,784,191 B |
-| B_Nextorm_Cached_ToList_Dto | B | 4,165.29 μs | 1,362,858 B |
-| B_Linq2Db_ToList_Dto | B | 5,937.36 μs | 1,547,617 B |
-| B_EFCore_ToList_Dto | B | 8,780.73 μs | 3,794,231 B |
+| A_Nextorm_Prepared_ToList_Dto | A | 5,217.99 μs | 1,360,688 B |
+| Linq2Db_Compiled_ToList_Dto | A | 6,867.59 μs | 1,544,580 B |
+| A_EFCore_Compiled_ToList_Dto | A | 10,303.59 μs | 3,790,111 B |
+| Dapper_ToList_Dto | A+B | 7,831.00 μs | 1,784,116 B |
+| B_Nextorm_Cached_ToList_Dto | B | 5,110.60 μs | 1,362,858 B |
+| B_Linq2Db_ToList_Dto | B | 7,003.57 μs | 1,547,645 B |
+| B_EFCore_ToList_Dto | B | 10,053.18 μs | 3,794,208 B |
 <!-- benchmarks:tier1-streaming-buffered:end -->
 
 Небуферизованное перечисление DTO:
@@ -267,12 +267,12 @@ DTO и чтение через `DbDataReader` **без создания объе
 <!-- benchmarks:tier1-streaming-unbuffered:start -->
 | Арм | Категория | Mean | Allocated |
 | --- | --- | ---: | ---: |
-| A_Nextorm_Prepared_AsyncStream_Dto | A | 4,115.10 μs | 1,280,890 B |
-| A_EFCore_Compiled_AsyncStream_Dto | A | 5,106.04 μs | 3,527,002 B |
-| Dapper_AsyncStream_Dto | A+B | 4,655.43 μs | 1,521,474 B |
-| B_Nextorm_Cached_AsyncStream_Dto | B | 4,542.01 μs | 1,284,226 B |
-| B_Linq2Db_AsyncStream_Dto | B | 4,660.90 μs | 1,284,642 B |
-| B_EFCore_AsyncStream_Dto | B | 5,159.78 μs | 3,531,154 B |
+| A_Nextorm_Prepared_AsyncStream_Dto | A | 5,102.05 μs | 1,280,890 B |
+| A_EFCore_Compiled_AsyncStream_Dto | A | 6,390.56 μs | 3,527,002 B |
+| Dapper_AsyncStream_Dto | A+B | 5,615.85 μs | 1,521,474 B |
+| B_Nextorm_Cached_AsyncStream_Dto | B | 5,489.86 μs | 1,284,226 B |
+| B_Linq2Db_AsyncStream_Dto | B | 5,632.32 μs | 1,284,642 B |
+| B_EFCore_AsyncStream_Dto | B | 6,309.38 μs | 3,531,154 B |
 <!-- benchmarks:tier1-streaming-unbuffered:end -->
 
 Чтение через `DbDataReader` без материализации (синхронно; общий приёмник не сохраняет строки; EF Core
@@ -281,11 +281,11 @@ DTO и чтение через `DbDataReader` **без создания объе
 <!-- benchmarks:tier1-streaming-readers:start -->
 | Арм | Категория | Mean | Allocated |
 | --- | --- | ---: | ---: |
-| A_Nextorm_Prepared_ToDataReader | A | 4,340.06 μs | 949.37 KB |
-| Linq2Db_ToDataReader | B | 3,682.80 μs | 943.65 KB |
-| Provider_Direct_ToDataReader | B | 3,708.38 μs | 943.39 KB |
-| Dapper_ToDataReader | B | 3,770.33 μs | 943.42 KB |
-| B_Nextorm_ToDataReader | B | 4,190.48 μs | 951.91 KB |
+| A_Nextorm_Prepared_ToDataReader | A | 5,302.54 μs | 949.29 KB |
+| Linq2Db_ToDataReader | B | 4,204.47 μs | 943.65 KB |
+| Provider_Direct_ToDataReader | B | 4,258.22 μs | 943.39 KB |
+| Dapper_ToDataReader | B | 4,597.43 μs | 943.42 KB |
+| B_Nextorm_ToDataReader | B | 5,008.46 μs | 951.91 KB |
 <!-- benchmarks:tier1-streaming-readers:end -->
 
 Пустой `DbDataReader` служит контролем времени открытия и закрытия без чтения строк:
@@ -293,10 +293,10 @@ DTO и чтение через `DbDataReader` **без создания объе
 <!-- benchmarks:tier1-streaming-empty-readers:start -->
 | Арм | Категория | Mean | Allocated |
 | --- | --- | ---: | ---: |
-| Provider_Direct_ToDataReader_Empty | B | 82.39 μs | 0.00 KB |
-| Dapper_ToDataReader_Empty | B | 92.60 μs | 0.00 KB |
-| Linq2Db_ToDataReader_Empty | B | 92.66 μs | 0.00 KB |
-| B_Nextorm_ToDataReader_Empty | B | 225.84 μs | 16.80 KB |
+| Provider_Direct_ToDataReader_Empty | B | 79.50 μs | 0.00 KB |
+| Dapper_ToDataReader_Empty | B | 92.57 μs | 0.00 KB |
+| Linq2Db_ToDataReader_Empty | B | 92.69 μs | 0.00 KB |
+| B_Nextorm_ToDataReader_Empty | B | 220.89 μs | 16.80 KB |
 <!-- benchmarks:tier1-streaming-empty-readers:end -->
 
 ### JSON / CSV кросс-библиотечно
@@ -312,17 +312,17 @@ JSON-отчёт покрывает `RowCount` 1 000 / 10 000 / 100 000; пока
 <!-- benchmarks:tier1-write-json:start -->
 | Метод (10 000 строк) | Mean | Ratio | Allocated |
 | --- | ---: | ---: | ---: |
-| WriteJson_Array_Scalar | 4,780.7 μs | 0.74 | 9.76 KB |
-| WriteJsonAsync_Array_Scalar | 5,113.1 μs | 0.79 | 9.92 KB |
-| ToList_Dto | 6,446.5 μs | 1.00 | 783.76 KB |
-| Nextorm_ToList_Dto_Json | 7,419.7 μs | 1.15 | 784.07 KB |
-| WriteJson_Array_Dto | 7,880.6 μs | 1.22 | 403.18 KB |
-| Linq2Db_ToList_Json | 8,379.2 μs | 1.30 | 963.72 KB |
-| WriteJson_Array_ScalarPayload | 8,707.5 μs | 1.35 | 11493.13 KB |
-| WriteJsonAsync_Array_ScalarPayload | 9,174.3 μs | 1.42 | 11493.28 KB |
-| Dapper_ToList_Json | 9,493.9 μs | 1.47 | 1273.76 KB |
-| EFCore_ToList_Json | 10,812.4 μs | 1.68 | 3158.23 KB |
-| WriteJson_Array_WideDto | 10,993.8 μs | 1.71 | 11495.97 KB |
+| WriteJson_Array_Scalar | 5,721.1 μs | 0.92 | 10.31 KB |
+| WriteJsonAsync_Array_Scalar | 4,948.7 μs | 0.80 | 9.97 KB |
+| ToList_Dto | 6,215.8 μs | 1.00 | 783.76 KB |
+| Nextorm_ToList_Dto_Json | 7,040.5 μs | 1.13 | 784.07 KB |
+| WriteJson_Array_Dto | 7,424.2 μs | 1.20 | 403.13 KB |
+| Linq2Db_ToList_Json | 8,423.1 μs | 1.36 | 963.75 KB |
+| WriteJson_Array_ScalarPayload | 8,201.0 μs | 1.32 | 11493.13 KB |
+| WriteJsonAsync_Array_ScalarPayload | 8,612.0 μs | 1.39 | 11493.34 KB |
+| Dapper_ToList_Json | 8,835.7 μs | 1.42 | 1273.72 KB |
+| EFCore_ToList_Json | 10,377.1 μs | 1.67 | 3158.27 KB |
+| WriteJson_Array_WideDto | 10,384.0 μs | 1.67 | 11495.97 KB |
 <!-- benchmarks:tier1-write-json:end -->
 
 CSV (срез `large_table`, 10 000 строк; Ratio — относительно `Nextorm_ToList`):
@@ -330,14 +330,14 @@ CSV (срез `large_table`, 10 000 строк; Ratio — относительн
 <!-- benchmarks:tier1-csv:start -->
 | Метод | Mean | Ratio | Allocated |
 | --- | ---: | ---: | ---: |
-| Nextorm_StringProjection_ToList | 2.763 ms | 0.33 | 1018.12 KB |
-| Nextorm_StringProjection_WriteCsv | 3.469 ms | 0.42 | 949.1 KB |
-| Nextorm_ToList | 8.336 ms | 1.00 | 2266.74 KB |
-| Nextorm_ToList_ManualCsv | 9.694 ms | 1.16 | 4375.43 KB |
-| Nextorm_WriteCsv | 10.095 ms | 1.21 | 1733.92 KB |
-| Linq2Db_ToList_ManualCsv | 12.945 ms | 1.55 | 4087.58 KB |
-| Dapper_ToList_ManualCsv | 13.250 ms | 1.59 | 5100.61 KB |
-| EFCore_ToList_ManualCsv | 14.824 ms | 1.78 | 6751.01 KB |
+| Nextorm_StringProjection_ToList | 2.617 ms | 0.34 | 1018.15 KB |
+| Nextorm_StringProjection_WriteCsv | 3.302 ms | 0.42 | 949.13 KB |
+| Nextorm_ToList | 7.805 ms | 1.00 | 2266.74 KB |
+| Nextorm_ToList_ManualCsv | 9.237 ms | 1.18 | 4375.42 KB |
+| Nextorm_WriteCsv | 9.480 ms | 1.21 | 1733.92 KB |
+| Linq2Db_ToList_ManualCsv | 11.925 ms | 1.53 | 4087.51 KB |
+| Dapper_ToList_ManualCsv | 12.323 ms | 1.58 | 5100.61 KB |
+| EFCore_ToList_ManualCsv | 13.288 ms | 1.70 | 6750.96 KB |
 <!-- benchmarks:tier1-csv:end -->
 
 ### Startup с NativeAOT (справочно, не бенчмарк запросов)
