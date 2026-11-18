@@ -131,16 +131,15 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.9) is the first stable release: the public API surface is frozen and tracked
-from this version, and the packages target .NET 10 and .NET 11.
+Nextorm is stable and targets .NET 10 and .NET 11. Package validation checks the public API against
+1.0.9, the first stable release.
 
 ## Installation
 
 - from cli `dotnet add package nextorm`
 - from package manager `Install-Package nextorm`
 
-The 1.0.9 release is stable, so the `--prerelease` flag is no longer needed; previews
-(`1.0.10-a.x` and later) still require it.
+Use `--prerelease` only if you want to install a preview.
 To add specific database provider use the following:
 
 - `dotnet add package nextorm.sqlserver`
@@ -165,6 +164,34 @@ They differ in cost, lifetime and thread-safety rules. Which one to use, what ea
 its limitations are covered in the [plan cache and reuse guide](engine/03-plan-cache-and-reuse.md).
 
 ## Releases
+
+### 1.0.10
+
+This release adds vector search, runtime mapping and data routing, and extends the verified
+NativeAOT surface. The packages still target .NET 10 and .NET 11.
+
+- **Breaking for low-level query extensions:** `OuterRefMarker<T>` and
+  `ReplaceConstantsExpressionVisitor.GetOuterRefMarkerCI(Type)` are removed. If you constructed
+  outer references manually, use `OuterReference.Create` and recompile. Fluent queries are
+  unchanged. See [how to reference a value from an enclosing query](advanced/extensibility.md#reference-a-value-from-an-enclosing-query).
+- **Vector search:** Use `VectorSearch` for exact or approximate nearest-neighbor queries on
+  PostgreSQL and SQL Server 2025+. PostgreSQL also supports the pgvector `vector`, `halfvec`,
+  `sparsevec`, and `bit` types and their arrays. `Vector` compares coordinates by value, not
+  object identity. Check the server and index requirements in the
+  [vector search guide](guide/36-ai-and-vector-search.md).
+- **Mapping and routing:** A [mapping variant](guide/33-runtime-mapping-variant.md) selects a physical
+  mapping for an entity. [Data routing](guide/34-routing-data-to-topologies.md) selects a host.
+  [Consistent-hash sharding](guide/35-sharding-and-horizontal-partitioning.md) supports bucket
+  placement and fan-out queries. Use `GroupByBucket` to group rows before bulk writes. A full-table
+  delete against a sharded entity fails rather than falling back to the default table.
+- **NativeAOT:** The verified .NET 11 `linux-x64` surface covers all six database providers,
+  including representative queries, writes, raw SQL, streaming, and eager-loading scenarios.
+  The EF Core bridge remains JIT-only. See the [NativeAOT guide](infrastructure/05-nativeaot.md)
+  for the tested scope and limitations.
+- **Correlated queries:** Subqueries that reference an outer row through a reference navigation
+  now resolve the joined alias correctly ([#304](https://github.com/AlexeyShirshov/nextorm/issues/304)).
+
+[Changes since 1.0.9](https://github.com/AlexeyShirshov/nextorm/compare/v1.0.9...1.0.10)
 
 ### 1.0.9
 

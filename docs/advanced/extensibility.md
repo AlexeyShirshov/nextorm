@@ -329,6 +329,22 @@ var rows = ctx.From<Order>()
 
 See [Extensions package § Inferred grouping](extensions-package.md) for the inference rules and the rejection boundaries.
 
+### Reference a value from an enclosing query
+
+For a correlated subquery built with the low-level expression API, call
+`OuterReference.Create(registry, outerExpression)`. Pass the registry for the correlated command
+and the value expression over the enclosing query's existing row parameter, such as its `Id`
+member access. Use the returned expression in the inner predicate. It has the same CLR type as
+`outerExpression`; don't compile it as a CLR value or reuse it in a different query.
+
+If you build the subquery with the fluent API and reference an outer lambda parameter, nextorm
+handles the reference for you. You don't need to call `OuterReference.Create` in that case.
+
+If you built outer references manually in 1.0.9, replace `OuterRefMarker<T>` and
+`ReplaceConstantsExpressionVisitor.GetOuterRefMarkerCI(Type)` with `OuterReference.Create`.
+Pass the outer expression directly instead of registering it yourself: `Create` registers it
+for you. The returned node no longer requires a generic type to be constructed at runtime.
+
 ## Advanced: custom SQL dialects and renderers
 
 `ISqlDialect` exposes capabilities; `SqlDialectBase` provides virtual defaults. PostgreSQL and ClickHouse dialects are deliberately not `sealed` and expose public constructors, a shared `Instance` singleton and a virtual `ExtremeRowRenderer`. SQLite, SQL Server and MariaDB dialects are `sealed`.

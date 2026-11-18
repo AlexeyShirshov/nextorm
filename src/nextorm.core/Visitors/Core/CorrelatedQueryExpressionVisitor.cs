@@ -776,8 +776,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             var outerKey = outerKeys[component];
             var foreignKey = Expression.Property(navigation, leg.ForeignKeys[component].PropertyInfo);
 
-            var index = _queryProvider!.AddOuterReference(outerKey);
-            var marker = OuterReference.Create(index, outerKey.Type);
+            var marker = OuterReference.Create(_queryProvider!, outerKey);
 
             var (left, right) = AlignNavigationKeys(foreignKey, marker);
             var parentEquality = Expression.Equal(left, right);
@@ -1323,8 +1322,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 $"The reference navigation direction '{hop.Direction}' is not supported by the in-memory provider.");
         }
 
-        var index = _queryProvider!.AddOuterReference(outerKey);
-        var marker = OuterReference.Create(index, outerKey.Type);
+        var marker = OuterReference.Create(_queryProvider!, outerKey);
 
         var (left, right) = AlignNavigationKeys(innerKey, marker);
         return (hop.RelatedType, Expression.Lambda(Expression.Equal(left, right), navigation));

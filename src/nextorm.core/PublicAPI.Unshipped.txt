@@ -63,6 +63,8 @@ NextORM.Core.PostgresFunctions.vector_subtract<T>(T left, T right) -> T
 *REMOVED*NextORM.Core.OuterRefMarker<T>.OuterRefMarker(int i) -> void
 *REMOVED*NextORM.Core.OuterRefMarker<T>.Ref.get -> T?
 *REMOVED*static NextORM.Core.ReplaceConstantsExpressionVisitor.GetOuterRefMarkerCI(System.Type! type) -> System.Reflection.ConstructorInfo!
+NextORM.Core.OuterReference
+static NextORM.Core.OuterReference.Create(NextORM.Core.IQueryRegistry! registry, System.Linq.Expressions.Expression! outerExpression) -> System.Linq.Expressions.Expression!
 NextORM.Core.AttributeShardKeyProvider
 NextORM.Core.AttributeShardKeyProvider.AttributeShardKeyProvider() -> void
 NextORM.Core.AttributeShardKeyProvider.GetShardKey(System.Type! entityType) -> System.Collections.Generic.IReadOnlyList<System.Reflection.PropertyInfo!>!

@@ -201,8 +201,6 @@ public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
         if (node.NodeType == ExpressionType.MemberAccess && node.Expression is ParameterExpression param
             && _outerParams is not null && _outerParams.Contains(param))
         {
-            int idx;
-
             // #324: a member of the left row of a projection-shaped correlated APPLY is bound to its
             // exact left-row slot. The slot comes from the projection member's position (ItemN or the
             // generated JoinSlot ordinal), never from an alias name or a type guess. A slot outside the
@@ -215,14 +213,10 @@ public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
                     throw new InvalidOperationException(
                         $"The correlated CROSS/OUTER APPLY source references slot {slot} of its left row, but only {leftSlots} preceding source(s) (the FROM source plus earlier joins) are in scope. The applied source and later joins cannot be referenced.");
 
-                idx = command.AddBoundOuterReference(node, param, slot);
-            }
-            else
-            {
-                idx = _queryProvider!.AddOuterReference(node);
+                return OuterReference.Create(command.AddBoundOuterReference(node, param, slot), node.Type);
             }
 
-            return OuterReference.Create(idx, node.Type);
+            return OuterReference.Create(_queryProvider!, node);
         }
 
         return base.VisitMember(node);

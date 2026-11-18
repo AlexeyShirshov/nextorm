@@ -13,7 +13,7 @@ namespace NextORM.Core;
 /// (<c>OuterRefMarker&lt;T&gt;(idx).Ref</c>) needed the closed type's constructor and property metadata
 /// while the expression tree was built, and a native AOT image does not keep them for a type closed at
 /// run time — the lookup returned <see langword="null"/> and building the tree failed. The element type
-/// is carried by the conversion that wraps the marker instead (see <see cref="OuterReference.Create"/>),
+/// is carried by the conversion that wraps the marker instead (see <see cref="OuterReference.Create(int, Type)"/>),
 /// so the node needs neither a generic instantiation nor a run-time type lookup.
 /// </remarks>
 /// <param name="i">The zero-based index of the outer element in the correlated query scope.</param>
@@ -33,22 +33,41 @@ internal sealed class OuterRefMarker(int i)
 }
 
 /// <summary>
-/// Builds and recognises the outer-reference node the correlated translator emits:
-/// <c>(T)new OuterRefMarker(idx).Ref</c>.
+/// Creates expressions that refer to values in an enclosing query.
 /// </summary>
 /// <remarks>
-/// Everything the node needs is closed over a type the image already knows
-/// (<see cref="OuterRefMarker"/>), so it can be built at run time without a generic instantiation and
-/// without a reflection lookup over a user type. The conversion to <c>T</c> is an unbox/cast the
-/// expression compiler performs on the target type handle, not a metadata lookup.
+/// The returned expression is an opaque query node, not a value to compile or evaluate directly.
+/// Its construction doesn't require a runtime generic instantiation or a reflection lookup over a
+/// user type.
 /// </remarks>
-internal static class OuterReference
+public static class OuterReference
 {
     /// <summary>The marker's constructor, resolved once from the statically known marker type.</summary>
     private static readonly ConstructorInfo MarkerCtor = typeof(OuterRefMarker).GetConstructor([typeof(int)])!;
 
     /// <summary>The marker's sentinel member, resolved once from the statically known marker type.</summary>
     private static readonly PropertyInfo RefMember = typeof(OuterRefMarker).GetProperty(nameof(OuterRefMarker.Ref))!;
+
+    /// <summary>
+    /// Registers an enclosing-query expression and creates a reference to it for a correlated subquery.
+    /// </summary>
+    /// <param name="registry">The query registry for the correlated command.</param>
+    /// <param name="outerExpression">The value expression over the enclosing query's existing row parameter.</param>
+    /// <returns>A query expression with the same CLR type as <paramref name="outerExpression"/>.</returns>
+    /// <remarks>
+    /// Use the registry of the same query being built. This method doesn't introduce a new source
+    /// or bind a projected slot of an APPLY source.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="registry"/> or <paramref name="outerExpression"/> is <see langword="null"/>.
+    /// </exception>
+    public static Expression Create(IQueryRegistry registry, Expression outerExpression)
+    {
+        ArgumentNullException.ThrowIfNull(registry);
+        ArgumentNullException.ThrowIfNull(outerExpression);
+
+        return Create(registry.AddOuterReference(outerExpression), outerExpression.Type);
+    }
 
     /// <summary>
     /// Creates the node that denotes the outer element at <paramref name="index"/> as a value of

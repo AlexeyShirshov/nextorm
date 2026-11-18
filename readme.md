@@ -27,9 +27,9 @@ with no change tracking and no mandatory entity class.
 * **Extensible without forking** — public query components (`IQueryComponent` + `WithComponent`),
   global query filters, value converters, SQL functions, interceptors, custom dialects and renderers.
   No `InternalsVisibleTo`, no translator registry and no global mutable state.
-* **Zero-config NativeAOT** — `PublishAot=true` is the only change: no compiled model, no precompilation
-  step, no interceptor opt-in and no manual entity/query registration. Partial coverage today (SQLite,
-  .NET 11 / `linux-x64`); see the
+* **NativeAOT** — enable `PublishAot=true` without a separate compiled model or manual query
+  registration. Representative scenarios are verified for all six database providers on
+  .NET 11 `linux-x64`; see the
   [NativeAOT guide](https://alexeyshirshov.github.io/nextorm/infrastructure/05-nativeaot.html).
 
 ## Installation
@@ -39,8 +39,8 @@ dotnet add package nextorm
 dotnet add package nextorm.sqlite   # pick one provider
 ```
 
-1.0.9 is the first stable release, so `--prerelease` is not needed; previews (`1.0.10-a.x` and later)
-still require it. Package Manager Console equivalent: `Install-Package nextorm`.
+Use `--prerelease` only if you want to install a preview. Package Manager Console equivalent:
+`Install-Package nextorm`.
 
 | Package | Provider | Driver |
 |---|---|---|
@@ -132,14 +132,11 @@ is [Extensibility](https://alexeyshirshov.github.io/nextorm/advanced/extensibili
 
 ## NativeAOT
 
-Partial support: native binaries run against all six measured providers on `net11.0` (`linux-x64`) —
-SQLite, PostgreSQL, SQL Server, MySQL, MariaDB and ClickHouse — with a fail-closed JIT-parity check on
-every scenario: 19 SQLite scenarios plus 10 / 11 / 7 / 7 / 9 provider queries, values equal to JIT in
-every cell. Every push publishes the native runner and executes it in CI. The unmeasured surface — the
-EF Core bridge, bulk insert, raw SQL row mapping, DML builders — and the residual AOT/trim diagnostics
-are tracked in
-[#370](https://github.com/AlexeyShirshov/nextorm/issues/370); see the
-[NativeAOT guide](https://alexeyshirshov.github.io/nextorm/infrastructure/05-nativeaot.html).
+Native binaries run against SQLite, PostgreSQL, SQL Server, MySQL, MariaDB, and ClickHouse on
+`net11.0` (`linux-x64`). Native-versus-JIT checks cover representative scenarios, including
+writes, bulk insert, raw SQL row mapping, streaming, and eager loading. The EF Core bridge
+requires JIT. See the [NativeAOT guide](https://alexeyshirshov.github.io/nextorm/infrastructure/05-nativeaot.html)
+for the tested scope, JSON serialization requirements, and limitations.
 
 Row materializers are generated at build time for every projection type in the assembly — named
 types, record DTOs and anonymous types alike — so a prepared query keeps compiled-class
@@ -197,11 +194,10 @@ The full comparison — capabilities and benchmarks, with methodology — is in 
 
 ## Status
 
-Stable — 1.0.9 is the first stable release. The public API surface is frozen and tracked from this
-version (`PublicAPI.Shipped.txt` per package, enforced by `PublicApiAnalyzers`), so a breaking change
-is a deliberate, reviewed diff rather than an accident. See the
-[roadmap](https://github.com/AlexeyShirshov/nextorm/milestones) and the
-[documentation](https://alexeyshirshov.github.io/nextorm/) for details.
+Stable. The packages target .NET 10 and .NET 11, and package validation checks the public API
+against 1.0.9, the first stable release. See the
+[release notes](https://alexeyshirshov.github.io/nextorm/#releases) and
+[roadmap](https://github.com/AlexeyShirshov/nextorm/milestones).
 
 ## Contributing
 
