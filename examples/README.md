@@ -1,14 +1,14 @@
 ﻿# nextorm examples
 
 Three runnable **comparison** console applications over realistic demo databases, plus a **NativeAOT
-reference application** and a **NativeAOT PostgreSQL probe**. Each query in a comparison project is
+reference application** and three **NativeAOT provider probes**. Each query in a comparison project is
 implemented twice — with nextorm and with
 [linq2db](https://github.com/linq2db/linq2db) — and both arms are executed against the same provisioned
 database, then benchmarked with BenchmarkDotNet. Each comparison example provisions its database with
 [Testcontainers](https://dotnet.testcontainers.org/) on first run (downloading and caching the official
 dataset into a named Docker volume); the examples only read, so the loaded database is reused on later
-runs. The AOT reference reads a local SQLite file (or a synthetic one) and needs no container; the AOT
-probe runs the nextorm arm only against a PostgreSQL server you point it at.
+runs. The AOT reference reads a local SQLite file (or a synthetic one) and needs no container. Each
+AOT probe runs only the nextorm arm against a database you supply.
 
 The model SQL lives next to the code, in each project's `Sql/` folder, and every C# method pair names
 the file it models. Each project README maps every SQL construct to the nextorm construct that replaces
@@ -24,16 +24,10 @@ it — start there to understand how to translate a query in either direction.
 | [`nextorm.aotexamples.mssql.adventureworks`](nextorm.aotexamples.mssql.adventureworks/README.md) | `nextorm.sqlserver` | AdventureWorks 2022 | — (NativeAOT probe, no linq2db arm, no container) |
 | [`nextorm.aotexamples.clickhouse.analytics`](nextorm.aotexamples.clickhouse.analytics/README.md) | `nextorm.clickhouse` | ClickHouse `datasets.hits_v1` | — (NativeAOT probe, no linq2db arm, no container) |
 
-> The postgres, clickhouse, oc-report and both `aotexamples` probes consume the
-> **published `nextorm.*` NuGet packages**
-> (version pinned by `NextOrmVersion` in [`Directory.Packages.props`](../Directory.Packages.props))
-> instead of referencing `src/` directly, so they double as a real consumer of what ships on nuget.org.
-> **`nextorm.examples.mssql.adventureworks` is an explicit exception** (#232): it references
-> `nextorm.core`/`nextorm.sqlserver` from `src/` via `ProjectReference` so it can demonstrate the
-> current-checkout typed `Pivot`/`Unpivot` surface, which is not in a published package yet. Its run
-> and build commands are the same as the other examples.
-> `nextorm.examples.oc-report` moved from `ProjectReference` to the published packages with `1.0.9-rc5`,
-> the first release that carries the NativeAOT fix it demonstrates.
+`nextorm.examples.oc-report` and all three `aotexamples` probes use published NuGet packages by
+default. [`Directory.Packages.props`](Directory.Packages.props) pins those packages through
+`NextOrmVersion`. The comparison apps use source projects by default so they can measure the
+current checkout.
 
 ## Running
 

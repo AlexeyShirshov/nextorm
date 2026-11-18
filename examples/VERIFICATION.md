@@ -1,5 +1,22 @@
 ﻿# Examples verification report
 
+## Package update to 1.0.10 (2026-11-18)
+
+All seven example projects built in Release without warnings or errors. The `oc-report` example
+and all three NativeAOT provider probes resolved their Nextorm dependencies from the published
+`1.0.10` NuGet packages. The comparison projects used the checkout's source projects, not NuGet.
+The provider probe results for `1.0.9` in the historical section aren't runtime verification of
+`1.0.10`.
+
+On the synthetic SQLite dataset, `oc-report` exited successfully for the three-day report in both
+JIT and NativeAOT (`linux-x64`). The reports matched apart from the timestamp in the `window:` line.
+
+On the existing Podman dataset volumes, the comparison apps returned matching row counts for
+every query: PostgreSQL Aviasales **10/10**, SQL Server AdventureWorks **11/11**, and ClickHouse
+Analytics **9/9**. All three processes exited with code `0`.
+
+## Verification history for 1.0.9
+
 > **Last verified: 2026-11-11; the NativeAOT probes re-verified 2026-11-13** (the examples are now **comparison projects**: native comparison queries have
 > nextorm and linq2db arms, and both are executed against the same dataset; BenchmarkDotNet runs
 > through `--benchmark`). Re-run the examples whenever the engine gains features and update the tables
