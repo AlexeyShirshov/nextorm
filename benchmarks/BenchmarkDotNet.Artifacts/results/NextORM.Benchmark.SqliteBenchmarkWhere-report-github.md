@@ -1,26 +1,27 @@
 ```
 
-BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
-AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
+BenchmarkDotNet v0.15.8, Linux Ubuntu 26.04.1 LTS (Resolute Raccoon)
+AMD EPYC 7763 3.24GHz, 1 CPU, 4 logical and 2 physical cores
 .NET SDK 11.0.100
   [Host] : .NET 11.0.0 (11.0.0, 11.0.26.53018), X64 RyuJIT x86-64-v3
 
-Job=Job-JWQWGO  Toolchain=InProcessEmitToolchain  
+Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3  
+LaunchCount=1  WarmupCount=3  
 
 ```
-| Method                            | Categories | Mean     | Median   | Gen0     | Gen1    | Allocated  |
-|---------------------------------- |----------- |---------:|---------:|---------:|--------:|-----------:|
-| Nextorm_Prepared_AsyncStream      |            | 1.038 ms | 1.056 ms |  13.6719 |       - |  117.42 KB |
-| Nextorm_Prepared_ToListAsync      |            | 1.055 ms | 1.055 ms |  11.7188 |       - |  102.59 KB |
-| Nextorm_CachedForLoop_ToListAsync |            | 1.152 ms | 1.139 ms |  13.6719 |       - |  114.16 KB |
-| Dapper_Async                      |            | 1.526 ms | 1.516 ms |  21.4844 |       - |  179.23 KB |
-| Linq2Db_Compiled_ToList           |            | 1.526 ms | 1.534 ms |  29.2969 |       - |  252.75 KB |
-| Dapper_AsyncStream                |            | 1.540 ms | 1.532 ms |  23.4375 |       - |  202.51 KB |
-| Nextorm_Cached_AsyncStream        |            | 1.920 ms | 1.921 ms |  70.3125 |       - |  580.28 KB |
-| Linq2Db_ToListAsync               |            | 2.664 ms | 2.651 ms |  66.4063 |       - |  548.07 KB |
-| Linq2Db_AsyncStream               |            | 2.916 ms | 2.900 ms |  66.4063 |       - |  546.11 KB |
-| EFCore_Compiled_AsyncStream       |            | 3.347 ms | 3.335 ms |  89.8438 | 42.9688 |  745.41 KB |
-| EFCore_ToListAsync                |            | 6.990 ms | 7.003 ms | 164.0625 | 54.6875 | 1384.26 KB |
-| EFCore_AsyncStream                |            | 6.991 ms | 6.967 ms | 164.0625 | 54.6875 | 1371.24 KB |
-|                                   |            |          |          |          |         |            |
-| Nextorm_Cached_ToListAsync        | acceptance | 1.629 ms | 1.624 ms |  44.9219 |  9.7656 |  374.02 KB |
+| Method                            | Categories | Mean       | Gen0    | Gen1    | Allocated  |
+|---------------------------------- |----------- |-----------:|--------:|--------:|-----------:|
+| Nextorm_Prepared_ToListAsync      |            |   922.4 μs |  5.8594 |       - |  102.58 KB |
+| Nextorm_Prepared_AsyncStream      |            |   934.9 μs |  6.8359 |       - |  117.42 KB |
+| Nextorm_CachedForLoop_ToListAsync |            |   995.6 μs |  5.8594 |  1.9531 |  114.17 KB |
+| Dapper_Async                      |            | 1,342.4 μs |  9.7656 |       - |  179.23 KB |
+| Dapper_AsyncStream                |            | 1,364.9 μs | 11.7188 |       - |  202.51 KB |
+| Linq2Db_Compiled_ToList           |            | 1,383.1 μs | 13.6719 |       - |  252.74 KB |
+| Nextorm_Cached_AsyncStream        |            | 1,874.8 μs | 35.1563 |       - |  580.27 KB |
+| Linq2Db_ToListAsync               |            | 2,554.6 μs | 31.2500 |       - |  548.06 KB |
+| Linq2Db_AsyncStream               |            | 2,744.8 μs | 31.2500 |       - |  546.11 KB |
+| EFCore_Compiled_AsyncStream       |            | 3,329.6 μs | 42.9688 | 19.5313 |  745.41 KB |
+| EFCore_AsyncStream                |            | 7,224.9 μs | 78.1250 | 39.0625 | 1371.23 KB |
+| EFCore_ToListAsync                |            | 7,384.8 μs | 78.1250 | 31.2500 |  1384.3 KB |
+|                                   |            |            |         |         |            |
+| Nextorm_Cached_ToListAsync        | acceptance | 1,518.0 μs | 21.4844 |  5.8594 |  374.02 KB |
