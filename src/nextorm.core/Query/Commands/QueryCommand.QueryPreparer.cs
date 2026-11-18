@@ -4857,8 +4857,18 @@ public partial class QueryCommand
     /// </summary>
     private sealed class ClosureKeyScan : ExpressionVisitor
     {
+        private enum ScanMember { Other, Condition, Projection, Group }
+
         private readonly List<object> _closures = new();
+        private ScanMember _member;
         internal bool HasCapturedCommand { get; private set; }
+
+        /// <summary>
+        /// Whether the scanned graph carries a value list the raw-recipe publish gate refuses: a filter
+        /// list (top-level) or a captured/tuple list in the projection/grouping (unkeyed). Set during the
+        /// existing scan, so no second expression walk is needed.
+        /// </summary>
+        internal bool HasUnpublishableValueList { get; private set; }
 
         /// <summary>
         /// Order-independent-with-the-list hash of the closure identities added so far, so a caller
@@ -4871,6 +4881,8 @@ public partial class QueryCommand
             _closures.Clear();
             IdentitiesHash = 0;
             HasCapturedCommand = false;
+            HasUnpublishableValueList = false;
+            _member = ScanMember.Other;
         }
 
         internal object[]? Snapshot() => _closures.Count == 0 ? null : _closures.ToArray();
@@ -4888,9 +4900,13 @@ public partial class QueryCommand
         /// </summary>
         internal void ScanCommand(QueryCommand cmd)
         {
+            _member = ScanMember.Projection;
             Scan(cmd._exp);
+            _member = ScanMember.Condition;
             Scan(cmd._condition);
+            _member = ScanMember.Group;
             Scan(cmd._groupExp);
+            _member = ScanMember.Other;
             Scan(cmd._having);
             Scan(cmd._preWhere);
             Scan(cmd.PerParentPartition);
@@ -4933,6 +4949,20 @@ public partial class QueryCommand
                 for (var j = 0; j < selectors.Length; j++)
                     Scan(selectors[j]);
             }
+        }
+
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            if (!HasUnpublishableValueList)
+            {
+                if (_member == ScanMember.Condition && InValues.IsAnyValueListSource(node))
+                    HasUnpublishableValueList = true;
+                else if ((_member == ScanMember.Projection || _member == ScanMember.Group)
+                    && InValues.IsUnkeyedValueListSource(node))
+                    HasUnpublishableValueList = true;
+            }
+
+            return base.VisitMethodCall(node);
         }
 
         protected override Expression VisitMember(MemberExpression node)
@@ -5079,6 +5109,7 @@ public partial class QueryCommand
         scan.Reset();
         scan.ScanCommand(cmd);
         if (scan.HasCapturedCommand) return null;
+        if (scan.HasUnpublishableValueList) return null;
 
         var exp = comparers.Expression;
         XxHash32 hash = new();

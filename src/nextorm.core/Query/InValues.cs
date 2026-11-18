@@ -195,10 +195,26 @@ internal static class InValues
             return base.VisitMethodCall(node);
         }
 
-        // An inline array's element type is its array element: no generic-method instantiation, no allocation.
-        private static bool IsInlineTupleList(Expression valuesExp)
-            => valuesExp.Type.IsArray && TypeFacts.IsTupleFamily(valuesExp.Type.GetElementType()!);
     }
+
+    /// <summary>
+    /// Whether the method call is a value-list membership node (any list position). Reuses the same
+    /// metadata-only recognition as <see cref="ContainsAnyInValues"/>; no collection is evaluated.
+    /// </summary>
+    internal static bool IsAnyValueListSource(MethodCallExpression node)
+        => TryGetValueListSource(node, out _, out _);
+
+    /// <summary>
+    /// Whether the method call is a value list the raw shape cannot key (a captured collection or a
+    /// tuple list). An inline scalar list is keyed by the expression graph and is not reported.
+    /// </summary>
+    internal static bool IsUnkeyedValueListSource(MethodCallExpression node)
+        => TryGetValueListSource(node, out var valuesExp, out _)
+            && (valuesExp is not NewArrayExpression || IsInlineTupleList(valuesExp));
+
+    // An inline array's element type is its array element: no generic-method instantiation, no allocation.
+    private static bool IsInlineTupleList(Expression valuesExp)
+        => valuesExp.Type.IsArray && TypeFacts.IsTupleFamily(valuesExp.Type.GetElementType()!);
 
     /// <summary>
     /// Metadata-only recognition of a value-list membership node, without the element type: only the
