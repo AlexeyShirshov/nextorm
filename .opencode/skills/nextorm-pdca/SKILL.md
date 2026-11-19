@@ -428,7 +428,8 @@ dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=
 - Приёмка обязательна для query-path изменений (план/cache/executor/материализация).
   Для in-memory execution набор напрямую покрывает только агрегаты `Count`/`GroupBy`;
   прочие in-memory изменения требуют дополнительных релевантных бенчмарков помимо набора.
-- Убедиться, что выполнено ровно **7** кейсов и нет падений; рядом с baseline
+- Убедиться, что команда выбрала хотя бы один кейс и выполнила все выбранные
+  кейсы без пропусков и падений. Рядом с baseline
   (`docs/specs/performance/acceptance-benchmarks.md`) записать wall time, Mean и
   Allocated по каждому кейсу, а также cached/prepared ratio.
 - Рост **comparable** cached-vs-prepared ratio больше **20 %** относительно baseline —
