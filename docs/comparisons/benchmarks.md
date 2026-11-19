@@ -70,14 +70,14 @@ As of **2026-11-18**.
 
 | Feature | Nextorm (prepared) | Dapper | linq2db (compiled) | EF Core (compiled) |
 |---|---|---|---|---|
-| `CASE WHEN` | **7.48 μs / 664 B** | 9.49 μs / 1.34 KB | 9.76 μs / 1.59 KB | 19.71 μs / 7.46 KB |
+| CASE WHEN | **7.48 μs / 664 B** | 9.49 μs / 1.34 KB | 9.76 μs / 1.59 KB | 19.71 μs / 7.46 KB |
 | CTE | **7.79 μs / 752 B** | 12.33 μs / 1.56 KB | 12.39 μs / 1.77 KB | — |
-| `SELECT DISTINCT` | **8.32 μs / 664 B** | 10.24 μs / 1.44 KB | 10.58 μs / 1.59 KB | 20.71 μs / 7.23 KB |
-| `EXCEPT` | **8.80 μs / 680 B** | 11.71 μs / 1.43 KB | 12.65 μs / 1.67 KB | 23.45 μs / 8.38 KB |
+| SELECT DISTINCT | **8.32 μs / 664 B** | 10.24 μs / 1.44 KB | 10.58 μs / 1.59 KB | 20.71 μs / 7.23 KB |
+| EXCEPT | **8.80 μs / 680 B** | 11.71 μs / 1.43 KB | 12.65 μs / 1.67 KB | 23.45 μs / 8.38 KB |
 | IN-list | **9.09 μs / 1.55 KB** | 10.77 μs / 1.26 KB | 16.12 μs / 13.63 KB | 24.12 μs / 14.34 KB |
-| `INTERSECT` | **7.94 μs / 665 B** | 10.45 μs / 1.28 KB | 11.71 μs / 1.62 KB | 21.08 μs / 7.50 KB |
+| INTERSECT | **7.94 μs / 665 B** | 10.45 μs / 1.28 KB | 11.71 μs / 1.62 KB | 21.08 μs / 7.50 KB |
 | 4-table join | **10.01 μs / 1.03 KB** | 16.03 μs / 2.02 KB | 14.64 μs / 2.06 KB | 25.06 μs / 8.05 KB |
-| `LEFT JOIN` | **9.98 μs / 1.16 KB** | 13.03 μs / 2.21 KB | 13.02 μs / 2.31 KB | 22.16 μs / 9.48 KB |
+| LEFT JOIN | **9.98 μs / 1.16 KB** | 13.03 μs / 2.21 KB | 13.02 μs / 2.31 KB | 22.16 μs / 9.48 KB |
 | Recursive CTE | **9.08 μs / 672 B** | 13.44 μs / 1.52 KB | 13.98 μs / 1.77 KB | — |
 | String functions | **7.13 μs / 656 B** | 9.23 μs / 1.27 KB | 9.27 μs / 1.63 KB | 18.23 μs / 7.05 KB |
 | UDF | **7.22 μs / 688 B** | 9.34 μs / 1.27 KB | 9.55 μs / 1.63 KB | 18.57 μs / 7.05 KB |
@@ -93,14 +93,14 @@ with the runner, so treat deltas below ~20 % as noise.
 <!-- benchmarks:category-b:start -->
 | Feature | Nextorm (cached) | Dapper | linq2db | EF Core |
 |---|---|---|---|---|
-| `CASE WHEN` | **8.82 μs / 2.06 KB** | 9.65 μs / 1.34 KB | 11.59 μs / 3.77 KB | 21.98 μs / 11.46 KB |
+| CASE WHEN | **8.82 μs / 2.06 KB** | 9.65 μs / 1.34 KB | 11.59 μs / 3.77 KB | 21.98 μs / 11.46 KB |
 | CTE | 14.28 μs / 9.26 KB | **12.34 μs / 1.56 KB** | 19.76 μs / 9.31 KB | — |
-| `SELECT DISTINCT` | **9.69 μs / 3.03 KB** | 10.30 μs / 1.44 KB | 12.23 μs / 3.88 KB | 22.80 μs / 11.70 KB |
-| `EXCEPT` | **10.72 μs / 4.30 KB** | 11.22 μs / 1.43 KB | 15.59 μs / 5.01 KB | 26.55 μs / 14.92 KB |
+| SELECT DISTINCT | **9.69 μs / 3.03 KB** | 10.30 μs / 1.44 KB | 12.23 μs / 3.88 KB | 22.80 μs / 11.70 KB |
+| EXCEPT | **10.72 μs / 4.30 KB** | 11.22 μs / 1.43 KB | 15.59 μs / 5.01 KB | 26.55 μs / 14.92 KB |
 | IN-list | 13.43 μs / 7.04 KB | **10.39 μs / 1.26 KB** | 18.55 μs / 17.28 KB | 29.03 μs / 22.20 KB |
-| `INTERSECT` | **10.07 μs / 4.28 KB** | 10.36 μs / 1.28 KB | 14.61 μs / 4.96 KB | 25.82 μs / 13.99 KB |
+| INTERSECT | **10.07 μs / 4.28 KB** | 10.36 μs / 1.28 KB | 14.61 μs / 4.96 KB | 25.82 μs / 13.99 KB |
 | 4-table join | 16.44 μs / 10.05 KB | **15.73 μs / 2.02 KB** | 24.59 μs / 14.06 KB | 40.00 μs / 23.94 KB |
-| `LEFT JOIN` | 13.27 μs / 5.64 KB | **12.63 μs / 2.21 KB** | 22.28 μs / 8.94 KB | 31.47 μs / 19.88 KB |
+| LEFT JOIN | 13.27 μs / 5.64 KB | **12.63 μs / 2.21 KB** | 22.28 μs / 8.94 KB | 31.47 μs / 19.88 KB |
 | Recursive CTE | 14.49 μs / 10.09 KB | **13.30 μs / 1.52 KB** | 19.94 μs / 8.45 KB | — |
 | String functions | **8.58 μs / 2.81 KB** | 8.72 μs / 1.27 KB | 12.23 μs / 4.89 KB | 21.87 μs / 12.74 KB |
 | UDF | **9.03 μs / 2.90 KB** | 9.09 μs / 1.27 KB | 15.92 μs / 6.63 KB | 23.31 μs / 12.74 KB |
@@ -392,12 +392,13 @@ and update the sidecar's run date and report hashes. Each report hash is compute
 line endings with LF, so checkout line-ending settings do not affect validation; all other report bytes
 remain covered by the hash.
 
-The generator reads each comparison suite's UTC start date and report hashes from
-`suite-run-dates.json`; report modification times are not measurement evidence. After a local run,
-record the UTC date captured immediately before each suite with `--record-run-date
-CLASS=YYYY-MM-DD --run-evidence SOURCE`, where `SOURCE` is that run's log path or URL. Repeat
-`--record-run-date` for every suite you refreshed. The workflow records each suite date and binds it
-to the generated CSV and Markdown reports before regenerating the tables.
+The generator reads each comparison suite's UTC start date, measured Nextorm version, and report
+hashes from `suite-run-dates.json`. The README shows versions; the detailed articles retain dates.
+After a local run, pass `--record-run-date CLASS=YYYY-MM-DD --run-version VERSION --run-evidence SOURCE`.
+Repeat `--record-run-date` for each suite run on the same source revision. Use the date captured
+immediately before each suite, the measured release version or Git revision for `VERSION`, and the
+run's log path or URL for `SOURCE`. CI derives the version from the checked-out commit's Git tag
+and includes the commit identifier if that checkout isn't at a release tag.
 
 The same end-to-end refresh runs from `.github/workflows/benchmarks.yml` — automatically after every
 merge into `main` that touches the engine (`src/**`) or the benchmark project, and on demand from the
