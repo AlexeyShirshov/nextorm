@@ -132,11 +132,12 @@ Publishing natively removes the JIT and the cold start; on short-lived processes
 win. A start-up plus one small query drops from almost a second to tens of milliseconds, and the 13 GB
 `oc-report` run below finishes in tenths of a second instead of one to two seconds.
 
-That win has a price: without JIT the row materializer expressions are interpreted — roughly twice
-the time and several times the allocations of compiled code. The build removes most of it for you: a
-source generator covers every projection type declared in your assembly — named types and record DTOs,
-and anonymous types as well — so a prepared query keeps its usual speed on a native build. On a
-prepared 500-row, three-column command that is 543 → 364 µs and 246 → 39 KB.
+For supported projections, Nextorm uses a build-time generated materializer that reads rows without
+interpreting expressions. If no matching materializer is available for a projection, NativeAOT
+interprets the expression instead. The cost depends on the projection and row count. For example,
+in a separate benchmark of a prepared query returning 500 rows and three columns, the generated
+materializer reduced mean time from 544 to 364 µs and allocations from 246 to 39.4 KB. Both results
+are from NativeAOT.
 
 For example, these projections need no attribute or registration:
 
@@ -154,8 +155,7 @@ var rows = context.From<Order>().Select(order => new { order.Id, order.Customer 
 Streaming terminals are not affected by that cost: `WriteCsv` and `WriteJson` do not materialize rows
 and write scalar columns with compiled code on a native build as well.
 
-For bulk exports of wide rows on the AOT runtime the interpretation is still noticeable — such jobs
-are better left on the JIT runtime.
+For large queries that return wide rows, compare JIT and NativeAOT using your projection and data volume.
 
 ## Real-world check
 
