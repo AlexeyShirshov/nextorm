@@ -31,7 +31,11 @@ internal static class EntitySelectListBuilder
 
             var prop = props[idx];
             var pi = prop.PropertyInfo;
-            var exp = Expression.Lambda(Expression.Property(p, pi), p);
+            // A bare member expression, not a per-column lambda: the lambda form closes
+            // Expression<Func<TEntity, TProperty>> at run time, and NativeAOT has no metadata for a
+            // delegate type it never saw statically. Consumers already accept either shape and wrap the
+            // bare member in their own typed lambda where a delegate is genuinely required.
+            var exp = Expression.Property(p, pi);
 
             if (prop.RangeColumns is { } rangeColumns)
             {

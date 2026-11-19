@@ -2288,8 +2288,16 @@ public partial class QueryCommand
             {
                 var column = columns[i];
 
-                if (reRoot && column.Expression is LambdaExpression { Parameters.Count: 1 } lambda)
-                    column.Expression = new ReplaceParameterInstanceVisitor(lambda.Parameters[0], itemExpression).Visit(lambda.Body);
+                if (reRoot)
+                {
+                    column.Expression = column.Expression switch
+                    {
+                        LambdaExpression { Parameters.Count: 1 } lambda
+                            => new ReplaceParameterInstanceVisitor(lambda.Parameters[0], itemExpression).Visit(lambda.Body),
+                        { } bare => new ReplaceParameterExpressionVisitor(itemExpression).Visit(bare),
+                        null => null,
+                    };
+                }
 
                 if (visitor is not null)
                     column.Expression = visitor.Visit(column.Expression!);

@@ -36,6 +36,9 @@ public sealed class AotComplexEntity
 
     [Column("m")]
     public decimal? Numeric { get; set; }
+
+    [Column("dt")]
+    public DateTime? Timestamp { get; set; }
 }
 
 [SqlTable("person")]

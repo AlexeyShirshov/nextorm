@@ -105,6 +105,21 @@ public sealed class AotNativeRunTests
         var nativeReports = scenarioLines.ToDictionary(ParseScenarioId, ParseReport, StringComparer.Ordinal);
         var jitResults = RunJitScenarios(databasePath);
         var jitManyToManyResults = RunManyToManyJitScenarios(databasePath);
+        // Diagnostics only: persist both arms before the fail-closed assertions, so a red scenario can be
+        // inspected (native stdout, JIT exception/message) without weakening the gate.
+        var diagnosticDirectory = Environment.GetEnvironmentVariable("NEXTORM_AOT_EVIDENCE_DIR");
+        if (!string.IsNullOrWhiteSpace(diagnosticDirectory))
+        {
+            Directory.CreateDirectory(diagnosticDirectory);
+            File.WriteAllText(Path.Combine(diagnosticDirectory, "native-stdout.log"), stdout);
+            File.WriteAllText(
+                Path.Combine(diagnosticDirectory, "jit-results.log"),
+                string.Join(
+                    Environment.NewLine,
+                    jitResults.Select(pair =>
+                        $"scenario={pair.Key}\tstatus={pair.Value.Status}\texception={pair.Value.Exception}\tmessage={pair.Value.Message}\tvalues={pair.Value.Values}")));
+        }
+
         // Fail-closed gate: a native scenario that fails or diverges from its JIT control fails this
         // test, not only the written oracle. Without this a native-only preparation failure would still
         // leave the harness green.

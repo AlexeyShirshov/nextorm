@@ -26,6 +26,11 @@ public static partial class AotScenarioCatalog
         new("join", Join),
         new("cte", Cte),
         new("prepared-reuse", PreparedReuse),
+        new("terminal-any", TerminalAny),
+        new("terminal-first-scalar", TerminalFirstScalar),
+        new("terminal-first-entity", TerminalFirstEntity),
+        new("terminal-single-scalar", TerminalSingleScalar),
+        new("terminal-single-entity", TerminalSingleEntity),
         new("window-function", WindowFunction),
         new("value-converters", ValueConverters),
         new("relationship-load-with", RelationshipLoadWith),
@@ -78,12 +83,69 @@ public static partial class AotScenarioCatalog
 
     private static object? PreparedReuse(IDataContext context)
     {
-        // One command executed twice: the second execution must reuse the prepared statement and the
-        // cached plan rather than rebuild either.
-        var command = context.From<AotSimpleEntity>().OrderBy(x => x.Id).Select(x => x.Id);
-        var first = command.ToList();
-        var second = command.ToList();
+        // Prepared explicitly, then executed twice: the second execution must reuse the prepared
+        // statement and its parameter binding instead of preparing again.
+        var command = context.From<AotSimpleEntity>().OrderBy(x => x.Id).Select(x => x.Id).Prepare();
+        var first = command.ToList(context);
+        var second = command.ToList(context);
         return $"first={string.Join(",", first)};second={string.Join(",", second)}";
+    }
+
+    /// <summary>
+    /// The query-command-producing terminal family, each prepared explicitly and executed:
+    /// <c>AnyCommand</c> and both <c>FirstOrFirstOrDefaultCommand</c> / <c>SingleOrSingleOrDefaultCommand</c>
+    /// overloads (selector and no-selector). The no-selector entity shape builds its projection from
+    /// metadata, one lambda per mapped property, so it also covers a nullable <c>DateTime</c> column.
+    /// </summary>
+    private static object? TerminalAny(IDataContext context)
+    {
+        var command = context.From<AotSimpleEntity>()
+            .Where(x => x.Id > 5)
+            .AnyCommand()
+            .Prepare();
+        return $"any={context.Any(command)}";
+    }
+
+    private static object? TerminalFirstScalar(IDataContext context)
+    {
+        var command = context.From<AotSimpleEntity>()
+            .OrderBy(x => x.Id)
+            .FirstOrFirstOrDefaultCommand(x => x.Id)
+            .Prepare();
+        return $"first={command.FirstOrDefault(context)}";
+    }
+
+    private static object? TerminalFirstEntity(IDataContext context)
+    {
+        var command = context.From<AotComplexEntity>()
+            .OrderBy(x => x.Id)
+            .FirstOrFirstOrDefaultCommand()
+            .Prepare();
+        var row = command.FirstOrDefault(context);
+        return row is null
+            ? "null"
+            : $"{row.Id}:{row.String ?? "null"}:{row.Timestamp?.Ticks.ToString(CultureInfo.InvariantCulture) ?? "null"}";
+    }
+
+    private static object? TerminalSingleScalar(IDataContext context)
+    {
+        var command = context.From<AotSimpleEntity>()
+            .Where(x => x.Id == 3)
+            .SingleOrSingleOrDefaultCommand(x => x.Id)
+            .Prepare();
+        return $"single={command.SingleOrDefault(context)}";
+    }
+
+    private static object? TerminalSingleEntity(IDataContext context)
+    {
+        var command = context.From<AotComplexEntity>()
+            .Where(x => x.Id == 2)
+            .SingleOrSingleOrDefaultCommand()
+            .Prepare();
+        var row = command.SingleOrDefault(context);
+        return row is null
+            ? "null"
+            : $"{row.Id}:{row.Numeric?.ToString(CultureInfo.InvariantCulture) ?? "null"}";
     }
 
     private static object? WindowFunction(IDataContext context)

@@ -2538,7 +2538,7 @@ internal readonly struct SqlBuilder
                 var key = window.OrderBy[i];
                 var (_, column) = SqlSourceRenderer.MakeColumn(
                     in ctx,
-                    new SelectExpression(key.Expression.ReturnType) { Expression = key.Expression },
+                    new SelectExpression((key.Expression as LambdaExpression)?.ReturnType ?? key.Expression.Type) { Expression = key.Expression },
                     entityType,
                     dontNeedAlias: true);
 
