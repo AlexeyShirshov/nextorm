@@ -17,6 +17,8 @@ namespace NextORM.Postgres;
 /// </remarks>
 public class PostgresDialect : SqlDialectBase
 {
+    internal override bool SupportsBoundedDelete => true;
+
     // The first PostgreSQL release with the ANSI aggregate FILTER clause (SQL:2003 T612, 9.4).
     private static readonly Version AggregatesFilterMinVersion = new(9, 4);
 

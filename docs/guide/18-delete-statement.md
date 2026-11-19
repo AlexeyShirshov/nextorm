@@ -7,6 +7,7 @@
 ## Choose a delete operation
 
 - To delete rows that match a condition, use [Deleting rows by predicate](#deleting-rows-by-predicate).
+- To cap how many matching rows are deleted, use [Delete a bounded set of rows](#delete-a-bounded-set-of-rows).
 - To delete every row, mark the operation explicitly with [`All()`](#deleting-every-row).
 - To delete one entity by its key, use [Deleting by key](#deleting-by-key).
 - To return the removed rows, see [Returning the removed rows](#returning-the-removed-rows).
@@ -42,6 +43,46 @@ To inspect the generated statement without opening a connection, call
 
 * Values captured in the predicate become parameters (`x => x.Id == id` renders `id = @id`); inline literals are emitted verbatim, exactly as in a query `WHERE`.
 * `Delete()`/`DeleteAsync()` return the affected-row count (`0` when nothing matched). ClickHouse reports no count (its mutation returns none).
+
+## Delete a bounded set of rows
+
+Start from one mapped table and add an explicit `Where`. The query terminal keeps
+the predicate and applicable global filters, including any `IgnoreFilters`
+selection. A global filter or limit alone doesn't substitute for `Where`.
+
+To delete up to 100 archived orders, oldest first, break timestamp ties with the
+unique order ID:
+
+```csharp
+var deleted = await app.Orders.Where(o => o.IsArchived)
+    .OrderBy(o => o.ArchivedAt)
+    .ThenBy(o => o.Id)
+    .Limit(100)
+    .DeleteAsync(cancellationToken);
+```
+
+Use `Delete()` for the synchronous equivalent. You can apply the same cap to an
+explicit delete builder. The following example accepts any 100 matching rows:
+
+```csharp
+var deleted = app.Orders.MakeDelete()
+    .Where(o => o.IsArchived)
+    .Limit(100)
+    .Delete();
+```
+
+Declare a unique, non-null key that matches the database schema; composite keys
+are supported. A bounded delete selects the keys and deletes the rows in one
+server statement, without fetching entities or keys to the client. It doesn't
+strengthen database isolation. An unbounded predicate delete doesn't need a key.
+
+Use a positive limit. Explicit `Limit(0)` is rejected for DELETE even though it
+means no limit for SELECT. Bounded DELETE supports PostgreSQL, SQL Server,
+MySQL, MariaDB, and SQLite (no optional SQLite DELETE LIMIT extension needed).
+ClickHouse rejects bounded deletes; the in-memory provider doesn't support
+mutations. Use the separate joined-delete API for joins; it doesn't support
+bounded deletion. Short DELETE also rejects derived sources, projections, and
+options such as positive offset and `WithTies` instead of ignoring them.
 
 ## Deleting every row
 

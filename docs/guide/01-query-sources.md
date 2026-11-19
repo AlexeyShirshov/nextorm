@@ -22,6 +22,46 @@ the query and returns those values in a list.
 Choose another `From` overload when your rows come from a subquery, raw SQL, a common table expression
 (CTE), a temporary table, or a table-valued function.
 
+## Expose typed sources from an application context
+
+Derive an application context from `NextORM.Core.Repositories.DbContext` to give callers named
+entity sources without hiding the concrete provider's behavior:
+
+```csharp
+using NextORM.Core;
+using NextORM.Core.Repositories;
+
+public sealed class AppDbContext(IDataContext provider) : DbContext(provider)
+{
+    public IRepository<Order> Orders => Repository<Order>();
+}
+```
+
+In scoped dependency injection, register the database provider separately as
+`IDataContext`, then register `AppDbContext` as scoped. The facade borrows the
+provider. It neither executes queries itself nor disposes the provider; use
+`app.DataContext` to access low-level APIs on that exact instance.
+
+Start an independent query or mutation from the same repository:
+
+```csharp
+var openOrders = await app.Orders.Where(o => !o.IsArchived)
+    .ToListAsync(cancellationToken);
+var archivedCount = app.Orders.Where(o => o.IsArchived).Count();
+var delete = app.Orders.MakeDelete().Where(o => o.IsArchived);
+```
+
+The facade caches the source wrapper per entity type, not the builders. A
+configuration passed to `Repository<T>(configure)` uses the same process-wide
+first-registration rule as `From<T>(configure)`. The provider still owns filters,
+transactions, and caching.
+
+`app.DataContext.From(app.Orders)` and `query.Join(app.Orders, predicate)` use the
+mapped table directly. Both reject a repository backed by a different
+`IDataContext` instance. To use a filtered query as a derived source, pass the
+filtered builder instead: `app.DataContext.From(app.Orders.Where(predicate))`.
+For mutation examples, see [Data modification (DELETE)](18-delete-statement.md).
+
 ## Query sources at a glance
 
 [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) has an overload for each source type. Every overload returns an [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1), so you can compose the same query operators (`Where`, `Join`, `GroupBy`, `Having`, `OrderBy`, `Limit`, and `Select`) with any source, subject to the source and provider limitations documented for each operator:

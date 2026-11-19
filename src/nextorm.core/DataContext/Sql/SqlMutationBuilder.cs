@@ -293,6 +293,7 @@ internal static class SqlMutationBuilder
     /// <param name="captureInto">A batch-capture target: when set, the removed rows are written into this table variable through <c>OUTPUT ... INTO</c> and no client output or automatic read-back is emitted.</param>
     /// <param name="metadataProvider">Resolves scope-specific metadata for the target and its columns.</param>
     /// <returns>The rendered SQL and the parameters it references.</returns>
+    /// <param name="renderKeySelection">Renders the bounded key query with the supplied projection, when needed.</param>
     internal static (string Sql, List<Parameter> Parameters) MakeDelete(
         ISqlDialect dialect,
         bool quoteIdentifiers,
@@ -305,7 +306,8 @@ internal static class SqlMutationBuilder
         MutationRenderKind renderKind = MutationRenderKind.Prepared,
         MutationParameterLowering? lowering = null,
         OutputIntoClause? captureInto = null,
-        IEntityMetadataProvider? metadataProvider = null)
+        IEntityMetadataProvider? metadataProvider = null,
+        Func<string, string>? renderKeySelection = null)
     {
         lowering ??= MutationParameterLowering.For(dialect, renderKind);
         var writer = StringBuilderPool.Shared.Get();
@@ -315,8 +317,37 @@ internal static class SqlMutationBuilder
             var table = ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, namingConvention);
             if (command.MappingVariant != MappingVariant.Default && metadataProvider is not null)
                 table = ResolveTableName(metadataProvider.GetMetadata(command.EntityType, command.MappingVariant).TableName ?? table, false, command.EntityType, namingConvention);
+            var targetName = table;
             var schema = command.MappingVariant == MappingVariant.Default ? command.Schema : metadataProvider?.GetMetadata(command.EntityType, command.MappingVariant).Schema ?? command.Schema;
             table = RenderTableReference(dialect, quoteIdentifiers, table, schema, false, command.EntityType, namingConvention);
+
+            if (command.BoundedKeys is { Length: > 0 } boundedKeys)
+            {
+                if (renderKeySelection is null)
+                    throw new NotSupportedException("Bounded DELETE is not supported by this mutation renderer.");
+
+                // A derived alias must not hide the outer DELETE target, even when quoted.
+                const string defaultAlias = "nextorm_keys";
+                var selectionAlias = System.Globalization.CultureInfo.InvariantCulture.CompareInfo.Compare(
+                    targetName.TrimEnd(), defaultAlias, System.Globalization.CompareOptions.IgnoreCase |
+                    System.Globalization.CompareOptions.IgnoreNonSpace | System.Globalization.CompareOptions.IgnoreWidth) == 0
+                    ? "bounded_delete_selection"
+                    : defaultAlias;
+                var projection = new string[boundedKeys.Length];
+                var equality = new string[boundedKeys.Length];
+                for (var i = 0; i < boundedKeys.Length; i++)
+                {
+                    var column = RenderColumnReference(dialect, quoteIdentifiers, boundedKeys[i], namingConvention, command.MappingVariant, metadataProvider);
+                    var alias = "nextorm_key_" + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    projection[i] = column + SqlKeywords.Of(keywordCase, " as ") + alias;
+                    equality[i] = selectionAlias + "." + alias + " = " + table + "." + column;
+                }
+
+                var selection = renderKeySelection(string.Join(", ", projection));
+                whereSql = SqlKeywords.Of(keywordCase, "exists (select 1 from (") + selection +
+                    SqlKeywords.Of(keywordCase, ") as ") + selectionAlias + SqlKeywords.Of(keywordCase, " where ") +
+                    string.Join(SqlKeywords.Of(keywordCase, " and "), equality) + ")";
+            }
 
             writer.Append(dialect.MakeDeleteHead(table, keywordCase));
 

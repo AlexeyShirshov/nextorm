@@ -2307,6 +2307,27 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, null, [], KeywordCase, provider, renderKind, lowering, captureInto, EntityMetadataProvider);
 
         var parameters = new List<Parameter>();
+        if (command.BoundedKeys is not null)
+        {
+            if (Dialect is not SqlDialectBase { SupportsBoundedDelete: true })
+                throw new NotSupportedException($"{GetType().Name} does not support bounded DELETE.");
+
+            if (renderKind != MutationRenderKind.AdHoc || captureInto is not null)
+                throw new NotSupportedException("Bounded DELETE is supported only as a standalone mutation.");
+
+            string RenderKeys(string projection)
+            {
+                var source = _planner.RenderSource(command.Condition, provider, parameters,
+                    parameterNamePrefix: parameterNamePrefix, keyProjection: projection);
+                if (source.WithSql is not null || source.MaxRecursionStmt is not null)
+                    throw new NotSupportedException("Bounded DELETE cannot use a common table expression.");
+                return source.Sql;
+            }
+
+            return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, null,
+                parameters, KeywordCase, provider, renderKind, lowering, captureInto, EntityMetadataProvider, RenderKeys);
+        }
+
         var (whereSql, _) = _planner.RenderPredicate(command.Condition, provider, parameters, parameterNamePrefix, lowering);
         return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, whereSql, parameters, KeywordCase, provider, renderKind, lowering, captureInto, EntityMetadataProvider);
     }

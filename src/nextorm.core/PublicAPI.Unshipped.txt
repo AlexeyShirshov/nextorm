@@ -409,3 +409,33 @@ NextORM.Core.EntityRelationshipDescriptor.PrincipalKeys.get -> System.Collection
 NextORM.Core.EntityRelationshipDescriptor.PrincipalKeys.init -> void
 NextORM.Core.EntityRelationshipDescriptor.RelatedType.get -> System.Type!
 NextORM.Core.EntityRelationshipDescriptor.RelatedType.init -> void
+NextORM.Core.Repositories.DbContext
+NextORM.Core.Repositories.DbContext.DataContext.get -> NextORM.Core.IDataContext!
+NextORM.Core.Repositories.DbContext.DbContext(NextORM.Core.IDataContext! dataContext) -> void
+NextORM.Core.Repositories.DbContext.Repository<TEntity>() -> NextORM.Core.IRepository<TEntity>!
+NextORM.Core.Repositories.DbContext.Repository<TEntity>(System.Action<NextORM.Core.EntityMetadataBuilder<TEntity>!>! configure) -> NextORM.Core.IRepository<TEntity>!
+NextORM.Core.IRepository<TEntity>
+NextORM.Core.IRepository<TEntity>.DataContext.get -> NextORM.Core.IDataContext!
+NextORM.Core.IRepository<TEntity>.Query() -> NextORM.Core.EntityBuilder<TEntity>!
+NextORM.Core.RepositoryExtensions
+static NextORM.Core.RepositoryExtensions.Count<TEntity>(this NextORM.Core.IRepository<TEntity>! repository) -> int
+static NextORM.Core.RepositoryExtensions.CountAsync<TEntity>(this NextORM.Core.IRepository<TEntity>! repository, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+static NextORM.Core.RepositoryExtensions.From<TEntity>(this NextORM.Core.Repositories.DbContext! context, NextORM.Core.IRepository<TEntity>! repository) -> NextORM.Core.EntityBuilder<TEntity>!
+static NextORM.Core.RepositoryExtensions.From<TEntity>(this NextORM.Core.IDataContext! context, NextORM.Core.IRepository<TEntity>! repository) -> NextORM.Core.EntityBuilder<TEntity>!
+static NextORM.Core.RepositoryExtensions.Join<TEntity, TJoinEntity>(this NextORM.Core.EntityBuilder<TEntity>! builder, NextORM.Core.IRepository<TJoinEntity>! source, System.Linq.Expressions.Expression<System.Func<TEntity, TJoinEntity, bool>!>! predicate) -> NextORM.Core.JoinedEntityBuilder<TEntity, TJoinEntity>!
+static NextORM.Core.RepositoryExtensions.Join<TEntity, TJoinEntity>(this NextORM.Core.IRepository<TEntity>! repository, NextORM.Core.IRepository<TJoinEntity>! source, System.Linq.Expressions.Expression<System.Func<TEntity, TJoinEntity, bool>!>! predicate) -> NextORM.Core.JoinedEntityBuilder<TEntity, TJoinEntity>!
+static NextORM.Core.RepositoryExtensions.Limit<TEntity>(this NextORM.Core.IRepository<TEntity>! repository, int count) -> NextORM.Core.EntityBuilder<TEntity>!
+static NextORM.Core.RepositoryExtensions.MakeDelete<TEntity>(this NextORM.Core.IRepository<TEntity>! repository) -> NextORM.Core.DeleteBuilder<TEntity>!
+static NextORM.Core.RepositoryExtensions.MakeInsert<TEntity>(this NextORM.Core.IRepository<TEntity>! repository) -> NextORM.Core.InsertBuilder<TEntity>!
+static NextORM.Core.RepositoryExtensions.MakeUpdate<TEntity>(this NextORM.Core.IRepository<TEntity>! repository) -> NextORM.Core.UpdateBuilder<TEntity>!
+static NextORM.Core.RepositoryExtensions.OrderBy<TEntity>(this NextORM.Core.IRepository<TEntity>! repository, System.Linq.Expressions.Expression<System.Func<TEntity, object?>!>! key) -> NextORM.Core.EntityBuilder<TEntity>!
+static NextORM.Core.RepositoryExtensions.OrderByDescending<TEntity>(this NextORM.Core.IRepository<TEntity>! repository, System.Linq.Expressions.Expression<System.Func<TEntity, object?>!>! key) -> NextORM.Core.EntityBuilder<TEntity>!
+static NextORM.Core.RepositoryExtensions.ToList<TEntity>(this NextORM.Core.IRepository<TEntity>! repository) -> System.Collections.Generic.List<TEntity>!
+static NextORM.Core.RepositoryExtensions.ToListAsync<TEntity>(this NextORM.Core.IRepository<TEntity>! repository, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<TEntity>!>!
+static NextORM.Core.RepositoryExtensions.Where<TEntity>(this NextORM.Core.IRepository<TEntity>! repository, System.Linq.Expressions.Expression<System.Func<TEntity, bool>!>! predicate) -> NextORM.Core.EntityBuilder<TEntity>!
+NextORM.Core.QueryDeleteExtensions
+static NextORM.Core.QueryDeleteExtensions.Delete<TEntity>(this NextORM.Core.EntityBuilder<TEntity>! query) -> int
+static NextORM.Core.QueryDeleteExtensions.DeleteAsync<TEntity>(this NextORM.Core.EntityBuilder<TEntity>! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+NextORM.Core.DeleteBuilder<TEntity>.Limit(int limit) -> NextORM.Core.DeleteBuilder<TEntity>!
+NextORM.Core.DeleteBuilder<TEntity>.OrderBy(System.Linq.Expressions.Expression<System.Func<TEntity, object?>!>! key) -> NextORM.Core.DeleteBuilder<TEntity>!
+NextORM.Core.DeleteBuilder<TEntity>.OrderByDescending(System.Linq.Expressions.Expression<System.Func<TEntity, object?>!>! key) -> NextORM.Core.DeleteBuilder<TEntity>!
