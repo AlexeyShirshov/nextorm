@@ -1,26 +1,26 @@
 ```
 
 BenchmarkDotNet v0.15.8, Linux Ubuntu 26.04.1 LTS (Resolute Raccoon)
-AMD EPYC 9V45 4.30GHz, 1 CPU, 4 logical and 2 physical cores
+AMD EPYC 7763 3.20GHz, 1 CPU, 4 logical and 2 physical cores
 .NET SDK 11.0.100
-  [Host] : .NET 11.0.0 (11.0.0, 11.0.26.53018), X64 RyuJIT x86-64-v4
+  [Host] : .NET 11.0.0 (11.0.0, 11.0.26.53018), X64 RyuJIT x86-64-v3
 
 Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3  
 LaunchCount=1  WarmupCount=3  
 
 ```
-| Method                                        | Mean      | Error     | StdDev    | Gen0    | Gen1   | Allocated |
-|---------------------------------------------- |----------:|----------:|----------:|--------:|-------:|----------:|
-| Nextorm_Prepared_Scalar_FirstOrDefault        |  74.11 μs |  15.39 μs |  0.844 μs |  0.4883 |      - |   8.55 KB |
-| Nextorm_Prepared_Entity_FirstOrDefault        |  79.55 μs |  18.00 μs |  0.987 μs |  0.7324 |      - |  12.77 KB |
-| Dapper_Scalar_FirstOrDefault                  |  94.52 μs |  28.22 μs |  1.547 μs |  0.9766 |      - |  16.12 KB |
-| Nextorm_PreparedForLoop_Entity_FirstOrDefault |  97.66 μs |  15.74 μs |  0.863 μs |  1.9531 |      - |  34.33 KB |
-| Nextorm_Cached_Scalar_FirstOrDefault          | 101.32 μs |  23.55 μs |  1.291 μs |  3.0518 |      - |  51.08 KB |
-| Nextorm_Cached_Entity_FirstOrDefault          | 102.24 μs |  13.65 μs |  0.748 μs |  2.6855 |      - |  45.06 KB |
-| Dapper_Entity_FirstOrDefault                  | 104.45 μs |  11.61 μs |  0.637 μs |  1.0986 |      - |  19.17 KB |
-| Linq2Db_Compiled_Scalar_FirstOrDefault        | 150.02 μs |  25.05 μs |  1.373 μs |  9.7656 |      - | 159.77 KB |
-| Linq2Db_Compiled_Entity_FirstOrDefault        | 179.01 μs | 233.04 μs | 12.774 μs | 10.4980 |      - | 172.59 KB |
-| Linq2Db_Scalar_FirstOrDefault                 | 191.92 μs | 195.84 μs | 10.735 μs | 11.7188 |      - | 192.96 KB |
-| Linq2Db_Entity_FirstOrDefault                 | 194.28 μs | 137.08 μs |  7.514 μs | 11.7188 |      - | 191.98 KB |
-| EFCore_Compiled_Scalar_FirstOrDefault         | 200.65 μs | 123.21 μs |  6.754 μs |  4.6387 | 2.1973 |  76.02 KB |
-| EFCore_Compiled_Entity_FirstOrDefault         | 206.71 μs |  21.52 μs |  1.179 μs |  4.6387 | 2.1973 |  79.42 KB |
+| Method                                        | Mean      | Error     | StdDev   | Gen0    | Gen1   | Allocated |
+|---------------------------------------------- |----------:|----------:|---------:|--------:|-------:|----------:|
+| Nextorm_Prepared_Scalar_FirstOrDefault        |  95.27 μs |  4.508 μs | 0.247 μs |  0.4883 |      - |   8.56 KB |
+| Nextorm_Prepared_Entity_FirstOrDefault        | 108.79 μs | 11.038 μs | 0.605 μs |  0.7324 |      - |  12.77 KB |
+| Dapper_Scalar_FirstOrDefault                  | 141.48 μs | 20.643 μs | 1.131 μs |  0.9766 |      - |  16.12 KB |
+| Nextorm_PreparedForLoop_Entity_FirstOrDefault | 165.96 μs | 38.488 μs | 2.110 μs |  1.9531 |      - |  34.22 KB |
+| Dapper_Entity_FirstOrDefault                  | 173.91 μs |  9.111 μs | 0.499 μs |  0.9766 |      - |  19.17 KB |
+| Nextorm_Cached_Scalar_FirstOrDefault          | 178.65 μs | 30.069 μs | 1.648 μs |  2.9297 |      - |  51.08 KB |
+| Nextorm_Cached_Entity_FirstOrDefault          | 186.98 μs | 22.739 μs | 1.246 μs |  2.6855 |      - |  43.97 KB |
+| EFCore_Compiled_Scalar_FirstOrDefault         | 373.45 μs | 25.625 μs | 1.405 μs |  4.3945 | 1.9531 |  76.03 KB |
+| Linq2Db_Compiled_Scalar_FirstOrDefault        | 383.95 μs | 83.717 μs | 4.589 μs |  9.7656 |      - | 159.77 KB |
+| EFCore_Compiled_Entity_FirstOrDefault         | 410.94 μs | 26.193 μs | 1.436 μs |  4.3945 | 1.9531 |  79.42 KB |
+| Linq2Db_Compiled_Entity_FirstOrDefault        | 458.94 μs | 47.252 μs | 2.590 μs | 10.2539 |      - |  172.6 KB |
+| Linq2Db_Scalar_FirstOrDefault                 | 648.40 μs | 69.855 μs | 3.829 μs | 11.7188 |      - | 192.97 KB |
+| Linq2Db_Entity_FirstOrDefault                 | 656.64 μs |  9.393 μs | 0.515 μs | 11.7188 |      - | 191.99 KB |
