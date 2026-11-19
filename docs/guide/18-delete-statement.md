@@ -46,6 +46,9 @@ To inspect the generated statement without opening a connection, call
 
 ## Delete a bounded set of rows
 
+The examples use `app.Orders` from an application context. To set it up, see
+[Repositories and application context](37-repositories.md).
+
 Start from one mapped table and add an explicit `Where`. The query terminal keeps
 the predicate and applicable global filters, including any `IgnoreFilters`
 selection. A global filter or limit alone doesn't substitute for `Where`.

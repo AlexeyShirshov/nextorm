@@ -2,6 +2,8 @@
   items:
     - name: Query sources
       href: 01-query-sources.md
+    - name: Repositories and application context
+      href: 37-repositories.md
     - name: Projections
       href: 02-projections.md
     - name: Filtering (WHERE)

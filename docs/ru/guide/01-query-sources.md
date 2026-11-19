@@ -24,44 +24,8 @@ var rows = dataContext.From<SimpleEntity>()
 
 ## Предоставьте типизированные источники через контекст приложения
 
-Унаследуйте контекст приложения от `NextORM.Core.Repositories.DbContext`, чтобы предоставить
-именованные источники сущностей и сохранить поведение выбранного провайдера:
-
-```csharp
-using NextORM.Core;
-using NextORM.Core.Repositories;
-
-public sealed class AppDbContext(IDataContext provider) : DbContext(provider)
-{
-    public IRepository<Order> Orders => Repository<Order>();
-}
-```
-
-При внедрении зависимостей зарегистрируйте провайдер БД отдельно как
-`IDataContext`, а затем зарегистрируйте `AppDbContext` в той же области
-видимости (`scoped`). Фасад заимствует провайдер: он не исполняет запросы сам и не
-освобождает провайдер. Через `app.DataContext` доступен низкоуровневый API этого
-же экземпляра.
-
-Начните независимый запрос или изменение через один репозиторий:
-
-```csharp
-var openOrders = await app.Orders.Where(o => !o.IsArchived)
-    .ToListAsync(cancellationToken);
-var archivedCount = app.Orders.Where(o => o.IsArchived).Count();
-var delete = app.Orders.MakeDelete().Where(o => o.IsArchived);
-```
-
-Фасад кеширует оболочку источника для каждого типа сущности, а не построители.
-Для настройки `Repository<T>(configure)` действует то же правило первой
-регистрации на процесс, что и для `From<T>(configure)`. Фильтры, транзакции и
-кеш по-прежнему принадлежат провайдеру.
-
-`app.DataContext.From(app.Orders)` и `query.Join(app.Orders, predicate)`
-используют отображённую таблицу напрямую и не принимают репозиторий с другим
-экземпляром `IDataContext`. Для производного запроса передайте построитель с
-условием: `app.DataContext.From(app.Orders.Where(predicate))`.
-Примеры изменений см. в разделе [Изменение данных (DELETE)](18-delete-statement.md).
+Чтобы предоставить именованные источники сущностей, например `app.Orders`, и использовать
+их в `From` или `Join`, см. [«Репозитории и контекст приложения»](37-repositories.md).
 
 ## Источники запроса: краткий обзор
 

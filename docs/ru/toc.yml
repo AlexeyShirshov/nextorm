@@ -18,6 +18,8 @@
       items:
         - name: Источники запроса
           href: guide/01-query-sources.md
+        - name: Репозитории и контекст приложения
+          href: guide/37-repositories.md
         - name: Проекции
           href: guide/02-projections.md
         - name: Фильтрация (WHERE)
