@@ -448,7 +448,8 @@ internal static class RowMapperFactory
                     DynamicColumnsReadMI,
                     param,
                     Expression.Constant(startIndex)),
-                column => Expression.Call(param, IsDBNullMI, Expression.Constant(column.Index)));
+                column => Expression.Call(param, IsDBNullMI, Expression.Constant(column.Index)),
+                allowImplicitStructMemberInit: true);
         }
 
         var boxed = body.Type == typeof(object) ? body : Expression.Convert(body, typeof(object));
@@ -514,7 +515,8 @@ internal static class RowMapperFactory
                     DynamicColumnsReadMI,
                     param,
                     Expression.Constant(startIndex)),
-                column => Expression.Call(param, IsDBNullMI, Expression.Constant(column.Index)));
+                column => Expression.Call(param, IsDBNullMI, Expression.Constant(column.Index)),
+                allowImplicitStructMemberInit: true);
 
             lambda = Expression.Lambda<Func<IDataRecord, TResult>>(body, param);
         }

@@ -59,6 +59,60 @@ public sealed class StructProjectionLiveTests : IDisposable
 
     public readonly record struct NumericStructProjection(int Id);
 
+    private struct RuntimeMutableProjection
+    {
+        public int Id { get; set; }
+        public string Value { get; set; }
+    }
+
+    private readonly struct RuntimeReadonlyProjection(int id)
+    {
+        public int Id { get; } = id;
+    }
+
+    [Fact]
+    public void PrivateProjectionType_ShouldUseSqlRuntimeMemberInit()
+    {
+        // The generated mapper cannot name this private nested type.
+        var rows = _ctx.From<Row>()
+            .OrderBy(x => x.Id)
+            .Select(x => new RuntimeMutableProjection { Id = x.Id, Value = x.Value })
+            .ToList();
+
+        rows.Select(x => (x.Id, x.Value)).Should().Equal((1, "one"), (2, "two"));
+    }
+
+    [Fact]
+    public void PrivateReadonlyProjectionType_ShouldUseItsPublicConstructor()
+    {
+        var rows = _ctx.From<Row>()
+            .OrderBy(x => x.Id)
+            .Select(x => new RuntimeReadonlyProjection(x.Id))
+            .ToArray();
+
+        rows.Select(x => x.Id).Should().Equal(1, 2);
+    }
+
+    [Fact]
+    public async Task PrivateProjectionType_ShouldStreamTheParameterizedRowsSyncAndAsync()
+    {
+        var query = _ctx.From<Row>()
+            .Where(x => x.Id >= SqlFunctions.Parameter<int>(0))
+            .OrderBy(x => x.Id)
+            .Select(x => new RuntimeMutableProjection { Id = x.Id, Value = x.Value });
+
+        query.ToEnumerable(2).Select(x => (x.Id, x.Value)).Should().Equal((2, "two"));
+
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using (var enumerator = query.ToAsyncEnumerable(cancellationToken, 1).GetAsyncEnumerator(cancellationToken))
+        {
+            (await enumerator.MoveNextAsync()).Should().BeTrue();
+            (enumerator.Current.Id, enumerator.Current.Value).Should().Be((1, "one"));
+        }
+
+        query.ToEnumerable(2).Select(x => (x.Id, x.Value)).Should().Equal((2, "two"));
+    }
+
     [Fact]
     public void SelectToList_MutableStructMemberInit()
     {
