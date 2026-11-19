@@ -168,9 +168,7 @@ var updated = dataContext.From<IComplexEntity>()
 * `values(column)` — `MySQL VALUES(column) cannot be translated as a scalar query function; use the mutation builder's upsert API.`
 
 `JSON_TABLE` — таблице-образующая конструкция, а не скаляр: ей нужна позиция `FROM`/join и список
-определений `COLUMNS`, поэтому она достижима только через сырой SQL или обёртку `[SqlFunction]`. То же
-верно для всей нативной поверхности MySQL: отказы — это детерминированные исходы транслятора, а не
-пробелы, оставленные на будущее.
+определений `COLUMNS`. Используйте сырой SQL или обёртку `[SqlFunction]`.
 
 ## MariaDB
 
@@ -187,13 +185,8 @@ var updated = dataContext.From<IComplexEntity>()
 реализует), поэтому `MariaDbDialect.MySqlFunctions` сообщает их как неподдерживаемые, и запрос
 отклоняется с `NotSupportedException`.
 
-Каталог MySQL, реализованный в #283, проверен на MySQL 8.4. Оценка его поддержки в MariaDB завершена
-в #284: перечень из 138 позиций содержит 109 реализованных имён, 6 ранее поддержанных, 18 явных отказов
-и 5 функций, доступных начиная с MariaDB 11.7; ожидающих решения позиций нет. Проверка MariaDB выполнена
-на версии 11.4.13; функции с ограничением 11.7 не выполнялись. Постоянные исключения `UUID_TO_BIN`,
-`BIN_TO_UUID` и `JSON_STORAGE_FREE` сохраняются. См.
-[каталог MariaDB](../../scalar-functions/08-reference.md#mariadb-catalogue): в нём указаны статус каждого
-имени, ограничения версий, причины отказов и оговорки к результатам проверки.
+См. [каталог MariaDB](../../scalar-functions/08-reference.md#mariadb-catalogue): в нём перечислены
+поддерживаемые функции, требования к версии и причины отказа.
 
 Поверх наследуемого набора MariaDB добавляет собственные имена через тот же вход `SqlFunctions.MySql`.
 Диалект MySQL их не сообщает, поэтому запрос MySQL с таким именем отклоняется с `NotSupportedException`:

@@ -269,15 +269,15 @@ other dialect rejects it:
   stays `NULL`); the other providers and the in-memory provider reject them;
 * `generate_ulid` (`generateULID`).
 
-### Delivered families (#286, T286b)
+### Function families
 
-The tables below list the remaining native functions. Each entry is a typed
+The table groups native functions by purpose. Each entry is a typed
 `ClickHouseFunctions` method: it uses the exact ClickHouse name in SQL and declares its CLR result
 shape. A shared `IScalarFunctions` capability check rejects the method with `NotSupportedException`
 on other dialects. The baseline server is ClickHouse **25.8.33.6**
 (`clickhouse/clickhouse-server:25.8-alpine`). Functions introduced later than that version, and result
 shapes the provider cannot materialize, are listed under
-[Not yet supported](#not-yet-supported).
+[Unsupported functions](#unsupported-functions).
 
 | Family | Members |
 |---|---|
@@ -334,7 +334,7 @@ version 25.9:
 
 | Declaration | Behaviour |
 |---|---|
-| none (the pinned 25.8 baseline, the default) | `NotSupportedException` with the historical `The array_except function is not supported by this provider.` — nothing is emitted |
+| none (the pinned 25.8 baseline, the default) | `NotSupportedException` with the message `The array_except function is not supported by this provider.` — nothing is emitted |
 | earlier than 25.9 (for example `25.8`) | `NotSupportedException` naming the required `25.9` and the declared version, thrown before any SQL |
 | 25.9 or later | the native `arrayExcept(...)`, which takes exactly two arrays; any other arity is refused before SQL |
 
@@ -515,10 +515,9 @@ The scalar helpers therefore use this predicate instead:
 See
 [Null-safe comparison](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-comparison-is-not-distinct-from).
 
-## Not yet supported
+## Unsupported functions
 
-The entries below complete the remaining §3 set for the pinned **25.8.33.6** server. They exist as
-typed methods on `ClickHouseFunctions`, but deliberately throw a precise `NotSupportedException`
+The following `ClickHouseFunctions` methods throw `NotSupportedException`
 before sending SQL to the provider. nextorm does not silently rewrite them, substitute defaults or
 truncate their results.
 

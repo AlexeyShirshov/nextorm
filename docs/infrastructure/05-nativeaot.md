@@ -117,8 +117,7 @@ context declares is serialized with the default options.
 
 ## Limitations
 
-- The EF Core bridge (`nextorm.entityframeworkcore`) is not part of the native build yet — keep that
-  scenario on the regular JIT runtime.
+- The EF Core bridge (`nextorm.entityframeworkcore`) requires the JIT runtime.
 - ClickHouse tuple result columns whose element type is not registered by the driver are not
   materialized by the native build. Select individual `tupleElement(...)` columns or retrieve the
   tuple as text and parse it on the client.

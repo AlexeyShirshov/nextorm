@@ -55,8 +55,7 @@ SQL.
 This describes **feature depth per engine, not the number of engines**. linq2db connects to more
 database products (Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, Access, SQL CE, DuckDB, Ydb).
 Nextorm adds an in-memory object context and treats MySQL and MariaDB as separate providers. linq2db
-still has broader SQL Server scalar-function coverage and more hint varieties (issue
-[#182](https://github.com/AlexeyShirshov/nextorm/issues/182)).
+has broader SQL Server scalar-function coverage and more hint varieties.
 
 ## PostgreSQL
 
@@ -116,13 +115,9 @@ linq2db ones.
 | Session/server identity (`@@SERVERNAME`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) | yes | yes |
 | **Total** | 20 / 0 / 0 | 13 / 4 / 2 |
 
-Net: **parity on the audited T-SQL scalar catalogue, with linq2db still wider overall**. Issue
-[#182](https://github.com/AlexeyShirshov/nextorm/issues/182) reconciled 61 pinned linq2db `SqlFn.cs` entries
-against Nextorm: 51 covered and 10 excluded, where the excluded set is live, mutable
-connection/session/statement-scope state rather than per-row query scalars. The identity subset
-(`@@SERVERNAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) shipped in
-[#219](https://github.com/AlexeyShirshov/nextorm/issues/219), leaving the rest tracked in
-[#248](https://github.com/AlexeyShirshov/nextorm/issues/248). Nextorm leads on first-class builders for
+Nextorm exposes the identity scalars `@@SERVERNAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`,
+`SUSER_NAME`, and `ORIGINAL_LOGIN`. linq2db has a broader SQL Server scalar-function catalogue overall.
+Nextorm provides dedicated APIs for
 `PIVOT`/`UNPIVOT`, `FOR JSON`/`FOR XML`, XML methods, `OPENJSON`/`STRING_SPLIT` and the 2025 regex functions.
 
 ## MySQL / MariaDB
@@ -176,9 +171,8 @@ ahead only on hint variety.
 | **Total** | 13 / 0 / 1 | 6 / 1 / 7 |
 
 Net: **mixed, net Nextorm broader** — Nextorm adds JSON1, regex, custom aggregates, window frame
-`GROUPS`/`EXCLUDE`, table-valued parameters, LOB streaming, the SQLite full-text **query + FROM** surface
-([#181](https://github.com/AlexeyShirshov/nextorm/issues/181)) and the **FTS5 maintenance/control** command
-builder ([#195](https://github.com/AlexeyShirshov/nextorm/issues/195)/[#196](https://github.com/AlexeyShirshov/nextorm/issues/196)).
+`GROUPS`/`EXCLUDE`, table-valued parameters, LOB streaming, the SQLite full-text **query + FROM** surface and the **FTS5 maintenance/control** command
+builder.
 linq2db still leads only on FTS3/FTS4 maintenance and the FTS5 `delete`/`delete-all`/`pgsz`/`usermerge`
 commands.
 
@@ -223,8 +217,7 @@ The strongest Nextorm-only areas, with no linq2db equivalent found:
 
 - A per-provider scalar-function library for **all** providers: `SqlFunctions.Postgres`,
   `SqlFunctions.SqlServer`, `SqlFunctions.MySql`, `SqlFunctions.Sqlite` and `SqlFunctions.ClickHouse`, plus the
-  shared session-info gate that carries the identity scalars of
-  [#219](https://github.com/AlexeyShirshov/nextorm/issues/219) across four providers.
+  shared session-info gate that carries the identity scalars across four providers.
 - PostgreSQL: full-text, regex, `jsonb_path_*`, range operators, data-modifying CTE, table functions
   (`generate_series`/`unnest`/`jsonb_*`/`ts_stat`), sequences/settings, boolean/bit/statistical/regression
   aggregates, ordered-set percentiles, table-valued parameters.

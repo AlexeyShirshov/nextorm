@@ -50,8 +50,8 @@ breadth, see [Provider features](provider-features.md).
 | Result-set export to a stream (JSON, CSV) | yes | partial (client serialization) | partial (client serialization) |
 | `CASE WHEN` / ternary / `switch`, `COALESCE`, numeric `CAST` | yes | yes | yes |
 | String / math / date scalar functions, `LIKE`, concatenation, `NULLIF` | yes | yes | yes |
-| CLR `Regex` (`IsMatch`/`Replace`, constant pattern) | yes (PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite, SQL Server 2025+) | partial (open [linq2db#698](https://github.com/linq2db/linq2db/issues/698)) | no |
-| `string.Format` / interpolation in SQL | yes (culture-invariant subset) | partial ([linq2db#5921](https://github.com/linq2db/linq2db/issues/5921)) | no |
+| CLR `Regex` (`IsMatch`/`Replace`, constant pattern) | yes (PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite, SQL Server 2025+) | partial | no |
+| `string.Format` / interpolation in SQL | yes (culture-invariant subset) | partial | no |
 | Date arithmetic (`date_add`/`date_diff`/`date_trunc`/`end_of_month`/`date_from_parts`, `DateTime.Add*`) | yes | yes | yes |
 | Full-text search | yes (SQL Server, PostgreSQL, MySQL/MariaDB; SQLite FTS3/4/5 query + `FROM`, FTS5 maintenance builder) | yes | partial |
 | Conditional functions (`iif`/`choose`/`multi_if`) | yes | no | no |
@@ -65,7 +65,7 @@ breadth, see [Provider features](provider-features.md).
 | `STRING_AGG` / `ARRAY_AGG` | yes (`array_agg` on PostgreSQL) | yes | partial |
 | Value converters | yes | yes | yes (`HasConversion`) |
 | Dynamic columns (`[DynamicColumns]` store) | yes | yes | no (JSON/TPH workarounds) |
-| JSON column ↔ object | yes | partial ([linq2db#1661](https://github.com/linq2db/linq2db/issues/1661)) | yes (JSON columns) |
+| JSON column ↔ object | yes | partial | yes (JSON columns) |
 | Duration / interval columns | yes (PostgreSQL `interval` → `TimeSpan` only for representable zero-month values) | yes | partial (provider interval mapping) |
 | Native JSON documents | yes on PostgreSQL | partial (the `json`/`jsonb` type plus `@>`, `#>>` and `Json.Value`; not the full `jsonb_*` library) | partial (JSON column mapping + Npgsql `EF.Functions.Json*`) |
 | JSON scalar functions (`json_value`/`json_query`/`json_modify`, `isjson`) | yes (SQL Server, MySQL/MariaDB) | yes | partial |
@@ -73,7 +73,7 @@ breadth, see [Provider features](provider-features.md).
 | Arrays and higher-order array functions (`cardinality`/`array_*`/`@>`/`&&`, `Array(T)`, `ARRAY JOIN`) | yes on PostgreSQL and ClickHouse | partial (PostgreSQL array operators only) | partial |
 | Row values / tuples (`ROW`/`(a, b)`, element access, row comparison) | yes — PostgreSQL `ROW`/`(row).fN` and ClickHouse `tuple`/`tupleElement`; flat `(a, b)` on MySQL/MariaDB/SQLite | yes (`Sql.Row`; emulated where the provider has no native row) | partial |
 | Range types and range-over-scalar-columns (`Range<T>`, `Overlaps`, `range_contains`, bound inspection) | yes — native range/multirange on PostgreSQL; a mapped pair of scalar columns (`[RangeColumns]`) elsewhere | partial (provider-native `NpgsqlRange<T>`/multirange mapping only; no portable `Range<T>`/pair) | partial |
-| Collation and ordinal string semantics | yes | partial ([linq2db#5927](https://github.com/linq2db/linq2db/issues/5927)) | partial |
+| Collation and ordinal string semantics | yes | partial | partial |
 | Naming conventions (e.g. snake_case) | yes (opt-in, built-in `SnakeCaseNamingConvention`) | partial (no built-in convention) | partial |
 | Identifier quoting | yes (opt-in) | yes (on by default) | yes (always) |
 | SQL keyword casing (upper/lower) | yes (opt-in `KeywordCase.Upper`) | no (keywords are emitted in the provider's canonical case) | no |
@@ -84,10 +84,10 @@ breadth, see [Provider features](provider-features.md).
 | `CREATE TABLE AS SELECT`, temporary tables | yes | yes | no |
 | `TRUNCATE` | yes (SQLite/in-memory reject) | yes | no (raw SQL only) |
 | Optimistic concurrency | partial (explicit token-guarded pattern; no concurrency-token metadata) | yes | yes |
-| `OUTPUT ... INTO` | yes (SQL Server) | partial (`…WithOutputInto` writes to a table; combined returning+INTO open [#3832](https://github.com/linq2db/linq2db/issues/3832)) | no |
+| `OUTPUT ... INTO` | yes (SQL Server) | partial (`…WithOutputInto` writes to a table; does not also return the rows to the caller) | no |
 | Transactions (own and enlisted) | yes (SQLite, PostgreSQL, SQL Server, MySQL/MariaDB; ClickHouse and in-memory reject) | yes | yes |
 | Savepoints (create / rollback to / release) | yes (through `ITransactionManager`; SQL Server release is a no-op, ClickHouse has none) | partial (raw SQL only) | yes (`IDbContextTransaction` savepoint methods; provider-dependent) |
-| Captured-collection lookup (`dict[column]`, `list[column]`) | yes | no (open [linq2db#5879](https://github.com/linq2db/linq2db/issues/5879); only `Contains` → `IN`) | no (indexer not translated; client evaluation blocked) |
+| Captured-collection lookup (`dict[column]`, `list[column]`) | yes | no (only `Contains` → `IN`) | no (indexer not translated; client evaluation blocked) |
 | Entity class optional (query without a mapped type) | yes | partial | no |
 | Navigation properties / associations / eager loading | partial (declarative O2M/M2O/O2O/M2M metadata, `JoinInto`, `LoadWith` eager loading — split or single-query, nested level 2+ with a graph-wide mode and per-level ordering/top-N — and declared-relationship implicit navigation; convention-over-FK inference is absent in linq2db too) | yes (`[Association]`, `LoadWith`) | yes |
 | Context configuration, logging and DI | yes | yes | yes |
@@ -128,8 +128,7 @@ Against the shared surface Nextorm matches or exceeds linq2db; on top of that it
   provides a per-command variant or ships sharding.
 - `SelectWhereMax`/`SelectWhereMin` as a dedicated extreme-row operator, lowered to the native strategy on
   PostgreSQL and ClickHouse; linq2db composes window functions plus `OrderBy`/`Take`.
-- `[JsonColumn]` with Auto/Native/Text storage — a mapping linq2db still lacks
-  ([linq2db#1661](https://github.com/linq2db/linq2db/issues/1661)).
+- `[JsonColumn]` with Auto/Native/Text storage — a mapping linq2db does not provide.
 - A complete, explicit write surface: `INSERT`/`UPDATE`/`DELETE`/full `MERGE`, generated keys and returned
   rows, key upsert, bulk insert, `CREATE TABLE AS SELECT`/temporary tables, PostgreSQL data-modifying CTEs and
   transactions — all explicit commands, with no change tracking and no `SaveChanges`.
@@ -149,10 +148,8 @@ Against the shared surface Nextorm matches or exceeds linq2db; on top of that it
   On a 13 GB SQLite reporting app, Nextorm published natively with no source changes (8.2 MB, 0.12
   s,
   30 MB RSS); EF Core needed 17.3 MB / 0.23 s / 42 MB after two code-generation workarounds.
-  Coverage is measured across all six providers but remains incomplete: the EF Core bridge, bulk
-  insert,
-  raw SQL row mapping, and DML builders stay on JIT
-  ([#370](https://github.com/AlexeyShirshov/nextorm/issues/370)).
+  NativeAOT supports representative query, write, and raw SQL scenarios across all six providers.
+  The EF Core bridge requires JIT.
   The advantage is the migration contract, not full AOT feature parity. See the [NativeAOT
   guide](../infrastructure/05-nativeaot.md).
 - Cross-provider row values, portable range-over-scalar-pairs (`[RangeColumns]`), index hints, configurable

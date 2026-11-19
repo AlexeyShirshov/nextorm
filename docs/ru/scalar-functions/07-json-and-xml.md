@@ -338,7 +338,7 @@ select t2.value.value('(.)[1]/@id', 'int') as [Id], t2.value.value('(.)[1]', 'nv
 Операнд обязан быть колонкой внешней строки, а XQuery — строковым литералом; все прочие провайдеры
 отвергают `xml_nodes` с `NotSupportedException`, как и in-memory-провайдер.
 
-## Функции JSON (ClickHouse, #286 T286b)
+## Функции JSON (ClickHouse)
 
 JSON-поверхность ClickHouse диспетчеризуется `JsonExtractSqlTranslator` и проходит через
 `ISqlDialect.SupportsJsonExtract`. Члены ниже дополняют каталог; формы результатов объявлены явно

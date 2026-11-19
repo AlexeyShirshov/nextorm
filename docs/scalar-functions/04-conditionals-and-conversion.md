@@ -217,7 +217,7 @@ A SQL NULL (literal, parameter or nullable column) yields SQL NULL; an empty inp
 result. Invalid or URL-safe BASE64 is outside the portable input domain and the provider error is not
 masked. ClickHouse, SQLite and the in-memory provider reject both members with
 `The {name} function is not supported by this provider.` ClickHouse has native `base64Encode`/
-`base64Decode`, but nextorm does not expose them in this slice: the adapter binds a `byte[]` argument
+`base64Decode`, but nextorm does not expose them: the adapter binds a `byte[]` argument
 as `Array(UInt8)` and reads a `String` result as `string`, so the `byte[]` signature cannot be honoured.
 On SQL Server `base64_decode` takes `varchar` input, so an `nvarchar` column needs an explicit cast.
 
@@ -307,4 +307,4 @@ instead of collapsing into the `to*` arm.
 `reinterpretAs*` preserves the little-endian bit pattern. The 128/256-bit integers, `Decimal128`/
 `Decimal256` and the eleven `to_interval_*` units remain refused (no exact CLR carrier — `BigInteger`,
 `System.Decimal`'s 96-bit mantissa, and the ClickHouse-only `Interval*` types respectively). See
-[ClickHouse-specific SQL › Not yet supported](../guide/provider-specific-sql/clickhouse.md#not-yet-supported).
+[ClickHouse-specific SQL › Unsupported functions](../guide/provider-specific-sql/clickhouse.md#unsupported-functions).

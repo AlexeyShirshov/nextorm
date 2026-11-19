@@ -82,31 +82,7 @@ nextorm arm throws the documented gap.
 
 ## Notes on the nextorm API
 
-Building these examples surfaced and fixed eight engine bugs (all covered by the existing test suites):
-
-* computed `GROUP BY` keys were emitted with an `AS alias` (`group by date_trunc('day', d) as "x"`),
-  which no supported dialect accepts;
-* aggregate projections (`count`/`count_distinct`/`sum`/`avg`/`min`/`max`/`stdev`) were not aliased, so
-  a derived table could not expose them under their property name;
-* aggregate arguments were rendered with the alias provider unset, which crashed when the argument was
-  a column of a joined entity (`sum(t4.price)`);
-* `ORDER BY` expressions were rendered without table aliases, so a column name shared by two joined
-  tables (`DueDate` in supply-chain) was ambiguous;
-* `decimal` literals were silently dropped (`t.IsPrimitive` is false for `decimal`), so
-  `x / 1000000.0m` or `pct <= 0.80m` produced invalid SQL;
-* a compile-time `new DateTime(2014, 3, 20)` literal was rendered by visiting the constructor arguments
-  and concatenating their literals (`2014320`) instead of being folded into a bound parameter;
-* numeric casts from unsigned CLR types (`(long)someUInt64`) were silently dropped, so a ClickHouse
-  `UInt64` column (for example `hits_v1.UserID`) could not be materialised at all;
-* a CTE/source built over a raw table name (`From(string)`) only exposed `Where`/`Join`/`Select`, so the
-  reference `WITH` queries could not use `GroupBy`/`Having`/`OrderBy`/`Limit`.
-
-Each query is written to mirror the **original SQL structurally** (CTEs become derived queries,
-`WITH ... JOIN` becomes a derived-query join, window functions run over the aggregate) and does **not**
-add a workaround. Every method carries a `WORKING` / `NOT WORKING` comment stating which it is and, when
-it fails, why. Where nextorm lacks a capability the query is expressed naturally and fails (or, when the
-construct has no LINQ surface at all, throws `NotSupportedException`); the gap is tracked in the roadmap
-instead of being masked:
+The examples map SQL constructs to their Nextorm equivalents:
 
 * **Derived query as the primary `FROM` source** — `ctx.From(derivedQuery).Join(...)` is supported (a
   `Where` before the join is pushed onto the derived query; other modifiers stay inside it). The
@@ -125,13 +101,12 @@ instead of being masked:
   `sum_over`), and the array / higher-order-lambda surface (`splitByChar`, `arrayMap`, `arrayFilter`,
   grouping by an array) plus `groupArray((…))`/tuple results are expressed through
   `split_by_char`/`array_map`/`array_filter`/`group_array` + `Tuple.Create`; only `uniqMerge`
-  (`-Merge`/`-State`) still has no LINQ surface, so that query was removed from the example rather than
-  run through `WithSql`.
+  (`-Merge`/`-State`) has no LINQ API and is not part of the comparison.
 
 ## Extra course exercises
 
 On top of the five demo queries each project adds six course-style queries (6–11) over the same data
-(ClickHouse keeps five — the `uniqMerge` query was removed):
+including:
 top-N per group, conditional/FILTER aggregation, `WITHIN GROUP` percentiles, `string_agg`/`group_concat`,
 `LAG`/`LEAD` growth, `NTILE` RFM segmentation, Pareto 80/20, rolling windows, and a device/session
 breakdown for ClickHouse. All of them are `WORKING` except where noted in the method comment.
@@ -145,17 +120,10 @@ datasets. The examples deliberately express the original SQL without workarounds
 means one arm hit a documented gap; `DIFF` means the two arms returned different row counts; any other
 error still aborts.
 
-Last run against Testcontainers (Podman), 2026-11-11 (`NextOrmVersion = 1.0.9`):
+Comparison results from the Testcontainers (Podman) run on 2026-11-18:
 
-| Project | Matched in both arms | Remaining `FAIL`s (documented gaps) |
+| Project | Matched in both arms | Notes |
 |---|---|---|
 | postgres aviasales | 10/10 | — (`DelayPercentilesByModel` is nextorm-only) |
 | mssql adventureworks | 11/11 | — (query 5 uses conditional aggregation instead of `PIVOT` on the linq2db arm) |
-| clickhouse analytics | 9/9 | `Retention` remains nextorm-only; `Incremental` comparison removed |
-
-The detailed, dated verification log (per-query failures and the roadmap item that tracks each) lives in
-[`VERIFICATION.md`](VERIFICATION.md) — update it on every re-run.
-
-The ClickHouse retention query in `nextorm.examples.clickhouse.analytics/Sql/clickhouse_retention.sql`
-was also corrected: the original referenced `UserID` outside the subquery that exposes it and divided
-by the cohort-week instead of the cohort size.
+| clickhouse analytics | 9/9 | `Retention` has only a Nextorm implementation; `Incremental` is not run |

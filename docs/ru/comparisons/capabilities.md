@@ -50,8 +50,8 @@
 | Экспорт result-set в поток (JSON, CSV) | yes | partial (клиентская сериализация) | partial (клиентская сериализация) |
 | `CASE WHEN` / тернарный оператор / `switch`, `COALESCE`, числовой `CAST` | yes | yes | yes |
 | Скалярные функции строк / математики / дат, `LIKE`, конкатенация, `NULLIF` | yes | yes | yes |
-| CLR `Regex` (`IsMatch`/`Replace`, константный шаблон) | yes (PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite, SQL Server 2025+) | partial (открытый [linq2db#698](https://github.com/linq2db/linq2db/issues/698)) | no |
-| `string.Format` / интерполяция в SQL | yes (culture-invariant подмножество) | partial ([linq2db#5921](https://github.com/linq2db/linq2db/issues/5921)) | no |
+| CLR `Regex` (`IsMatch`/`Replace`, константный шаблон) | yes (PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite, SQL Server 2025+) | partial | no |
+| `string.Format` / интерполяция в SQL | yes (culture-invariant подмножество) | partial | no |
 | Арифметика дат (`date_add`/`date_diff`/`date_trunc`/`end_of_month`/`date_from_parts`, `DateTime.Add*`) | yes | yes | yes |
 | Полнотекстовый поиск | yes (SQL Server, PostgreSQL, MySQL/MariaDB; SQLite FTS3/4/5 — запрос + `FROM`, билдер FTS5 maintenance/control) | yes | partial |
 | Условные функции (`iif`/`choose`/`multi_if`) | yes | no | no |
@@ -65,7 +65,7 @@
 | `STRING_AGG` / `ARRAY_AGG` | yes (`array_agg` на PostgreSQL) | yes | partial |
 | Конвертеры значений | yes | yes | yes (`HasConversion`) |
 | Динамические колонки (хранилище `[DynamicColumns]`) | yes | yes | no (обход через JSON/TPH) |
-| JSON-колонка ↔ объект | yes | partial ([linq2db#1661](https://github.com/linq2db/linq2db/issues/1661)) | yes (JSON-колонки) |
+| JSON-колонка ↔ объект | yes | partial | yes (JSON-колонки) |
 | Колонки-длительности / interval | yes (PostgreSQL `interval` → `TimeSpan` — только для представимых значений с нулевыми месяцами) | yes | partial (маппинг interval провайдером) |
 | Нативные JSON-документы | yes на PostgreSQL | partial (тип `json`/`jsonb` плюс `@>`, `#>>` и `Json.Value`; не полная библиотека `jsonb_*`) | partial (маппинг JSON-колонок + Npgsql `EF.Functions.Json*`) |
 | JSON-скаляры (`json_value`/`json_query`/`json_modify`, `isjson`) | yes (SQL Server, MySQL/MariaDB) | yes | partial |
@@ -73,7 +73,7 @@
 | Массивы и higher-order функции (`cardinality`/`array_*`/`@>`/`&&`, `Array(T)`, `ARRAY JOIN`) | yes на PostgreSQL и ClickHouse | partial (только операторы массивов PostgreSQL) | partial |
 | Row values / tuple (`ROW`/`(a, b)`, доступ к элементу, сравнение строк) | yes — PostgreSQL `ROW`/`(row).fN` и ClickHouse `tuple`/`tupleElement`; плоский `(a, b)` в MySQL/MariaDB/SQLite | yes (`Sql.Row`; эмуляция там, где у провайдера нет нативной строки) | partial |
 | Range-типы и range поверх пары скалярных колонок (`Range<T>`, `Overlaps`, `range_contains`, инспекция границ) | yes — нативные range/multirange на PostgreSQL; пара скалярных колонок (`[RangeColumns]`) в остальных | partial (только провайдерный маппинг `NpgsqlRange<T>`/multirange; нет переносимого `Range<T>`/пары) | partial |
-| Collation и ordinal-семантика строк | yes | partial ([linq2db#5927](https://github.com/linq2db/linq2db/issues/5927)) | partial |
+| Collation и ordinal-семантика строк | yes | partial | partial |
 | Соглашения об именах (например snake_case) | yes (opt-in, встроенный `SnakeCaseNamingConvention`) | partial (нет встроенного соглашения) | partial |
 | Квотирование идентификаторов | yes (opt-in) | yes (включено по умолчанию) | yes (всегда) |
 | Регистр ключевых слов SQL (upper/lower) | yes (opt-in `KeywordCase.Upper`) | no (ключевые слова выводятся в каноническом регистре провайдера) | no |
@@ -84,10 +84,10 @@
 | `CREATE TABLE AS SELECT`, временные таблицы | yes | yes | no |
 | `TRUNCATE` | yes (SQLite/in-memory отклоняют) | yes | no (только сырой SQL) |
 | Оптимистичная конкурентность | partial (явный паттерн с токеном; метаданных concurrency-токена нет) | yes | yes |
-| `OUTPUT ... INTO` | yes (SQL Server) | partial (`…WithOutputInto` пишет в таблицу; совмещённый returning+INTO открыт [#3832](https://github.com/linq2db/linq2db/issues/3832)) | no |
+| `OUTPUT ... INTO` | yes (SQL Server) | partial (`…WithOutputInto` пишет в таблицу; одновременно вернуть строки вызывающему коду нельзя) | no |
 | Транзакции (собственные и переданные извне) | yes (SQLite, PostgreSQL, SQL Server, MySQL/MariaDB; ClickHouse и in-memory отклоняют) | yes | yes |
 | Savepoints (создание / откат к / освобождение) | yes (через `ITransactionManager`; release в SQL Server — no-op, в ClickHouse их нет) | partial (только сырой SQL) | yes (методы savepoint у `IDbContextTransaction`; зависит от провайдера) |
-| Поиск по захваченной коллекции (`dict[column]`, `list[column]`) | yes | no (открытый [linq2db#5879](https://github.com/linq2db/linq2db/issues/5879); поддержан только `Contains` → `IN`) | no (индексатор не транслируется; клиентская оценка заблокирована) |
+| Поиск по захваченной коллекции (`dict[column]`, `list[column]`) | yes | no (поддержан только `Contains` → `IN`) | no (индексатор не транслируется; клиентская оценка заблокирована) |
 | Класс сущности необязателен (запрос без маппинга типа) | yes | partial | no |
 | Навигационные свойства / связи / eager loading | partial (декларативные метаданные O2M/M2O/O2O/M2M, `JoinInto`, eager loading `LoadWith` — split или single-query, вложенность уровня 2+ с единым режимом на граф и порядком/top-N на уровне — и неявная навигация по объявленным связям; вывод по конвенции FK отсутствует и в linq2db) | yes (`[Association]`, `LoadWith`) | yes |
 | Конфигурация контекста, логирование и DI | yes | yes | yes |
@@ -129,8 +129,7 @@
   или встроенного шардирования.
 - `SelectWhereMax`/`SelectWhereMin` как отдельный оператор экстремальной строки с нативной стратегией на
   PostgreSQL и ClickHouse; linq2db собирает это из оконных функций и `OrderBy`/`Take`.
-- `[JsonColumn]` с хранилищем Auto/Native/Text — маппинг, которого у linq2db до сих пор нет
-  ([linq2db#1661](https://github.com/linq2db/linq2db/issues/1661)).
+- `[JsonColumn]` с режимами хранения Auto/Native/Text — такого маппинга в linq2db нет.
 - Полную явную поверхность записи: `INSERT`/`UPDATE`/`DELETE`/полный `MERGE`, сгенерированные ключи и
   возвращаемые строки, key upsert, массовая вставка, `CREATE TABLE AS SELECT`/временные таблицы,
   data-modifying CTE на PostgreSQL и транзакции — всё явными командами, без отслеживания изменений и
@@ -151,9 +150,8 @@
   На приложении отчётов по SQLite объёмом 13 ГБ Nextorm опубликовался нативно без изменений
   исходников
   (8.2 MB, 0.12 s, 30 MB RSS), а EF Core — 17.3 MB / 0.23 s / 42 MB после двух обходных решений для
-  кодогенерации. Покрытие измерено на всех шести провайдерах, но остаётся неполным: EF Core bridge,
-  массовая вставка, маппинг сырого SQL и DML-билдеры остаются на JIT-рантайме
-  ([#370](https://github.com/AlexeyShirshov/nextorm/issues/370)). Преимущество — в контракте
+  кодогенерации. NativeAOT поддерживает проверенные сценарии запросов, записи и сырого SQL
+  для всех шести провайдеров. Мост EF Core требует JIT. Преимущество — в контракте
   миграции,
   а не в полном паритете возможностей под AOT. См. [руководство по
   NativeAOT](../infrastructure/05-nativeaot.md).

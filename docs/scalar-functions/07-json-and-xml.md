@@ -337,7 +337,7 @@ select t2.value.value('(.)[1]/@id', 'int') as [Id], t2.value.value('(.)[1]', 'nv
 The operand must be a column of the outer row and the XQuery a string literal; every other provider
 rejects `xml_nodes` with a `NotSupportedException`, as does the in-memory provider.
 
-## JSON functions (ClickHouse, #286 T286b)
+## JSON functions (ClickHouse)
 
 ClickHouse's JSON surface is dispatched by `JsonExtractSqlTranslator` and gated by
 `ISqlDialect.SupportsJsonExtract`. The members below complete the catalogue; result shapes are explicit

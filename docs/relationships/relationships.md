@@ -192,7 +192,7 @@ The same structural validation applies to manually supplied [`IRelationshipMetad
 
 [`JoinInto`](xref:NextORM.Core.EntityBuilder`1) declares a join that fills a declared navigation — a child collection (one-to-many), a nullable reference (one-to-one) or a junction-backed many-to-many collection — when the query is enumerated by a list terminal. It returns a **copy** of the builder, so the source builder is unchanged and declarations chain:
 
-> **Note.** The former child-collection scenario (issue #40) — loading children from a parent+child join — is expressed today by `JoinInto` into a **declared collection property**, as shown below. Projecting children into an arbitrary (anonymous) shape, the historical `NORM.ChildCollection(...)` form, is **not provided**: declare the collection and load it with `JoinInto`, or select the child rows with an explicit join and materialize them yourself.
+> **Note.** To load child rows through `JoinInto`, declare a collection property on the parent type. For an arbitrary result shape, use an explicit join and assemble the collections yourself.
 
 ```csharp
 var orders = ctx.From<Order>()
@@ -338,7 +338,7 @@ The same parameter carries the local relationship configurations described below
 
 ### Child filters
 
-"Source-less" describes the **source**, not a filter: the child source is the mapping of `TChild` and carries no condition. Neither family applies a **child-source** filter to the join today — a child builder that carries a `Where` does not add a condition to the join, and only the `(parent, child) => …` predicate reaches the `ON` clause. Filtering a child source is tracked as **#309**.
+"Source-less" describes the **source**, not a filter: the child source is the mapping of `TChild` and carries no condition. Neither family applies a **child-source** filter to the join — a child builder that carries a `Where` does not add a condition to the join, and only the `(parent, child) => …` predicate reaches the `ON` clause.
 
 To narrow the child set, write the condition into the predicate, which *is* the `ON` condition — `(o, i) => o.Id == i.OrderId && i.Active` pairs only matching active children. With `Left` a parent whose children are all filtered out is kept with an empty collection; with `Inner` it is dropped. Do not read a `Where` on the child source as the equivalent of that predicate: the join ignores it today.
 

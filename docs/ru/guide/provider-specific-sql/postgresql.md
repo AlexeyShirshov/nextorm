@@ -204,13 +204,13 @@ select id, ts_rank(to_tsvector(somestring), to_tsquery('cat'))
 Native-поверхность реализована только в PostgreSQL; остальные провайдеры отклоняют её на этапе
 построения SQL.
 
-Дополнения `#281` расширяют ту же поверхность: конструкторы вектора и запроса `array_to_tsvector`,
+API PostgreSQL также включает конструкторы вектора и запроса `array_to_tsvector`,
 `json_to_tsvector` и `jsonb_to_tsvector`; члены проверки и перезаписи `numnode`, `querytree`,
 `setweight`, `strip`, `ts_delete`, `ts_filter`, `ts_rewrite` и `tsquery_phrase`; пару преобразования и
 лексирования `tsvector_to_array` и `ts_lexize`; и читатели токенизатора `ts_debug`, `ts_parse` и
 `ts_token_type` как `FROM`-источники. Их SQL-формы, интерфейсы строк и мост `cast(... as text)`
 перечислены в разделе
-[Строковые функции › Полнотекстовый поиск (PostgreSQL, #281)](../../scalar-functions/01-string-functions.md#полнотекстовый-поиск-postgresql-281).
+[Строковые функции › Полнотекстовый поиск (PostgreSQL)](../../scalar-functions/01-string-functions.md#полнотекстовый-поиск-postgresql).
 
 ## Расширенные скаляры и regexp
 
@@ -221,7 +221,7 @@ Native-поверхность реализована только в PostgreSQL;
 (`to_char`/`to_date`/`to_number`/`to_timestamp`/`timezone`/`make_interval`/`justify_*`) и
 конструкторы массивов, всё гейтится `SupportsExtendedScalarFunctions`.
 
-Остаточный строковый каталог #281 живёт на той же поверхности `Postgres`, один член на серверную
+API `Postgres` также включает строковые функции, один член на серверную
 перегрузку: `btrim` (одноаргументная, с набором символов и формы `bytea`), двухаргументные и
 `bytea`-формы `ltrim`/`rtrim`, `starts_with`, `parse_ident`, перегрузки `text` у
 `quote_ident`/`quote_literal`/`quote_nullable`, `to_ascii(value, encoding)` (кодировка текстом или её
@@ -238,7 +238,7 @@ SQL PostgreSQL до него не доходит. `normalize` принимает
 `anyelement`, — отклоняются во время подготовки запроса; проверенные причины собраны в таблице
 отказов в статье [Строковые функции](../../scalar-functions/01-string-functions.md#проверенные-отказы).
 
-Остаточное семейство даты/времени #281 подчиняется тому же правилу: `date_subtract` (двухаргументная
+То же правило применяется к функциям даты и времени: `date_subtract` (двухаргументная
 форма с `interval` и зонированная трёхаргументная форма, обе возвращают `timestamp with time zone`),
 `justify_interval`, `make_timestamptz` (с зоной и без), часы
 `clock_timestamp`/`statement_timestamp`/`transaction_timestamp`, `timeofday` и `isfinite` над
@@ -581,7 +581,7 @@ var nearest = ctx.From<Document>()
     .Select(x => new { x.Id, Distance = SqlFunctions.Postgres.cosine_distance(x.Embedding, target) });
 ```
 
-Агрегаты PostgreSQL `avg`/`sum` над векторами и их полуточными формами пока не представлены LINQ-маркерами.
+Агрегаты PostgreSQL `avg`/`sum` над векторами и их полуточными формами не представлены LINQ-маркерами.
 DDL вне области охвата nextorm: расширение, столбцы и индексы (HNSW/IVFFlat, `vector_l2_ops` и т.п.) создаёт
 приложение. Операции расстояния с разными размерностями и операции `bit` с разной длиной завершаются ошибкой
 PostgreSQL.

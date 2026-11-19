@@ -186,8 +186,7 @@ var top = dataContext.From<IComplexEntity>()
 ## Типы результата и аргументы AVG
 
 `avg` не возвращает тип своего аргумента: для целочисленного столбца результат дробный, поэтому
-`avg` по `[1, 2]` даёт `1.5`. Раньше результат был целым числом (`2`, а в SQL Server — `1`, поскольку
-его целочисленный `AVG` отбрасывает дробную часть). На всех провайдерах результат допускает `null`,
+`avg` по `[1, 2]` даёт `1.5`. На всех провайдерах результат допускает `null`,
 поэтому пустой вход или вход, где все значения равны `NULL`, возвращает `null`.
 
 | Вход | Результат `avg(x)` |
@@ -844,8 +843,7 @@ var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.va
 | Последовательности / воронка | `SqlFunctions.ClickHouse.window_funnel(window, ts, c1, c2)`, `sequence_match(pattern, ts, c1, c2)`, `retention(c1, c2)` | `toInt32(windowFunnel(window)(ts, c1, c2))`, `toInt32(sequenceMatch(pattern)(ts, c1, c2))`, `retention(c1, c2)` | [`SequenceAggregates`](xref:NextORM.Core.ISqlDialect.SequenceAggregates) | ClickHouse |
 | Упорядоченные | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `median(() => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, `percentile_cont(0.5) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) (`mode`), [`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles) (квантили, `median`) | PostgreSQL |
 
-MariaDB **не** поддерживает `any_agg`: в 10.4–12.x нет `ANY_VALUE` (возможность SQL-2023 `T626` всё ещё
-ожидается, ориентир — 13.2), поэтому [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) равно `false`, а вызов отклоняется через `NotSupportedException`.
+Провайдер MariaDB **не** поддерживает `any_agg`: в MariaDB 10.4–12.x нет `ANY_VALUE`, поэтому [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) равно `false`, а вызов отклоняется через `NotSupportedException`.
 
 ```csharp
 var stats = dataContext.From<IComplexEntity>()

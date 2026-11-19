@@ -198,8 +198,8 @@ correlated `EXISTS`/scalar subquery on every SQL provider:
 | PostgreSQL | yes | SQL shape + shared live |
 | SQL Server | yes | SQL shape + shared live |
 | MySQL | yes | SQL shape + shared live |
-| MariaDB | yes | SQL shape; live deferred (trigger: dedicated live harness or MySQL divergence) |
-| ClickHouse | yes | SQL shape (no `APPLY`); live deferred (trigger: correlated-`EXISTS` live fixture or shape change) |
+| MariaDB | yes | SQL shape only |
+| ClickHouse | yes | SQL shape only (no `APPLY`) |
 
 [ClickHouse's collection-through-reference limitation](#collection-navigation) is unchanged: the
 reference hop itself is supported, and a *collection* reached through a reference stays rejected. The
@@ -348,14 +348,13 @@ client-side evaluation:
 * **Navigation in grouping/paging modifier keys** — `GROUP BY`, `DISTINCT ON`, `LIMIT BY` and
   extreme-row keys do not evaluate navigation (use explicit joins there).
 * **Temp-table / table-valued (TVP) navigation** — navigation over a temp-table/TVP source is
-  **deferred**: a lazy temp-table read source (`ctx.From(tempTableSource)`) is an untyped `TableAlias`
-  with no navigation surface, so a navigation member cannot be read over it. The trigger is a navigation
-  source combined with a temp-table/TVP path. Navigation declared **before** the temp-table boundary is
-  still expanded into the materialising `CREATE TEMPORARY TABLE ... AS SELECT`; build a navigation over
+  not supported: a lazy temp-table read source (`ctx.From(tempTableSource)`) is an untyped `TableAlias`
+  with no navigation surface, so a navigation member cannot be read over it. Navigation declared **before** the temp-table boundary is
+  expanded into the materialising `CREATE TEMPORARY TABLE ... AS SELECT`; build a navigation over
   the temp-table rows from an explicit join or from the mapped source instead.
 * **Adapter LINQ composition outside a projection slot** — chaining query operators after
   `AsEntityBuilder<T>` is not a query construct: as a navigation query the adapter recognises only the direct
-  terminals. The one composition that *is* delivered is the
+  terminals. The exception is the
   [collection-valued projection slot](collection-projection.md), where the adapter continues into a per-parent
   `Where`/`OrderBy`/`ThenBy`/`Limit`/`Select` pipeline terminated by `ToList()`/`ToArray()`.
 * **Bare reference-adapter projection** — projecting the reference marker itself

@@ -90,9 +90,8 @@ nextorm не переключается на вычисление на клие�
   числе если по результату выполняется следующий доступ (`e.Value.Offset.TotalMinutes`,
   `e.Value.UtcDateTime.Year`, `e.Value.Date.AddDays(1)`).
 * **Изменение смещения:** `.ToOffset(...)` — и с константным, и с динамическим аргументом.
-* **Арифметика без SQL-формы:** `.AddTicks(...)` и `.Add(TimeSpan)`; серверная трансляция отложена до
-  следующего релиза. Также не поддерживаются дробные `.AddYears(...)` и `.AddMonths(...)`: аргумент CLR
-  имеет тип `int`.
+* **Арифметика без SQL-формы:** `.AddTicks(...)` и `.Add(TimeSpan)` не транслируются в SQL.
+  Дробные `.AddYears(...)` и `.AddMonths(...)` тоже не поддерживаются: аргумент CLR имеет тип `int`.
 
 Форма проекции не меняет отказ: анонимная проекция, объект DTO, предикат и простой скаляр
 (`Select(e => e.Value.DayOfWeek)`, включая `.First()`/`.Single()`) получают одно сообщение при
@@ -144,7 +143,7 @@ time zone.
 | `SqlFunctions.Postgres.current_date()` / `current_time()` / `localtime()` / `localtimestamp()` | те же ключевые слова |
 | `SqlFunctions.Postgres.pg_typeof(x)` | `cast(pg_typeof(x) as text)` |
 
-Остаточное семейство даты/времени #281 живёт на той же поверхности, один член на серверную
+API `Postgres` предоставляет следующие функции даты и времени, один член на серверную
 перегрузку, и каждое имя гейтится **отдельно** через
 [`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)), а не общим
 флагом семейства:
@@ -452,7 +451,7 @@ select toInt32(toYear(dt)) as `Year`, toStartOfMonth(dt) as `MonthStart`
  from complex_entity
 ```
 
-### Поставленные функции даты и времени (#286, T286b)
+### Функции даты и времени
 
 Остальной каталог даты/времени ClickHouse типизирован на `ClickHouseFunctions`. Результаты объявлены
 явно: `make_date`/`make_date32`/`to_modified_julian_day`/`to_time` возвращают целые,
@@ -482,4 +481,4 @@ select toInt32(toYear(dt)) as `Year`, toStartOfMonth(dt) as `MonthStart`
 Три члена остаются отклонёнными с проверенной причиной: `from_utc_timestamp` (пара «настенное время,
 зона» непредставима в `System.DateTime`), `to_time64` (`Time64(scale)` не имеет CLR-носителя) и
 `from_unix_timestamp64_nano` (`DateTime64(9)` превышает разрешение `DateTime` в 100 нс). См.
-[ClickHouse-specific SQL › Пока не поддерживается](../guide/provider-specific-sql/clickhouse.md#пока-не-поддерживается).
+[ClickHouse-specific SQL › Неподдерживаемые функции](../guide/provider-specific-sql/clickhouse.md#неподдерживаемые-функции).

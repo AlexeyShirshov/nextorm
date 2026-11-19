@@ -184,15 +184,11 @@ still render, and `CommonFunctions.any_agg` is unaffected on the providers that 
 
 The names on [`SqlFunctions.MySql`](../guide/provider-specific-sql/mysql.md) render only on the MySQL
 provider; PostgreSQL, SQL Server, SQLite, ClickHouse and the in-memory provider reject them with
-`NotSupportedException`. This half of the catalogue was **delivered by
-[#283](https://github.com/AlexeyShirshov/nextorm/issues/283) and verified against MySQL 8.4 only**.
-MariaDB evidence is separate and is never inferred from MySQL: [#284](https://github.com/AlexeyShirshov/nextorm/issues/284)
-re-verified every name on MariaDB 11.4.13 and records the outcome in the
-[MariaDB catalogue](#mariadb-catalogue) — which is why fourteen names claimed in this half are refused there.
+`NotSupportedException`. This catalogue was verified on MySQL 8.4. For MariaDB support, see the
+[MariaDB catalogue](#mariadb-catalogue).
 
-The catalogue holds 86 newly delivered members plus the two names that were already covered
-(`json_storage_free`, delivered in an earlier slice, and the cross-provider `connection_id`); the three
-refused names are listed in [MySQL refusals](#mysql-refusals).
+The table lists supported functions, with notes on arguments the provider rejects.
+For unsupported functions, see [MySQL refusals](#mysql-refusals).
 
 | Family | Member | MySQL SQL | Notes |
 |---|---|---|---|
@@ -254,7 +250,7 @@ refused names are listed in [MySQL refusals](#mysql-refusals).
 | JSON | `json_schema_validation_report(schema, document)` | `JSON_SCHEMA_VALIDATION_REPORT(...)` | JSON report of the validation |
 | JSON | `json_search(json, oneOrAll, search[, escape[, paths...]])` | `JSON_SEARCH(...)` | the mode must be `'one'` or `'all'`; the escape must be a single character |
 | JSON | `json_storage_size(json)` | `JSON_STORAGE_SIZE(...)` | bytes used by the stored representation |
-| JSON | `json_storage_free(json)` | `JSON_STORAGE_FREE(...)` | already delivered in an earlier slice: bytes freed in a binary `JSON` column value by a partial in-place update, `0` when nothing was freed, `null` for SQL NULL — see the [MySQL guide](../guide/provider-specific-sql/mysql.md#native-functions) |
+| JSON | `json_storage_free(json)` | `JSON_STORAGE_FREE(...)` | bytes freed in a binary `JSON` column value by a partial in-place update, `0` when nothing was freed, `null` for SQL NULL — see the [MySQL guide](../guide/provider-specific-sql/mysql.md#native-functions) |
 | JSON | `member_of(value, jsonArray)` | `value MEMBER OF (jsonArray)` | the array argument must be a compile-time JSON array literal |
 | Aggregate | `bit_and(value)` | `BIT_AND(value)` | bitwise AND of every non-null value in the group, `null` for an empty group |
 | Aggregate | `bit_or(value)` | `BIT_OR(value)` | bitwise OR of every non-null value in the group |
@@ -320,19 +316,15 @@ control on the same provider. The exact messages are listed in the
 
 `SqlFunctions.MySql` carries both halves: the names only MySQL renders are the section above, and the names
 MariaDB renders are listed here. A MariaDB-only member is refused by MySQL, PostgreSQL, SQL Server, SQLite,
-ClickHouse and the in-memory provider. [#283](https://github.com/AlexeyShirshov/nextorm/issues/283) delivered
-the MySQL catalogue; [#284](https://github.com/AlexeyShirshov/nextorm/issues/284) closes its MariaDB
-assessment and adds the MariaDB-only surface.
+ClickHouse and the in-memory provider.
 
-The table covers all 138 candidates of the #284 inventory: **109 delivered / 6 already covered / 18 refused
-with a reason / 5 version-gated (MariaDB 11.7) / 0 pending**. Verification used **MariaDB 11.4.13**; the five
-11.7-gated functions were not executed, and no MariaDB behaviour is inferred from the MySQL result. In the
+Verification used **MariaDB 11.4.13** and did not exercise the five functions that require 11.7. In the
 third column `11.4` means "present on the verified 11.4.13 baseline", a lower value is a documented minimum
-and a higher one an unverified gate. Seventeen delivered rows return a 32-bit provider field where the shared
+and a higher one an unverified gate. Seventeen functions return a 32-bit provider field where the shared
 member is typed for the wider MySQL type: the asserted contract is the declared CLR type and the widening is
 lossless.
 
-### Delivered
+### Supported functions
 
 | Inventory name | Public API / form | MariaDB minimum or gate | Behaviour / refusal reason / verification qualification |
 |---|---|---|---|
@@ -450,8 +442,8 @@ lossless.
 
 | Inventory name | Public API / form | MariaDB minimum or gate | Behaviour / refusal reason / verification qualification |
 |---|---|---|---|
-| `JSON_NORMALIZE` | `json_normalize(json)` | 11.4 | already covered by the T284 MariaDB-only surface (`json_normalize`, live case `T284_JsonNormalize_ShouldEvaluate`): canonical text with sorted keys, idempotent; accepted on 11.4.13 (`{"a":1.0E0,"b":2.0E0}`). |
-| `JSON_EQUALS` | `json_equals(json1, json2)` | 11.4 | already covered by the T284 surface (`json_equals`, live case `T284_JsonEquals_ShouldEvaluate`): `1` for equal documents (key order does not matter); accepted on 11.4.13 (`1`). |
+| `JSON_NORMALIZE` | `json_normalize(json)` | 11.4 | canonical text with sorted keys, idempotent; accepted on 11.4.13 (`{"a":1.0E0,"b":2.0E0}`). |
+| `JSON_EQUALS` | `json_equals(json1, json2)` | 11.4 | `1` for equal documents (key order does not matter); accepted on 11.4.13 (`1`). |
 | `MEDIAN` | `median(value)` | 10.3 | already covered by the percentile work: composes to `percentile_cont(0.5) within group (order by ...) over (...)`; accepted on 11.4.13 (`2`). |
 | `PERCENTILE_CONT` | `SqlFunctions.Sql.percentile_cont(fraction, value)` | 10.3 | already covered: native window percentile `percentile_cont(f) within group (order by ...) over (...)`; accepted on 11.4.13 (`2`). |
 | `PERCENTILE_DISC` | `SqlFunctions.Sql.percentile_disc(fraction, value)` | 10.3 | already covered: native window percentile `percentile_disc(f) within group (order by ...) over (...)`; accepted on 11.4.13 (`1`). |

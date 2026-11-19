@@ -274,7 +274,7 @@ MariaDB он генерирует `ANY_VALUE`) и `corr`/`covar*`, описан�
   остаётся `NULL`); остальные провайдеры и in-memory провайдер их отклоняют;
 * `generate_ulid` (`generateULID`).
 
-### Поставленные семейства (#286, T286b)
+### Семейства функций
 
 Таблицы ниже перечисляют остальные нативные функции. Каждая запись — типизированный метод
 `ClickHouseFunctions`: он использует точное имя ClickHouse в SQL и явно объявляет тип результата
@@ -282,7 +282,7 @@ CLR. Общая проверка возможностей `IScalarFunctions` о�
 других диалектах. Базовый сервер — ClickHouse **25.8.33.6**
 (`clickhouse/clickhouse-server:25.8-alpine`). Функции, появившиеся позже этой версии, и типы
 результатов, которые провайдер не может преобразовать, перечислены в разделе
-[Пока не поддерживается](#пока-не-поддерживается).
+[Неподдерживаемые функции](#неподдерживаемые-функции).
 
 | Семейство | Члены |
 |---|---|
@@ -301,7 +301,7 @@ CLR. Общая проверка возможностей `IScalarFunctions` о�
 | Приведение типов | `to_string`, `to_bool`, `to_fixed_string`, `to_low_cardinality`, `to_int8`…`to_int64`, `to_uint8`…`to_uint64`, `to_float32`, `to_float64`, `to_decimal32`, `to_decimal64`, `accurate_cast_*` с вариантами `_or_null`/`_or_default`, `reinterpret_as_uint8`…`reinterpret_as_uuid` |
 | Агрегаты | `entropy`, `first_value`, `last_value`, `max_intersections` (+`max_intersections_position`), `simple_linear_regression`, `delta_sum`, `delta_sum_timestamp`, `gini`, `skew_pop`, `skew_samp`, `kurt_pop`, `kurt_samp`, `rank_corr`, `contingency`, `cramers_v`, `cramers_v_bias_corrected`, `theils_u`, `welch_t_test`, `mann_whitney_u_test`, `kolmogorov_smirnov_test`, `mean_z_test`, `analysis_of_variance`, `quantile_tdigest`, `quantile_gk`, `quantile_dd`, `quantile_bfloat16`, `quantile_prometheus_histogram`, `approx_top_k`, `approx_top_sum`, `any_heavy`, `max_map`, `min_map`, `sum_count`, `sum_kahan`, `group_array_moving_avg`, `group_array_moving_sum`, `group_array_sample`, `group_array_sorted`, `group_array_last`, `group_array_insert_at`, `group_array_intersect`, `group_concat`, `group_format`, `histogram`, `sparkbar`, `uniq_up_to`, `sequence_count`, `sequence_match_events`, `sequence_next_node`, `exponential_time_decayed_sum`, `exponential_time_decayed_max`, `exponential_time_decayed_count`, `exponential_time_decayed_avg`, `student_t_test`, `student_t_test_one_sample`, `quantiles`, `quantiles_exact`, `quantiles_exact_low`, `quantiles_exact_high`, `quantiles_exact_weighted`, `quantiles_timing`, `quantiles_tdigest`, `quantiles_bfloat16`, `quantiles_dd`, `quantiles_gk`, `quantiles_prometheus_histogram`, `time_series_group_sum`, `time_series_group_rate_sum`, `time_series_instant_rate_to_grid`, `time_series_rate_to_grid`, `time_series_resample_to_grid_with_staleness`, `group_array` |
 | Оконные | `non_negative_derivative` (возвращает `WindowFunction<double>`, дополните `Over(...)`) |
-| Словари | `dict_get_or_null`, `dict_get_all`, `dict_get_descendants`, `region_to_name`, `region_to_city`, `region_to_area`, `region_to_district`, `region_to_country`, `region_to_continent`, `region_to_top_continent`, `region_to_population`, `region_hierarchy`, `region_in` (плюс уже поставленные `dict_get`, `dict_get_or_default`, `dict_get_hierarchy`, `dict_get_children`, `dict_has`, `dict_is_in`) |
+| Словари | `dict_get_or_null`, `dict_get_all`, `dict_get_descendants`, `region_to_name`, `region_to_city`, `region_to_area`, `region_to_district`, `region_to_country`, `region_to_continent`, `region_to_top_continent`, `region_to_population`, `region_hierarchy`, `region_in` (а также `dict_get`, `dict_get_or_default`, `dict_get_hierarchy`, `dict_get_children`, `dict_has`, `dict_is_in`) |
 
 Метод явно задаёт тип CLR-результата; он не выводится из типа результата сервера. Результаты
 `UInt64`/`UInt32`/`UInt16` имеют типы `ulong`/`uint`/`int`, а `UInt8` — `byte` или `bool`.
@@ -338,7 +338,7 @@ CLR. Общая проверка возможностей `IScalarFunctions` о�
 
 | Объявление | Поведение |
 |---|---|
-| нет (закреплённая базовая версия 25.8, по умолчанию) | `NotSupportedException` с историческим сообщением `The array_except function is not supported by this provider.` — SQL не генерируется |
+| нет (закреплённая базовая версия 25.8, по умолчанию) | `NotSupportedException` с сообщением `The array_except function is not supported by this provider.` — SQL не генерируется |
 | раньше 25.9 (например, `25.8`) | `NotSupportedException`, называющий требуемую версию `25.9` и объявленную версию; бросается до любого SQL |
 | 25.9 или новее | нативная `arrayExcept(...)`, принимающая ровно два массива; любая другая арность отклоняется до генерации SQL |
 
@@ -527,11 +527,9 @@ ClickHouse принимает `isNotDistinctFrom(...)` и оператор `<=>`
 `UInt8`. См.
 [Null-safe-сравнение](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-сравнение-is-not-distinct-from).
 
-## Пока не поддерживается
+## Неподдерживаемые функции
 
-Перечисленные ниже члены завершают остаточный набор §3 для закреплённого сервера **25.8.33.6**.
-Они существуют как типизированные методы `ClickHouseFunctions`, но намеренно выбрасывают точное
-`NotSupportedException` до отправки SQL провайдеру. nextorm не переписывает их молча, не подменяет
+Перечисленные методы `ClickHouseFunctions` выбрасывают `NotSupportedException` до отправки SQL провайдеру. nextorm не переписывает их молча, не подменяет
 значением по умолчанию и не усекает результат.
 
 | Семейство | Отклонённый член | Проверенная причина |

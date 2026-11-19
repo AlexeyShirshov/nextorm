@@ -214,12 +214,11 @@ The projection may also **nest** these supported shapes:
 Any other shape is rejected with `NotSupportedException` while nextorm plans the shape, before it writes
 output. Unsupported types include `TimeSpan`, `DateTimeOffset`, `DateOnly`/`TimeOnly`, `Range<T>`,
 value-converted columns (including JSON-column members), and streaming LOB columns. Nested construction
-also has these **explicit exclusions**, which are tracked separately rather than silently flattened:
+also has these restrictions:
 
-* **arbitrary JSON converters and native/text enum storage** — issue [#178](https://github.com/AlexeyShirshov/nextorm/issues/178);
+* **arbitrary JSON converters and native/text enum storage**;
 * **child-collection query projections** (`List<T>`, `IEnumerable<T>`, dictionaries and any other
-  collection with no provider-native array source) — issue [#172](https://github.com/AlexeyShirshov/nextorm/issues/172);
-* **new naming-policy / options behaviour** — issue [#177](https://github.com/AlexeyShirshov/nextorm/issues/177);
+  collection with no provider-native array source);
 * **DB-side JSON generation** (SQL Server `FOR JSON`, PostgreSQL `json_agg`, …) stays a separate
   server-side path for *nested* shapes; `WriteJson` on SQL Server uses `FOR JSON` internally only for an
   eligible flat shape (see [SQL Server native fast-path](#sql-server-native-fast-path));

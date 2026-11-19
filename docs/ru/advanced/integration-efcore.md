@@ -371,7 +371,7 @@ var active = db.Documents
 | `Microsoft.EntityFrameworkCore.SqlServer` | `nextorm.sqlserver` |
 | `Pomelo.EntityFrameworkCore.MySql` / `MySql.EntityFrameworkCore` (MySQL) | `nextorm.mysql` |
 
-Нереляционный провайдер `Microsoft.EntityFrameworkCore.InMemory` **не** поддерживается (у него нет `DbConnection`), поэтому через него нельзя импортировать ни один фильтр. У ClickHouse сегодня нет EF Core-провайдера, который распознавал бы мост, а путь общего соединения MariaDB обслуживается только MySQL-провайдером Pomelo. Срез «ClickHouse без EF-адаптера» и сертификация общего соединения специально для MariaDB отслеживаются как открытые единицы вехи `1.0.9-b`; до их появления используйте поддерживаемые адаптеры выше.
+Нереляционный провайдер `Microsoft.EntityFrameworkCore.InMemory` **не** поддерживается (у него нет `DbConnection`), поэтому через него нельзя импортировать ни один фильтр. У ClickHouse нет EF Core-провайдера, который распознавал бы мост, а путь общего соединения MariaDB обслуживается только MySQL-провайдером Pomelo.
 
 Остальные ограничения наследуются от моста и подсистемы фильтров:
 

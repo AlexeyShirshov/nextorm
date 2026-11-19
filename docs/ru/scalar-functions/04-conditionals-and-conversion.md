@@ -220,7 +220,7 @@ SQL NULL (литерал, параметр или nullable-столбец) да�
 Невалидный или URL-safe BASE64 находится вне переносимого входного домена, и ошибка провайдера не
 маскируется. ClickHouse, SQLite и in-memory провайдер отклоняют оба члена с
 `The {name} function is not supported by this provider.` В ClickHouse есть нативные `base64Encode`/
-`base64Decode`, но nextorm не открывает их в этом срезе: адаптер привязывает аргумент `byte[]` как
+`base64Decode`, но nextorm не предоставляет их: адаптер привязывает аргумент `byte[]` как
 `Array(UInt8)` и читает результат `String` как `string`, поэтому сигнатуру `byte[]` соблюсти нельзя.
 В SQL Server `base64_decode` принимает `varchar`, поэтому столбец `nvarchar` требует явного приведения.
 
@@ -258,7 +258,7 @@ SQL NULL (литерал, параметр или nullable-столбец) да�
 
 Цель вне отображения отклоняется до подготовки команды: `The TRY_CAST function cannot map CLR target
 'MyType' to a supported SQL Server conversion type.` Длины и точности фиксированы — аргумента длины или
-точности пока нет — и сервер применяет своё нативное усечение: значение длиннее 4000 символов
+точности нет — и сервер применяет своё нативное усечение: значение длиннее 4000 символов
 преобразуется ровно в 4000 символов (`try_cast(<5000 символов> as nvarchar(4000))` даёт 4000 символов /
 8000 байт), а не ошибку.
 
@@ -312,4 +312,4 @@ compile-time масштаб, а `accurate_cast_*` поставлен как дв
 `Decimal256` и одиннадцать единиц `to_interval_*` остаются отклонёнными (нет точного CLR-носителя —
 `BigInteger`, 96-битная мантисса `System.Decimal` и типы `Interval*`, существующие только в
 ClickHouse соответственно). См.
-[ClickHouse-specific SQL › Пока не поддерживается](../guide/provider-specific-sql/clickhouse.md#пока-не-поддерживается).
+[ClickHouse-specific SQL › Неподдерживаемые функции](../guide/provider-specific-sql/clickhouse.md#неподдерживаемые-функции).

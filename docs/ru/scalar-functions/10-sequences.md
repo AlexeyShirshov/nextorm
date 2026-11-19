@@ -97,8 +97,7 @@ var rows = dataContext.From<IOrderEntity>()
 возвращающего значение `setval` (его эквивалент — DDL `ALTER SEQUENCE ... RESTART WITH`), поэтому
 открыто только следующее значение. Эти имена требуют провайдера, который сообщает их через
 [`ISqlDialect.SqlServerFunctions`](xref:NextORM.Core.ISqlDialect.SqlServerFunctions); все прочие
-провайдеры их отклоняют. Отслеживается в
-[#218](https://github.com/AlexeyShirshov/nextorm/issues/218).
+провайдеры их отклоняют.
 
 ## Генераторы UUID
 

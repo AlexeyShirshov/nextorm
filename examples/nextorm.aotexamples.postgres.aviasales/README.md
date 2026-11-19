@@ -51,5 +51,4 @@ Native support for the PostgreSQL provider is **measured, not guaranteed**, by t
 [current matrix](../../docs/infrastructure/05-nativeaot.md) lists what runs natively and what does not.
 The project pins the latest **published** `nextorm` packages (`NextOrmVersion` in
 [`Directory.Packages.props`](../Directory.Packages.props)), so a run reproduces the **released**
-surface; the guide's current numbers are for the development build of the next release. Released
-results are tracked in [`VERIFICATION.md`](../VERIFICATION.md).
+API for the package versions declared in that file.

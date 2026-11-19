@@ -9,10 +9,7 @@ The project shows **how a real SQL query becomes nextorm code, and how it looks 
 Every method pair models exactly one query file in [`Sql/`](Sql): the method comment names it, and the
 tables below map each SQL construct to the nextorm construct that replaces it.
 
-> **Consumes the current checkout (not a published package).** Unlike the postgres and clickhouse
-> examples, this project references `nextorm.core`/`nextorm.sqlserver` from `src/` via `ProjectReference`
-> instead of the published `nextorm.*` NuGet packages, so it can demonstrate the working-tree typed
-> `Pivot`/`Unpivot` surface (#232). The run and build commands below are unchanged.
+> This example references the Nextorm source projects through `ProjectReference` by default.
 
 ## Layout
 
@@ -107,7 +104,7 @@ Two nextorm-specific rules that trip people up:
   `GroupBy(p => new { M = date_trunc("month", p.OrderDate) })` must be followed by
   `Select(p => new { M = date_trunc("month", p.OrderDate), … })`. `SelectGroup` removes the duplication:
   it takes the projection alone and infers the same keys, which is why most demo queries use it (the
-  `CustomerMetrics` CTE keeps `GroupBy` + `Select` because the join-alias generator does not yet recognise
+  `CustomerMetrics` CTE keeps `GroupBy` + `Select` because the join-alias generator does not recognise
   `SelectGroup` when it recovers a consumed chain's element type).
 * **Derived queries as a `FROM` source and as a join side** — `ctx.From(derived).Join(...)` works, and a
   `QueryCommand<T>` can be joined directly; a `Where` may precede the join (it is pushed onto the derived
@@ -117,10 +114,10 @@ Two nextorm-specific rules that trip people up:
   query 1 — the CTE-producing one (`WithAlias(Alias.Order)`, `Alias.Customer`, `Alias.Person`) and the
   one that consumes it (`Alias.Metrics`, `Alias.SalesPerson`, `Alias.Manager`) — and query 3
   (`WithAlias(Alias.ProductionImpact)` + `Alias.Supplier`); all are **WORKING**. An aliased
-  chain may feed a later aliased chain (the downstream aliases are no longer dropped, #230); every
+  chain may feed a later aliased chain; every
   aliased chain must be rooted at a **named** projection (`CustomerMetricRow`, `SupplierDelayRow`,
   `ProductionImpactRow`), not an anonymous type: the alias generator renders the chain's concrete type
-  and reports `NORMGEN009` instead of emitting an anonymous one (#229). Every query in this example
+  and reports `NORMGEN009` instead of emitting an anonymous one. Every query in this example
   names its joins, including both CTE producers of `SupplyChain` (`SupplierDelays` names its
   `Alias.OrderDetail`/`PurchaseOrder`/`Vendor` slots and `ProductionImpact` its `Alias.WorkOrder`/`Product`
   ones), so no `p.ItemN` is left in a query body.

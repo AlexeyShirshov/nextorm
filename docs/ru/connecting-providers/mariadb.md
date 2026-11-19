@@ -50,7 +50,7 @@ using IDataContext ctx = new MariaDbDataContext(
 - `UPDATE ... RETURNING` включается только при явно настроенной версии сервера 13.0 или новее
   ([`SupportsUpdateReturning`](xref:NextORM.Core.ISqlDialect.SupportsUpdateReturning)).
 - Агрегат произвольного значения `any_agg` **отключён**, потому что в MariaDB 10.4–12.x нет
-  `ANY_VALUE`. Возможность SQL-2023 `T626` ещё ожидается; ориентир — 13.2.
+  `ANY_VALUE`.
 
 Остальное MariaDB наследует от MySQL: параметры, квотирование, `concat`, `coalesce`, постраничность,
 имена агрегатов и написание `if(...)` для переносимого `iif`.
@@ -61,8 +61,7 @@ using IDataContext ctx = new MariaDbDataContext(
 bulk `Returning*`. Настройка **явная** — nextorm никогда не опрашивает работающий сервер. Передайте версию через
 параметр `Version` конструктора контекста. В отличие от PostgreSQL, **незаданная** версия **не** включает
 возможность: без явной 13.0+ терминал `Returning()` у `UPDATE` и вызов bulk `Returning*` бросают
-`NotSupportedException`. `RETURNING` у одно-row insert и delete не меняется (MariaDB отклоняет их как и
-раньше); правило поддержки `ANY_VALUE` (`any_agg`, ориентир — 13.2) тоже не меняется. Bulk `Returning*` поддерживается начиная с
+`NotSupportedException`. Провайдер отклоняет `RETURNING` при вставке или удалении одной строки. Bulk `Returning*` поддерживается начиная с
 13.0+, а ниже отклоняется; живая сертификация идёт на `mariadb:11.4`, то есть покрывает ветку отказа.
 
 ```csharp

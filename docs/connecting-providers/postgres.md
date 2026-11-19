@@ -129,7 +129,7 @@ one contributing value, `Stdevp`/`Varp` are `null` for zero and `0.0` for one. T
 
 The dialect can be pinned to the server version, which gates version-dependent syntax. Configuration is
 **explicit** — nextorm never probes the live server. Pass the version with the context constructor's
-`Version` parameter; leaving it unset keeps the historical behaviour and assumes PostgreSQL 9.4 or later,
+`Version` parameter; leaving it unset assumes PostgreSQL 9.4 or later,
 so the ANSI aggregate `FILTER (WHERE ...)` clause stays enabled. A version below 9.4 disables it: a
 filtered aggregate rejects with `NotSupportedException`.
 

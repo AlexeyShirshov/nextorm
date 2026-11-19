@@ -145,7 +145,7 @@ var orders = ctx.From<Order>()
 
 ## Выбор режима
 
-Аргумент `mode` выбирает, как загружаются объявленные коллекции, через публичный enum [`EagerLoadMode`](xref:NextORM.Core.EagerLoadMode). Числовые значения фиксированы и совместимы при миграции: `Default=0`, `SplitQuery=1` и `SingleQuery=2` сохраняют исторический смысл для тех, кто хранит или сравнивает enum, а `Correlated=3`/`Auto=4` добавлены в конец:
+Аргумент `mode` выбирает, как загружаются объявленные коллекции, через публичный enum [`EagerLoadMode`](xref:NextORM.Core.EagerLoadMode). В таблице указаны числовые значения и поведение каждого режима:
 
 | Член | Значение | Смысл |
 |---|---|---|
@@ -167,7 +167,7 @@ var orders = ctx.From<Order>()
 
 ### Context-wide default
 
-[`DataContextBuilder.UseEagerLoadMode(EagerLoadMode)`](xref:NextORM.Core.DataContextBuilder.UseEagerLoadMode(NextORM.Core.EagerLoadMode)) задаёт context-wide default для коллекций `LoadWith`, чей запрос не объявляет явный режим. По умолчанию это `EagerLoadMode.SplitQuery`, поэтому ненастроенный контекст сохраняет историческое поведение:
+[`DataContextBuilder.UseEagerLoadMode(EagerLoadMode)`](xref:NextORM.Core.DataContextBuilder.UseEagerLoadMode(NextORM.Core.EagerLoadMode)) задаёт context-wide default для коллекций `LoadWith`, чей запрос не объявляет явный режим. По умолчанию это `EagerLoadMode.SplitQuery`, этот режим работает так:
 
 ```csharp
 var builder = new DataContextBuilder()
@@ -360,7 +360,7 @@ SQL-провайдеры (SQLite, PostgreSQL, SQL Server, MySQL/MariaDB, ClickHo
 - **переполнение арности проекции**: сведение графа в один денормализованный SQL-запрос с более чем семью дочерними коллекциями (предел арности [`Projection<T1..T8>`](relationships.md#один-round-trip)) бросает `NotSupportedException`; объявите более мелкий граф или используйте split-режим;
 - **конфликт вложенного режима**: ребёнок, запрашивающий явный режим, отличный от режима графа, бросает `NotSupportedException` (`... mixes modes ...`);
 - **циклы**: объявление, чья ancestor-composite идентичность повторяется, — самоссылающаяся сущность или фабрика ребёнка, рекурсивно возвращающая саму себя, — детерминированно бросает `NotSupportedException`: требуется конечный ацикличный граф, а не ограничение глубины;
-- **пейджированный дочерний запрос в in-memory**: существующее fail-closed отклонение #211 (нет SQL-окна) не меняется; непейджированная вложенная загрузка там работает.
+- **пейджированный дочерний запрос в in-memory**: in-memory не поддерживает постраничную загрузку дочерних строк, но поддерживает вложенную загрузку без постраничного ограничения.
 - **форма с объявленными метаданными на провайдере in-memory**: перегрузки `LoadWith` по метаданным работают только на SQL и отвергаются при построении родительской команды — до любой команды, SQL и записи в план-кэш и без изменения флага кэша контекста; форма с явными ключами сохраняет описанную выше поддержку in-memory.
 
 ## Правило назначения

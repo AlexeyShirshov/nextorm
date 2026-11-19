@@ -160,14 +160,7 @@ JSON он выделяет меньше памяти, но работает в 1
 измеряются; замер публикации NativeAOT без дополнительных настроек и показатели JIT/AOT приведены
 на той же странице [бенчмарков](benchmarks.md).
 
-## Что дальше
-
-Случаи, где этот снимок отстаёт от linq2db, отслеживаются в milestone rc3:
-[#243](https://github.com/AlexeyShirshov/nextorm/issues/243) (аллокации Count/Sum),
-[#244](https://github.com/AlexeyShirshov/nextorm/issues/244) (аллокации CTE/рекурсивного CTE),
-[#245](https://github.com/AlexeyShirshov/nextorm/issues/245) (аллокации EXCEPT/INTERSECT),
-[#246](https://github.com/AlexeyShirshov/nextorm/issues/246) (чтение через `DbDataReader`) и
-[#247](https://github.com/AlexeyShirshov/nextorm/issues/247) (JSON streaming).
+## Как воспроизвести
 
 ```bash
 # Этот отчёт не использует prepared-ветки.

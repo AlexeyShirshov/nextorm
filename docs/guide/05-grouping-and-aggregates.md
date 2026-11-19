@@ -832,8 +832,7 @@ its own dialect capability; PostgreSQL and ClickHouse opt into different subsets
 | Sequence / funnel | `SqlFunctions.ClickHouse.window_funnel(window, ts, c1, c2)` , `sequence_match(pattern, ts, c1, c2)`, `retention(c1, c2)` | `toInt32(windowFunnel(window)(ts, c1, c2))`, `toInt32(sequenceMatch(pattern)(ts, c1, c2))`, `retention(c1, c2)` | [`SequenceAggregates`](xref:NextORM.Core.ISqlDialect.SequenceAggregates) | ClickHouse |
 | Ordered-set | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `median(() => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, `percentile_cont(0.5) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) (`mode`), [`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles) (percentiles, `median`) | PostgreSQL |
 
-MariaDB does **not** support `any_agg`: it has no `ANY_VALUE` in 10.4–12.x (the SQL-2023 `T626` feature
-is still pending, targeted for 13.2), so [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) is `false` and the call is rejected with `NotSupportedException`.
+The MariaDB provider does **not** support `any_agg`: MariaDB 10.4–12.x has no `ANY_VALUE`, so [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) is `false` and the call is rejected with `NotSupportedException`.
 
 ```csharp
 var stats = dataContext.From<IComplexEntity>()

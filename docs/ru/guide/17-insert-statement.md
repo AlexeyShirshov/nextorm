@@ -629,9 +629,6 @@ declare @t table (id bigint, name nvarchar(100)); insert into simple_entity (nam
 | `OutputIntoThenOutput(targetTable)` | Существующая таблица | Изменённые строки (второй `OUTPUT`) | `Single()`/`ToList()`/… плюс `ToSql()` |
 | `OutputIntoTableVariable("@t", definitions)` | Табличная переменная, объявленная в том же батче | Строки чтения финального `SELECT`, видимые «сырому» исполнению (`Execute()` их отбрасывает) | `Execute()`/`ExecuteAsync()` (число затронутых строк), `ToSql()` |
 
-Поддержка `OUTPUT`/`OUTPUT INTO` на SQL Server отслеживалась в задаче
-[#15](https://github.com/AlexeyShirshov/nextorm/issues/15) (закрыта).
-
 ### Захват в рамках батча (`BatchBuilder.OutputIntoTableVariable`)
 
 Fluent-форма выше принадлежит самой мутации: она объявляет переменную, пишет в неё изменённые строки

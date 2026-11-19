@@ -87,8 +87,7 @@ unchanged.
 
 ## SQL Server aggregate family (2019 and 2022)
 
-Five [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) members close the residual SQL Server
-aggregate names. They are aggregate-context members: the two approximate percentiles are ordered-set
+These functions are used in an aggregate context: the two approximate percentiles are ordered-set
 aggregates spelled `WITHIN GROUP (ORDER BY …)` with no window form, `approx_count_distinct` has no
 `OVER` form in the engine at all, and `checksum_agg` — whose native `OVER` form the engine does accept —
 is offered in the aggregate form only here. `grouping_id` is the analytic member of the family and needs
@@ -292,7 +291,7 @@ var elements = dataContext
 `generate_series` selects [`Value`](xref:NextORM.Core.SqlFunctions.IGenerateSeriesRow.Value) and `unnest` selects
 [`Value`](xref:NextORM.Core.SqlFunctions.IUnnestRow`1.Value); both map to the single column the function returns.
 
-## PostgreSQL aggregate additions (#281)
+## PostgreSQL aggregate functions
 
 The members below extend the PostgreSQL aggregate surface. They are ordinary `pg_proc` aggregates — or,
 for the SQL/JSON aggregates and `grouping`, parser-level constructs with no `pg_proc` row — gated per
@@ -403,7 +402,7 @@ Nextorm's `GroupByRollup(...)` emits that grouping (as do `GroupByCube` and `Gro
 error (`42601`), and the result is `integer` (`int?`). Measured on 17.11. It returns `0` or `1` for
 every row; there is no NULL or empty-input case.
 
-## ClickHouse aggregate catalogue (#286, T286b)
+## ClickHouse aggregate catalogue
 
 The residual ClickHouse aggregate catalogue is typed on `ClickHouseFunctions` and dispatched by
 `AdvancedAggregateTranslator` over the ClickHouse-only `IClickHouseAggregateRenderer` capability (null on
@@ -431,4 +430,4 @@ live test expects `UNKNOWN_FUNCTION` from that baseline server. Separately, `seq
 `allow_experimental_time_series_aggregate_functions`. Three members stay refused
 (`stochastic_linear_regression`, `stochastic_logistic_regression`, `exponential_moving_average`: opaque
 `AggregateFunction` states) — see
-[ClickHouse-specific SQL › Not yet supported](../guide/provider-specific-sql/clickhouse.md#not-yet-supported).
+[ClickHouse-specific SQL › Unsupported functions](../guide/provider-specific-sql/clickhouse.md#unsupported-functions).

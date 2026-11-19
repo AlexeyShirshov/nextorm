@@ -201,12 +201,12 @@ select id, ts_rank(to_tsvector(somestring), to_tsquery('cat'))
 
 Only PostgreSQL implements the native surface; every other provider rejects it at SQL build time.
 
-The `#281` additions extend the same surface: the vector and query constructors `array_to_tsvector`,
+The PostgreSQL API also includes the vector and query constructors `array_to_tsvector`,
 `json_to_tsvector` and `jsonb_to_tsvector`; the inspection and rewriting members `numnode`, `querytree`,
 `setweight`, `strip`, `ts_delete`, `ts_filter`, `ts_rewrite` and `tsquery_phrase`; the conversion and
 lexing pair `tsvector_to_array` and `ts_lexize`; and the tokenizer readers `ts_debug`, `ts_parse` and
 `ts_token_type` as `FROM` sources. Their SQL forms, row interfaces and the `cast(... as text)` bridge are
-listed in [String functions › Full-text search (PostgreSQL, #281)](../../scalar-functions/01-string-functions.md#full-text-search-postgresql-281).
+listed in [String functions › Full-text search (PostgreSQL)](../../scalar-functions/01-string-functions.md#full-text-search-postgresql).
 
 ## Extended scalar and regexp helpers
 
@@ -217,7 +217,7 @@ The [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) surface adds `pg_typeo
 `to_number`/`to_timestamp`/`timezone`/`make_interval`/`justify_*`) and the array constructors, all gated
 by `SupportsExtendedScalarFunctions`.
 
-The residual string catalogue of #281 sits on the same `Postgres` surface, one member per server
+The `Postgres` API also exposes these string functions, one member per server
 overload: `btrim` (one-argument, character-set and `bytea` forms), the two-argument and `bytea` forms
 of `ltrim`/`rtrim`, `starts_with`, `parse_ident`, the `text` overloads of
 `quote_ident`/`quote_literal`/`quote_nullable`, `to_ascii(value, encoding)` (encoding named as text or
@@ -234,7 +234,7 @@ the pinned PostgreSQL 17.11 — `casefold`, the one-argument `to_ascii` and the 
 overloads — are refused while the query is prepared; the tested reasons are in the refusal table of
 [String functions](../../scalar-functions/01-string-functions.md#tested-refusals).
 
-The residual date/time family of #281 follows the same rule: `date_subtract` (the two-argument
+The same rule applies to these date and time functions: `date_subtract` (the two-argument
 `interval` form and the zoned three-argument form, both returning `timestamp with time zone`),
 `justify_interval`, `make_timestamptz` (with and without a zone), the clocks
 `clock_timestamp`/`statement_timestamp`/`transaction_timestamp`, `timeofday` and `isfinite` over

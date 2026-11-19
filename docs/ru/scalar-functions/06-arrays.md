@@ -101,7 +101,7 @@ select cardinality(@norm_p1) as "N"
  from complex_entity where array_length(@norm_p0, 1) = 3
 ```
 
-### Формирование и разворачивание массивов (#281)
+### Формирование и разворачивание массивов
 
 `trim_array` возвращает укороченную копию одномерного массива, а формы `unnest` с несколькими
 массивами, `WITH ORDINALITY` и `generate_subscripts` разворачивают массивы в строки. Шесть
@@ -207,7 +207,7 @@ select value, ordinality
 | `SqlFunctions.ClickHouse.array_last(f, a)` | `arrayLast(f, a)` |
 | `SqlFunctions.ClickHouse.array_last_index(f, a)` | `arrayLastIndex(f, a)` |
 
-### Поставленные функции массивов, кортежей и Map (#286, T286b)
+### Функции массивов, кортежей и Map
 
 Члены ниже дополняют каталог массивов на закреплённом сервере 25.8.33.6. Формы результатов объявлены
 явно: поэлементные предикаты возвращают `bool`, агрегаты — объявленный скалярный/массивный CLR-тип, а
@@ -262,7 +262,7 @@ select value, ordinality
 
 `arrayReduce`/`arrayReduceInRanges` остаются отклонёнными: агрегат задаётся строкой SQL во время
 выполнения, поэтому типизированный контракт невозможен (см.
-[ClickHouse-specific SQL › Пока не поддерживается](../guide/provider-specific-sql/clickhouse.md#пока-не-поддерживается)).
+[ClickHouse-specific SQL › Неподдерживаемые функции](../guide/provider-specific-sql/clickhouse.md#неподдерживаемые-функции)).
 `untuple` отклонён по той же структурной причине: одно выражение проекции отображается ровно в одну
 колонку результата.
 
@@ -314,11 +314,9 @@ select value, ordinality
 > подготовке. SQL Server и провайдер in-memory отклоняют эту поверхность row-конструктора/сравнения
 > строк; при этом in-memory вычисляет список значений tuple `IN`/`Contains` in-process (не отклоняет).
 > Tuple `IN`/`Contains` по
-> списку значений плоских `System.Tuple`/`System.ValueTuple` арности 1..7 — реализован
-> ([#193](https://github.com/AlexeyShirshov/nextorm/issues/193)); точные формы провайдеров и семантика
+> списку значений плоских `System.Tuple`/`System.ValueTuple` арности 1..7 поддерживается; точные формы провайдеров и семантика
 > описаны в блоке tuple `IN` ниже.
-> Материализация «сырого» `ROW(...)` — реализована в PostgreSQL
-> ([#194](https://github.com/AlexeyShirshov/nextorm/issues/194)): одна колонка-запись `ROW(...)`
+> PostgreSQL поддерживает материализацию «сырого» `ROW(...)`: одна колонка-запись `ROW(...)`
 > (арность 1..7) или зарегистрированный вызывающим именованный composite материализуется в
 > соответствующий `System.Tuple<...>`/именованный тип (см.
 > [Сырой SQL](../guide/14-raw-sql.md#сырые-postgresql-строки-и-composite-типы)); `ValueTuple`,
@@ -351,9 +349,8 @@ select value, ordinality
 > (`c1 IS NULL` / `c1 IS NOT NULL AND c1 = @p`), потому что обычный row `IN` никогда не совпадает с SQL
 > `NULL`. Null-элемент ссылочного кортежа (`null` внутри коллекции) бросает `NotSupportedException`, а не
 > вырождается в строку из одних null; арность ≥8, форма `Rest` и вложенные компоненты-кортежи бросают
-> `NotSupportedException`; на SQL Server всё это вместо этого даёт отклонение провайдера выше. Отложено
-> в текущем milestone: tuple-типизированный `QueryCommand` (подзапрос) в правой части и
-> `Rest`/вложенные кортежи — **пока не поддерживаются**; обещания будущего milestone нет.
+> `NotSupportedException`; на SQL Server всё это вместо этого даёт отклонение провайдера выше.
+> `QueryCommand` (подзапрос) с кортежным типом не поддерживается в правой части.
 
 > Функции высшего порядка (lambda) принимают inline-лямбду C#, параметр которой — элемент массива;
 > например `array_map(v => -v, e.Nums)` рендерится как `arrayMap(v -> -(v), nums)`.

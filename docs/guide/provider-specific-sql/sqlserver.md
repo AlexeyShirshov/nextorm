@@ -404,11 +404,11 @@ session `currval`/`lastval`, no value-returning `setval`). See
 
 ## Version-gated functions (2022 and 2025)
 
-The [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) functions below are checked against the
+The functions below are checked against the
 SQL Server **major version declared in the provider configuration**. This declaration controls the
 version check; it does not connect to the database to discover its version or verify database settings.
 The runtime prerequisites in the table and notes still need to be met. Unlike function checks, the native
-JSON storage type (`SupportsJson`, [#345](https://github.com/AlexeyShirshov/nextorm/issues/345)) also
+JSON storage type (`SupportsJson`) also
 uses an engine-edition allowlist: a few Azure/Fabric products have that type while reporting a lower
 major version. For functions, availability follows the engine major version itself; an edition
 declaration does not substitute for a version, and an unversioned context refuses these functions before
@@ -623,13 +623,8 @@ operand needs a SQL type derived from metadata; an unmapped one is rejected befo
 
 ## Refused functions (deterministic, before SQL)
 
-[#282](https://github.com/AlexeyShirshov/nextorm/issues/282) is closed for this slice:
-**22 delivered / 0 delivery names remaining / 11 tested refusals**. The eleven refusals are callable
-`SqlFunctions.SqlServer` API members that throw `NotSupportedException` with one stable
-message per member (`SqlFunctions.SqlServer.<member> (<TOKEN>) is refused: <reason>`) at the SQL-builder
-command boundary, before SQL is rendered and before any command is created. They are not deferred names:
-they are deterministic, tested refusals. The supported sibling members (`rowcount_big`, `xact_state`,
-`scope_identity`, `db_name`, `current_user`, …) still render normally.
+The `SqlFunctions.SqlServer` members listed here throw `NotSupportedException` before SQL is rendered
+or a command is created. The message format is `SqlFunctions.SqlServer.<member> (<TOKEN>) is refused: <reason>`.
 
 | Member | SQL token | Kind and reason |
 |---|---|---|
@@ -647,8 +642,7 @@ they are deterministic, tested refusals. The supported sibling members (`rowcoun
 
 The two refusal types stay distinct. Most system names are **scope/CLR limitations**: they require a
 statement or `CATCH` scope, or return `sql_variant` without a faithful CLR carrier. `SESSION_ID` and
-`ANY_VALUE` are **observed engine rejections**. `ANY_VALUE` is not a version gap a later nextorm release can close, and
-the portable `CommonFunctions.any_agg` is unaffected on the providers that enable it. See
+`ANY_VALUE` are **observed engine rejections**. The portable `CommonFunctions.any_agg` is unaffected on the providers that enable it. See
 [Limitations and out-of-scope features](../../advanced/limitations.md) and
 [system functions](../../scalar-functions/09-system-functions.md#refused-statement-and-error-scope-names-sql-server).
 

@@ -49,8 +49,7 @@ from [`MySqlDialect`](xref:NextORM.MySql.MySqlDialect). It changes these capabil
   and throws `NotSupportedException`.
 - `UPDATE ... RETURNING` is enabled only when you explicitly configure server version 13.0 or later
   ([`SupportsUpdateReturning`](xref:NextORM.Core.ISqlDialect.SupportsUpdateReturning)).
-- The arbitrary-value aggregate `any_agg` stays disabled because MariaDB has no `ANY_VALUE` in versions
-  10.4–12.x. The SQL-2023 `T626` feature is still pending and targeted for 13.2.
+- The arbitrary-value aggregate `any_agg` is disabled. MariaDB 10.4–12.x does not provide `ANY_VALUE`.
 
 MariaDB inherits the remaining behavior from MySQL: parameters, quoting, `concat`, `coalesce`, paging,
 aggregate names, and the `if(...)` spelling of portable `iif`.
@@ -61,9 +60,7 @@ The dialect can be pinned to the server version, which gates `UPDATE ... RETURNI
 `Returning*` terminals. Configuration is **explicit** — nextorm never probes the live server. Pass the
 version with the context constructor's `Version` parameter. Unlike PostgreSQL, an **unset** version does
 **not** enable the feature: without an explicit 13.0+ the `Returning()` terminal of an `UPDATE` and a bulk
-`Returning*` call reject with `NotSupportedException`. Single-row insert and delete `RETURNING` are
-unchanged (MariaDB rejects them as before), and the `ANY_VALUE` gate (`any_agg`, targeted for 13.2) is also
-unchanged. Bulk `Returning*` is supported on 13.0+ and refused below; the live certification runs on
+`Returning*` call reject with `NotSupportedException`. The provider rejects `RETURNING` on single-row inserts and deletes. Bulk `Returning*` is supported on 13.0+ and refused below; the live certification runs on
 `mariadb:11.4`, so it covers the refusal arm.
 
 ```csharp

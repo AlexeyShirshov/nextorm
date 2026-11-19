@@ -81,16 +81,14 @@ function with Msg 195, including with preview features enabled; no supported SQL
 contract is established.` Отказ поднимается до генерации SQL и до создания любой команды, а соседний
 агрегат того же запроса по-прежнему выполняется.
 
-Это **наблюдаемое отклонение движком**, а не ограничение CLR/области и не версионный пробел, который
-закроет будущий релиз nextorm. Переносимый `CommonFunctions.any_agg` — другой член: на SQL Server он
+Вызов отклоняет **движок SQL Server**; это не ограничение CLR или области выполнения. Переносимый `CommonFunctions.any_agg` — другой член: на SQL Server он
 остаётся выключенным (`SupportsAnyValueAggregate = false`) и **не** заменяется этим отказом; провайдеры,
 которые его включают (MySQL/MariaDB через `ANY_VALUE`, ClickHouse через `any`), сохраняют свою
 диспетчеризацию без изменений.
 
 ## Семейство агрегатов SQL Server (2019 и 2022)
 
-Пять членов [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) закрывают остаточные имена
-агрегатов SQL Server. Это члены агрегатного контекста: два приблизительных квантиля — упорядоченные
+Эти функции работают в контексте агрегации: два приблизительных квантиля — упорядоченные
 агрегаты с записью `WITHIN GROUP (ORDER BY …)` без оконной формы, у `approx_count_distinct` оконной формы
 нет в самом движке, а `checksum_agg` — чей нативный вид `OVER` движок принимает — здесь предлагается
 только в агрегатной форме. `grouping_id` — аналитический член семейства, ему нужна сгруппированная
@@ -294,7 +292,7 @@ var elements = dataContext
 `generate_series` проецируется на [`Value`](xref:NextORM.Core.SqlFunctions.IGenerateSeriesRow.Value), а `unnest` — на
 [`Value`](xref:NextORM.Core.SqlFunctions.IUnnestRow`1.Value); обе соответствуют единственной колонке, которую возвращает функция.
 
-## Дополнения агрегатов PostgreSQL (#281)
+## Агрегатные функции PostgreSQL
 
 Члены ниже дополняют агрегатную поверхность PostgreSQL. Это обычные агрегаты `pg_proc` — или, для
 агрегатов SQL/JSON и `grouping`, конструкции уровня парсера без строки в `pg_proc` — с проверкой по
@@ -405,7 +403,7 @@ PostgreSQL нет. У построителя нет места для внутр
 синтаксическая ошибка (`42601`), а результат — `integer` (`int?`). Измерено на 17.11. Для каждой строки
 возвращается `0` или `1`; случая NULL или пустого входа у неё нет.
 
-## Каталог агрегатов ClickHouse (#286, T286b)
+## Каталог агрегатов ClickHouse
 
 Остаточный каталог агрегатов ClickHouse типизирован на `ClickHouseFunctions` и диспетчеризуется
 `AdvancedAggregateTranslator` через возможность `IClickHouseAggregateRenderer`, существующую только для
@@ -433,4 +431,4 @@ CLR-аргументами, а аргументы-значения образу�
 `allow_experimental_time_series_aggregate_functions`. Три члена остаются отклонёнными
 (`stochastic_linear_regression`, `stochastic_logistic_regression`,
 `exponential_moving_average`: непрозрачные состояния `AggregateFunction`) — см.
-[ClickHouse-specific SQL › Пока не поддерживается](../guide/provider-specific-sql/clickhouse.md#пока-не-поддерживается).
+[ClickHouse-specific SQL › Неподдерживаемые функции](../guide/provider-specific-sql/clickhouse.md#неподдерживаемые-функции).

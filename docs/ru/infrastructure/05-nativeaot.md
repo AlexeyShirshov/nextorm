@@ -119,7 +119,7 @@ internal sealed partial class AppJsonContext : JsonSerializerContext;
 
 ## Ограничения
 
-- EF Core bridge (`nextorm.entityframeworkcore`) в нативную сборку пока не входит — для этого сценария
+- EF Core bridge (`nextorm.entityframeworkcore`) требует JIT — для этого сценария
   оставайтесь на обычном JIT-рантайме.
 - Результат-колонка типа tuple в ClickHouse, если типы элементов не зарегистрированы драйвером, не
   материализуется в нативной сборке. Выбирайте отдельные колонки через `tupleElement(...)` или

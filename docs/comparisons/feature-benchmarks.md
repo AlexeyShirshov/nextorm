@@ -149,21 +149,6 @@ This report does not compare the prepared path: the separate Category A results 
 measure startup or NativeAOT; see the [benchmarks](benchmarks.md) page for the zero-config AOT
 reference and JIT/AOT numbers.
 
-## Optimization follow-ups
-
-The cases where this snapshot is behind linq2db are tracked in the rc3 milestone:
-[#243](https://github.com/AlexeyShirshov/nextorm/issues/243) (Count/Sum allocations),
-[#244](https://github.com/AlexeyShirshov/nextorm/issues/244) (CTE/recursive CTE allocations),
-[#245](https://github.com/AlexeyShirshov/nextorm/issues/245) (EXCEPT/INTERSECT allocations),
-[#246](https://github.com/AlexeyShirshov/nextorm/issues/246) (raw reader) and
-[#247](https://github.com/AlexeyShirshov/nextorm/issues/247) (JSON streaming).
-
-
-**T246 status (2026-10-17, rv2):** **GAP / incomplete — qualification exhausted, no qualified final result, empty
-arm unmeasured.** The canonical out-of-process oracle gives empty-arm allocation **7.86–7.94×**, not **2.31×**;
-2.31× is a historical in-process `ShortRun` figure from a different regime and the two are not comparable (no
-conversion factor between jobs). No PASS is claimed and no final ratios are published.
-
 ## Reproducing
 
 ```bash

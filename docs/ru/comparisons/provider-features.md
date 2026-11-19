@@ -57,8 +57,7 @@ JSON1, regex, агрегаты, потоковое чтение LOB и обсл�
 Речь о **глубине возможностей каждого движка, а не о количестве движков**. linq2db подключается к
 большему числу СУБД (Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, Access, SQL CE, DuckDB,
 Ydb). Nextorm добавляет in-memory-контекст объектов и разделяет MySQL и MariaDB на отдельные
-провайдеры. У linq2db по-прежнему шире набор скалярных функций SQL Server и больше вариантов хинтов
-(issue [#182](https://github.com/AlexeyShirshov/nextorm/issues/182)).
+провайдеры. У linq2db шире набор скалярных функций SQL Server и больше вариантов хинтов.
 
 ## PostgreSQL
 
@@ -118,13 +117,9 @@ Ydb). Nextorm добавляет in-memory-контекст объектов и 
 | Session/server identity (`@@SERVERNAME`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) | yes | yes |
 | **Итого** | 20 / 0 / 0 | 13 / 4 / 2 |
 
-Итог: **паритет по выверенному каталогу T-SQL-скаляров, но в целом linq2db шире**. Issue
-[#182](https://github.com/AlexeyShirshov/nextorm/issues/182) свёл 61 закреплённую запись `SqlFn.cs` из linq2db
-с Nextorm: 51 покрыта и 10 исключены, причём исключённое — живое изменяемое состояние
-connection/session/statement-scope, а не построчные скаляры запроса. Подмножество identity
-(`@@SERVERNAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) поставлено в
-[#219](https://github.com/AlexeyShirshov/nextorm/issues/219), остальное отслеживается в
-[#248](https://github.com/AlexeyShirshov/nextorm/issues/248). Nextorm впереди по выделенным билдерам для
+Nextorm поддерживает скаляры идентификации `@@SERVERNAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`,
+`SUSER_NAME` и `ORIGINAL_LOGIN`. В целом каталог скалярных функций SQL Server у linq2db шире.
+Nextorm предоставляет выделенные API для
 `PIVOT`/`UNPIVOT`, `FOR JSON`/`FOR XML`, методов XML, `OPENJSON`/`STRING_SPLIT` и regex-функций 2025.
 
 ## MySQL / MariaDB
@@ -180,9 +175,8 @@ MariaDB
 
 Итог: **смешанно, в сумме шире Nextorm** — Nextorm добавляет JSON1, regex, пользовательские агрегаты, рамки
 окон `GROUPS`/`EXCLUDE`, табличные параметры, потоковое чтение LOB, поверхность full-text **запроса + FROM**
-в SQLite ([#181](https://github.com/AlexeyShirshov/nextorm/issues/181)) и билдер команд
-**FTS5 maintenance/control**
-([#195](https://github.com/AlexeyShirshov/nextorm/issues/195)/[#196](https://github.com/AlexeyShirshov/nextorm/issues/196)).
+в SQLite и билдер команд
+**FTS5 maintenance/control**.
 linq2db впереди только по **FTS3/FTS4 maintenance** и командам FTS5
 `delete`/`delete-all`/`pgsz`/`usermerge`.
 
@@ -228,7 +222,7 @@ linq2db впереди только по **FTS3/FTS4 maintenance** и коман
 
 - Библиотека скалярных функций для **всех** провайдеров: `SqlFunctions.Postgres`, `SqlFunctions.SqlServer`,
   `SqlFunctions.MySql`, `SqlFunctions.Sqlite` и `SqlFunctions.ClickHouse`, плюс общий гейт session-info,
-  который несёт identity-скаляры из [#219](https://github.com/AlexeyShirshov/nextorm/issues/219) по четырём
+  который несёт identity-скаляры по четырём
   провайдерам.
 - PostgreSQL: full-text, regex, `jsonb_path_*`, операторы range, data-modifying CTE, табличные функции
   (`generate_series`/`unnest`/`jsonb_*`/`ts_stat`), последовательности/настройки,

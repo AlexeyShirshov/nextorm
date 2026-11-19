@@ -371,7 +371,7 @@ The filter import runs wherever the bridge maps an EF model, so it is available 
 | `Microsoft.EntityFrameworkCore.SqlServer` | `nextorm.sqlserver` |
 | `Pomelo.EntityFrameworkCore.MySql` / `MySql.EntityFrameworkCore` (MySQL) | `nextorm.mysql` |
 
-The non-relational `Microsoft.EntityFrameworkCore.InMemory` provider is **not** supported (it has no `DbConnection`), so no filter can be imported through it. ClickHouse has no EF Core provider the bridge recognises today, and MariaDB's shared-connection path is served only through Pomelo's MySQL provider. The ClickHouse no-EF-adapter slice and the MariaDB-specific shared-connection certification are tracked open units in milestone `1.0.9-b`; until they land, use the supported adapters above.
+The non-relational `Microsoft.EntityFrameworkCore.InMemory` provider is **not** supported (it has no `DbConnection`), so no filter can be imported through it. ClickHouse has no EF Core provider the bridge recognises, and MariaDB's shared-connection path is served only through Pomelo's MySQL provider.
 
 Other limitations are inherited from the bridge and the filter subsystem:
 

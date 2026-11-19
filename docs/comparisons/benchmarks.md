@@ -122,7 +122,7 @@ recursive CTE, `EXCEPT`, and `INTERSECT`.
 
 ## Tier-1 query-shape scenarios
 
-Issue #188 added these query shapes, which the first two tables do not cover: projection into a
+This table compares additional query shapes: projection into a
 fresh DTO (data transfer object), SQL-side aggregates, ordered paging, streaming DTO results in
 buffered or unbuffered form, zero-materialization raw readers, and JSON/CSV output across libraries.
 
@@ -152,7 +152,7 @@ Dapper's `ExecuteReader` API.
 
 **Streaming has three groups:** buffered DTO materialization, unbuffered DTO enumeration, and a
 **zero-materialization** raw-reader group. The zero-materialization group is synchronous only; async
-reader arms are deferred. Nextorm `ToDataReader`, Dapper `ExecuteReader`, and linq2db
+reader benchmarks are not included. Nextorm `ToDataReader`, Dapper `ExecuteReader`, and linq2db
 `ExecuteReader` (its `DataReaderAsync.Reader`) read the same `id, someString` projection through
 **one shared non-retaining sink**. The sink does not retain the rows. EF Core is **not** included in
 this group because it has no LINQ raw-reader counterpart. Here, zero-materialization means no entity

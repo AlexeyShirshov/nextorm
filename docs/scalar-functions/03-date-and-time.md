@@ -90,9 +90,8 @@ constants:
   including when used as the receiver of another access (`e.Value.Offset.TotalMinutes`,
   `e.Value.UtcDateTime.Year`, `e.Value.Date.AddDays(1)`).
 * **Offset conversion:** `.ToOffset(...)`, whether its argument is constant or dynamic.
-* **Arithmetic without a supported SQL form:** `.AddTicks(...)` and `.Add(TimeSpan)`; server translation
-  is deferred to a later release. Fractional `.AddYears(...)` and `.AddMonths(...)` are also unsupported
-  because the CLR amount is an `int`.
+* **Arithmetic without a supported SQL form:** `.AddTicks(...)` and `.Add(TimeSpan)` are not translated to SQL.
+  Fractional `.AddYears(...)` and `.AddMonths(...)` are also unsupported because the CLR amount is an `int`.
 
 The refusal does not depend on the projection form: an anonymous projection, a DTO, a predicate and a
 bare scalar (`Select(e => e.Value.DayOfWeek)`, including `.First()`/`.Single()` over it) all fail during
@@ -143,7 +142,7 @@ PostgreSQL only):
 | `SqlFunctions.Postgres.current_date()` / `current_time()` / `localtime()` / `localtimestamp()` | the same key words |
 | `SqlFunctions.Postgres.pg_typeof(x)` | `cast(pg_typeof(x) as text)` |
 
-The residual date/time family of #281 sits on the same surface, one member per server overload, each
+The `Postgres` API exposes these date and time functions, one member per server overload, each
 name gated **individually** by
 [`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)) rather than by
 the family flag:
@@ -445,7 +444,7 @@ select toInt32(toYear(dt)) as `Year`, toStartOfMonth(dt) as `MonthStart`
  from complex_entity
 ```
 
-### Delivered date/time functions (#286, T286b)
+### Date/time functions
 
 The remaining ClickHouse date/time catalogue is typed on `ClickHouseFunctions`. Results are explicit:
 `make_date`/`make_date32`/`to_modified_julian_day`/`to_time` return integers, `make_date_time` returns
@@ -474,4 +473,4 @@ returns `int`, and `now64`/`time_slot`/`from_unix_timestamp*` keep the vendor's 
 Three members stay refused with a tested reason: `from_utc_timestamp` (the wall-clock/zone pair is not
 representable in `System.DateTime`), `to_time64` (`Time64(scale)` has no CLR carrier) and
 `from_unix_timestamp64_nano` (`DateTime64(9)` exceeds `DateTime`'s 100 ns tick resolution). See
-[ClickHouse-specific SQL › Not yet supported](../guide/provider-specific-sql/clickhouse.md#not-yet-supported).
+[ClickHouse-specific SQL › Unsupported functions](../guide/provider-specific-sql/clickhouse.md#unsupported-functions).

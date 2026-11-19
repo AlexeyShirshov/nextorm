@@ -114,8 +114,7 @@ Two nextorm-specific rules that trip people up:
   `p.Root`/`p.Name` instead of `p.ItemN`. Two constraints come with it: a joined **entity** uses the
   source-less form (`.Join<IEntity>((l, r) => …, Alias.X)`), while a joined **CTE** passes its
   descriptor (`.Join(cte, …, Alias.X)`), and the chain's **whole projection must be a named type**,
-  because the alias generator renders that concrete type and reports `NORMGEN009` for an anonymous one
-  (#229). Every query in this example names its joins; the `route_monthly_revenue` chain of query 5 needs
+  because the alias generator renders that concrete type and reports `NORMGEN009` for an anonymous one. Every query in this example names its joins; the `route_monthly_revenue` chain of query 5 needs
   no DTO because its root is the mapped `ITimetable` table.
 
 ## Demo queries: SQL file → method

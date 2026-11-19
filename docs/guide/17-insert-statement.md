@@ -625,9 +625,6 @@ The three forms differ in where the modified rows go and what reaches the client
 | `OutputIntoThenOutput(targetTable)` | An existing table | The modified rows (second `OUTPUT`) | `Single()`/`ToList()`/… plus `ToSql()` |
 | `OutputIntoTableVariable("@t", definitions)` | A table variable declared in the same batch | The read-back rows of the final `SELECT`, visible to a raw execution (`Execute()` discards them) | `Execute()`/`ExecuteAsync()` (affected-row count), `ToSql()` |
 
-SQL Server `OUTPUT`/`OUTPUT INTO` support is tracked in issue
-[#15](https://github.com/AlexeyShirshov/nextorm/issues/15) (closed).
-
 ### Batch-scoped capture (`BatchBuilder.OutputIntoTableVariable`)
 
 The fluent form above owns the mutation: it declares the variable, writes the modified rows into it and

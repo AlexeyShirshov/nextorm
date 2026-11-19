@@ -1448,8 +1448,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
     /// per matching child. The parent/child keys are resolved from the declared relationship metadata (or
     /// from a local <see cref="JoinOptions"/> configuration, which fully replaces the metadata for this
     /// call); a composite principal/foreign key is supported componentwise. A relationship that is not
-    /// declared, a many-to-many without a junction, or a composite-junction many-to-many (carried by
-    /// issue #223) is rejected with <see cref="NotSupportedException"/> — use the explicit-key overload
+    /// declared, a many-to-many without a junction, or a composite-junction many-to-many is rejected with <see cref="NotSupportedException"/> — use the explicit-key overload
     /// instead.
     /// The list terminals
     /// execute one denormalized command and stitch the children onto the deduplicated parents; the
@@ -4330,7 +4329,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
     }
 
     /// <summary>
-    /// Seam for generated alias-join builders (issue #113): adds <paramref name="_"/> as a join and
+    /// Seam for generated alias-join builders: adds <paramref name="_"/> as a join and
     /// returns the caller-created builder of a different projection shape, carrying this builder's join
     /// chain. The generated extension method supplies the target type through <paramref name="create"/>
     /// so the projection can expose lexical alias properties (for example <c>p.Buyer</c>) whose
@@ -4365,7 +4364,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
     }
 
     /// <summary>
-    /// Source-less alias-join seam for generated alias-join builders (issue #322): the implicit
+    /// Source-less alias-join seam for generated alias-join builders: the implicit
     /// <c>FROM</c> source for <typeparamref name="TJoinEntity"/> is created from this builder's data
     /// context (<c>From&lt;TJoinEntity&gt;()</c>) and forwarded to the same assembly path as the
     /// source-explicit conditional overload, so a generated extension method can expose the
@@ -4736,7 +4735,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
     }
 
     /// <summary>
-    /// Root-alias seam (issue #160, Phase 2): re-roots a plain source builder into a caller-created
+    /// Root-alias seam: re-roots a plain source builder into a caller-created
     /// builder whose projection shape names the root slot 1 lexically (for example
     /// <c>AliasProjection_A1_Order&lt;Order&gt;</c>), preserving the source's query state (physical table
     /// or derived source, CTE declarations, overrides, source options and hints). The generated
@@ -5143,7 +5142,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
     private const string JoinProjectionApplyMessage =
         "A correlated CROSS/OUTER APPLY over a join projection needs the flat transition declared on the joined builder (JoinedEntityBuilder<T1, ..., Tn>): the inherited single-entity member would nest the projection as the result's first item.";
     /// <summary>
-    /// Shared construction seam for the correlated APPLY-after-join transitions (issue #324). It
+    /// Shared construction seam for the correlated APPLY-after-join transitions. It
     /// validates the receiver once, stores the user lambda as <see cref="JoinExpression.ApplySource"/>
     /// without compiling or evaluating it, constructs the caller's <em>flat</em>
     /// <typeparamref name="TNext"/> and carries the complete join state through

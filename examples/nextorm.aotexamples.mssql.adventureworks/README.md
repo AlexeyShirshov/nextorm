@@ -10,11 +10,7 @@ Deliberately absent — the project exists to keep the AOT surface small:
 - no **BenchmarkDotNet**;
 - no **linq2db**: there is no second arm and no reflection-heavy comparison library.
 
-Like the PostgreSQL probe, this one consumes the **published `nextorm` / `nextorm.sqlserver` /
-`nextorm.extensions` packages**. The typed `Pivot` overload used by `QuarterlyPivot` has been part of
-the shipped `nextorm.sqlserver` surface since `1.0.9` (`PublicAPI.Shipped.txt` lists both overloads), so
-nothing here needs the source projects — the comparison example's note about an unpublished `Pivot`
-(#232) predates that release.
+This example uses the published `nextorm`, `nextorm.sqlserver`, and `nextorm.extensions` packages.
 
 ## Running
 
@@ -57,5 +53,4 @@ Native support for the SQL Server provider is **measured, not guaranteed**, by t
 [current matrix](../../docs/infrastructure/05-nativeaot.md) lists what runs natively and what does not.
 The project pins the latest **published** `nextorm` packages (`NextOrmVersion` in
 [`Directory.Packages.props`](../Directory.Packages.props)), so a run reproduces the **released**
-surface; the guide's current numbers are for the development build of the next release. Released
-results are tracked in [`VERIFICATION.md`](../VERIFICATION.md).
+API for the package versions declared in that file.

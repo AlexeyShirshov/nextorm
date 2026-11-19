@@ -401,7 +401,7 @@ var rows = dataContext.From<IComplexEntity>()
 The in-memory provider evaluates the same calls through their CLR equivalents, so the same query runs
 without a database.
 
-## ClickHouse string functions (#286, T286b)
+## ClickHouse string functions
 
 The ClickHouse-only string surface lives on `SqlFunctions.ClickHouse`; every member renders the exact
 vendor name and is rejected by every other dialect. Result shapes are explicit: `overlay`/`initcap`/
@@ -467,9 +467,9 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
-### Residual string, encoding and regexp helpers (#281)
+### String, encoding and regexp helpers
 
-The rest of the PostgreSQL string catalogue is exposed on the same surface, one member per server
+The `Postgres` API exposes the following functions, one member per server
 overload. Every name is gated **individually** by
 [`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)), and a
 provider that does not implement the interface rejects the call with `NotSupportedException`:
@@ -555,9 +555,9 @@ encoding code and the emitted statement fails on the server with `42704`. The `b
 the binary helpers (`get_bit`/`set_bit`/`bit_count` over `bit`) have no CLR mapping, so no member is
 offered for them and the call is refused instead of being translated.
 
-## Full-text search (PostgreSQL, #281)
+## Full-text search (PostgreSQL)
 
-The cross-provider predicates and the earlier native surface — `contains`/`freetext`, `to_tsvector`,
+The cross-provider predicates and native functions — `contains`/`freetext`, `to_tsvector`,
 `to_tsquery`, `plainto_tsquery`/`phraseto_tsquery`/`websearch_to_tsquery`, `ts_match`, `ts_rank`,
 `ts_rank_cd`, `ts_headline` and `@@` — are described in
 [PostgreSQL-specific SQL › Full-text search](../guide/provider-specific-sql/postgresql.md#full-text-search).

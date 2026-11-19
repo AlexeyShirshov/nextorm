@@ -111,9 +111,7 @@ public sealed class MariaDbDialect : MySqlDialect
     public override bool SupportsSelectWhereMinMax => true;
 
     /// <summary>
-    /// MariaDB has no <c>ANY_VALUE</c> in the supported range: the SQL-2023 <c>T626</c> feature
-    /// (MDEV-10426) is still pending and targeted for 13.2, so <c>any_agg</c> is gated off even though
-    /// MySQL implements it.
+    /// The MariaDB dialect does not support <c>any_agg</c>. MariaDB 10.4–12.x does not provide <c>ANY_VALUE</c>.
     /// </summary>
     public override bool SupportsAnyValueAggregate => false;
 

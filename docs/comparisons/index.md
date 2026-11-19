@@ -84,9 +84,8 @@ noted:
 
   On a 13 GB SQLite reporting app, Nextorm published natively with no source changes (8.2 MB binary,
   0.12 s, 30 MB RSS); EF Core published at 17.3 MB / 0.23 s / 42 MB after two code-generation
-  workarounds. AOT coverage is measured across all six providers but remains incomplete: the EF Core
-  bridge, bulk insert, raw SQL row mapping, and DML builders stay on JIT
-  ([#370](https://github.com/AlexeyShirshov/nextorm/issues/370)). The advantage is migration cost,
+  workarounds. NativeAOT supports representative query, write, and raw SQL scenarios across all six providers.
+  The EF Core bridge requires JIT. The advantage is migration cost,
   not full AOT feature parity. See the [NativeAOT guide](../infrastructure/05-nativeaot.md).
 - **Benchmarked performance**: fastest on every end-to-end scenario, fastest on every prepared feature
   (with the smallest allocations on all but the IN-list), and ahead of regular linq2db and EF Core on

@@ -93,8 +93,7 @@ value. SQL Server has no session-scoped `currval`/`lastval` and no value-returni
 equivalent is the DDL `ALTER SEQUENCE ... RESTART WITH`), so only the next value is exposed. These
 names require a provider that reports them through
 [`ISqlDialect.SqlServerFunctions`](xref:NextORM.Core.ISqlDialect.SqlServerFunctions); every other
-provider rejects them. Tracked in
-[#218](https://github.com/AlexeyShirshov/nextorm/issues/218).
+provider rejects them.
 
 ## UUID generators
 

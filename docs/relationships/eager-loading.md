@@ -139,7 +139,7 @@ Each of these is rejected with [`NotSupportedException`](xref:System.NotSupporte
 
 ## Mode selection
 
-The `mode` argument selects how the declared collections are loaded, using the public [`EagerLoadMode`](xref:NextORM.Core.EagerLoadMode) enum. The numeric values are fixed and migration-compatible: `Default=0`, `SplitQuery=1` and `SingleQuery=2` keep their historical meaning for callers that persist or compare the enum, and `Correlated=3`/`Auto=4` are appended:
+The `mode` argument selects how the declared collections are loaded, using the public [`EagerLoadMode`](xref:NextORM.Core.EagerLoadMode) enum. The table lists the enum values and their behavior:
 
 | Member | Value | Meaning |
 |---|---|---|
@@ -161,7 +161,7 @@ The mode is resolved when `LoadWith` runs; the load specification is otherwise u
 
 ### Context-wide default
 
-[`DataContextBuilder.UseEagerLoadMode(EagerLoadMode)`](xref:NextORM.Core.DataContextBuilder.UseEagerLoadMode(NextORM.Core.EagerLoadMode)) configures a context-wide default for `LoadWith` collections whose query declares no explicit mode. It defaults to `EagerLoadMode.SplitQuery`, so an unconfigured context keeps the historical behavior:
+[`DataContextBuilder.UseEagerLoadMode(EagerLoadMode)`](xref:NextORM.Core.DataContextBuilder.UseEagerLoadMode(NextORM.Core.EagerLoadMode)) configures a context-wide default for `LoadWith` collections whose query declares no explicit mode. It defaults to `EagerLoadMode.SplitQuery`, which works as follows:
 
 ```csharp
 var builder = new DataContextBuilder()
@@ -195,7 +195,7 @@ The effective strategy is `query override ?? context default`: an explicit `Load
 
 ### `Correlated` and per-parent paging
 
-`EagerLoadMode.Correlated` has no implemented execution path in this release. It is recognized and rejected with [`NotSupportedException`](xref:System.NotSupportedException) **during preparation — before any SQL is generated and before a plan entry is inserted**, so a rejected query neither runs the parent statement nor poisons the plan cache. The enum value is reserved for the correlated work tracked separately. The rejection is terminal-agnostic: it also holds on the **non-list** terminals below, which evaluate the parent only. Such a terminal first validates the `LoadWith` set, so an explicit `Correlated` is rejected before its parent command is built instead of being silently dropped; the non-list terminal still does not materialize the collection.
+`EagerLoadMode.Correlated` has no implemented execution path in this release. It is recognized and rejected with [`NotSupportedException`](xref:System.NotSupportedException) **during preparation — before any SQL is generated and before a plan entry is inserted**, so a rejected query neither runs the parent statement nor poisons the plan cache. The rejection is terminal-agnostic: it also holds on the **non-list** terminals below, which evaluate the parent only. Such a terminal first validates the `LoadWith` set, so an explicit `Correlated` is rejected before its parent command is built instead of being silently dropped; the non-list terminal still does not materialize the collection.
 
 A child query's own `Limit`/`Offset`/`Page` is **not** rejected: it is applied independently to each parent through a partitioned `row_number()` child source in both `SplitQuery` and `SingleQuery`, with child filtering and ordering before paging, root bounds kept independent and empty parents preserved. `Auto` honors the paged load through its split dispatch, and a paged load is never reinterpreted as a global child limit or an unrestricted load. Per-parent top-N is a `LoadWith` capability: `JoinInto` rejects it before execution, and the in-memory provider rejects a paged eager child fail-closed (it has no SQL window) while unpaged eager loading is unchanged. See [Per-parent paging in eager loading](eager-loading-per-parent-paging.md).
 
@@ -335,7 +335,7 @@ Every unexpressible nested graph is rejected before any SQL is generated and bef
 - **projection-arity overflow**: flattening the graph into a single denormalized command for more than seven child collections (the [`Projection<T1..T8>`](relationships.md#one-round-trip) arity cap) throws `NotSupportedException`; declare a shallower graph or use split mode;
 - **nested mode conflict**: a child requesting an explicit mode different from the graph-wide mode throws `NotSupportedException` (`... mixes modes ...`);
 - **cycles**: a declaration whose ancestor-composite identity repeats — a self-referential entity, or a child factory that recursively returns itself — throws `NotSupportedException` deterministically: a finite acyclic graph is required, not a depth limit.
-- **in-memory paged eager child**: the existing #211 fail-closed rejection (no SQL window) is unchanged; unpaged nested loading works there.
+- **in-memory paged eager child**: the in-memory provider supports unpaged nested loading but rejects per-parent paging.
 - **declared-metadata form on the in-memory provider**: the metadata-driven `LoadWith` overloads are SQL-only and are rejected while the parent command is constructed — before any command, SQL or plan-cache entry, and without touching the context's cache flag; the explicit-key form keeps its in-memory support described above.
 
 ## Assignment rule

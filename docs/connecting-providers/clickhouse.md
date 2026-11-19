@@ -216,9 +216,8 @@ using var ctx = new ClickHouseDataContext(
 
 A declared version of 25.9 or later enables the native `arrayExcept` behind
 `SqlFunctions.ClickHouse.array_except`; the two-array call renders as `arrayExcept(...)` (the native
-function takes exactly two arrays, so any other arity is refused before SQL). An undeclared context
-keeps the historical refusal — the shared `ClickHouseDialect.Instance` never enables a 25.9 function —
-and a context declaring an older version (for example `25.8`) still refuses the call, but the
+function takes exactly two arrays, so any other arity is refused before SQL). A context without an explicit version rejects the call. If you declare an older version (for example
+`25.8`), the
 `NotSupportedException` names both the required `25.9` and the declared version and is thrown before
 any SQL is emitted.
 

@@ -380,8 +380,7 @@ var body = anchor.UnionAll(step);                        // строковый A
 var nums = anchor.AsRecursiveCte("nums", self => ...);   // типизированный API, всегда UNION ALL
 ```
 
-PostgreSQL, SQLite, MySQL и MariaDB принимают `UNION` без сохранения дубликатов в рекурсивном CTE и
-генерируют тот же SQL, что и раньше.
+PostgreSQL, SQLite, MySQL и MariaDB принимают `UNION` без сохранения дубликатов в рекурсивном CTE.
 
 Каждый пример выше ограничен завершающим предикатом в шаге; никогда не стройте неограниченный
 рекурсивный CTE.

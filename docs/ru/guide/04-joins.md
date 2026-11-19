@@ -528,7 +528,7 @@ var sql = dataContext.From<ISimpleEntity>()
 ### Границы
 
 Форма по типу выше охватывает четыре оператора с predicate. Кроме того, `CrossJoin`, `CrossApply` и
-`OuterApply` теперь тоже имеют форму без источника — и **по типу**
+`OuterApply` также имеют форму без источника — и **по типу**
 (`CrossJoin<TJoinEntity>()`, `CrossApply<TJoinEntity>()`, `OuterApply<TJoinEntity>(Action<JoinOptions>? options = null)`),
 и **по имени таблицы** (`CrossJoin/CrossApply/OuterApply(string table, Action<JoinOptions>? options = null)`),
 при этом правая сторона становится `TJoinEntity` или `TableAlias` соответственно. Те же строковые
