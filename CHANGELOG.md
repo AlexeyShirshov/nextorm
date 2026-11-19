@@ -1,5 +1,16 @@
 # Release notes
 
+## 1.0.10.2 — 2026-11-19
+
+### Fixed
+
+- NativeAOT query preparation no longer fails when Nextorm builds an implicit whole-entity
+  projection for a mapped property whose expression metadata isn't available at runtime.
+  Existing queries don't need changes. Regression coverage includes scalar and entity forms of
+  `FirstOrDefault` and `SingleOrDefault`, as well as `Any`.
+
+[Changes since 1.0.10.1](https://github.com/AlexeyShirshov/nextorm/compare/v1.0.10.1...v1.0.10.2)
+
 ## 1.0.10
 
 This release adds vector search, runtime mapping and data routing, and extends the verified
