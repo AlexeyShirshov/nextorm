@@ -7,52 +7,32 @@
 
 ## Overview
 
-Window functions live on [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql). Each call returns a
-[`WindowFunction<T>`](xref:NextORM.Core.WindowFunction`1) marker that must be completed with `.Over(...)`;
-inside the query expression it reads as the value type of the function (`int` for
-`row_number`/`rank`/`dense_rank`/`ntile`, `double` for `percent_rank`/`cume_dist`, `T?` for the
-value/aggregate functions). The marker types and their methods are only ever interpreted by the
-expression visitor - they are never executed.
+Window functions in [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) calculate a value for
+each row over a partition, without replacing the rows with one aggregate result.
 
-[`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.Core.WindowOrder,NextORM.Core.WindowFrame)) with no arguments renders an empty specification (`over ()`). Because C# expression trees
-reject named arguments that skip a preceding defaulted parameter, an **order-only** specification must
-use the [`WindowOrder`](xref:NextORM.Core.WindowOrder) overload - `Over(SqlFunctions.Sql.asc(() => e.Id))` - rather than `Over(orderBy: ...)`.
-`SqlFunctions.Sql.asc(expression)` and `SqlFunctions.Sql.desc(expression)` return a [`WindowOrder`](xref:NextORM.Core.WindowOrder) (an order key plus an
-[`OrderDirection`](xref:NextORM.Core.OrderDirection)).
+Each call returns a [`WindowFunction<T>`](xref:NextORM.Core.WindowFunction`1) marker. Complete it with
+`.Over(...)` to specify the window. The expression visitor translates the marker; it never executes it.
 
-Calling a window function **without** [`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.Core.WindowOrder,NextORM.Core.WindowFrame)) is an error: the visitor throws `NotSupportedException`
-whose message mentions [`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.Core.WindowOrder,NextORM.Core.WindowFrame)).
+In a query expression, the marker has the function's value type: `int` for
+`row_number`/`rank`/`dense_rank`/`ntile`, `double` for `percent_rank`/`cume_dist`, and `T?` for
+value and aggregate functions.
 
-## Functions
+[`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.Core.WindowOrder,NextORM.Core.WindowFrame))
+with no arguments emits an empty specification (`over ()`). To specify ordering without a partition, use
+the [`WindowOrder`](xref:NextORM.Core.WindowOrder) overload, such as
+`Over(SqlFunctions.Sql.asc(() => e.Id))`. C# expression trees reject named arguments that skip a
+preceding optional parameter, so `Over(orderBy: ...)` is not valid for this case. The helpers
+`SqlFunctions.Sql.asc(expression)` and `SqlFunctions.Sql.desc(expression)` return a
+[`WindowOrder`](xref:NextORM.Core.WindowOrder): an ordering key and its
+[`OrderDirection`](xref:NextORM.Core.OrderDirection).
 
-| Function | [`Sql`](xref:NextORM.Core.SqlFunctions.Sql) call | Emitted SQL |
-|---|---|---|
-| Row number | `row_number()` | `row_number()` |
-| Rank (with gaps) | `rank()` | `rank()` |
-| Dense rank | `dense_rank()` | `dense_rank()` |
-| Relative rank | `percent_rank()` | `percent_rank()` |
-| Cumulative distribution | `cume_dist()` | `cume_dist()` |
-| Interpolated percentile | `percentile_cont(fraction, property)` | `percentile_cont(f) within group (order by expr) over (...)` |
-| Discrete percentile | `percentile_disc(fraction, property)` | `percentile_disc(f) within group (order by expr) over (...)` |
-| Median (analytic) | `SqlFunctions.SqlServer.median(property)` / `SqlFunctions.MySql.median(property)` | `percentile_cont(0.5) within group (order by expr) over (...)` |
-| Buckets | `ntile(buckets)` | `ntile(n)` |
-| Previous value | `lag(property[, offset[, defaultValue]])` | `lag(expr, offset[, default])` |
-| Next value | `lead(property[, offset[, defaultValue]])` | `lead(expr, offset[, default])` |
-| Previous value in frame (ClickHouse) | `SqlFunctions.ClickHouse.lag_in_frame(property[, offset[, defaultValue]])` | `lagInFrame(expr, offset[, default])` |
-| Next value in frame (ClickHouse) | `SqlFunctions.ClickHouse.lead_in_frame(property[, offset[, defaultValue]])` | `leadInFrame(expr, offset[, default])` |
-| First in frame | `first_value(property)` | `first_value(expr)` |
-| Last in frame | `last_value(property)` | `last_value(expr)` |
-| N-th in frame | `nth_value(property, n)` | `nth_value(expr, n)` |
-| Windowed sum | `sum_over(property)` | `sum(expr)` |
-| Windowed average | `avg_over(property)` | `avg(expr)` |
-| Windowed minimum | `min_over(property)` | `min(expr)` |
-| Windowed maximum | `max_over(property)` | `max(expr)` |
-| Windowed count | `count_over()` / `count_over(property)` | `count(*)` / `count(expr)` |
-
-The aggregate variants carry an `_over` suffix so they do not clash with the scalar aggregates `sum`,
-`avg`, `min`, `max` and `count` that are used with [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})).
+A window function call without
+[`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.Core.WindowOrder,NextORM.Core.WindowFrame))
+is an error. The visitor throws `NotSupportedException` and mentions `Over` in the message.
 
 ## Row number over a partition
+
+To number rows within a partition, pass the partition key and ordering key to `.Over(...)`:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -82,6 +62,37 @@ Output:
 
 The seeded `complex_entity` has a singleton `nullableint` partition (`id` 1) and a two-row partition
 (`id` 2, 3), so `rn` is 1, 1, 2.
+
+## Functions
+
+The following table lists the available functions and the SQL each one emits:
+
+| Function | [`Sql`](xref:NextORM.Core.SqlFunctions.Sql) call | Emitted SQL |
+|---|---|---|
+| Row number | `row_number()` | `row_number()` |
+| Rank (with gaps) | `rank()` | `rank()` |
+| Dense rank | `dense_rank()` | `dense_rank()` |
+| Relative rank | `percent_rank()` | `percent_rank()` |
+| Cumulative distribution | `cume_dist()` | `cume_dist()` |
+| Interpolated percentile | `percentile_cont(fraction, property)` | `percentile_cont(f) within group (order by expr) over (...)` |
+| Discrete percentile | `percentile_disc(fraction, property)` | `percentile_disc(f) within group (order by expr) over (...)` |
+| Median (analytic) | `SqlFunctions.SqlServer.median(property)` / `SqlFunctions.MySql.median(property)` | `percentile_cont(0.5) within group (order by expr) over (...)` |
+| Buckets | `ntile(buckets)` | `ntile(n)` |
+| Previous value | `lag(property[, offset[, defaultValue]])` | `lag(expr, offset[, default])` |
+| Next value | `lead(property[, offset[, defaultValue]])` | `lead(expr, offset[, default])` |
+| Previous value in frame (ClickHouse) | `SqlFunctions.ClickHouse.lag_in_frame(property[, offset[, defaultValue]])` | `lagInFrame(expr, offset[, default])` |
+| Next value in frame (ClickHouse) | `SqlFunctions.ClickHouse.lead_in_frame(property[, offset[, defaultValue]])` | `leadInFrame(expr, offset[, default])` |
+| First in frame | `first_value(property)` | `first_value(expr)` |
+| Last in frame | `last_value(property)` | `last_value(expr)` |
+| N-th in frame | `nth_value(property, n)` | `nth_value(expr, n)` |
+| Windowed sum | `sum_over(property)` | `sum(expr)` |
+| Windowed average | `avg_over(property)` | `avg(expr)` |
+| Windowed minimum | `min_over(property)` | `min(expr)` |
+| Windowed maximum | `max_over(property)` | `max(expr)` |
+| Windowed count | `count_over()` / `count_over(property)` | `count(*)` / `count(expr)` |
+
+The aggregate variants carry an `_over` suffix so they do not clash with the scalar aggregates `sum`,
+`avg`, `min`, `max` and `count` that are used with [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})).
 
 ## Rank, dense rank, and `asc`/`desc`
 

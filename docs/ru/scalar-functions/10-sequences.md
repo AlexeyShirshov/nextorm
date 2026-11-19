@@ -2,15 +2,21 @@
 
 Серверные генераторы значений: последовательности продвигаются и читаются, а генераторы UUID создают
 уникальные идентификаторы. Ни у того, ни у другого нет единого переносимого написания, потому что
-набор операций у провайдеров различается. Для последовательностей сегодня поддержаны PostgreSQL,
-MariaDB и SQL Server.
+провайдеры предоставляют разные наборы операций. Для последовательностей PostgreSQL, MariaDB и SQL
+Server открывают разные подмножества:
 
 | Операция | PostgreSQL | MariaDB | SQL Server |
 |---|---|---|---|
 | Следующее значение | `SqlFunctions.Postgres.nextval(seq)` | `SqlFunctions.MySql.nextval(seq)` / `next_value_for(seq)` | `SqlFunctions.SqlServer.next_value_for(seq)` / `nextval(seq)` |
-| Задать следующее значение | `SqlFunctions.Postgres.setval(seq, value)` | `SqlFunctions.MySql.setval(seq, value)` | — |
+| Задать значение последовательности | `SqlFunctions.Postgres.setval(seq, value)` | `SqlFunctions.MySql.setval(seq, value)` | — |
 | Текущее значение (сессия) | `SqlFunctions.Postgres.currval(seq)` | — | — |
 | Последнее значение (сессия/соединение) | `SqlFunctions.Postgres.lastval()` | `SqlFunctions.MySql.lastval(seq)` | — |
+
+`nextval` и `next_value_for` продвигают последовательность и возвращают значение. `currval` и
+`lastval` читают состояние с областью сессии или соединения; между провайдерами их семантика не
+взаимозаменяема. `setval` меняет состояние последовательности, а не читает его. Перед использованием
+значения в другом запросе проверьте раздел провайдера: где это требуется, запрос должен выполняться в
+той же сессии или соединении.
 
 ## PostgreSQL
 
@@ -32,8 +38,11 @@ var next = dataContext.From<IComplexEntity>()
     .First();
 ```
 
-`currval` и `lastval` привязаны к **сессии**: они требуют того же соединения, которое последним
-продвинуло последовательность.
+`currval(sequence)` читает значение, последнее возвращённое `nextval` для этой последовательности в
+текущей сессии; `lastval()` читает значение, последнее возвращённое `nextval` для любой
+последовательности в этой сессии. Оба вызова только читают и не продвигают последовательность. Они
+**привязаны к сессии** и требуют того же соединения БД, на котором был выполнен соответствующий
+`nextval`; следующий запрос безопасен только если использует то же соединение.
 
 ## MariaDB
 
@@ -54,8 +63,9 @@ var rows = dataContext.From<IOrderEntity>()
 ```
 
 Эти имена — только для MariaDB: MySQL, PostgreSQL, SQL Server, SQLite, ClickHouse и in-memory-контекст
-отклоняют их с `NotSupportedException`. `lastval` читает последнее сгенерированное значение
-**соединения**.
+отклоняют их с `NotSupportedException`. `lastval(sequence)` читает последнее сгенерированное значение
+последовательности на **соединении**; вызов не продвигает последовательность, поэтому его нужно
+выполнять на том же соединении БД, которое создало значение.
 
 Функции последовательностей MariaDB и их доступность перечислены в
 [каталоге MariaDB](08-reference.md#mariadb-catalogue).
@@ -87,8 +97,7 @@ var rows = dataContext.From<IOrderEntity>()
 возвращающего значение `setval` (его эквивалент — DDL `ALTER SEQUENCE ... RESTART WITH`), поэтому
 открыто только следующее значение. Эти имена требуют провайдера, который сообщает их через
 [`ISqlDialect.SqlServerFunctions`](xref:NextORM.Core.ISqlDialect.SqlServerFunctions); все прочие
-провайдеры их отклоняют. Отслеживается в
-[#218](https://github.com/AlexeyShirshov/nextorm/issues/218).
+провайдеры их отклоняют.
 
 ## Генераторы UUID
 

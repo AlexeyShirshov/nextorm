@@ -1,26 +1,30 @@
 # Внедрение зависимостей
 
-> Регистрируйте контексты NextORM с помощью [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions.AddNextOrmContext(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{NextORM.Core.DataContextBuilder})), настраивайте провайдер и логирование на scoped [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) и получайте один экземпляр контекста на область (scope).
+> Регистрируйте контексты NextORM с помощью [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions.AddNextOrmContext``1(Microsoft.Extensions.DependencyInjection.IServiceCollection)), настраивайте провайдер и логирование на scoped [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) и получайте один экземпляр контекста на область (scope).
 
 **Предварительные требования:** [Установка](01-installation.md) · [Быстрый старт](02-quickstart.md).
 
 ## Обзор
 
-Регистрация DI находится в [`NextORM.Core`](xref:NextORM.Core) ([`ServiceCollectionExtensions`](xref:NextORM.Core.ServiceCollectionExtensions)) и работает с любым контейнером `Microsoft.Extensions.DependencyInjection`. Есть два пути регистрации:
+Выберите регистрацию через делегат настройки, если нужно настроить SQL-провайдер вызовами `Use…`.
+Регистрация по типу подходит, когда контейнер может сам создать контекст, например
+[`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext). Оба варианта доступны через
+[`ServiceCollectionExtensions`](xref:NextORM.Core.ServiceCollectionExtensions) из
+[`NextORM.Core`](xref:NextORM.Core) и работают с любым контейнером
+`Microsoft.Extensions.DependencyInjection`.
 
-* **Путь типа** - [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions.AddNextOrmContext(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{NextORM.Core.DataContextBuilder})) регистрирует конкретный тип контекста как scoped и
-  перенаправляет [`IDataContext`](xref:NextORM.Core.IDataContext) на него. Контейнер создаёт `TContext`, поэтому его конструктор должен быть
-  разрешим из контейнера (например, конструктор без параметров у [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext)).
-* **Путь параметров** - `AddNextOrmContext(Action<DataContextBuilder>)` (или перегрузка
-  `Action<IServiceProvider, DataContextBuilder>`) регистрирует **scoped [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder)**, который
-  настраивает делегат параметров, плюс фабрику [`IDataContext`](xref:NextORM.Core.IDataContext), вызывающую
-  `` Это путь, используемый с методами `Use…` провайдеров.
+Регистрация через делегат настройки добавляет scoped
+[`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) и фабрику
+[`IDataContext`](xref:NextORM.Core.IDataContext). Фабрика вызывает
+[`CreateDataContext`](xref:NextORM.Core.DataContextBuilder.CreateDataContext). Регистрация по типу
+добавляет конкретный контекст со сроком жизни scoped и направляет `IDataContext` на тот же экземпляр.
+Контейнер создаёт `TContext`, поэтому должен уметь разрешить параметры его конструктора.
 
-Гарантии следуют из XML-документации на [`ServiceCollectionExtensions`](xref:NextORM.Core.ServiceCollectionExtensions):
+Эти регистрации гарантируют:
 
 * конкретный тип контекста регистрируется **один раз на область**, и получение конкретного типа и
   [`IDataContext`](xref:NextORM.Core.IDataContext) даёт **один и тот же экземпляр**;
-* делегат параметров **обязателен** для регистрации на основе фабрики - передача `null` выбрасывает
+* делегат настройки **обязателен** для регистрации на основе фабрики - передача `null` выбрасывает
   `ArgumentNullException` во время регистрации, а не во время разрешения;
 * сам [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) является scoped, поэтому каждая область получает свежий построитель.
 
@@ -28,28 +32,16 @@ Keyed-варианты ([`AddKeyedNextOrmContext`](xref:NextORM.Core.ServiceColl
 
 ## Регистрация контекста
 
-Обобщённая регистрация - самая короткая форма:
+Для SQL-провайдера настройте построитель в делегате параметров:
 
 ```csharp
 var services = new ServiceCollection();
 
-services.AddNextOrmContext<InMemoryDataContext>();
-
-using var provider = services.BuildServiceProvider();
-using var scope = provider.CreateScope();
-
-var viaInterface = scope.ServiceProvider.GetRequiredService<IDataContext>();
-var viaConcrete = scope.ServiceProvider.GetRequiredService<InMemoryDataContext>();
-// viaInterface and viaConcrete are the same instance
-```
-
-Чтобы настроить провайдер базы данных, используйте перегрузку с параметрами:
-
-```csharp
 services.AddNextOrmContext(builder => builder.UseSqlite("app.db"));
 ```
 
-Перегрузка с `IServiceProvider` позволяет извлекать зависимости, такие как `ILoggerFactory`, из контейнера во время настройки:
+Если для настройки провайдера нужна другая зависимость, например `ILoggerFactory`, используйте
+перегрузку с `IServiceProvider`:
 
 ```csharp
 services.AddNextOrmContext((sp, builder) =>
@@ -61,22 +53,42 @@ services.AddNextOrmContext((sp, builder) =>
 });
 ```
 
-Keyed-регистрация разделяет несколько контекстов:
+Если приложению нужны несколько по-разному настроенных контекстов, задайте им ключи:
 
 ```csharp
 services.AddKeyedNextOrmContext(builder => builder.UsePostgres(reportingConnectionString), "reporting");
 services.AddKeyedNextOrmContext<InMemoryDataContext>("audit"); // generic keyed type path
 ```
 
+Создайте провайдер после регистрации обоих контекстов и получайте контекст с ключом из области:
+
 ```csharp
+using var provider = services.BuildServiceProvider();
 using var scope = provider.CreateScope();
 var reporting = scope.ServiceProvider.GetRequiredKeyedService<IDataContext>("reporting");
 ```
 
-> **Примечание:** путь параметров регистрирует только [`IDataContext`](xref:NextORM.Core.IDataContext) (и scoped [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder)); он
-> не регистрирует конкретный тип [`SqliteDataContext`](xref:NextORM.Sqlite.SqliteDataContext)/[`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext)/[`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext). Получайте
-> [`IDataContext`](xref:NextORM.Core.IDataContext) при использовании пути параметров. Именно путь типа обеспечивает то, что конкретный тип и
-> интерфейс разрешаются в один и тот же экземпляр.
+Путь параметров регистрирует только [`IDataContext`](xref:NextORM.Core.IDataContext) и scoped
+[`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder). Он не регистрирует конкретный тип
+провайдера, например [`SqliteDataContext`](xref:NextORM.Sqlite.SqliteDataContext),
+[`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext) или
+[`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext). При такой регистрации получайте
+`IDataContext`.
+
+Для контекста, который контейнер может создать напрямую, используйте путь типа. В пределах одной
+области конкретный тип и `IDataContext` указывают на один экземпляр:
+
+```csharp
+var typeServices = new ServiceCollection();
+typeServices.AddNextOrmContext<InMemoryDataContext>();
+
+using var typeProvider = typeServices.BuildServiceProvider();
+using var typeScope = typeProvider.CreateScope();
+
+var viaInterface = typeScope.ServiceProvider.GetRequiredService<IDataContext>();
+var viaConcrete = typeScope.ServiceProvider.GetRequiredService<InMemoryDataContext>();
+// viaInterface and viaConcrete are the same instance
+```
 
 ## Интерцепторы через DI
 

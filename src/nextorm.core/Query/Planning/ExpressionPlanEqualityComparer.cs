@@ -10,8 +10,7 @@ using System.Threading;
 namespace NextORM.Core;
 
 /// <summary>
-/// Compares expressions structurally so that logically identical queries share a cached plan. Owns the
-/// thread-static hashing visitor used by <c>GetHashCode</c>.
+/// Compares query expressions structurally to determine whether they share the same cached plan.
 /// </summary>
 public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
 {

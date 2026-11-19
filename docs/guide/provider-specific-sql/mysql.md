@@ -168,26 +168,23 @@ Three vendor names are refused outright; each member exists only to carry the re
 * `values(column)` — `MySQL VALUES(column) cannot be translated as a scalar query function; use the mutation builder's upsert API.`
 
 `JSON_TABLE` is a table-producing construct, not a scalar: it needs a `FROM`/join position and a
-`COLUMNS` definition list, so it is reachable only through raw SQL or a `[SqlFunction]` wrapper. The
-same holds for the MySQL vendor surface as a whole — the refusals are deterministic translator
-outcomes, not gaps left for a later slice.
+`COLUMNS` definition list, so it is reachable only through raw SQL or a `[SqlFunction]` wrapper.
 
 ## MariaDB
 
-`nextorm.mariadb` derives `MariaDbDialect` from `MySqlDialect`, so it inherits the whole surface above.
+Both providers expose family-specific calls through `SqlFunctions.MySql`, but that does not make every
+member available on both. If a query must run on both servers, check each member's provider and
+server-version notes; for cross-provider behavior, use `SqlFunctions.Sql` where it provides the operation,
+such as the null-safe comparison below. `nextorm.mariadb` derives `MariaDbDialect` from `MySqlDialect`, so
+it inherits the surface above subject to its own capability and server-version checks.
 The three names it has never supported stay excluded: `uuid_to_bin`/`bin_to_uuid` and
 `json_storage_free`. MariaDB has no such functions (`uuid_to_bin`/`bin_to_uuid` convert through
 `CAST(... AS BINARY(16))`/`CAST(... AS UUID)`, and MariaDB does not implement MySQL's binary-JSON
 freed-space accounting), so `MariaDbDialect.MySqlFunctions` reports them as unsupported and the query
 is rejected with `NotSupportedException`.
 
-The MySQL catalogue delivered by #283 was verified against MySQL 8.4. Its MariaDB assessment is now
-closed by #284: the 138-row inventory contains 109 delivered names, 6 already-covered names, 18 explicit
-refusals, and 5 functions gated to MariaDB 11.7, with no pending rows. MariaDB verification used 11.4.13;
-the 11.7-gated functions were not executed. The permanent exclusions `UUID_TO_BIN`, `BIN_TO_UUID`, and
-`JSON_STORAGE_FREE` remain. See the
-[MariaDB catalogue](../../scalar-functions/08-reference.md#mariadb-catalogue) for the per-name
-disposition, version gates, refusal reasons, and verification qualifications.
+See the [MariaDB catalogue](../../scalar-functions/08-reference.md#mariadb-catalogue) for supported
+functions, version requirements, and reasons for rejection.
 
 On top of the inherited surface, MariaDB adds its own names through the same `SqlFunctions.MySql`
 entry point. MySQL's dialect does not report them, so a MySQL query using one of them is rejected with

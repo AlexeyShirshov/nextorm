@@ -1,16 +1,42 @@
 # Relationships and single-query loading (`JoinInto`)
 
-> A relationship is declared explicitly on the mapping metadata ([`HasMany`](xref:NextORM.Core.EntityMetadataBuilder`1)/[`HasOne`](xref:NextORM.Core.EntityMetadataBuilder`1) or [`[Relationship]`](xref:NextORM.Core.RelationshipAttribute)); [`JoinInto`](xref:NextORM.Core.EntityBuilder`1) then loads a declared navigation in a single round trip and stitches the denormalized rows back onto deduplicated parents: a one-to-many collection through one `LEFT JOIN` (or `INNER JOIN`), a one-to-one nullable reference through one join, and a many-to-many collection through a junction with two flat joins (a derived link join plus the child join).
+> Declare a relationship explicitly in mapping metadata, for example through
+> [`HasMany`](xref:NextORM.Core.EntityMetadataBuilder`1), [`HasOne`](xref:NextORM.Core.EntityMetadataBuilder`1)
+> or [`[Relationship]`](xref:NextORM.Core.RelationshipAttribute).
+> Then use [`JoinInto`](xref:NextORM.Core.EntityBuilder`1) to load one declared navigation in a single
+> round trip and stitch the denormalized rows onto deduplicated parents. It supports one-to-many collections
+> through one `LEFT JOIN` (or `INNER JOIN`), one-to-one nullable references through one join, and many-to-many
+> collections through a junction and two flat joins (a derived link join plus the child join).
 
 **Prerequisites:** [Quickstart](../getting-started/02-quickstart.md) · [Joins](../guide/04-joins.md) · [Eager loading child collections](eager-loading.md)
 
 ## Overview
 
-nextorm resolves a graph from **declared** metadata, not from a mapper convention: an entity without declared relationships is mapped by its columns as usual, and a navigation property is excluded from the column mapping only when it participates in a declared relationship. This page covers the metadata model and [`JoinInto`](xref:NextORM.Core.EntityBuilder`1), the explicit single-query relationship loader. Implicit navigation queries are supported for **declared** relationships — a reference navigation as a scalar chain or a presence check, a reference hop used inside a correlated predicate or scalar subquery, and a collection navigation through exactly four direct terminals (see [Implicit navigation queries](implicit-navigation.md)) — not inferred by convention. The correlated-predicate form joins the hop on the outer command and reads the joined alias from the nested one (`LEFT JOIN` plus a correlated `EXISTS`/scalar subquery, no `APPLY`); it is a predicate/scalar surface, not correlated eager loading, which stays reserved and rejected (`EagerLoadMode.Correlated`). Navigation **after** a temp-table/TVP boundary is **not available (fail-closed)**, and a table-valued parameter is parameter-only (no query root).
+nextorm resolves relationships only from **declared** metadata, never from a mapper convention. Without
+a declared relationship, an entity maps its columns as usual; a navigation property is excluded from
+column mapping only when it participates in a declaration. This page covers that metadata model and
+[`JoinInto`](xref:NextORM.Core.EntityBuilder`1), the explicit single-query relationship loader.
+Implicit navigation queries also require declared relationships (see [Implicit navigation queries](implicit-navigation.md)):
+references support scalar chains, presence checks, and hops inside correlated predicates or scalar
+subqueries; collections support exactly four direct terminals. In a correlated predicate, the outer
+command adds the reference hop as a `LEFT JOIN`, and the nested `EXISTS` or scalar subquery reads that
+joined alias—without `APPLY`. This is a predicate/scalar surface, not correlated eager loading;
+`EagerLoadMode.Correlated` remains reserved and rejected. Navigation after a temp-table or TVP boundary
+is unavailable (fail-closed), and a table-valued parameter is parameter-only, with no query root.
 
 `JoinInto` and [`LoadWith`](eager-loading.md) are two ways to fill a parent collection and share one assignment contract: `JoinInto` is one denormalized query over all parents, and `LoadWith` defaults to a split query with one extra child statement per key chunk (or one denormalized query when the builder passes `EagerLoadMode.SingleQuery` to `LoadWith`). `JoinInto` fills **one** declared navigation; a multi-level (level 2+) graph is expressed by nesting `LoadWith` child queries, where each level runs in one graph-wide mode (see [Nested graphs](eager-loading.md#nested-graphs-level-2-and-deeper)). A **third** form returns the per-parent collections inside a projected result instead of filling the entity — the direct `Select(p => new { p.Id, p.Comments })` member and the `AsEntityBuilder<T>() … ToList()` adapter — documented in [Collection-valued projection slots](collection-projection.md).
 
 `LoadWith` reads the same declared metadata when it is used without key selectors: the collection and reference `LoadWith(navigation)` / `LoadWith(navigation, childQuery)` overloads take the navigation's ordered key components from its declaration — one predicate per component, the component at position `i` on one side against the component at position `i` on the other — instead of requiring explicit selectors; the explicit-key overload remains the form for an entity pair with no declared relationship (see [Declared-metadata form](eager-loading.md#declared-metadata-form)). The declaration is therefore the single producer for both loaders: `HasMany`, `HasOne`, `HasOneToOne`, `HasManyThrough` and `[Relationship]` are the only source of a relationship, and neither loader infers one from a convention.
+
+### Choose a loading surface
+
+Use the surface that matches the result you need:
+
+| Need | Use | Result |
+|---|---|---|
+| Fill one declared navigation as part of a query | `JoinInto` | One denormalized query; use a list terminal to assemble the navigation. |
+| Fill one or more collections with explicit key selectors, or load a nested graph | `LoadWith` | Split queries by default; `SingleQuery` is available when the child-query shape supports it. |
+| Return each parent's collection inside a projected result | Collection-valued projection slot | The declared collection becomes a member of the result shape. |
 
 ## Declaring a relationship
 
@@ -93,7 +119,12 @@ public EntityMetadataBuilder<T> HasManyThrough<TChild, TJunction>(
     where TChild : class where TJunction : class;
 ```
 
-When each form is required: **A, C, E and I** infer `TChild` from the navigation; **I** additionally infers `TKey` from the child foreign key, so a composite anonymous key needs no explicit type argument. The key-only forms **B, D, G and H** cannot infer `TChild` from an untyped lambda — call them with an explicit `<TChild>` (a typed selector variable can still infer it, but the public form is explicit). **F and J** require explicit `<TChild, TJunction>`: `TJunction` appears only inside untyped lambdas, and C# cannot supply a partial generic-argument list. Use **A–F** when the key must be explicit — a different component order, a non-key principal property, or a reversed role; use **G–J** when the full primary key is the principal key. To customise only one side of a many-to-many relationship use **F** with all four lists; there is no partially ordered overload.
+Choose an overload by how much key information you need to provide:
+
+- **Type inference:** **A, C, E and I** infer `TChild` from the navigation. **I** also infers `TKey` from the child foreign key, so a composite anonymous key needs no explicit type argument.
+- **Explicit child type:** The key-only forms **B, D, G and H** cannot infer `TChild` from an untyped lambda. Call them with an explicit `<TChild>`; a typed selector variable can still infer it, but the public form is explicit. **F and J** require explicit `<TChild, TJunction>` because `TJunction` appears only inside untyped lambdas and C# cannot accept a partial generic-argument list.
+- **Explicit keys:** Use **A–F** when you need to specify the key, its component order, a non-key principal property or a reversed role. Use **G–J** when the full primary key is the principal key.
+- **Many-to-many:** Use **F** with all four key lists to customize only one side; there is no partially ordered overload.
 
 #### Ordered key selectors
 
@@ -161,7 +192,7 @@ The same structural validation applies to manually supplied [`IRelationshipMetad
 
 [`JoinInto`](xref:NextORM.Core.EntityBuilder`1) declares a join that fills a declared navigation — a child collection (one-to-many), a nullable reference (one-to-one) or a junction-backed many-to-many collection — when the query is enumerated by a list terminal. It returns a **copy** of the builder, so the source builder is unchanged and declarations chain:
 
-> **Note.** The former child-collection scenario (issue #40) — loading children from a parent+child join — is expressed today by `JoinInto` into a **declared collection property**, as shown below. Projecting children into an arbitrary (anonymous) shape, the historical `NORM.ChildCollection(...)` form, is **not provided**: declare the collection and load it with `JoinInto`, or select the child rows with an explicit join and materialize them yourself.
+> **Note.** To load child rows through `JoinInto`, declare a collection property on the parent type. For an arbitrary result shape, use an explicit join and assemble the collections yourself.
 
 ```csharp
 var orders = ctx.From<Order>()
@@ -171,7 +202,10 @@ var orders = ctx.From<Order>()
 
 ### Overloads
 
-`JoinInto` comes in three families. Two of them differ by one argument — the child source is either supplied as an `EntityBuilder<TChild>` or resolved from the mapping of `TChild` — and take an explicit `(parent, child) => …` predicate as the join condition; both fill the same navigations and share one contract, so choose by whether you have a child source in hand. The third family takes a navigation only and derives the join condition from the declared relationship metadata: see [Metadata-driven joins](#metadata-driven-joins).
+`JoinInto` has two ways to specify the child source and one metadata-driven form:
+
+- Supply an `EntityBuilder<TChild>` when you need a custom child source, or omit it to use the mapping for `TChild`. Both forms take an explicit `(parent, child) => …` join predicate and share the same contract.
+- Pass only the navigation when the declared relationship metadata should supply the join condition. See [Metadata-driven joins](#metadata-driven-joins).
 
 #### Source-less
 
@@ -304,7 +338,7 @@ The same parameter carries the local relationship configurations described below
 
 ### Child filters
 
-"Source-less" describes the **source**, not a filter: the child source is the mapping of `TChild` and carries no condition. Neither family applies a **child-source** filter to the join today — a child builder that carries a `Where` does not add a condition to the join, and only the `(parent, child) => …` predicate reaches the `ON` clause. Filtering a child source is tracked as **#309**.
+"Source-less" describes the **source**, not a filter: the child source is the mapping of `TChild` and carries no condition. Neither family applies a **child-source** filter to the join — a child builder that carries a `Where` does not add a condition to the join, and only the `(parent, child) => …` predicate reaches the `ON` clause.
 
 To narrow the child set, write the condition into the predicate, which *is* the `ON` condition — `(o, i) => o.Id == i.OrderId && i.Active` pairs only matching active children. With `Left` a parent whose children are all filtered out is kept with an empty collection; with `Inner` it is dropped. Do not read a `Where` on the child source as the equivalent of that predicate: the join ignores it today.
 

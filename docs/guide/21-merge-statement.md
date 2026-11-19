@@ -1,6 +1,11 @@
 # Data merging (`MERGE` / upsert)
 
-> nextorm builds a `MERGE` (upsert) through [`CreateMergeBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateMergeBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})): one entry point covers both the portable **key upsert** (`INSERT ... ON CONFLICT` / `ON DUPLICATE KEY` / `MERGE`) and the general, multi-branch **full `MERGE`** with `WHEN MATCHED`/`WHEN NOT MATCHED` branches. There is no change tracking and no `SaveChanges`: every terminal issues exactly one command.
+> Use a key upsert to insert a row when its declared key is absent or update it
+> when the key already exists. Use full `MERGE` when the operation needs multiple
+> conditional branches, such as deleting matched rows. Both forms use
+> [`CreateMergeBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateMergeBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
+> and issue an explicit command; nextorm does not track changes or provide
+> `SaveChanges`. Provider support differs by form.
 
 **Prerequisites:** [Data modification (INSERT)](17-insert-statement.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Provider overview](../connecting-providers/overview.md)
 
@@ -258,6 +263,42 @@ var sql = ctx.CreateMergeBuilder<ISimpleEntity>()
 -- PostgreSQL
 insert into simple_entity (id, name) values (@p0, @p1) on conflict (id) do update set name = excluded.name
 ```
+
+## Runtime mapping variant
+
+Use `WithVariant(MappingVariant)` when the same entity mapping targets a tenant- or shard-specific table. The variant selects metadata for this command only; it does not change the context's default mapping. Entity, batch and query sources can use the same variant:
+
+```csharp
+var variant = new MappingVariant("tenant_a");
+ctx.CreateMergeBuilder<Order>()
+    .Using(order)
+    .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
+    .WithVariant(variant)
+    .Merge();
+```
+
+A **sharded** merge must pass the variant explicitly: the builder resolves its scope from the entity type
+only, never from the source values, so a merge without `WithVariant(...)` throws instead of writing the
+default table. The variant is the bucket, so merge one bucket at a time:
+
+```csharp
+foreach (var entitiesPerBucket in ctx.GroupByBucket(orders))
+{
+    ctx.CreateMergeBuilder<Order>()
+        .Using(entitiesPerBucket.Rows)
+        .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
+        .WithVariant(entitiesPerBucket.Variant)   // this bucket's table on its shard
+        .Merge();
+}
+```
+
+Buckets, their physical names and the shard-key rules are described in
+[Sharding and horizontal partitioning](35-sharding-and-horizontal-partitioning.md).
+
+`CreateTruncateBuilder<TEntity>()` resolves the context's configured entity variant as well, so the truncate target uses the corresponding table and schema.
+
+The variant itself — its resolver, the metadata provider that derives table/schema/column names and the
+isolation it guarantees — is described in [Runtime mapping variant](33-runtime-mapping-variant.md).
 
 ## Provider and capability summary
 

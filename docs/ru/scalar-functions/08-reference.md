@@ -1,5 +1,10 @@
 # Таблица сопоставления провайдеров
 
+Используйте эту матрицу для краткого сравнения выбранных SQL-трансляций в SQLite, SQL Server и
+PostgreSQL, а не как полный перечень поддержки провайдеров. В ней нет MySQL и MariaDB; ClickHouse
+кратко описан отдельно после матрицы. Ниже приведены провайдерные и версионно-зависимые API, включая
+каталоги MySQL и MariaDB и их отказы.
+
 | Возможность | SQLite | SQL Server | PostgreSQL |
 |---|---|---|---|
 | `ToUpper` / `ToLower` | `upper` / `lower` | `upper` / `lower` | `upper` / `lower` |
@@ -42,9 +47,9 @@
 | JSONPath (`jsonb_path_*`) | `NotSupportedException` | `NotSupportedException` | `cast(path as jsonpath)` |
 | Встроенные табличные функции | `NotSupportedException` | `string_split(...)`, `openjson(...)`, `regexp_split_to_table(...)` (2025+) | `generate_series(...)`, `unnest(...)` |
 
-Провайдер in-memory не рендерит SQL: он компилирует и вычисляет выражение для строк в памяти, поэтому
-выполняется сам метод .NET. Приведённая выше матрица SQL относится к провайдерам SQLite, SQL Server и
-PostgreSQL.
+Провайдер in-memory не входит в эту SQL-матрицу. Он компилирует и вычисляет .NET-выражение над строками
+в памяти, поэтому выполняется сам метод .NET; не выводите поведение in-memory из SQL-сопоставлений и
+поддержку SQL из вычисления в памяти.
 
 ClickHouse рендерит `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`addSeconds` (и масштабированный
 `addYears` над операндом `DateTime64(6)` для `year`/`decade`/`century`, тип SQL-результата которых —
@@ -96,8 +101,7 @@ Regex-скаляры не зависят от уровня совместимо�
 рантайм-гейт. Четырём fuzzy-именам нужны **все** условия: совместимость 170, `PREVIEW_FEATURES = ON`
 и Windows-коллация; на протестированной сборке `17.0.5005.3` коллация `SQL_*` даёт Msg 9847, а
 отсутствие preview-флага — Msg 195. Флаг объявленной мажорной версии 17 обещает только версионный
-гейт; эти рантайм-предусловия — факты окружения, проверяемые вживую, и обещаний для будущих сборок не
-даётся.
+гейт. Эти условия выполнения зависят от окружения.
 
 Агрегаты U4 продолжают тот же версионный контракт. `APPROX_COUNT_DISTINCT` требует мажорную версию 15,
 а два приблизительных квантиля — мажорную версию 16; `CHECKSUM_AGG` и `GROUPING_ID` версионного порога
@@ -181,16 +185,11 @@ SQL-билдера до вычисления любого аргумента, п
 
 Имена из [`SqlFunctions.MySql`](../guide/provider-specific-sql/mysql.md) рендерятся только провайдером
 MySQL; PostgreSQL, SQL Server, SQLite, ClickHouse и in-memory-провайдер отклоняют их с
-`NotSupportedException`. Эта половина каталога **поставлена в
-[#283](https://github.com/AlexeyShirshov/nextorm/issues/283) и проверена только на MySQL 8.4**.
-Свидетельства MariaDB отдельны и никогда не выводятся из MySQL:
-[#284](https://github.com/AlexeyShirshov/nextorm/issues/284) перепроверил каждое имя на MariaDB 11.4.13 и
-записал результат в [каталоге MariaDB](#каталог-mariadb) — поэтому четырнадцать имён, заявленных в этой
-половине, там отклонены.
+`NotSupportedException`. Каталог проверен на MySQL 8.4. О поддержке в MariaDB см.
+[каталог MariaDB](#каталог-mariadb).
 
-Каталог содержит 86 новых членов и два имени, которые уже были покрыты (`json_storage_free`, поставлен
-в предыдущем срезе, и кросс-провайдерный `connection_id`); три отклонённых имени перечислены в разделе
-[Отказы MySQL](#отказы-mysql).
+Таблица перечисляет поддерживаемые функции. Аргументы, которые отклоняет провайдер, описаны в примечаниях.
+Имена неподдерживаемых функций см. в разделе [Отказы MySQL](#отказы-mysql).
 
 | Семейство | Член | SQL MySQL | Примечания |
 |---|---|---|---|
@@ -252,7 +251,7 @@ MySQL; PostgreSQL, SQL Server, SQLite, ClickHouse и in-memory-провайде�
 | JSON | `json_schema_validation_report(schema, document)` | `JSON_SCHEMA_VALIDATION_REPORT(...)` | JSON-отчёт о проверке |
 | JSON | `json_search(json, oneOrAll, search[, escape[, paths...]])` | `JSON_SEARCH(...)` | режим должен быть `'one'` или `'all'`; escape — один символ |
 | JSON | `json_storage_size(json)` | `JSON_STORAGE_SIZE(...)` | байты, занятые хранимым представлением |
-| JSON | `json_storage_free(json)` | `JSON_STORAGE_FREE(...)` | поставлен в предыдущем срезе: байты, освобождённые в бинарном значении `JSON`-колонки при частичном обновлении на месте, `0`, если ничего не освободилось, `null` для SQL NULL — см. [руководство по MySQL](../guide/provider-specific-sql/mysql.md#нативные-функции) |
+| JSON | `json_storage_free(json)` | `JSON_STORAGE_FREE(...)` | байты, освобождённые в бинарном значении `JSON`-колонки при частичном обновлении на месте, `0`, если ничего не освободилось, `null` для SQL NULL — см. [руководство по MySQL](../guide/provider-specific-sql/mysql.md#нативные-функции) |
 | JSON | `member_of(value, jsonArray)` | `value MEMBER OF (jsonArray)` | аргумент-массив должен быть литералом JSON-массива времени компиляции |
 | Агрегатные | `bit_and(value)` | `BIT_AND(value)` | побитовое AND всех не-null значений группы, `null` для пустой группы |
 | Агрегатные | `bit_or(value)` | `BIT_OR(value)` | побитовое OR всех не-null значений группы |
@@ -321,19 +320,14 @@ MySQL; PostgreSQL, SQL Server, SQLite, ClickHouse и in-memory-провайде�
 `SqlFunctions.MySql` несёт обе половины: имена, которые рендерит только MySQL, — в разделе выше, а имена,
 которые рендерит MariaDB, перечислены здесь. Член только для MariaDB отклоняют MySQL, PostgreSQL,
 SQL Server, SQLite, ClickHouse и in-memory-провайдер.
-[#283](https://github.com/AlexeyShirshov/nextorm/issues/283) поставил каталог MySQL;
-[#284](https://github.com/AlexeyShirshov/nextorm/issues/284) закрывает его оценку для MariaDB и добавляет
-поверхность только для MariaDB.
 
-Таблица покрывает все 138 кандидатов инвентаря #284: **109 поставлено / 6 уже покрыто / 18 отклонено с
-причиной / 5 ограничено версией (MariaDB 11.7) / 0 в ожидании**. Проверка выполнена на
-**MariaDB 11.4.13**; пять функций, ограниченных версией 11.7, не исполнялись, и поведение MariaDB никогда
+Проверка выполнена на **MariaDB 11.4.13**; пять функций, ограниченных версией 11.7, не исполнялись, и поведение MariaDB никогда
 не выводится из результата MySQL. В третьей колонке `11.4` означает «присутствует на проверенной базовой
 версии 11.4.13», меньшее значение — документированный минимум, большее — непроверенное ограничение.
-Семнадцать поставленных строк возвращают 32-битное поле провайдера там, где общий член типизирован под
+Семнадцать функций возвращают 32-битное поле провайдера там, где общий член типизирован под
 более широкий тип MySQL: утверждаемый контракт — объявленный CLR-тип, а расширение выполняется без потерь.
 
-### Поставлено
+### Поддерживаемые функции
 
 | Inventory name | Public API / form | MariaDB minimum or gate | Behaviour / refusal reason / verification qualification |
 |---|---|---|---|
@@ -451,8 +445,8 @@ SQL Server, SQLite, ClickHouse и in-memory-провайдер.
 
 | Inventory name | Public API / form | MariaDB minimum or gate | Behaviour / refusal reason / verification qualification |
 |---|---|---|---|
-| `JSON_NORMALIZE` | `json_normalize(json)` | 11.4 | уже покрыто поверхностью MariaDB из T284 (`json_normalize`, живой тест `T284_JsonNormalize_ShouldEvaluate`): канонический текст с отсортированными ключами, идемпотентно; принято на 11.4.13 (`{"a":1.0E0,"b":2.0E0}`). |
-| `JSON_EQUALS` | `json_equals(json1, json2)` | 11.4 | уже покрыто поверхностью из T284 (`json_equals`, живой тест `T284_JsonEquals_ShouldEvaluate`): `1` для равных документов (порядок ключей не важен); принято на 11.4.13 (`1`). |
+| `JSON_NORMALIZE` | `json_normalize(json)` | 11.4 | канонический текст с отсортированными ключами, идемпотентно; принято на 11.4.13 (`{"a":1.0E0,"b":2.0E0}`). |
+| `JSON_EQUALS` | `json_equals(json1, json2)` | 11.4 | `1` для равных документов (порядок ключей не важен); принято на 11.4.13 (`1`). |
 | `MEDIAN` | `median(value)` | 10.3 | уже покрыто работой по перцентилям: компилируется в `percentile_cont(0.5) within group (order by ...) over (...)`; принято на 11.4.13 (`2`). |
 | `PERCENTILE_CONT` | `SqlFunctions.Sql.percentile_cont(fraction, value)` | 10.3 | уже покрыто: нативный оконный перцентиль `percentile_cont(f) within group (order by ...) over (...)`; принято на 11.4.13 (`2`). |
 | `PERCENTILE_DISC` | `SqlFunctions.Sql.percentile_disc(fraction, value)` | 10.3 | уже покрыто: нативный оконный перцентиль `percentile_disc(f) within group (order by ...) over (...)`; принято на 11.4.13 (`1`). |

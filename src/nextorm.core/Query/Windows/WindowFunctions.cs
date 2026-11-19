@@ -4,26 +4,24 @@ using System.Runtime.CompilerServices;
 namespace NextORM.Core;
 
 /// <summary>
-/// A window-function call that has not been given its <c>OVER</c> clause yet. The <c>row_number</c>,
-/// <c>rank</c>, <c>lag</c>, <c>sum_over</c>, ... methods of <see cref="CommonFunctions"/> return this
-/// wrapper so that <see cref="Over(Expression{Func{object?}}?, Expression{Func{object?}}?, WindowFrame?)"/>
-/// can be chained and returns the value type that is actually read from the result set.
+/// An expression for a window function before its <c>OVER</c> specification is supplied. Window-function
+/// methods on <see cref="CommonFunctions"/> return this wrapper; call <see cref="Over(Expression{Func{object?}}?, Expression{Func{object?}}?, WindowFrame?)"/>
+/// to add partition, ordering, and frame clauses and get the value type read from the result set.
 /// <para>
-/// The wrapper is only ever produced by the compiler while building an expression tree; none of its
-/// members is executed. The nested <c>partitionBy</c>/<c>orderBy</c> lambdas close over the outer
-/// query parameter, e.g. <c>SqlFunctions.Sql.row_number().Over(partitionBy: () =&gt; e.Int, orderBy: () =&gt; e.Id)</c>.
+/// The wrapper builds an expression tree; its members are not executed. The nested
+/// <c>partitionBy</c>/<c>orderBy</c> lambdas close over the outer query parameter. For example:
+/// <c>SqlFunctions.Sql.row_number().Over(partitionBy: () =&gt; e.Int, orderBy: () =&gt; e.Id)</c>.
 /// </para>
 /// </summary>
 public sealed class WindowFunction<T>
 {
     /// <summary>
-    /// Completes the window function with a partition and/or an ascending <c>ORDER BY</c> plus an
-    /// optional frame. <c>Over()</c> renders an empty specification (<c>over ()</c>); trailing
-    /// arguments may be omitted.
+    /// Completes the window function with an optional partition expression, ascending order expression,
+    /// and frame. Calling <c>Over()</c> renders an empty specification (<c>OVER ()</c>).
     /// <para>
-    /// Because C# expression trees reject named arguments that skip a preceding defaulted parameter,
-    /// an order-only specification must use the <see cref="WindowOrder"/> overloads
-    /// (<c>Over(SqlFunctions.Sql.asc(() =&gt; e.Id))</c>) rather than <c>Over(orderBy: ...)</c>.
+    /// To specify ordering without a partition, use an overload that accepts <see cref="WindowOrder"/>.
+    /// C# expression trees do not allow you to skip the preceding <c>partitionBy</c> argument while
+    /// naming <c>orderBy</c>.
     /// </para>
     /// </summary>
     public T Over(
@@ -36,12 +34,9 @@ public sealed class WindowFunction<T>
     /// (<c>asc</c>/<c>desc</c>), plus an optional frame. This is the scalar counterpart of the array
     /// overload below for callers that do not build arrays.
     /// <para>
-    /// The overload is declared with <see cref="OverloadResolutionPriorityAttribute"/> priority <c>-1</c>
-    /// so that the existing <see cref="Over(Expression{Func{object?}}?, Expression{Func{object?}}?, WindowFrame?)"/>
-    /// overload wins whenever it is applicable. Without that, an untyped <c>default</c> or <c>null</c> in the
-    /// <c>orderBy</c> position (for example <c>Over(partitionBy: e, orderBy: default)</c>) would be ambiguous
-    /// between the two overloads and would stop compiling; the attribute only orders resolution, the
-    /// signature itself is additive.
+    /// This overload has lower resolution priority so an untyped <c>default</c> or <c>null</c> for
+    /// <c>orderBy</c> continues to bind to the existing
+    /// expression-based overload instead of becoming ambiguous.
     /// </para>
     /// </summary>
     /// <param name="partitionBy">The partition key expression (a lambda closing over the outer query parameter), or <c>null</c> for no <c>PARTITION BY</c>.</param>
@@ -65,17 +60,18 @@ public sealed class WindowFunction<T>
     public T Over(string windowName) => default!;
 
     /// <summary>
-    /// Completes the window function with multiple ordered keys. Use this when a mixed
-    /// <c>asc</c>/<c>desc</c> ordering or more than one order key is required; partition keys for
-    /// this shape are supplied through the array overload (see the <c>Over</c> overload below).
+    /// Completes the window function with multiple ordered keys. Use this for mixed <c>asc</c>/<c>desc</c>
+    /// ordering or more than one key. To supply partition keys as well, use
+    /// <c>Over(partitionBy, orderBy, frame)</c>.
     /// </summary>
     public T Over(WindowOrder[] orderBy, WindowFrame? frame = null) => default!;
 
     /// <summary>
-    /// Completes the window function with multiple partition and/or ordered expressions, allowing a
-    /// mixed <c>asc</c>/<c>desc</c> ordering built with <see cref="CommonFunctions.asc(Expression{Func{object?}})"/>
-    /// and <see cref="CommonFunctions.desc(Expression{Func{object?}})"/>. <paramref name="partitionBy"/> is
-    /// required here so that <c>Over()</c> still binds unambiguously to the single-expression overload.
+    /// Completes the window function with multiple partition expressions and/or ordered keys. Use
+    /// <see cref="CommonFunctions.asc(Expression{Func{object?}})"/> and
+    /// <see cref="CommonFunctions.desc(Expression{Func{object?}})"/> to mix ordering directions.
+    /// <paramref name="partitionBy"/> is required here so <c>Over()</c> remains unambiguous; pass
+    /// <see langword="null"/> when no partition is needed.
     /// </summary>
     public T Over(
         Expression<Func<object?>>[]? partitionBy,
@@ -134,17 +130,17 @@ public enum WindowFrameBoundKind
 {
     /// <summary>From the start of the partition, regardless of offset.</summary>
     UnboundedPreceding,
-    /// <summary>A fixed number of rows before the current row.</summary>
+    /// <summary>An offset before the current row, measured in the frame's unit.</summary>
     Preceding,
     /// <summary>The current row.</summary>
     CurrentRow,
-    /// <summary>A fixed number of rows after the current row.</summary>
+    /// <summary>An offset after the current row, measured in the frame's unit.</summary>
     Following,
     /// <summary>To the end of the partition, regardless of offset.</summary>
     UnboundedFollowing
 }
 
-/// <summary>A single boundary of a <see cref="WindowFrame"/> (e.g. <c>1 preceding</c>).</summary>
+/// <summary>A frame boundary, such as <c>1 PRECEDING</c>.</summary>
 public sealed class WindowFrameBound
 {
     private WindowFrameBound(WindowFrameBoundKind kind, int offset)
@@ -166,10 +162,16 @@ public sealed class WindowFrameBound
     /// <summary>A boundary at the end of the partition.</summary>
     public static WindowFrameBound UnboundedFollowing => new(WindowFrameBoundKind.UnboundedFollowing, 0);
 
-    /// <summary>A boundary <paramref name="rows"/> rows before the current row.</summary>
+    /// <summary>
+    /// Creates a boundary <paramref name="rows"/> offset units before the current row. The frame type determines
+    /// whether the units are rows, ordering values, or peer groups.
+    /// </summary>
     public static WindowFrameBound Preceding(int rows) => new(WindowFrameBoundKind.Preceding, rows);
 
-    /// <summary>A boundary <paramref name="rows"/> rows after the current row.</summary>
+    /// <summary>
+    /// Creates a boundary <paramref name="rows"/> offset units after the current row. The frame type determines
+    /// whether the units are rows, ordering values, or peer groups.
+    /// </summary>
     public static WindowFrameBound Following(int rows) => new(WindowFrameBoundKind.Following, rows);
 }
 
@@ -204,16 +206,16 @@ public sealed class WindowFrame
     /// </summary>
     public WindowFrameExclusion? Exclusion { get; }
 
-    /// <summary>A <c>rows between</c> frame with explicit boundaries.</summary>
+    /// <summary>Creates a <c>ROWS BETWEEN</c> frame with explicit boundaries.</summary>
     public static WindowFrame Rows(WindowFrameBound start, WindowFrameBound end) => new(WindowFrameType.Rows, start, end, null);
 
-    /// <summary>A <c>range between</c> frame with explicit boundaries.</summary>
+    /// <summary>Creates a <c>RANGE BETWEEN</c> frame with explicit boundaries.</summary>
     public static WindowFrame Range(WindowFrameBound start, WindowFrameBound end) => new(WindowFrameType.Range, start, end, null);
 
-    /// <summary>A <c>groups between</c> frame with explicit peer-group boundaries.</summary>
+    /// <summary>Creates a <c>GROUPS BETWEEN</c> frame with explicit peer-group boundaries.</summary>
     public static WindowFrame Groups(WindowFrameBound start, WindowFrameBound end) => new(WindowFrameType.Groups, start, end, null);
 
-    /// <summary><c>groups between &lt;preceding&gt; preceding and &lt;following&gt; following</c>.</summary>
+    /// <summary>Creates a <c>GROUPS BETWEEN</c> frame with the given preceding and following offsets.</summary>
     public static WindowFrame Groups(int preceding, int following)
         => new(WindowFrameType.Groups, WindowFrameBound.Preceding(preceding), WindowFrameBound.Following(following), null);
 
@@ -223,15 +225,15 @@ public sealed class WindowFrame
     /// </summary>
     public WindowFrame WithExclusion(WindowFrameExclusion exclusion) => new(Type, Start, End, exclusion);
 
-    /// <summary><c>rows between &lt;preceding&gt; preceding and &lt;following&gt; following</c>.</summary>
+    /// <summary>Creates a <c>ROWS BETWEEN</c> frame with the given preceding and following offsets.</summary>
     public static WindowFrame Rows(int preceding, int following)
         => new(WindowFrameType.Rows, WindowFrameBound.Preceding(preceding), WindowFrameBound.Following(following), null);
 
-    /// <summary><c>rows between unbounded preceding and current row</c>, the default running aggregate frame.</summary>
+    /// <summary>A <c>ROWS</c> frame from unbounded preceding through the current row.</summary>
     public static WindowFrame RowsUnboundedPrecedingToCurrentRow
         => new(WindowFrameType.Rows, WindowFrameBound.UnboundedPreceding, WindowFrameBound.CurrentRow, null);
 
-    /// <summary><c>range between unbounded preceding and current row</c>.</summary>
+    /// <summary>A <c>RANGE</c> frame from unbounded preceding through the current row.</summary>
     public static WindowFrame RangeUnboundedPrecedingToCurrentRow
         => new(WindowFrameType.Range, WindowFrameBound.UnboundedPreceding, WindowFrameBound.CurrentRow, null);
 }

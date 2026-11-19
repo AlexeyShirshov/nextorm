@@ -29,7 +29,7 @@ public static class NextOrmQueryableExtensions
     /// </summary>
     /// <typeparam name="T">The entity type at the root of the query.</typeparam>
     /// <param name="source">The EF Core set to read through nextorm.</param>
-    /// <returns>A nextorm builder reading every row of <paramref name="source"/>.</returns>
+    /// <returns>A nextorm builder for queries over <paramref name="source"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The owning <see cref="DbContext"/> cannot be resolved from <paramref name="source"/>.</exception>
     public static EntityBuilder<T> ToNextOrm<T>(this DbSet<T> source) where T : class

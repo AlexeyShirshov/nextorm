@@ -30,7 +30,7 @@ using var ctx = builder.CreateDataContext();
 
 ## The three loggers
 
-Three loggers are created from the factory:
+The factory creates three loggers. The following table shows each logger's category and purpose:
 
 | Member | Category | Purpose |
 |---|---|---|
@@ -61,7 +61,8 @@ var builder = new DataContextBuilder()
 
 ## Provider differences
 
-Logging behaves the same across every provider; only the connection type differs. See [Connections: provider differences](01-connections.md#provider-differences).
+Logging behaves the same across every provider; only the connection type differs. See
+[Connections: provider differences](01-connections.md#provider-differences).
 
 ## See also
 

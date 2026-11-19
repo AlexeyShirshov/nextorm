@@ -1,9 +1,12 @@
 # Функции провайдеров: Nextorm против linq2db
 
-Датированное сравнение по движкам: **поверхность провайдер-специфичного API** — насколько широко каждая
-библиотека выставляет собственные возможности конкретного движка через выделенный API, подключённый к
-конструктору запросов. Оценки — суждения по публичной документации и исходникам обеих библиотек на
-**2026-10-04**.
+Эта страница пригодится, если нужно понять, предоставляет ли библиотека возможность конкретной СУБД
+через именованный API, подключённый к конструктору запросов. Для каждого общего SQL-движка таблица
+сравнивает ширину **выделенного провайдерного API**, а не все способы выразить тот же SQL. Оценки
+основаны на публичной документации и исходниках обеих библиотек на **2026-10-04**.
+
+Строки унифицированного поиска по векторам добавлены в Nextorm позже этого сравнения; для них linq2db
+отмечен как **not assessed**, и такие ячейки не входят в итоговые числа.
 
 Страница отвечает на более узкий вопрос, чем [«Возможности»](capabilities.md). «Возможности» — можно ли
 выразить конструкт вообще; здесь — есть ли для него **выделенный провайдерный API**. `no` означает, что
@@ -16,11 +19,15 @@
 - **partial** — есть с оговорённым ограничением либо достижим только общим механизмом.
 - **no** — выделенного провайдерного API не найдено.
 - **n/a** — такой возможности у движка нет.
+- **not assessed** — функция не сравнивалась; она исключена из итоговых чисел.
 
-Каждую таблицу закрывает строка **Итого**: количество yes / partial / no по каждой библиотеке (`n/a` не
-учитывается).
+Каждую таблицу закрывает строка **Итого**: количество yes / partial / no по каждой библиотеке (`n/a` и
+`not assessed` не учитываются).
 
 ## Провайдерное покрытие
+
+Эта таблица показывает, какие движки поддерживает каждая библиотека, но не глубину API для
+конкретного движка.
 
 | Движок | Nextorm | linq2db |
 |---|---|---|
@@ -39,24 +46,25 @@
 
 ## Ключевой вывод
 
-**Nextorm покрывает провайдер-специфичные возможности шире.** На шести SQL-движках, которые поддерживают обе
-библиотеки, Nextorm выставляет выделенный провайдерный API на большем числе поверхностей, чем linq2db:
-библиотека скалярных функций для каждого движка, поверхность ClickHouse
-(клаузы/агрегаты/табличные функции/tuple/нативный JSON), PostgreSQL
-(full-text/regex/`jsonb_path_*`/range/data-modifying CTE/табличные функции), последовательности и блокировки
-строк в SQL Server, JSON/regex/последовательности в MySQL/MariaDB, JSON1/regex/агрегаты/LOB/FTS5
-maintenance в SQLite — всё подключено к конструктору запросов, а не к сырому SQL.
+**На шести общих SQL-движках Nextorm предоставляет выделенный API для большего числа перечисленных
+провайдерных возможностей.** Например, это библиотека скалярных функций для каждого движка; клаузы,
+агрегаты, табличные функции, кортежи и нативный JSON ClickHouse; полнотекстовый поиск, regex,
+`jsonb_path_*`, range-операции, data-modifying CTE и табличные функции PostgreSQL;
+последовательности и блокировки строк SQL Server; JSON, regex и последовательности MySQL/MariaDB;
+JSON1, regex, агрегаты, потоковое чтение LOB и обслуживание FTS5 в SQLite. Эти API подключены к
+конструктору запросов, а не требуют сырого SQL.
 
-Это утверждение о **глубине по каждому движку, а не о числе движков**: linq2db подключается к большему числу
-продуктов (Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, Access, SQL CE, DuckDB, Ydb), тогда как Nextorm
-добавляет in-memory object context и разделяет MySQL/MariaDB. linq2db остаётся шире по библиотеке скалярных
-функций SQL Server и разнообразию хинтов (issue [#182](https://github.com/AlexeyShirshov/nextorm/issues/182)).
+Речь о **глубине возможностей каждого движка, а не о количестве движков**. linq2db подключается к
+большему числу СУБД (Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, Access, SQL CE, DuckDB,
+Ydb). Nextorm добавляет in-memory-контекст объектов и разделяет MySQL и MariaDB на отдельные
+провайдеры. У linq2db шире набор скалярных функций SQL Server и больше вариантов хинтов.
 
 ## PostgreSQL
 
 | Возможность | Nextorm | linq2db |
 |---|---|---|
 | Типы pgvector и операции | поддерживается (`PgVector`, `PgHalfVector`, `PgSparseVector` и `PgBit` только для PostgreSQL; перевод LINQ-маркеров расстояний, поэлементных операторов, функций и массивов векторов) | нет отдельного API |
+| Унифицированный поиск ближайших соседей по векторам | yes (общий API; PostgreSQL exact гарантирует точный результат через функции расстояния pgvector, потенциально медленнее и не обслуживается ANN-индексами; approximate использует операторы расстояния, допускающие индексы) | not assessed |
 | Массивы + квантификаторы `any`/`all` | yes | yes |
 | Range / multirange (операторы, маппинг) | yes | partial (только маппинг типов) |
 | Full-text `tsvector`/`tsquery` | yes | no |
@@ -77,7 +85,7 @@ maintenance в SQLite — всё подключено к конструктор�
 | Табличные функции / set-returning functions (`generate_series`, `unnest`, `regexp_matches`, `jsonb_*`, `ts_stat`, ...) | yes | partial (только `unnest`/`generate_series`) |
 | Блокировки строк (`FOR UPDATE` / `FOR SHARE`, `OF` на источник, режимы ожидания) | yes | yes |
 | Session/server identity (`pg_backend_pid`, `inet_*`) | yes | no |
-| **Итого** | 20 / 0 / 0 | 8 / 5 / 7 |
+| **Итого** | 21 / 0 / 0 | 8 / 5 / 7 |
 
 Итог: **Nextorm впереди** — full-text, regex, `jsonb_path_*`, операторы range, data-modifying CTE,
 последовательности/настройки, табличные параметры и семейства агрегатов имеют выделенный API в Nextorm и не
@@ -87,6 +95,7 @@ maintenance в SQLite — всё подключено к конструктор�
 
 | Возможность | Nextorm | linq2db |
 |---|---|---|
+| Поиск ближайших соседей по векторам (`VECTOR_DISTANCE` / `VECTOR_SEARCH`, 2025+) | yes (общий API; approximate требует выбранной грамматики, preview-функций и соответствующего индекса DiskANN) | not assessed |
 | `OUTPUT` / `OUTPUT ... INTO` | yes | yes |
 | `MERGE` (ветки, `BY SOURCE`) | yes | yes |
 | Хинты (table / query / join / tables-in-scope / index) | yes | yes (шире) |
@@ -106,15 +115,11 @@ maintenance в SQLite — всё подключено к конструктор�
 | Последовательности (`NEXT VALUE FOR`) | yes | yes |
 | Блокировки строк (`ForUpdate`/`ForShare`, `LockWaitMode` → `with (updlock)`/`with (holdlock)`) | yes | yes |
 | Session/server identity (`@@SERVERNAME`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) | yes | yes |
-| **Итого** | 19 / 0 / 0 | 13 / 4 / 2 |
+| **Итого** | 20 / 0 / 0 | 13 / 4 / 2 |
 
-Итог: **паритет по выверенному каталогу T-SQL-скаляров, но в целом linq2db шире**. Issue
-[#182](https://github.com/AlexeyShirshov/nextorm/issues/182) свёл 61 закреплённую запись `SqlFn.cs` из linq2db
-с Nextorm: 51 покрыта и 10 исключены, причём исключённое — живое изменяемое состояние
-connection/session/statement-scope, а не построчные скаляры запроса. Подмножество identity
-(`@@SERVERNAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) поставлено в
-[#219](https://github.com/AlexeyShirshov/nextorm/issues/219), остальное отслеживается в
-[#248](https://github.com/AlexeyShirshov/nextorm/issues/248). Nextorm впереди по выделенным билдерам для
+Nextorm поддерживает скаляры идентификации `@@SERVERNAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`,
+`SUSER_NAME` и `ORIGINAL_LOGIN`. В целом каталог скалярных функций SQL Server у linq2db шире.
+Nextorm предоставляет выделенные API для
 `PIVOT`/`UNPIVOT`, `FOR JSON`/`FOR XML`, методов XML, `OPENJSON`/`STRING_SPLIT` и regex-функций 2025.
 
 ## MySQL / MariaDB
@@ -143,7 +148,8 @@ connection/session/statement-scope, а не построчные скаляры 
 | Session/server identity (`CONNECTION_ID()`, `USER()`) | yes | no |
 | **Итого** | 17 / 2 / 1 | 6 / 3 / 11 |
 
-Итог: **Nextorm впереди** — JSON, regex, UUID-хелперы, табличные параметры и MariaDB-специфичные семейства
+Итог: **Nextorm впереди** — JSON, regex, UUID-хелперы, табличные параметры и семейства функций
+MariaDB
 (temporal, последовательности, строковые/датные функции, `ALL` для операций над множествами) не имеют
 провайдерного API в linq2db; linq2db впереди только по разнообразию хинтов.
 
@@ -169,9 +175,8 @@ connection/session/statement-scope, а не построчные скаляры 
 
 Итог: **смешанно, в сумме шире Nextorm** — Nextorm добавляет JSON1, regex, пользовательские агрегаты, рамки
 окон `GROUPS`/`EXCLUDE`, табличные параметры, потоковое чтение LOB, поверхность full-text **запроса + FROM**
-в SQLite ([#181](https://github.com/AlexeyShirshov/nextorm/issues/181)) и билдер команд
-**FTS5 maintenance/control**
-([#195](https://github.com/AlexeyShirshov/nextorm/issues/195)/[#196](https://github.com/AlexeyShirshov/nextorm/issues/196)).
+в SQLite и билдер команд
+**FTS5 maintenance/control**.
 linq2db впереди только по **FTS3/FTS4 maintenance** и командам FTS5
 `delete`/`delete-all`/`pgsz`/`usermerge`.
 
@@ -205,8 +210,9 @@ linq2db впереди только по **FTS3/FTS4 maintenance** и коман
 | Session/server identity (`connectionId()`, `hostName()`, `tcpPort()`) | yes | no |
 | **Итого** | 23 / 0 / 1 | 1 / 7 / 16 |
 
-Итог: **Nextorm впереди решительно** — публичная ClickHouse-специфичная поверхность linq2db — это по сути
-`AsClickHouse` плюс хинты, тогда как Nextorm выставляет набор клауз, семейства агрегатов, словари, табличные
+Итог: **Nextorm впереди решительно** — публичный API linq2db для ClickHouse по сути сводится к
+`AsClickHouse` и хинтам, тогда как Nextorm выставляет набор клауз, семейства агрегатов, словари,
+табличные
 функции и библиотеку скаляров.
 
 ## Общая оценка
@@ -216,13 +222,13 @@ linq2db впереди только по **FTS3/FTS4 maintenance** и коман
 
 - Библиотека скалярных функций для **всех** провайдеров: `SqlFunctions.Postgres`, `SqlFunctions.SqlServer`,
   `SqlFunctions.MySql`, `SqlFunctions.Sqlite` и `SqlFunctions.ClickHouse`, плюс общий гейт session-info,
-  который несёт identity-скаляры из [#219](https://github.com/AlexeyShirshov/nextorm/issues/219) по четырём
+  который несёт identity-скаляры по четырём
   провайдерам.
 - PostgreSQL: full-text, regex, `jsonb_path_*`, операторы range, data-modifying CTE, табличные функции
   (`generate_series`/`unnest`/`jsonb_*`/`ts_stat`), последовательности/настройки,
   boolean/bit/статистические/регрессионные агрегаты, ordered-set перцентили, табличные параметры.
 - MySQL/MariaDB: JSON, regex, бинарные UUID, агрегат произвольного значения (`any` → `ANY_VALUE`), и всё
-  MariaDB-специфичное семейство (temporal, последовательности,
+  семейство функций MariaDB (temporal, последовательности,
   `NVL`/`ADD_MONTHS`/`TO_CHAR`/`JSON_DETAILED`/`XXH3`, `ALL` для операций над множествами).
 - SQLite: JSON1, regex, пользовательские агрегаты, рамки окон `GROUPS`/`EXCLUDE`, табличные параметры,
   потоковое чтение LOB по `rowid`, FTS5 maintenance/control.
@@ -246,7 +252,8 @@ index/query hints, именованные окна.
 
 ## Оговорки
 
-- `no` — это находка по результатам поиска в провайдер-специфичной extension-поверхности библиотеки, а не
+- `no` — это находка по результатам поиска в наборе расширений библиотеки для конкретного
+  провайдера, а не
   доказательство невозможности: конструкт остаётся выразимым через сырой SQL (в linq2db — через
   `Sql.Ext`/`Sql.Function`). Утверждение — о ширине **выделенного** провайдерного API.
 - Часть записей Nextorm (распределённые табличные функции ClickHouse) объявлены и закрыты гейтом, но

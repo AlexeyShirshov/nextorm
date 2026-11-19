@@ -64,6 +64,22 @@ public class QueryCommandComparerOwnershipTests
         AssertOwnership(sourceComparers, destinationComparers, destination, "a cache clone");
     }
 
+    [Fact]
+    public void CacheClone_Should_Preserve_Scalar_Projection_On_Preparation_Adoption()
+    {
+        using var ctx = new InMemoryDataContext();
+        var source = ctx.From<SimpleEntity>().Select(row => row.Id);
+        source.PrepareCommand(CancellationToken.None);
+        source.OneColumn.Should().BeTrue();
+
+        var stored = source.CloneForCache();
+        var fresh = ctx.From<SimpleEntity>().Select(row => row.Id);
+        fresh.ApplyPreparationFrom(stored);
+
+        fresh.IsPrepared.Should().BeTrue();
+        fresh.OneColumn.Should().BeTrue("a cache miss after recipe adoption must build a scalar mapper");
+    }
+
     /// <summary>
     /// The exact recipe sequence: a destination whose comparers are already initialised adopts the
     /// stored command's prepared state and then discards it. The destination must keep its own

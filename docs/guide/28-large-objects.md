@@ -6,9 +6,9 @@
 
 ## Overview
 
-By default a `byte[]`/`string` projection is materialised whole: the row reader calls `GetValue`/`GetString` and the entire value lands in a managed array or string. For a file, image or document column of a few megabytes that is an avoidable allocation and can exhaust memory. The LOB terminals open the provider's streaming accessors instead (`DbDataReader.GetStream`/`GetTextReader`) and hand back an object you read incrementally.
+A normal `byte[]`/`string` projection loads the entire value into managed memory: the row reader calls `GetValue`/`GetString` and creates an array or string for it. That allocation can become expensive for a multi-megabyte file, image, or document. On providers with streaming support, LOB terminals instead open the provider's streaming accessor (`DbDataReader.GetStream`/`GetTextReader`) and return an object you can read incrementally.
 
-For a whole result set rather than a single LOB column, the JSON streaming terminal applies the same idea to rows: [`WriteJson`](30-streaming-data.md#json) / `WriteJsonAsync` write the query's `Select` projection to a caller-owned `Stream` with O(buffer) live memory and never close the destination. See [Streaming data to a Stream](30-streaming-data.md).
+These LOB terminals stream one column from a row. To stream an entire result set instead, use the JSON terminal: [`WriteJson`](30-streaming-data.md#json) / `WriteJsonAsync` writes the query's `Select` projection to a caller-owned `Stream`, keeps live memory at O(buffer), and leaves the destination open. See [Streaming data to a Stream](30-streaming-data.md).
 
 ## Terminals
 
@@ -32,7 +32,17 @@ public static Task<TextReader> ToTextReaderAsync(this QueryCommand<string> comma
 public static Task<TextReader> ToTextReaderAsync(this QueryCommand<string> command, CancellationToken cancellationToken, params object?[] parameters);
 ```
 
-The terminals are extension methods on [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) — the type [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) returns — so the query must first project a single `byte[]` or `string` column. They are created with `storeInCache: false`: the LOB command is per-call and never reuses the shared, buffered command of the same query shape.
+The terminals are extension methods on [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1), the type returned by [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})). Project exactly one `byte[]` or `string` column before calling one. Each call creates a fresh command with `storeInCache: false`, so a LOB terminal never reuses the shared buffered command for the same query shape.
+
+Choose a terminal based on the value you need to read:
+
+| Need | Projection | Terminal |
+|---|---|---|
+| Read one binary column incrementally | Exactly one `byte[]` column | `ToStream` / `ToStreamAsync` |
+| Read one text column incrementally | Exactly one `string` column | `ToTextReader` / `ToTextReaderAsync` |
+| Read a multi-column or multi-row result through a provider reader | A query projection | `ToDataReader` / `ToDataReaderAsync` |
+
+Provider support differs: only some providers offer database-backed streaming, while in-memory wraps an already materialized value. Check [Providers](#providers) before choosing a terminal.
 
 ## Usage
 
@@ -73,28 +83,13 @@ Stream stream = await ctx.From<BinaryEntity>()
 
 ## Named columns and row streaming
 
-The streaming accessors are also available on the named-column (`From("table")`) surface and can be
-read per row of an `IAsyncEnumerable` projection. A `Stream`/`TextReader` member in the projection is
-opened lazily from the sequential-access reader and is **valid only until the enumerator advances to
-the next row** (`MoveNext`): the underlying reader is owned by the enumerator and its per-call
-command, so the value must be fully consumed inside the loop body and never stored past the step.
-Dispose each per-row stream/reader before the next iteration; this releases the provider's per-row
-handle (required by SQLite, whose rowid locator keeps the statement pinned until the value is
-released).
+The named-column surface (`From("table")`) also supports streaming members in an `IAsyncEnumerable` projection. The accessors are [`TableAlias.GetStream`](xref:NextORM.Core.TableAlias.GetStream(System.String)) / [`TableAlias.GetTextReader`](xref:NextORM.Core.TableAlias.GetTextReader(System.String)) and the indexer members [`TableColumn.AsStream`](xref:NextORM.Core.TableColumn.AsStream) / [`TableColumn.AsTextReader`](xref:NextORM.Core.TableColumn.AsTextReader).
 
-After `MoveNext` the handle **must not be used**: its behavior is undefined and provider-specific.
-PostgreSQL may hand back the **next** row's bytes, SQL Server throws `ObjectDisposedException`, and
-SQLite returns end-of-stream at the blob's end. The only guarantee is a safety property — a stale
-handle never yields the watched row's data — so treat the value as invalid the moment the enumerator
-advances and do not depend on any particular failure mode.
+Follow these rules for each row:
 
-The named-column accessors are
-[`TableAlias.GetStream`](xref:NextORM.Core.TableAlias.GetStream(System.String)) /
-[`TableAlias.GetTextReader`](xref:NextORM.Core.TableAlias.GetTextReader(System.String)) and the
-indexer members [`TableColumn.AsStream`](xref:NextORM.Core.TableColumn.AsStream) /
-[`TableColumn.AsTextReader`](xref:NextORM.Core.TableColumn.AsTextReader). The streaming member must be
-the **last** member of the projection, so the sequential-access reader reaches the LOB column after
-every scalar column:
+1. Put the `Stream` or `TextReader` member **last** in the projection, after all scalar columns. The member opens lazily from the sequential-access reader.
+2. Consume the value fully and dispose the stream or reader inside the loop before advancing. The enumerator owns the reader and its per-call command; SQLite also requires the per-row handle to be released because its `rowid` locator keeps the statement pinned.
+3. Treat the handle as invalid as soon as `MoveNext` advances. Do not rely on what happens if you use it afterward: PostgreSQL may return the **next** row's bytes, SQL Server throws `ObjectDisposedException`, and SQLite returns end-of-stream at the end of the blob. The only guarantee is that a stale handle never returns the row's data.
 
 ```csharp
 await foreach (var row in ctx.From("documents")
@@ -131,9 +126,9 @@ unlock, so use the buffered `byte[]`/`string` projection there instead.
 | ClickHouse | `NotSupportedException` (`GetStream` not implemented; `GetTextReader` buffers) |
 | In-memory | supported (`MemoryStream`/`StringReader` over the single materialized value; see [In-memory](#in-memory)) |
 
-Streaming is implemented for **PostgreSQL, SQL Server and SQLite** in this release. The streaming terminal is opt-in: the ordinary buffered `byte[]`/`string` projection keeps working on every provider, and DML of a LOB is out of scope. MySQL/MariaDB and ClickHouse reject the terminal with a `NotSupportedException` whose message names the provider, because their drivers do not offer memory-bounded LOB reads (they buffer the whole value; `SequentialAccess` does not change the allocations, and ClickHouse's `GetStream` is not implemented), so [`SupportsSequentialAccess`](xref:NextORM.Core.ISqlDialect.SupportsSequentialAccess) is deliberately `false` for them — the buffered projection is the supported path. The in-memory provider supports the scalar terminals as well, but with no `DbDataReader` to stream from it returns a plain BCL object over the materialized value — see [In-memory](#in-memory).
+**PostgreSQL, SQL Server, and SQLite** support streaming. The streaming terminal is opt-in: the ordinary buffered `byte[]`/`string` projection keeps working on every provider, and DML of a LOB is out of scope. MySQL/MariaDB and ClickHouse reject the terminal with a `NotSupportedException` whose message names the provider, because their drivers do not offer memory-bounded LOB reads (they buffer the whole value; `SequentialAccess` does not change the allocations, and ClickHouse's `GetStream` is not implemented), so [`SupportsSequentialAccess`](xref:NextORM.Core.ISqlDialect.SupportsSequentialAccess) is deliberately `false` for them — the buffered projection is the supported path. The in-memory provider supports the scalar terminals as well, but with no `DbDataReader` to stream from it returns a plain BCL object over the materialized value — see [In-memory](#in-memory).
 
-The multi-column [`ToDataReader`](#multiple-columns-todatareader) terminal is available on PostgreSQL, SQL Server and SQLite. PostgreSQL and SQL Server hand the sequential-access command over; SQLite returns a **buffered, locator-free** reader (the query is not opened with `SequentialAccess` and no `rowid` is appended, so `FieldCount` equals the projection column count and the ordinals match `Select`). MySQL/MariaDB and ClickHouse reject it because they have no sequential-access support; the in-memory provider rejects it because it has no `DbDataReader` at all:
+The multi-column [`ToDataReader`](#multiple-columns-todatareader) terminal is available on PostgreSQL, SQL Server, and SQLite. PostgreSQL and SQL Server return a sequential-access command. SQLite instead returns a **buffered, locator-free** reader: it does not open the query with `SequentialAccess` or append `rowid`, so `FieldCount` matches the projection and the ordinals match `Select`. MySQL/MariaDB and ClickHouse reject this terminal because they do not support sequential access; in-memory rejects it because no `DbDataReader` is available:
 
 | Provider | `ToDataReader` / `ToDataReaderAsync` |
 |---|---|
@@ -156,7 +151,9 @@ Only the first row is read. An empty result and a first value that is `NULL` bot
 
 ### SQLite query shapes
 
-The SQLite locator can only be appended to a **single-source, rowid-bearing** projection. Queries that join several sources, or that carry `DISTINCT`/`DISTINCT ON`, `UNION`, `GROUP BY` or an aggregate, are **not supported**; they may surface a SQLite driver error instead of a clean early failure. On a single-column projection a raw [`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String)) override is rejected with `NotSupportedException`, because a `rowid` locator cannot be added to caller-supplied SQL safely; a raw projection of two or more columns is rejected with the usual `InvalidOperationException`.
+SQLite can append its locator only to a **single-source projection over a rowid-bearing table**. Queries with joins, `DISTINCT`/`DISTINCT ON`, `UNION`, `GROUP BY`, or aggregates are **not supported**; they may fail with a SQLite driver error rather than an early validation error.
+
+For a single-column projection, a raw [`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String)) override is rejected with `NotSupportedException`: nextorm cannot safely add a `rowid` locator to caller-supplied SQL. A raw projection with two or more columns is rejected with the usual `InvalidOperationException`.
 
 ## Exactly one column
 

@@ -1,23 +1,55 @@
 # Провайдер SQL Server
 
-> Используйте `nextorm.sqlserver` для Microsoft SQL Server и Azure SQL; он отрисовывает параметры `@name`, разбиение на страницы `top(n)` / `offset … fetch` (внедряя `ORDER BY`, когда это необходимо), конкатенацию `+`, `isnull`, `datepart` и `count_big`, с идентификаторами в квадратных скобках.
+> Используйте `nextorm.sqlserver` для Microsoft SQL Server и Azure SQL. Провайдер формирует SQL с маркерами параметров `@name`, постраничной выборкой `top(n)` / `offset … fetch` (добавляя `ORDER BY`, когда это необходимо), конкатенацией `+`, функциями `isnull`, `datepart`, `count_big` и идентификаторами в квадратных скобках.
 
-**Предварительные требования:** [Provider overview](overview.md) · [Quickstart](../getting-started/02-quickstart.md)
+**Перед началом:** [Обзор провайдеров](overview.md) · [Быстрый старт](../getting-started/02-quickstart.md)
+
+## Регистрация провайдера
+
+Выберите способ подключения по владельцу соединения:
+
+```csharp
+using NextORM.Core;
+using NextORM.SqlServer;
+
+var builder = new DataContextBuilder()
+    .UseSqlServer("Server=localhost;Database=app;Trusted_Connection=True;TrustServerCertificate=True");
+using var ctx = builder.CreateDataContext();
+```
+
+Передайте существующий `DbConnection` в `UseSqlServer`, если приложению нужно управлять сроком его жизни:
+
+```csharp
+using var connection = new Microsoft.Data.SqlClient.SqlConnection("Server=localhost;Database=app;...");
+var builder = new DataContextBuilder().UseSqlServer(connection);
+using var ctx = builder.CreateDataContext();
+```
+
+Можно также создать контекст напрямую:
+
+```csharp
+using NextORM.Core;
+using NextORM.SqlServer;
+
+using IDataContext ctx = new SqlServerDataContext(
+    "Server=localhost;Database=app;...", new DataContextBuilder());
+```
 
 ## Обзор
 
-[`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext) (`src/nextorm.sqlserver/SqlServerDataContext.cs`) оборачивает `Microsoft.Data.SqlClient`. Он
-создаёт `SqlConnection`, передаёт значения параметров null как `DBNull` (иначе SqlClient не отправляет значение
-вообще), и переопределяет `MapColumnExpression`, чтобы читать числовые столбцы без боксинга: типизированные
-геттеры SqlClient строги к расширению, а storage-тип столбца известен только после открытия reader'а, поэтому
-маппер в рантайме разрешает `IDataRecord.GetFieldType` и читает соответствующим storage-типизированным
-геттером, конвертируя типизированным `Convert.To<T>` (маппинг `GetNumericGetter`/`GetTypedConversion`,
-общий с терминалом CSV). Только storage-тип вне закрытого числового набора откатывается к
+[`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext) (`src/nextorm.sqlserver/SqlServerDataContext.cs`) использует `Microsoft.Data.SqlClient`.
+Он создаёт `SqlConnection` и передаёт null-параметры как `DBNull` (иначе SqlClient не отправит значение).
+Кроме того, контекст переопределяет `MapColumnExpression`, чтобы читать числовые столбцы без упаковки
+значений в `object`. Типизированные методы чтения SqlClient строго проверяют расширение, а тип хранения
+столбца известен только после открытия считывателя. Поэтому преобразователь во время выполнения
+определяет тип через `IDataRecord.GetFieldType`, читает значение соответствующим типизированным методом и
+преобразует его с помощью `Convert.To<T>` (сопоставление `GetNumericGetter`/`GetTypedConversion` также
+используется терминалом CSV). Для типов хранения за пределами закрытого набора числовых типов применяется
 `GetValue`/`Convert.ChangeType`.
 
 [`SqlServerDialect`](xref:NextORM.SqlServer.SqlServerDialect) (`src/nextorm.sqlserver/SqlServerDialect.cs`) — это диалект:
 
-- плейсхолдер параметра `@name`;
+- маркер параметра `@name`;
 - идентификаторы заключаются в квадратные скобки ([`Escape`](xref:NextORM.Core.ISqlDialect.Escape(System.String)) возвращает `[name]`), включая ссылки на столбцы, чтобы псевдонимы, которые
   конфликтуют с ключевыми словами T-SQL, оставались пригодными;
 - отображение типов: `byte`→`tinyint`, `short`→`smallint`, `int`→`int`, `long`→`bigint`, `float`→`real`,
@@ -32,33 +64,6 @@
 
 Наконец, в SQL Server нет ключевого слова `RECURSIVE` (рекурсивные CTE объявляются только с `with`) и
 предоставляется `option (maxrecursion n)` для повышения глубины по умолчанию.
-
-## Регистрация провайдера
-
-На [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) доступны две перегрузки
-(`src/nextorm.sqlserver/DI/SqlServerDataContextOptionsBuilderExtensions.cs`):
-
-```csharp
-using NextORM.Core;
-using NextORM.SqlServer;
-
-var byString = new DataContextBuilder()
-    .UseSqlServer("Server=localhost;Database=app;Trusted_Connection=True;TrustServerCertificate=True");
-
-using var connection = new Microsoft.Data.SqlClient.SqlConnection("Server=localhost;Database=app;...");
-var byConnection = new DataContextBuilder().UseSqlServer(connection);
-
-using var ctx = byString.CreateDataContext();   // IDataContext
-```
-
-Напрямую:
-
-```csharp
-using NextORM.Core;
-using NextORM.SqlServer;
-
-using IDataContext ctx = new SqlServerDataContext("Server=localhost;Database=app;...", new DataContextBuilder());
-```
 
 ## Разбиение на страницы: `TOP` и `OFFSET … FETCH`
 
@@ -83,11 +88,12 @@ ctx.From<ISimpleEntity>().Offset(10).OrderBy(x => x.Id).Select(x => x.Id);
 // ... order by id offset 10 rows
 ```
 
-`WITH TIES` поддерживается только в форме `TOP(n) WITH TIES` без offset. Положительный `OFFSET`
-вместе с `WithTies()` — например `Page(5, 3).WithTies()` или `Offset(3).Limit(5).WithTies()` —
-бросает `NotSupportedException` во время подготовки, до того как SQL отрендерен, отправлен или
-закэширован: T-SQL принимает `WITH TIES` только в `TOP`, но не в `OFFSET … FETCH … ONLY`. Используйте
-`WithTies()` без `OFFSET` либо обычное разбиение на страницы без ties.
+`WITH TIES` поддерживается только с `TOP(n) WITH TIES` и без offset. Если задать положительный
+`OFFSET` вместе с `WithTies()` — например, `Page(5, 3).WithTies()` или
+`Offset(3).Limit(5).WithTies()`, — подготовка завершится с `NotSupportedException` до генерации SQL,
+его отправки серверу или помещения в кэш. T-SQL допускает `WITH TIES` с `TOP`, но не с
+`OFFSET … FETCH … ONLY`. Используйте `WithTies()` без `OFFSET` либо обычную постраничную выборку без
+ties.
 
 ## Агрегаты и скалярные функции
 
@@ -96,34 +102,31 @@ var count = ctx.From<IComplexEntity>().Select(x => SqlFunctions.Sql.count_big())
 var std   = ctx.From<IComplexEntity>().Select(x => SqlFunctions.Sql.stdev((double)x.Id)); // stdev(...)
 ```
 
-`count_big` / `count_big_distinct` отрисовывают `count_big(...)`; обычные `count`/`count_distinct` отрисовывают
-`count(...)`. `stdev`, `stdevp`, `var` и `varp` сохраняют свои имена (SQL Server предоставляет их нативно).
-`Math.Round`, `Math.Truncate`, `len`, `datepart`, `getdate` и `isnull` все выдаются, как показано выше.
-Агрегаты вариативности следуют общему контракту кардинальности: `Stdev`/`Var` дают `null` при нуле или
+`count_big` / `count_big_distinct` формируют `count_big(...)`; обычные `count`/`count_distinct` — `count(...)`.
+`stdev`, `stdevp`, `var` и `varp` сохраняют свои имена: SQL Server поддерживает их напрямую.
+`Math.Round`, `Math.Truncate`, `len`, `datepart`, `getdate` и `isnull` формируют SQL, показанный выше.
+Агрегаты стандартного отклонения и дисперсии следуют общему контракту кардинальности: `Stdev`/`Var` дают `null` при нуле или
 одном вносящем вклад значении, `Stdevp`/`Varp` — `null` при нуле и `0.0` при одном, а два и более
-значений сохраняют нативные формулы SQL Server. Nullable-результат доходит до вызывающего как `null`, а
-не бросает исключение на non-nullable `double`, поэтому один и тот же запрос возвращает одинаковую форму
+значений сохраняют нативные формулы SQL Server. Результат nullable-агрегата возвращается вызывающему коду
+как `null`, а не вызывает исключение при преобразовании к `double`, поэтому один и тот же запрос возвращает одинаковую форму
 здесь и на других провайдерах.
 
-BASE64 требует SQL Server 2025: там `SqlFunctions.Sql.base64_encode` и `base64_decode` рендерятся как
+Для BASE64 требуется SQL Server 2025: на нём `SqlFunctions.Sql.base64_encode` и `base64_decode` формируют
 `BASE64_ENCODE`/`BASE64_DECODE`, без compatibility level и preview-флага. `base64_decode` принимает
 `varchar`, поэтому столбец `nvarchar` нужно привести. `crypt_gen_random` и decimal-функции
 `parse`/`try_parse` (`decimal(38,18)`, фиксированный `en-US`) доступны на том же сервере. nextorm не
-опрашивает версию сервера, поэтому на старом сервере отрисованная функция падает с собственной
+опрашивает версию сервера, поэтому на старом сервере вызов сформированной функции завершается
 ошибкой сервера «not a recognized function».
-
-
-
 SQL Server 2022+ также включает `greatest`/`least` (стандартный синтаксис) и `SqlFunctions.Sql.date_trunc`,
-который отрисовывает `datetrunc(part, value)`, сворачивая множественные ANSI-части в единственные
+который формирует `datetrunc(part, value)` и сводит множественные ANSI-части к единственным
 T-SQL-написания (`milliseconds` → `millisecond`); `decade`/`century`/`millennium` выбрасывают исключение.
-Арифметика дат нативная: `SqlFunctions.Sql.date_add(field, amount, value)` отрисовывает
+Арифметика дат использует встроенный синтаксис: `SqlFunctions.Sql.date_add(field, amount, value)` формирует
 `dateadd(field, amount, value)` (а `decade`/`century`/`millennium` сворачиваются в масштабированное
 прибавление `year`), `SqlFunctions.Sql.date_diff(field, start, end)` — `datediff(field, start, end)`,
 `SqlFunctions.Sql.date_from_parts(year, month, day)` — `datefromparts(year, month, day)`,
 `SqlFunctions.Sql.end_of_month(value)` — `eomonth(value)`.
 
-Форматирование дат и чисел намеренно **не** вынесено на кросс-провайдерную поверхность: T-SQL `FORMAT`
+Форматирование дат и чисел намеренно **не** входит в общий для провайдеров набор функций: T-SQL `FORMAT`
 принимает .NET-шаблон (и зависит от CLR; SQL Server 2012+), тогда как PostgreSQL `to_char` и `%`-шаблоны
 `DATE_FORMAT`/`strftime`/`formatDateTime` остальных провайдеров используют несовместимые языки шаблонов,
 поэтому переносимого аргумента `template` нет. Для форматирования на SQL Server объявляйте
@@ -133,41 +136,41 @@ SQL Server 2017+ включает
 `SqlFunctions.Sql.string_agg` → `string_agg(value, delimiter)`. Типа-массива нет, поэтому `array_agg`
 по-прежнему выбрасывает исключение ([`SupportsArrayAgg`](xref:NextORM.Core.ISqlDialect.SupportsArrayAgg) равно `false`). SQL Server 2016+ также
 включает текстовые JSON-функции ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)): `SqlFunctions.SqlServer.json_value`, `SqlFunctions.SqlServer.json_query`,
-`SqlFunctions.SqlServer.json_modify` и `SqlFunctions.SqlServer.isjson` отрисовывают свои T-SQL-имена над текстовой колонкой,
-используя строку JSONPath (`'$.name'`); поверхность `json`/`jsonb` из PostgreSQL по-прежнему
-выбрасывает исключение. Типизированный набор строк `OPENJSON ... WITH (...)` объявляется фабрикой
+`SqlFunctions.SqlServer.json_modify` и `SqlFunctions.SqlServer.isjson` формируют SQL с соответствующими именами T-SQL над текстовой колонкой,
+используя строку JSONPath (`'$.name'`); функции `json`/`jsonb` из PostgreSQL по-прежнему
+вызывают исключение. Типизированный набор строк `OPENJSON ... WITH (...)` объявляется фабрикой
 `TvfEntityBuilder<T>`, чей `withClause` несёт тело клаузы (см. гайд по табличным функциям).
 Предикаты полнотекстового поиска `SqlFunctions.Sql.contains` и `SqlFunctions.Sql.freetext` ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText))
-отрисовываются как T-SQL `contains(...)`/`freetext(...)` и требуют полнотекстового индекса на колонке.
-`SqlFunctions.Sql.iif(condition, whenTrue, whenFalse)` отрисовывает `iif(...)`
+формируют T-SQL `contains(...)`/`freetext(...)` и требуют полнотекстового индекса на колонке.
+`SqlFunctions.Sql.iif(condition, whenTrue, whenFalse)` формирует `iif(...)`
 ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), написание через [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String))), а
 `SqlFunctions.SqlServer.choose(index, ...)` — `choose(...)` ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose));
 специализированное написание `SqlFunctions.SqlServer.iif` по-прежнему работает по наследованию.
-Семейство session/info ([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions)) отрисовывает
+Функции состояния сеанса ([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions)) формируют
 `SqlFunctions.Sql.current_user()`/`session_user()` как ключевые слова ANSI, а
 `current_schema()`/`current_database()`/`version()` — как `schema_name()`/`db_name()`/`@@version`.
-SQL Server отрисовывает оконные квантили `SqlFunctions.Sql.percentile_cont(fraction, property).Over()` и
+SQL Server формирует оконные квантили `SqlFunctions.Sql.percentile_cont(fraction, property).Over()` и
 `percentile_disc(...)` как `percentile_cont(fraction) within group (order by property) over (...)`
 ([`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow)); точной
 упорядоченно-агрегатной формы у него нет. Медиана — та же нативная композиция:
-`SqlFunctions.SqlServer.median(value).Over(...)` рендерит
+`SqlFunctions.SqlServer.median(value).Over(...)` формирует
 `percentile_cont(0.5) within group (order by value) over (...)`, одна строка на входную строку (не на
 группу); поддерживается только окно с `partition by`, поэтому оконный `ORDER BY` или рамка отклоняются,
 а вызов обязан быть завершён `Over(...)`. У общего `SqlFunctions.SqlServer.percentile` нет отдельного
 нативного написания — вызов бросает `NotSupportedException`. Дроби — это `double` в `[0, 1]`, а не
-проценты, и проверяются до рендеринга. Агрегат произвольного значения `any_agg` (`ANY_VALUE`)
+проценты, и проверяются до генерации SQL. Агрегат произвольного значения `any_agg` (`ANY_VALUE`)
 **не** включён: T-SQL даёт `ANY_VALUE` только в SQL Server 2025 / Fabric, чего версионно-агностичный
 диалект предположить не может.
 Методы типа XML `SqlFunctions.SqlServer.xml_value(xml, xpath, sqlType)`,
 `xml_query(xml, xpath)` и `xml_exist(xml, xpath)`
-([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)) рендерят
+([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)) формируют
 постфиксную форму T-SQL `xmlcol.value('xpath', 'type')` / `xmlcol.query('xpath')` / `xmlcol.exist('xpath')`;
 XQuery и SQL-тип обязаны быть строковыми литералами. Строковый метод `.nodes` доступен как
 `SqlFunctions.SqlServer.xml_nodes(xml, xpath)` и используется как коррелированный источник
-`CrossApply`/`OuterApply`: он рендерит `<xml>.nodes('xpath') as [alias]([value])`, а развёрнутый
+`CrossApply`/`OuterApply`: он формирует `<xml>.nodes('xpath') as [alias]([value])`, а развёрнутый
 `IXmlNodesRow.Value` проецируется скалярными методами выше (операнд обязан быть колонкой внешней строки,
 XQuery — строковым литералом).
-Блокирующие табличные хинты ([`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints)) отрисовываются как `WITH (hint, ...)` после
+Блокирующие табличные хинты ([`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints)) добавляются как `WITH (hint, ...)` после
 источника (после его псевдонима, если он есть): `ctx.From<IComplexEntity>(o => o.WithTableHint("nolock"))` даёт `from complex_entity with (nolock)`,
 а источник с псевдонимом — `... as [t1] with (nolock)`.
 Блокировка строк использует тот же механизм: `ForUpdate`/`ForShare`
@@ -184,8 +187,8 @@ XQuery — строковым литералом).
 необязательными именем элемента строки, `ROOT('...')` и `ELEMENTS`). `QueryCommand.WithForJson(...)`/
 `WithForXml(...)` присоединяют предложение без выполнения.
 
-Помимо этого SQL Server даёт широкую библиотеку скаляров, специфичных для T-SQL, на
-`SqlFunctions.SqlServer`, с гейтом по имени через
+Кроме того, `SqlFunctions.SqlServer` предоставляет обширный набор скалярных функций T-SQL. Доступность
+каждой функции проверяется по имени через
 [`ISqlServerFunctions`](xref:NextORM.Core.ISqlDialect.SqlServerFunctions); все остальные провайдеры её
 отвергают:
 
@@ -205,21 +208,20 @@ XQuery — строковым литералом).
   (1/0), а не `bit`; `formatmessage` принимает строку формата или id из `sys.messages` и не более 20
   аргументов.
 
-Семь имён, сообщающих живое изменяемое состояние соединения, сессии или инструкции, открыты как есть:
+Семь функций возвращают изменяемое состояние соединения, сеанса или инструкции:
 `CURRENT_REQUEST_ID`, `CURRENT_TRANSACTION_ID`, `XACT_STATE`, `IDENT_CURRENT`, `MIN_ACTIVE_ROWVERSION`,
-`ROWCOUNT_BIG` и `SCOPE_IDENTITY`. Живое изменяемое состояние **не** является критерием исключения:
-нативная семантика SQL Server поставляется вместе с оговорками, и nextorm не гарантирует построчную
-стабильность, непрерывность соединения между запросами и получение identity — отдельный вызов
-`SCOPE_IDENTITY`/`IDENT_CURRENT` не является API последней вставки, используйте
-`ReturningIdentity<TKey>()`. Стабильные конфигурационные константы и константы идентичности той же
-области (`CURRENT_TIMEZONE`/`CURRENT_TIMEZONE_ID`, `SERVER_NAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`,
-`SUSER_NAME`, `ORIGINAL_LOGIN`) остаются на той же поверхности. См.
+`ROWCOUNT_BIG` и `SCOPE_IDENTITY`. Они сохраняют нативную семантику SQL Server, но nextorm не гарантирует
+построчную стабильность или непрерывность соединения между запросами. Получение identity — отдельная
+операция: не используйте `SCOPE_IDENTITY`/`IDENT_CURRENT` для чтения ключа последней вставки; для этого
+предназначен `ReturningIdentity<TKey>()`. В этот набор также входят функции с конфигурационными
+значениями и идентичностью той же области: `CURRENT_TIMEZONE`/`CURRENT_TIMEZONE_ID`, `SERVER_NAME`,
+`HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME` и `ORIGINAL_LOGIN`. См.
 [гайд по скалярам T-SQL](../guide/provider-specific-sql/sqlserver.md#скаляры-t-sql).
 
 ## Рекурсивные CTE и `maxRecursion`
 
 ```csharp
-// Union branches must share one result type, so a named shape is used.
+// Ветви UNION должны возвращать один тип, поэтому здесь используется именованный тип результата.
 public sealed class CteNumberRow { public int n { get; set; } }
 
 var anchor = e.Where(s => s.Id == 1).Select(s => new CteNumberRow { n = s.Id });
@@ -238,8 +240,8 @@ select n
  from nums option (maxrecursion 100)
 ```
 
-Модификатор `recursive` опускается (в T-SQL его нет), а `maxRecursion` отрисовывается как завершающая
-опция инструкции; глубина по умолчанию в SQL Server — 100, поэтому передавайте значение только когда вам нужен другой предел.
+Модификатор `recursive` опускается (в T-SQL его нет), а `maxRecursion` добавляется в конец инструкции.
+SQL Server по умолчанию ограничивает глубину значением 100; задайте другой предел, только если он вам нужен.
 
 ## Операции над множествами `*ALL`
 
@@ -306,13 +308,16 @@ var total = result.Read<int>()[0];   // 6
 
 ## Большие объекты (потоковое чтение LOB)
 
-Одну колонку `byte[]` или `string` можно прочитать как `Stream`/`TextReader`, не загружая значение целиком в managed-память. SqlClient реализует `GetStream`/`GetTextReader` для `varbinary(max)` и `nvarchar(max)`; потоковый режим требует `CommandBehavior.SequentialAccess` (без него значение буферизуется) — nextorm выставляет его на LOB-пути:
+Одну колонку `byte[]` или `string` можно читать как `Stream`/`TextReader`, не загружая значение целиком
+в управляемую память .NET. SqlClient предоставляет `GetStream`/`GetTextReader` для `varbinary(max)` и
+`nvarchar(max)`. Потоковое чтение требует `CommandBehavior.SequentialAccess`; без него значение
+буферизуется. nextorm включает этот режим для LOB:
 
 ```csharp
 await using var stream = ctx.From<BinaryEntity>()
     .Where(x => x.Id == 1)
     .Select(x => x.Payload)
-    .ToStream();          // открывает reader с CommandBehavior.SequentialAccess
+    .ToStream();          // открывает DbDataReader с CommandBehavior.SequentialAccess
 
 using var reader = ctx.From<Document>()
     .Where(x => x.Id == 1)
@@ -320,9 +325,17 @@ using var reader = ctx.From<Document>()
     .ToTextReader();
 ```
 
-Возвращённый поток владеет reader'ом и per-call командой до освобождения и не закрывает контекст; проекция обязана быть ровно одной колонкой `byte[]`/`string` (иначе `InvalidOperationException`). MySQL/MariaDB, ClickHouse и провайдер in-memory отклоняют терминалы через `NotSupportedException`. См. [Потоковое чтение больших объектов](../guide/28-large-objects.md).
+Поток владеет объектом `DbDataReader` и командой, созданной для этого вызова, пока вы его не освободите;
+контекст при этом остаётся открытым. Проекция должна содержать ровно одну колонку `byte[]` или `string`,
+иначе возникает `InvalidOperationException`. MySQL/MariaDB, ClickHouse и провайдер в памяти отклоняют
+эти терминалы с `NotSupportedException`. См. [Потоковое чтение больших объектов](../guide/28-large-objects.md).
 
-SQL Server также поддерживает многоколоночный терминал `ToDataReader`/`ToDataReaderAsync`: он отдаёт ту же sequential-access команду как принадлежащий вызывающему `DbDataReader`, поэтому вызывающий может прочитать все колонки и строки (или несколько LOB-колонок по порядку), не материализуя результат. SQLite тоже его поддерживает, но через буферизованный reader без локатора (без `rowid`, без `SequentialAccess`, то есть без чанкового LOB); MySQL/MariaDB, ClickHouse и провайдер in-memory не имеют поддержки sequential access и отклоняют его.
+SQL Server также поддерживает многоколоночные терминалы `ToDataReader`/`ToDataReaderAsync`. Они возвращают
+объект `DbDataReader` в режиме `SequentialAccess`, принадлежащий вызывающему коду. Вызывающий может читать
+все колонки и строки (в том числе несколько LOB-колонок по порядку), не материализуя результат. SQLite
+тоже поддерживает этот терминал, но использует буферизованный `DbDataReader` без локатора и
+`SequentialAccess`, то есть не читает LOB частями. MySQL/MariaDB, ClickHouse и провайдер в памяти не
+поддерживают последовательное чтение и отклоняют эти вызовы.
 
 ## Массовая вставка
 
@@ -332,18 +345,18 @@ SQL Server также поддерживает многоколоночный т
 
 - `MaxBatchSize` отображается в `SqlBulkCopy.BatchSize`; незаданное значение остаётся дефолтом драйвера
   (`0`, один батч).
-- `KeepIdentity` отображается в `SqlBulkCopyOptions.KeepIdentity`; портируемое утверждение вместо этого
+- `KeepIdentity` отображается в `SqlBulkCopyOptions.KeepIdentity`; переносимая вставка вместо этого
   оборачивается в `SET IDENTITY_INSERT ... ON/OFF`.
 - `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` отображаются в соответствующие флаги
   `SqlBulkCopyOptions`; `false` учитывается отсутствием запроса флага, а `KeepNulls=false` принимается
-  только для default-equivalent формы.
+   только для формы, эквивалентной значениям по умолчанию.
 - Типизированная группа задаёт внутреннюю транзакцию:
   `SqlServer(new SqlServerBulkInsertOptions { UseInternalTransaction = true })` выставляет
   `SqlBulkCopyOptions.UseInternalTransaction` для батча драйвера. Комбинация с внешней транзакцией контекста
   недопустима, при нескольких батчах покрыт только текущий, а на портируемом пути запрос отклоняется.
 - `Timeout` — один бюджет на весь вызов: оставшееся время становится `BulkCopyTimeout` (минимум 1 с), а
   истёкший бюджет даёт `TimeoutException`; отмена вызывающего всегда побеждает.
-- `DatabaseName` рендерится как часть многочастного имени; `ServerName` отклоняется (bulk-вставка никогда не
+- `DatabaseName` входит в состав составного имени; `ServerName` отклоняется (массовая вставка никогда не
   перенаправляется на другой сервер).
 
 Набор буферизуется в `DataTable` до копирования, потому что `SqlBulkCopy` нужны метаданные типов колонок;
@@ -365,29 +378,29 @@ nextorm его не обнаруживает — возможность явля
 | `new SqlServerDataContext(SqlServerEngineEdition.SqlDatabase, connectionString)` — Azure SQL Database | `true` | из объявленной редакции: движок сообщает major-версию 12, поэтому редакцию нужно объявить (`Auto`/`Text`/`Native` разрешаются в один и тот же текстовый конвертер). Только модульные тесты: живого экземпляра Azure не было |
 | `…AzureSqlManagedInstance` / `…MicrosoftFabricSqlDatabase` — Azure SQL Managed Instance / база данных SQL в Microsoft Fabric | `true` | как выше; база данных SQL в Microsoft Fabric — редакция 12, а редакция 11 («Azure Synapse serverless SQL pool, или Microsoft Fabric») её **не** включает. Только модульные тесты |
 
-Редакция — это **объявление вызывающего кода**: nextorm никогда не читает `SERVERPROPERTY('EngineEdition')`,
+Редакция движка задаётся **вызывающим кодом**: nextorm никогда не читает `SERVERPROPERTY('EngineEdition')`,
 поэтому генерация SQL остаётся чистой функцией объявленного состояния. Конкретный тип контекста владеет
 одним неизменяемым объявлением `(версия, редакция)` — план-кэш ключуется типом контекста, — и
 конфликтующее объявление бросает `InvalidOperationException` до выполнения любой команды. Объявление
-возможности не переносит колонку `nvarchar` в `json`, а `Auto` сохраняет текстовый транспорт.
+включение поддержки не меняет тип колонки `nvarchar` на `json`, а `Auto` сохраняет текстовый транспорт.
 
 ```csharp
 // Конструктор «версия первой»: объявленная версия открывает возможности, зависящие от версии.
 using var dataContext = new SqlServerDataContext(new Version(17, 0), connectionString);
 ```
 
-`(Version, DbConnection)` — вторая перегрузка, для соединения, которым владеет вызывающий код. У типа
-контекста одно неизменяемое объявление `(версия, редакция движка)` — план-кэш ключуется типом
-контекста, — поэтому построение *одного и того же* типа с конфликтующим объявлением любой из компонент
-(другая версия, другая редакция либо сначала без объявления, а затем с ним) бросает
-`InvalidOperationException` до выполнения любой команды; заводите отдельный подкласс
-`SqlServerDataContext` на каждое объявление.
+Перегрузка `(Version, DbConnection)` предназначена для соединения, которым владеет вызывающий код.
+Тип контекста хранит одно неизменяемое объявление `(версия, редакция движка)`, а план-кэш использует тип
+контекста как ключ. Поэтому повторное создание *того же* типа с конфликтующим объявлением любой из
+компонент (другая версия, другая редакция либо сначала без объявления, а затем с ним) приводит к
+`InvalidOperationException` до выполнения команды. Используйте отдельный подкласс `SqlServerDataContext`
+для каждого объявления.
 
 ### Транспорт и ограничения
 
 * Представление — обычная CLR-строка `string`: параметры выводятся как `nvarchar`, DOM-параметра нет,
   `SqlDbType.Json` не выставляется, двойной сериализации нет.
-* В контексте с открытым гейтом — по объявленной major-версии 17+ либо по объявленной редакции
+* В контексте, где возможность включена явно заданной основной версией 17+ либо редакцией
   Azure/Fabric SQL database — `Auto`, `Text` и `Native` разрешаются в один и тот же конвертер,
   поэтому существующее отображение `[JsonColumn]` на `nvarchar` остаётся байт-в-байт тем же, когда вы
   добавляете аргумент версии или редакции.
@@ -407,21 +420,72 @@ nextorm не генерирует DDL колонок, поэтому перев�
 Объявление редакции движка — в равной степени объявление на стороне библиотеки: оно никогда не изменяет
 колонку.
 
+## Поиск по векторам
+
+Общий API поиска ближайших соседей работает со свойством `Vector`, отображённым на SQL Server
+`VECTOR(n)`. Размерность задаётся в схеме базы и должна быть объявлена явно; nextorm не выводит её для
+автоматического DDL. Возможности векторного расстояния и поиска требуют, чтобы вызывающий код объявил
+major-версию SQL Server не ниже 17. Версия не опрашивается, поэтому обычная перегрузка `UseSqlServer`
+без версии эти возможности не включает.
+
+Выберите грамматику `VECTOR_SEARCH` явно при настройке builder; она не выводится из major-версии:
+
+```csharp
+using NextORM.Core;
+using NextORM.SqlServer;
+
+var builder = new DataContextBuilder().UseSqlServer(
+    connectionString, new Version(17, 0), SqlServerVectorSearchSyntax.TopN);
+using var ctx = builder.CreateDataContext();
+```
+
+`SqlServerVectorSearchSyntax.TopN` выдаёт `TOP (k)` и `TOP_N = k` в вызове `VECTOR_SEARCH`.
+`SqlServerVectorSearchSyntax.WithApproximate` вместо этого выдаёт `TOP (k) WITH APPROXIMATE`, без
+аргумента `TOP_N`. Выбирайте грамматику по возможностям целевого движка/сборки, а не только по номеру
+версии. Точный поиск использует `VECTOR_DISTANCE` и `TOP (k)`; приближённый — `VECTOR_SEARCH`, и
+неподдерживаемый синтаксис не приводит к автоматическому откату на точный поиск.
+
+Для приближённого выполнения также требуются preview-функция базы и соответствующий векторный индекс
+DiskANN. Для создания индекса таблице нужен первичный ключ и не менее 100 векторов, не равных NULL.
+Включите функцию до векторных операций и создайте индекс через управляемый приложением DDL, например:
+
+```sql
+ALTER DATABASE SCOPED CONFIGURATION SET PREVIEW_FEATURES = ON;
+CREATE VECTOR INDEX ix_document_embedding
+    ON dbo.document (embedding)
+    WITH (METRIC = 'cosine', TYPE = 'DiskANN');
+```
+
+Метрика индекса должна совпадать с метрикой запроса; индекс нужен до приближённого поиска, без молчаливого
+отката на точный путь. SQL Server поддерживает косинусную, евклидову/L2 и dot-product дистанции
+(отрицательное скалярное произведение); меньшие значения `Distance` означают более близких соседей.
+Approximate требует положительный `topK`, прямой физический источник-таблицу сущности и отсутствие
+пользовательской сортировки, paging, соединений, группировки, `DISTINCT` и производного источника.
+Метрики PostgreSQL L1, Hamming и Jaccard не подменяются. Формы SQL и различия PostgreSQL описаны в
+руководствах по [SQL Server](../guide/provider-specific-sql/sqlserver.md#поиск-ближайших-соседей-по-векторам)
+и [PostgreSQL](../guide/provider-specific-sql/postgresql.md#унифицированный-api-поиска-ближайших-соседей).
+Библиотека выдаёт только явно выбранную грамматику и не опрашивает поддержку синтаксиса: `TopN`
+проверен вживую на SQL Server `17.0.5005.3`, а `WithApproximate` имеет только покрытие генерации SQL
+и требует проверки на целевой сборке движка.
+
+Общий контракт векторов и конвейер эмбеддингов/поиска на уровне приложения описаны в руководстве
+[«ИИ и векторный поиск»](../guide/36-ai-and-vector-search.md).
+
 ## Различия провайдеров
 
 | Аспект | SQL Server |
 |---|---|
-| Плейсхолдер параметра | `@name` |
+| Маркер параметра | `@name` |
 | Только limit | `top(n)` |
 | Limit + offset | `offset m rows fetch next n rows only` |
 | Только offset | `offset m rows` |
 | Разбиение на страницы без `ORDER BY` | внедряет `order by (select null as anyorder)` |
-| Concat | `+` |
-| Coalesce | `isnull` |
+| Конкатенация | `+` |
+| Подстановка при `NULL` | `isnull` |
 | Логический литерал | `1` / `0` (материализация bit) |
 | Квотирование идентификаторов | квадратные скобки (`as [t1]`) |
 | Псевдоним производной таблицы / TVF | требуется |
-| Потоковое чтение LOB (`ToStream`/`ToTextReader`, `ToDataReader`) | поддерживается (`SequentialAccess`; одна колонка `byte[]`/`string` или многоколоночный reader, принадлежащий вызывающему) |
+| Потоковое чтение LOB (`ToStream`/`ToTextReader`, `ToDataReader`) | поддерживается (`SequentialAccess`; одна колонка `byte[]`/`string` или многоколоночный `DbDataReader`, принадлежащий вызывающему) |
 | `*ALL` | не поддерживается (бросает исключение) |
 | Рекурсивный CTE | `with` + `option (maxrecursion n)` |
 | Имена агрегатов | `stdev`/`var` нативные; доступен `count_big` |
@@ -430,10 +494,10 @@ nextorm не генерирует DDL колонок, поэтому перев�
 | `date_add` / `date_diff` / `date_from_parts` / `end_of_month` | `dateadd(field, amount, value)` / `datediff(field, start, end)` / `datefromparts(y, m, d)` / `eomonth(value)` |
 | `string_agg` / `array_agg` | `string_agg` поддерживается (SQL Server 2017+); `array_agg` — нет (бросает исключение) |
 | Текстовый JSON | `json_value` / `json_query` / `json_modify` (SQL Server 2016+) |
-| Session/info-функции | `current_user`, `session_user`, `schema_name()`, `db_name()`, `@@version` |
-| Часы/смещение/`*FROMPARTS` T-SQL | `sysdatetime` / `sysdatetimeoffset` / `sysutcdatetime` / `switchoffset` / `todatetimeoffset` / `timefromparts` / `smalldatetimefromparts` / `datetimefromparts` / `datetime2fromparts` / `datetimeoffsetfromparts` (гейт по имени) |
-| Бинарные/checksum/прочие T-SQL | `checksum` / `binary_checksum` / `compress` / `decompress` / `rand` / `stuff` / `str` / `isdate` / `isnumeric` / `formatmessage` (гейт по имени) |
-| Метаданные T-SQL | `col_length` / `col_name` / `object_id` / `object_name` / `db_id` / `db_name` / `schema_id` / `schema_name` / `type_id` / `type_name` / `file_id` / `file_name` / `current_timezone` / `parsename` / `stats_date` и остальные семейства A-D (гейт по имени) |
+| Функции сведений о сеансе | `current_user`, `session_user`, `schema_name()`, `db_name()`, `@@version` |
+| Часы/смещение/`*FROMPARTS` T-SQL | `sysdatetime` / `sysdatetimeoffset` / `sysutcdatetime` / `switchoffset` / `todatetimeoffset` / `timefromparts` / `smalldatetimefromparts` / `datetimefromparts` / `datetime2fromparts` / `datetimeoffsetfromparts` (доступность проверяется по имени) |
+| Бинарные/checksum/прочие T-SQL | `checksum` / `binary_checksum` / `compress` / `decompress` / `rand` / `stuff` / `str` / `isdate` / `isnumeric` / `formatmessage` (доступность проверяется по имени) |
+| Метаданные T-SQL | `col_length` / `col_name` / `object_id` / `object_name` / `db_id` / `db_name` / `schema_id` / `schema_name` / `type_id` / `type_name` / `file_id` / `file_name` / `current_timezone` / `parsename` / `stats_date` и остальные семейства A-D (доступность проверяется по имени) |
 | Оконные квантили | `percentile_cont`/`percentile_disc` как `... within group (order by x) over (...)` (SQL Server 2012+) |
 | Медиана (аналитическая) | `SqlFunctions.SqlServer.median(v).Over(...)` → `percentile_cont(0.5) within group (order by v) over (...)`: одна строка на входную строку; окно только с `partition by` (`ORDER BY`/рамка отклоняются) |
 | Общий квантиль | не поддерживается: `SqlFunctions.SqlServer.percentile` бросает `NotSupportedException` |
@@ -443,21 +507,22 @@ nextorm не генерирует DDL колонок, поэтому перев�
 | Полнотекстовое ранжирование | табличные функции `containstable(table, column, search)` / `freetexttable(...)` возвращают `KEY`/`RANK` ([`SqlFunctions.SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer), [`IKeyRankRow<TKey>`](xref:NextORM.Core.SqlFunctions.IKeyRankRow`1)) |
 | Регулярные выражения | `regexp_like(value, pattern, 'c'/'i')` / `regexp_replace(value, pattern, replacement, 1, 0, 'c'/'i')` (SQL Server 2025+; для `regexp_like` дополнительно нужен уровень совместимости БД 170) |
 | Блокирующие табличные хинты | `with (hint, ...)` после источника, после его псевдонима, если он есть ([`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[]))) |
-| Блокировка строк | `ForUpdate`/`ForShare` рендерят `with (updlock)`/`with (holdlock)` на **каждом** физическом источнике `FROM`/`JOIN`; [`FromOptions.ForUpdate`](xref:NextORM.Core.FromOptions.ForUpdate)/[`JoinOptions.ForUpdate`](xref:NextORM.Core.JoinOptions.ForUpdate) нацелены на один источник ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)); [`LockWaitMode`](xref:NextORM.Core.LockWaitMode) добавляет `nowait`/`readpast` (`with (updlock, nowait)`/`with (updlock, readpast)`) |
+| Блокировка строк | `ForUpdate`/`ForShare` добавляют `with (updlock)`/`with (holdlock)` к **каждому** физическому источнику `FROM`/`JOIN`; [`FromOptions.ForUpdate`](xref:NextORM.Core.FromOptions.ForUpdate)/[`JoinOptions.ForUpdate`](xref:NextORM.Core.JoinOptions.ForUpdate) нацелены на один источник ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)); [`LockWaitMode`](xref:NextORM.Core.LockWaitMode) добавляет `nowait`/`readpast` (`with (updlock, nowait)`/`with (updlock, readpast)`) |
 | Нативный bulk copy | `SqlBulkCopy`; [`BulkInsertOptions`](xref:NextORM.Core.BulkInsertOptions) `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` отображаются в `SqlBulkCopyOptions`, а [`SqlServerBulkInsertOptions.UseInternalTransaction`](xref:NextORM.Core.SqlServerBulkInsertOptions.UseInternalTransaction) выставляет флаг внутренней транзакции (см. [Массовая вставка](../guide/22-bulk-insert.md#опции-bulk-copy-в-sql-server)) |
 | JSON-вывод | весь набор одним JSON-документом, терминальные `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[]))) |
 | XML-вывод | весь набор одним XML-документом, терминальные `for xml raw/auto/explicit/path` ([`ForXml`](xref:NextORM.Core.QueryCommand`1.ForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean,System.Object[]))) |
 | Методы типа XML | `xml.value('xpath', 'type')` / `xml.query('xpath')` / `xml.exist('xpath')` / `xml.nodes('xpath') as [alias]([value])` ([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)) |
 | `AVG` по целочисленному столбцу | усекается до целого |
 | Размещение null при `ORDER BY … DESC` | null сортируются последними по умолчанию |
+| Поиск ближайших соседей по векторам | SQL Server 2025+ (`VECTOR_DISTANCE` для exact; явно выбранная грамматика `VECTOR_SEARCH` для approximate; см. [Поиск по векторам](#поиск-по-векторам)) |
 
 ## См. также
 
-- [Provider overview](overview.md)
+- [Обзор провайдеров](overview.md)
 - [SQLite](sqlite.md)
 - [PostgreSQL](postgres.md)
 - [In-memory](in-memory.md)
-- [Limitations and out-of-scope features](../advanced/limitations.md)
+- [Ограничения и неподдерживаемые возможности](../advanced/limitations.md)
 
 ---
 

@@ -4,15 +4,13 @@ using NextORM.Core;
 namespace NextORM.Extensions;
 
 /// <summary>
-/// The packaged grouping operator: implements <c>SelectGroup</c> and <c>SelectGroupHaving</c> entirely
-/// on the public Core preparation-contribution mechanism.
+/// The component used by <c>SelectGroup</c> and <c>SelectGroupHaving</c> to infer grouping keys from a
+/// projection and add the resulting grouping state during query preparation.
 /// </summary>
 /// <remarks>
-/// The component claims the exclusive grouping slot, so a command carries at most one grouping owner.
-/// <see cref="Prepare"/> infers the grouping keys from the projection, classifies the command into a
-/// <see cref="SelectGroupMode"/> and returns an immutable descriptor whose structural hash and equality
-/// take part in the plan key. The statement itself is rendered by the engine from the effective prepared
-/// state, so <see cref="BuildQuery"/> has nothing to build.
+/// It owns the command's exclusive grouping slot. <see cref="Prepare"/> infers the keys, resolves the
+/// <see cref="SelectGroupMode"/>, and returns a descriptor used in the plan key. The engine renders the
+/// statement from the prepared state, so <see cref="BuildQuery"/> does not modify the command.
 /// </remarks>
 public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryComponentShape
 {
@@ -47,8 +45,8 @@ public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryCompo
     public QueryComponentContribution Contribution => QueryComponentContribution.ExclusiveGrouping;
 
     /// <summary>
-    /// The scalar part of the raw-shape identity: whether the component carries a <c>HAVING</c> condition.
-    /// The projection itself is already part of the command's raw shape.
+    /// The component's scalar shape state: whether it carries a <c>HAVING</c> condition. The projection is
+    /// already part of the command's raw shape.
     /// </summary>
     public object? ShapeState => _shapeState;
 
@@ -59,7 +57,7 @@ public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryCompo
 
     /// <summary>Cached shape selectors: the condition lambda, or an empty array when there is no condition.</summary>
     private LambdaExpression[]? _shapeSelectors;
-    /// <summary>Cached shape selectors, materialized once per component instance.</summary>
+    /// <summary>The cached condition selector, or an empty array when there is no condition.</summary>
     public LambdaExpression[] ShapeSelectors
     {
         get
@@ -87,8 +85,9 @@ public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryCompo
         : throw new ArgumentOutOfRangeException(nameof(index));
 
     /// <summary>
-    /// Infers the grouping keys from the projection, validates it together with the effective <c>HAVING</c>
-    /// and the expression ordering, and returns the immutable preparation contribution for the engine.
+    /// Infers grouping keys from the projection and validates the projection, effective <c>HAVING</c>, and
+    /// expression ordering against the supported grouping rules. It returns the immutable preparation
+    /// descriptor for the engine.
     /// </summary>
     /// <param name="context">The preparation context over the command being prepared.</param>
     /// <returns>An immutable descriptor carrying the grouping contribution.</returns>
@@ -227,16 +226,15 @@ public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryCompo
 }
 
 /// <summary>
-/// The grouping operators of the <c>nextorm.extensions</c> package: <c>SelectGroup</c> and
-/// <c>SelectGroupHaving</c>, both built on the public query-component contract.
+/// Adds query operations that group rows by expressions in a projection and optionally filter groups
+/// with a <c>HAVING</c> predicate.
 /// </summary>
 public static class SelectGroupExtensions
 {
     /// <summary>
-    /// Projects each group of <paramref name="source"/>, inferring the <c>GROUP BY</c> keys from
-    /// <paramref name="projection"/>: every aggregate-free, row-dependent subexpression becomes a key and
-    /// the aggregate calls fold each group. The projection keeps its exact shape — no client-side grouping
-    /// and no rewriting of its members.
+    /// Groups database rows by the non-aggregate expressions in <paramref name="projection"/> and returns
+    /// each group's projected result. Grouping runs in the database, and the projection keeps its declared
+    /// shape.
     /// </summary>
     /// <typeparam name="TEntity">The mapped source entity.</typeparam>
     /// <typeparam name="TResult">The shape of the projection.</typeparam>
@@ -259,12 +257,9 @@ public static class SelectGroupExtensions
     }
 
     /// <summary>
-    /// Same inference as <see cref="SelectGroup{TEntity, TResult}"/>, with <paramref name="condition"/>
-    /// AND-ed into the effective <c>HAVING</c>. The condition is typed on the projection result
-    /// (<typeparamref name="TResult"/>), never on the source entity: a member of the result stands for the
-    /// projection expression that produces it, so <c>f => f.Total > 5</c> becomes the same <c>HAVING</c> as
-    /// the underlying <c>sum(...) &gt; 5</c>. Keys are inferred only from <paramref name="projection"/>;
-    /// the condition never adds a key.
+    /// Groups rows by the non-aggregate expressions in <paramref name="projection"/> and filters groups
+    /// with <paramref name="condition"/>. The condition is evaluated as a <c>HAVING</c> predicate over the
+    /// projected result and is combined with any existing <c>HAVING</c> predicate.
     /// </summary>
     /// <typeparam name="TEntity">The mapped source entity.</typeparam>
     /// <typeparam name="TResult">The shape of the projection.</typeparam>

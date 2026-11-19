@@ -21,15 +21,19 @@ public sealed class UpdateBuilder<TEntity>
 {
     private readonly IDataContext _dataContext;
     private readonly IEntityMetadata _metadata;
+    private readonly IEntityMetadata _targetMetadata;
+    private readonly MappingVariant _mappingVariant;
     private readonly List<UpdateAssignment> _assignments = [];
     private DynamicColumnSet? _dynamicColumns;
     private EntityBuilder<TEntity>? _filter;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
 
-    internal UpdateBuilder(IDataContext dataContext, IEntityMetadata metadata)
+    internal UpdateBuilder(IDataContext dataContext, IEntityMetadata metadata, MappingVariant mappingVariant = default, IEntityMetadata? targetMetadata = null)
     {
         _dataContext = dataContext;
         _metadata = metadata;
+        _mappingVariant = mappingVariant;
+        _targetMetadata = targetMetadata ?? metadata;
     }
 
     /// <summary>The context the update executes on.</summary>
@@ -284,8 +288,29 @@ public sealed class UpdateBuilder<TEntity>
             throw new InvalidOperationException("An update needs at least one assignment; call Set(...) or Set(entity).");
 
         var source = FilterSource().ToCommand();
-        return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, keys, dynamicColumns: _dynamicColumns);
+        return CreateCommand(source, keys);
     }
+
+    /// <summary>
+    /// Builds the update command for <paramref name="source"/>, carrying the mapping variant the statement
+    /// must execute under. The source command resolves a shard scope from its predicate when the builder
+    /// carries no explicit scope, and the renderer reads the source's scope while the executor reads the
+    /// command's own: both have to name the same bucket.
+    /// </summary>
+    /// <param name="source">The command that carries the <c>SET</c> target's <c>WHERE</c>.</param>
+    /// <param name="keys">The key equalities of the key form, or <see langword="null"/>.</param>
+    /// <param name="returningColumns">The mapped columns to return, or <see langword="null"/>.</param>
+    /// <param name="outputInto">The <c>OUTPUT ... INTO</c> target, or <see langword="null"/>.</param>
+    /// <returns>The update command.</returns>
+    private UpdateCommand CreateCommand(
+        QueryCommand source,
+        IReadOnlyList<KeyValue>? keys,
+        IReadOnlyList<IPropertyMetadata>? returningColumns = null,
+        OutputIntoClause? outputInto = null)
+        => new(typeof(TEntity), _targetMetadata.TableName!, _targetMetadata.IsTableNameAuto, _assignments, source, keys, returningColumns, outputInto, _dynamicColumns, _targetMetadata.Schema)
+        {
+            MappingVariant = _mappingVariant != MappingVariant.Default ? _mappingVariant : source.MappingVariant,
+        };
 
     /// <summary>Builds the update command for use as a side-effecting step of a batch.</summary>
     /// <returns>The update command.</returns>
@@ -301,7 +326,7 @@ public sealed class UpdateBuilder<TEntity>
             throw new InvalidOperationException("An update needs at least one assignment; call Set(...) or Set(entity).");
 
         var source = FilterSource().ToCommand();
-        return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, null, returningColumns, outputInto, _dynamicColumns);
+        return CreateCommand(source, null, returningColumns, outputInto);
     }
 
     /// <summary>Builds the update command for an <c>OUTPUT ... INTO</c>-only terminal: the updated rows are written into the target and nothing is returned to the client.</summary>
@@ -313,7 +338,7 @@ public sealed class UpdateBuilder<TEntity>
             throw new InvalidOperationException("An update needs at least one assignment; call Set(...) or Set(entity).");
 
         var source = FilterSource().ToCommand();
-        return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, null, null, outputInto, _dynamicColumns);
+        return CreateCommand(source, null, outputInto: outputInto);
     }
 
     // The source command that carries the UPDATE's WHERE and drives the assignments. It always carries
@@ -321,7 +346,13 @@ public sealed class UpdateBuilder<TEntity>
     // mutated), so both the predicate form (where the pre-join Where is the user's condition) and the
     // key form (where only the injected target filter remains) honor IgnoreFilters.
     private EntityBuilder<TEntity> FilterSource()
-        => (_filter ?? _dataContext.From<TEntity>()).WithFilterScope(_filterScope);
+    {
+        var source = _filter ?? _dataContext.From<TEntity>();
+        if (_mappingVariant != MappingVariant.Default)
+            source = source.WithVariant(_mappingVariant);
+
+        return source.WithFilterScope(_filterScope);
+    }
 
     private void SetAssignment(UpdateAssignment assignment)
     {

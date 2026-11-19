@@ -29,8 +29,8 @@ public sealed class SqliteFts5CommandBuilder
         _value = value;
     }
 
-    /// <summary>Selects the FTS5 <c>automerge</c> command, which merges up to <paramref name="value"/> b-tree segments.</summary>
-    /// <param name="value">The automerge level; must be between 0 and 16 inclusive.</param>
+    /// <summary>Selects the FTS5 <c>automerge</c> command, which sets how many same-level b-tree segments trigger an automatic incremental merge.</summary>
+    /// <param name="value">The automerge threshold; 0 disables automatic incremental merging, and the value must be between 0 and 16 inclusive.</param>
     /// <returns>A new builder carrying the <c>automerge</c> operation.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is outside 0..16.</exception>
     public SqliteFts5CommandBuilder AutoMerge(int value)
@@ -41,8 +41,8 @@ public sealed class SqliteFts5CommandBuilder
         return new(_dataContext, _tableName, SqliteFts5Operation.AutoMerge, value);
     }
 
-    /// <summary>Selects the FTS5 <c>crisismerge</c> command, which merges the <paramref name="value"/> largest segments.</summary>
-    /// <param name="value">The number of largest segments to merge; must not be negative.</param>
+    /// <summary>Selects the FTS5 <c>crisismerge</c> command, which sets the same-level segment threshold for an immediate merge.</summary>
+    /// <param name="value">The threshold; when reached, the segments on that level are merged immediately. Must not be negative; 0 or 1 selects SQLite's default threshold of 16.</param>
     /// <returns>A new builder carrying the <c>crisismerge</c> operation.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is negative.</exception>
     public SqliteFts5CommandBuilder CrisisMerge(int value)

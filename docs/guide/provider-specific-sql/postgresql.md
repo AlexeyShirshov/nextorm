@@ -34,6 +34,9 @@ See [Arrays (PostgreSQL)](../../scalar-functions/06-arrays.md#arrays-postgresql)
 can be used inside a query or projected directly: the row reader materialises an `Array(T)` result as
 a CLR `T[]`.
 
+Keep an array as a value when you need `any`/`all` or an array operator. If you need one result row per
+element, expand the array with `unnest` in [Set-returning functions](#set-returning-functions).
+
 ## Range types
 
 PostgreSQL has native range types (`int4range`, `int8range`, `numrange`, `tsrange`, `tstzrange`,
@@ -45,7 +48,9 @@ surface is gated by [`SupportsRanges`](xref:NextORM.Core.ISqlDialect.SupportsRan
 [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres). The operators are exposed as static methods named
 after the SQL tokens, so no range member collides with a CLR operator or the full-text `Contains`:
 
-On a database without a native range type, map a `Range<T>` property to a pair of scalar columns with [`RangeColumns`](../27-range-columns.md); the same operators are then translated over the pair.
+Use PostgreSQL's native range column for a single database range value. On a database without a native
+range type, map a `Range<T>` property to a pair of scalar columns with
+[`RangeColumns`](../27-range-columns.md); the same operators are then translated over the pair.
 
 | Member | SQL |
 |---|---|
@@ -109,15 +114,15 @@ var rows = dataContext.From<IReservation>()
 
 ## `json` and `jsonb`
 
-PostgreSQL is the only provider with native `json`/`jsonb` types. JSON operands are native JSON columns
-(a `[JsonColumn]` property maps a CLR object to `jsonb` on read and write), other JSON functions, or
-parameters whose runtime value is a `JsonDocument`/`JsonElement`/`JsonNode` (which Npgsql binds as
-`jsonb`). A bare `JsonNode`/`JsonNode?` property (declared exactly `JsonNode`, not `JsonObject`/`JsonArray`)
-reads a native `json`/`jsonb` column for object, array and scalar roots, in scalar and composite
-projections; SQL `NULL` and a JSON literal `null` both become CLR `null`. Declared `JsonObject`/`JsonArray`
-properties and a bare `JsonDocument`/`JsonElement` *scalar* projection remain outside this support. The
-`jsonb_*` family covers construction, extraction, containment and
-aggregation, for example `jsonb_build_object`, `jsonb_agg`, `json_get_text`, `json_cast`, `->`, `->>`.
+PostgreSQL is the only provider with native `json`/`jsonb` types. For a mapped CLR object, use
+`[JsonColumn]` to read and write it as `jsonb`. For a runtime JSON parameter, pass a
+`JsonDocument`/`JsonElement`/`JsonNode`; Npgsql binds it as `jsonb`. To materialise a native `json`/`jsonb`
+column, declare the property exactly as `JsonNode` or `JsonNode?` (not `JsonObject`/`JsonArray`); this
+supports object, array and scalar roots in scalar and composite projections. SQL `NULL` and a JSON literal
+`null` both become CLR `null`. Declared `JsonObject`/`JsonArray` properties and a bare
+`JsonDocument`/`JsonElement` *scalar* projection remain outside this support. The `jsonb_*` family covers
+construction, extraction, containment and aggregation, for example `jsonb_build_object`, `jsonb_agg`,
+`json_get_text`, `json_cast`, `->`, `->>`.
 
 The four accessors `json_get`, `json_get_text`, `json_get_path` and `json_get_path_text` (string-key and
 integer-index overloads) apply **contextual SQL typing**: a raw client document value (literal, captured
@@ -196,12 +201,12 @@ select id, ts_rank(to_tsvector(somestring), to_tsquery('cat'))
 
 Only PostgreSQL implements the native surface; every other provider rejects it at SQL build time.
 
-The `#281` additions extend the same surface: the vector and query constructors `array_to_tsvector`,
+The PostgreSQL API also includes the vector and query constructors `array_to_tsvector`,
 `json_to_tsvector` and `jsonb_to_tsvector`; the inspection and rewriting members `numnode`, `querytree`,
 `setweight`, `strip`, `ts_delete`, `ts_filter`, `ts_rewrite` and `tsquery_phrase`; the conversion and
 lexing pair `tsvector_to_array` and `ts_lexize`; and the tokenizer readers `ts_debug`, `ts_parse` and
 `ts_token_type` as `FROM` sources. Their SQL forms, row interfaces and the `cast(... as text)` bridge are
-listed in [String functions › Full-text search (PostgreSQL, #281)](../../scalar-functions/01-string-functions.md#full-text-search-postgresql-281).
+listed in [String functions › Full-text search (PostgreSQL)](../../scalar-functions/01-string-functions.md#full-text-search-postgresql).
 
 ## Extended scalar and regexp helpers
 
@@ -212,7 +217,7 @@ The [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) surface adds `pg_typeo
 `to_number`/`to_timestamp`/`timezone`/`make_interval`/`justify_*`) and the array constructors, all gated
 by `SupportsExtendedScalarFunctions`.
 
-The residual string catalogue of #281 sits on the same `Postgres` surface, one member per server
+The `Postgres` API also exposes these string functions, one member per server
 overload: `btrim` (one-argument, character-set and `bytea` forms), the two-argument and `bytea` forms
 of `ltrim`/`rtrim`, `starts_with`, `parse_ident`, the `text` overloads of
 `quote_ident`/`quote_literal`/`quote_nullable`, `to_ascii(value, encoding)` (encoding named as text or
@@ -229,7 +234,7 @@ the pinned PostgreSQL 17.11 — `casefold`, the one-argument `to_ascii` and the 
 overloads — are refused while the query is prepared; the tested reasons are in the refusal table of
 [String functions](../../scalar-functions/01-string-functions.md#tested-refusals).
 
-The residual date/time family of #281 follows the same rule: `date_subtract` (the two-argument
+The same rule applies to these date and time functions: `date_subtract` (the two-argument
 `interval` form and the zoned three-argument form, both returning `timestamp with time zone`),
 `justify_interval`, `make_timestamptz` (with and without a zone), the clocks
 `clock_timestamp`/`statement_timestamp`/`transaction_timestamp`, `timeofday` and `isfinite` over
@@ -335,7 +340,7 @@ See [Distinct](../09-distinct.md).
 
 ## Set-returning functions
 
-PostgreSQL's set-returning functions are exposed as table-valued functions through
+PostgreSQL's set-returning functions—functions that produce rows—are exposed as table-valued functions through
 [`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) with a runtime-factory call:
 
 | `SqlFunctions.Postgres.*` | SQL output columns | Row shape |
@@ -349,6 +354,9 @@ PostgreSQL's set-returning functions are exposed as table-valued functions throu
 | `jsonb_object_keys(json)` | `jsonb_object_keys` | `IJsonObjectKeysRow` |
 | `jsonb_path_query(json, jsonpath)` | `jsonb_path_query` | `IJsonPathQueryRow` |
 | `ts_stat(query)` | `word`, `ndoc`, `nentry` | `ITsStatRow` |
+
+Use `generate_series` to produce rows from a sequence; use `unnest` when you want one row for each
+element of an existing array. The JSON functions in the table expand JSON values or objects into rows.
 
 A JSONPath operand is passed as text through `SqlFunctions.Postgres.jsonpath(path)`, which renders
 `cast(path as jsonpath)`.
@@ -567,6 +575,40 @@ The PostgreSQL `avg`/`sum` aggregates over vectors and their half-precision form
 markers yet. DDL is out of scope for nextorm as a whole: install the extension and create the columns and
 indexes (HNSW/IVFFlat, `vector_l2_ops` and friends) yourself. Distance operations with unequal dimensions
 fail on the PostgreSQL server, as do `bit` operations with unequal lengths.
+
+### Unified nearest-neighbor API
+
+`EntityBuilder<TEntity>.VectorSearch(...)` uses the same result shape on PostgreSQL and SQL Server:
+`VectorSearchResult<TEntity>` exposes the matching `Entity` and nullable `Distance`. Use the shared
+`Vector` value or an existing PostgreSQL `PgVector`, `PgHalfVector` or `PgSparseVector` value that matches
+the mapped property; the query-vector type must match that property. `PgBit` remains available for the
+PostgreSQL-only bit-distance markers, not this shared metric set. For example:
+
+```csharp
+var nearest = ctx.From<Document>()
+    .VectorSearch(x => x.Embedding, new Vector(new[] { 1f, 2f, 3f }),
+        VectorDistanceMetric.Cosine, topK: 10, mode: VectorSearchMode.Approximate)
+    .ToList();
+```
+
+PostgreSQL uses separate SQL forms for the two modes. `Exact` calls pgvector's distance function and
+orders by the result, guaranteeing exact nearest neighbors for the filtered source rows; for example
+`ORDER BY cosine_distance(embedding, @queryVector) LIMIT 10`
+(`l2_distance` is Euclidean/L2 and `negative_inner_product` is dot product). These function calls do
+not match the HNSW/IVFFlat distance-operator index ordering, so an ANN index cannot serve the exact
+nearest-neighbor search; computing all candidate distances can be slower. `Approximate` uses the
+pgvector distance operator, for example `ORDER BY embedding <=> @queryVector LIMIT 10` (`<->` is
+Euclidean/L2 and `<#>` is negative inner product), which is eligible for a matching HNSW or IVFFlat
+index. The PostgreSQL planner still decides whether an eligible index is used. Both forms return the
+same metric distance with lower values nearer. The PostgreSQL-only marker surface above continues to
+provide its additional L1, Hamming and Jaccard operations. Providers without vector-search support
+reject the unified call during preparation rather than substituting another metric or search path.
+SQL Server remains unchanged: exact search uses `VECTOR_DISTANCE`, while approximate search uses the
+context's explicitly selected `VECTOR_SEARCH` grammar. See [SQL Server vector search](sqlserver.md#vector-nearest-neighbor-search)
+for its SQL forms.
+
+For the shared vector contract and an application-level embedding/search workflow, see
+[AI and vector search](../../guide/36-ai-and-vector-search.md).
 
 ## See also
 

@@ -4,13 +4,10 @@ using System.Text;
 namespace NextORM.Core;
 
 /// <summary>
-/// Default implementations of the dialect contract. Only the parts that genuinely differ between
-/// dialects are abstract (<see cref="MakeParam"/>, <see cref="MakePage"/>); everything else has a
-/// working generic-SQL default, so a dialect overrides just what is different. A class-A capability is
-/// expressed as a nullable capability object (for example <see cref="Iif"/>) and its <c>Supports*</c>
-/// flag is computed from the object's presence, so a dialect cannot report a capability without
-/// supplying its rendering; the remaining emitters default to a working generic body and are only
-/// overridden where a dialect deviates.
+/// Base class for SQL dialects. Only <see cref="MakeParam"/> and <see cref="MakePage"/> are abstract;
+/// most other hooks have generic SQL defaults that a dialect can override. For renderer-backed
+/// capabilities such as <see cref="Iif"/>, the capability object's presence supplies the renderer and
+/// determines the associated support flag.
 /// </summary>
 public abstract class SqlDialectBase : ISqlDialect
 {
@@ -174,6 +171,8 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsArrayAgg => SupportsStringArrayAggregates;
     /// <inheritdoc/>
     public virtual bool SupportsExtendedScalarFunctions => false;
+    /// <summary>Defaults to <c>false</c>; a provider must explicitly opt into vector-distance translation.</summary>
+    public virtual bool SupportsVectorSearch => false;
     /// <summary>Only PostgreSQL has a standalone session random seed (<c>setseed</c>).</summary>
     public virtual bool SupportsRandomSeed => false;
     /// <summary>Only PostgreSQL has the <c>digest</c>/<c>sha256</c> hash surface.</summary>
@@ -309,12 +308,9 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsTransactions => true;
 
     /// <summary>
-    /// True when the provider supports savepoints inside an ADO.NET transaction; the fail-closed
-    /// default is <c>false</c>, so a dialect opts in with an override. The member exists on the base
-    /// class as well as on <see cref="ISqlDialect"/> because a class member declared in a derived type
-    /// does not implement — and is not re-mapped to — an interface default member: without this
-    /// <c>virtual</c> member a third-party dialect deriving from this base and declaring
-    /// <c>SupportsSavepoints => true</c> would still read <c>false</c> through <see cref="ISqlDialect"/>.
+    /// True when the provider supports savepoints inside an ADO.NET transaction. Defaults to
+    /// <see langword="false"/>; override this virtual base-class member to expose the capability through
+    /// <see cref="ISqlDialect"/>.
     /// </summary>
     public virtual bool SupportsSavepoints => false;
 
@@ -749,8 +745,9 @@ public abstract class SqlDialectBase : ISqlDialect
         "hour", "minute", "second"
     };
     /// <summary>
-    /// True for the ANSI date parts the generic <c>extract</c> can render; a dialect whose native
-    /// spelling differs for a part extends this set (quarter/week/dow/isodow/epoch) as needed.
+    /// True when <paramref name="part"/> is in this base class's supported date-part set. Override
+    /// this predicate when the provider-specific <see cref="MakeDatePart(string, string)"/> supports a
+    /// different set.
     /// </summary>
     public virtual bool SupportsDatePart(string part) => DatePartFields.Contains(part);
     /// <inheritdoc/>
@@ -996,6 +993,13 @@ public abstract class SqlDialectBase : ISqlDialect
         topStmt = null;
         return false;
     }
+
+    /// <inheritdoc/>
+    public virtual string MakeApproximateTop(string limitSql, KeywordCase keywordCase = KeywordCase.Lower)
+        => throw new NotSupportedException("Approximate vector-search TOP is not supported by this SQL dialect.");
+
+    /// <inheritdoc/>
+    public virtual string? ApproximateVectorSearchTopNArgumentName => null;
 
     /// <summary>Defaults to <c>false</c>; PostgreSQL and SQL Server opt into <c>WITH TIES</c> paging.</summary>
     public virtual bool SupportsWithTies => false;

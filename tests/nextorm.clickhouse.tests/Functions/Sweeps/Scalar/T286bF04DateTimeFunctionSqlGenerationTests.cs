@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Linq.Expressions;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using NextORM.Core;
@@ -19,6 +20,11 @@ namespace NextORM.ClickHouse.Tests;
 public class T286bF04DateTimeFunctionSqlGenerationTests
 {
     private static readonly IScalarFunctions ClickHouseScalars = ClickHouseDialect.Instance.ScalarFunctions!;
+
+    private static readonly string[] IntervalUnitNames =
+    [
+        "second", "minute", "hour", "day", "week", "month", "quarter", "year"
+    ];
 
     /// <summary>One row per render arm of the delivered members.</summary>
     private static readonly (string Name, string[] Args, string Expected)[] Arms =
@@ -242,45 +248,117 @@ public class T286bF04DateTimeFunctionSqlGenerationTests
     }
 
     [Fact]
-    public void StartOfInterval_ShouldInlineTheUnitAndRejectANonLiteralOrSubSecondUnit()
+    public void StartOfInterval_ShouldInlineEveryUnitAcrossBothFormsAndEntryPoints()
     {
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IT286bDateTimeEntity>();
-        var unit = "day";
         var origin = new DateTime(2024, 1, 1);
 
-        var sql = SqlOf(ctx, e
-            .Where(x => x.Id == 1)
-            .Select(x => new
+        Expression<Func<IT286bDateTimeEntity, DateTime>> unanchoredTemplate =
+            x => SqlFunctions.ClickHouse.to_start_of_interval(x.Value, 15, "minute");
+        Expression<Func<IT286bDateTimeEntity, DateTime>> anchoredTemplate =
+            x => SqlFunctions.ClickHouse.to_start_of_interval(x.Value, 1, "minute", origin);
+
+        foreach (var unit in IntervalUnitNames)
+        {
+            foreach (var casedUnit in IntervalUnitCaseVariants(unit))
             {
-                Local = SqlFunctions.ClickHouse.to_start_of_interval(x.Value, 15, "minute"),
-                Anchored = SqlFunctions.ClickHouse.to_start_of_interval(x.Value, 1, "WEEK", origin)
-            }));
+                var keyword = unit.ToUpperInvariant();
+                var unanchoredSql = SqlOf(ctx, e.Select(WithIntervalUnit(unanchoredTemplate, casedUnit)));
+                var anchoredSql = SqlOf(ctx, e.Select(WithIntervalUnit(anchoredTemplate, casedUnit)));
 
-        using (new AssertionScope())
+                using (new AssertionScope())
+                {
+                    unanchoredSql.Should().Contain(
+                        $"toStartOfInterval(dt, INTERVAL 15 {keyword})",
+                        $"the translator should inline '{casedUnit}' for the unanchored form");
+                    anchoredSql.Should().Contain(
+                        $"toStartOfInterval(toDateTime(dt), INTERVAL 1 {keyword}, toDateTime(@origin))",
+                        $"the translator should inline '{casedUnit}' for the anchored form");
+
+                    ClickHouseScalars.Render("to_start_of_interval", ["dt", "15", casedUnit])
+                        .Should().Be($"toStartOfInterval(dt, INTERVAL 15 {keyword})");
+                    ClickHouseScalars.Render("to_start_of_interval", ["dt", "1", casedUnit, "origin"])
+                        .Should().Be(
+                            $"toStartOfInterval(toDateTime(dt), INTERVAL 1 {keyword}, toDateTime(origin))");
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void StartOfInterval_ShouldRejectInvalidUnitsAtEachBoundaryAndKeepLiteralRequirement()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IT286bDateTimeEntity>();
+
+        Expression<Func<IT286bDateTimeEntity, DateTime>> template =
+            x => SqlFunctions.ClickHouse.to_start_of_interval(x.Value, 1, "day");
+        var invalidUnits = new[]
         {
-            sql.Should().Contain("toStartOfInterval(dt, INTERVAL 15 MINUTE) as `Local`", "the unit is a validated SQL keyword");
-            sql.Should().Contain("toStartOfInterval(toDateTime(dt), INTERVAL 1 WEEK, toDateTime(@origin)) as `Anchored`", "value and origin share the DateTime type");
+            "millisecond", "microsecond", "nanosecond", "fortnight",
+            "", " ", "\t", "minute ", " minute", " minute "
+        };
+
+        foreach (var unit in invalidUnits)
+        {
+            FluentActions.Invoking(() => SqlOf(ctx, e.Select(WithIntervalUnit(template, unit))))
+                .Should().Throw<NotSupportedException>()
+                .WithMessage(
+                    "The to_start_of_interval unit must be a compile-time string literal naming second, " +
+                    "minute, hour, day, week, month, quarter or year; ClickHouse rejects sub-second units " +
+                    "for a DateTime argument.");
+
+            FluentActions.Invoking(() => ClickHouseScalars.Render("to_start_of_interval", ["dt", "1", unit]))
+                .Should().Throw<NotSupportedException>()
+                .WithMessage(
+                    "The to_start_of_interval unit must be second, minute, hour, day, week, month, quarter " +
+                    "or year; ClickHouse rejects sub-second units for a DateTime argument.");
         }
 
-        using (new AssertionScope())
-        {
-            FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.to_start_of_interval(x.Value, 1, "millisecond"))))
-                .Should().Throw<NotSupportedException>()
-                .WithMessage("*compile-time string literal*ClickHouse rejects sub-second units*");
-
-            FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.to_start_of_interval(x.Value, 1, "fortnight"))))
-                .Should().Throw<NotSupportedException>()
-                .WithMessage("*second, minute, hour, day, week, month, quarter or year*");
-
-            FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.to_start_of_interval(x.Value, 1, unit))))
-                .Should().Throw<NotSupportedException>()
-                .WithMessage("*must be a compile-time string literal*");
-        }
-
-        FluentActions.Invoking(() => ClickHouseScalars.Render("to_start_of_interval", ["dt", "1", "microsecond"]))
+        string capturedUnit = "day";
+        FluentActions.Invoking(() =>
+                SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.to_start_of_interval(x.Value, 1, capturedUnit))))
             .Should().Throw<NotSupportedException>()
-            .WithMessage("*ClickHouse rejects sub-second units*");
+            .WithMessage(
+                "The to_start_of_interval unit must be a compile-time string literal naming second, " +
+                "minute, hour, day, week, month, quarter or year; ClickHouse rejects sub-second units " +
+                "for a DateTime argument.");
+
+        FluentActions.Invoking(() =>
+                SqlOf(ctx, e.Select(WithIntervalUnit(template, null))))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage(
+                "The to_start_of_interval unit must be a compile-time string literal naming second, " +
+                "minute, hour, day, week, month, quarter or year; ClickHouse rejects sub-second units " +
+                "for a DateTime argument.");
+
+        FluentActions.Invoking(() => ClickHouseScalars.Render("to_start_of_interval", ["dt", "1", null!]))
+            .Should().Throw<ArgumentNullException>()
+            .WithParameterName("key");
+    }
+
+    private static Expression<Func<IT286bDateTimeEntity, DateTime>> WithIntervalUnit(
+        Expression<Func<IT286bDateTimeEntity, DateTime>> template, string? unit)
+    {
+        var call = (MethodCallExpression)template.Body;
+        var arguments = call.Arguments.ToArray();
+        arguments[2] = Expression.Constant(unit, typeof(string));
+        return Expression.Lambda<Func<IT286bDateTimeEntity, DateTime>>(
+            call.Update(call.Object, arguments), template.Parameters);
+    }
+
+    private static IEnumerable<string> IntervalUnitCaseVariants(string unit)
+    {
+        yield return unit;
+        yield return unit.ToUpperInvariant();
+
+        var mixedCase = unit.ToCharArray();
+        for (var index = 0; index < mixedCase.Length; index++)
+            mixedCase[index] = index % 2 == 0
+                ? char.ToUpperInvariant(mixedCase[index])
+                : char.ToLowerInvariant(mixedCase[index]);
+        yield return new string(mixedCase);
     }
 
     [Fact]

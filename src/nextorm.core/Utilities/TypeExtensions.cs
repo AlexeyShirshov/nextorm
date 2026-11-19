@@ -41,11 +41,11 @@ public static class TypeExtensions
             || type.Name.StartsWith("ValueTuple`", StringComparison.Ordinal));
 
     /// <summary>
-    /// Tries to get the number of columns a projection type materializes. A projection is a generic
-    /// type implementing <see cref="IProjection"/>; its dimension is its number of generic arguments.
+    /// Tries to get the generic arity of a projection type. A projection is a generic type that
+    /// implements <see cref="IProjection"/>.
     /// </summary>
     /// <param name="type">The type to inspect.</param>
-    /// <param name="dim">When this method returns <see langword="true"/>, the projection's generic arity; otherwise <c>0</c>.</param>
+    /// <param name="dim">When this method returns <see langword="true"/>, the number of generic arguments; otherwise <c>0</c>.</param>
     /// <returns><see langword="true"/> when <paramref name="type"/> is a projection; otherwise <see langword="false"/>.</returns>
     public static bool TryGetProjectionDimension(this Type type, out int dim)
     {

@@ -1,17 +1,21 @@
 # How the engine works
 
-> A high-level tour of what sits between a fluent `From<T>()...Select(...)` call and the rows you get back: the query command, the pipeline that turns it into SQL, the plan cache, execution and row materialization. For step-by-step usage see the [Guide](../guide/03-filtering-where.md); for the caching rules see [Plan cache and reuse](03-plan-cache-and-reuse.md).
+> A query moves from description to result: you build its shape, NextORM prepares and renders provider-specific SQL, the executor runs it, and the chosen terminal shapes the result. This section explains those stages and the two ways to reuse preparation: the implicit plan cache and explicit `Prepare`. For step-by-step usage, see the [Guide](../guide/03-filtering-where.md); for caching rules, see [Plan cache and reuse](03-plan-cache-and-reuse.md).
 
 **Prerequisites:** [Quickstart](../getting-started/02-quickstart.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md).
 
 ## The pipeline at a glance
 
-Every query follows the same shape:
+A terminal is the call that runs the query and returns the result in a chosen shape.
 
-- A **builder factory** on the context creates the fluent builder: `ctx.From<TEntity>()` returns an [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1); the fluent operators (`Where`, `Join`, `Select`, ...) accumulate into a [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1). `From` starts a query — the other statement shapes have their own factories (see [builder entry points](#builder-entry-points)).
-- A terminal (`ToListAsync`, `FirstAsync`, `AnyAsync`, ...) drives **preparation**: the command is turned into a structural `QueryPlan` key and looked up in the plan cache.
-- On a cache **miss** the query is prepared, translated to SQL text plus parameters, and paired with a compiled row mapper and a `DbCommand`; the plan is stored back in the cache.
-- The command is executed against the database, and the `DbDataReader` is turned into result rows by the row mapper or streamed straight through.
+Every query follows the same route from description to result:
+
+- A **builder factory** on the context starts the statement. For a query, `ctx.From<TEntity>()` returns an [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1), and fluent operators (`Where`, `Join`, `Select`, ...) record the query in a [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1). `From` starts a query; other statement shapes have their own factories (see [builder entry points](#builder-entry-points)).
+- A terminal (`ToListAsync`, `FirstAsync`, `AnyAsync`, ...) starts **preparation**. The command becomes a structural `QueryPlan` key, which NextORM looks up in the plan cache.
+- On a cache **miss**, NextORM prepares the query, translates it to SQL text and parameters, and pairs it with a compiled row mapper and a `DbCommand`. It then stores the plan in the cache.
+- The command runs against the database. The `DbDataReader` supplies result rows, which the mapper materializes or the terminal streams directly.
+
+Use this map to see which component handles each part of the route:
 
 | Piece | Responsibility |
 |---|---|
@@ -29,7 +33,7 @@ Every query follows the same shape:
 
 ## Builder entry points
 
-Every statement starts at a factory on [`IDataContext`](xref:NextORM.Core.IDataContext) that returns the builder for that statement shape. `From` is the **query** factory, not the only one:
+Choose a statement shape through a factory on [`IDataContext`](xref:NextORM.Core.IDataContext); each factory returns the matching builder. `From` is the **query** factory, not the only one:
 
 | Entry point | Returns | Builds |
 |---|---|---|
@@ -46,21 +50,21 @@ Every statement starts at a factory on [`IDataContext`](xref:NextORM.Core.IDataC
 
 ## Command execution path
 
-The diagram traces the full path — from the fluent builder through the plan cache and SQL generation to execution and the row mapper:
+The diagram traces the query from the fluent builder through plan lookup and SQL generation, then through execution and row mapping:
 
 ![Command execution path: EntityBuilder → QueryCommand → QueryPlan → plan-cache lookup → QueryExecutor → DbDataReader → RowMapperFactory → buffered/streamed/scalar/serializing/raw terminals; on a cache miss QueryPreparer → SqlBuilder generate the SQL, and QueryPlanStore backs the lookup.](../assets/diagrams/nextorm-command-execution.svg)
 
 ## Explicit `Prepare()`
 
-The second diagram shows the explicit reuse path, where the query is compiled once into an [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1) and executed any number of times — the plan cache is not involved:
+The second diagram shows explicit reuse: the query is compiled once into an [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1), which you can execute repeatedly without using the implicit plan cache:
 
 ![Explicit Prepare: EntityBuilder → QueryCommand.Prepare() → GetPreparedQueryCommand → QueryPreparer → SqlBuilder, which forks into RowMapperFactory and CreateCommand, both merged into IPreparedQueryCommand<TResult>; the compiled command is then executed N times through prepared.ToList(db)/First(db) → QueryExecutor → DbDataReader → result rows, while QueryPlanStore is bypassed.](../assets/diagrams/nextorm-command-execution-prepared.svg)
 
 ## In this section
 
-* [Query pipeline: fluent to SQL](01-query-pipeline.md) — the command, preparation, the plan key and SQL generation.
-* [Execution and rows](02-execution-and-rows.md) — running the command and shaping the result.
-* [Plan cache and reuse: `Prepare`](03-plan-cache-and-reuse.md) — the implicit cache and explicit prepared commands.
+* [Query pipeline: fluent to SQL](01-query-pipeline.md) — trace query intent through preparation, the plan key, and SQL generation.
+* [Execution and rows](02-execution-and-rows.md) — follow command execution and choose how to consume its result.
+* [Plan cache and reuse: `Prepare`](03-plan-cache-and-reuse.md) — compare automatic plan reuse with explicit prepared commands.
 
 ## See also
 

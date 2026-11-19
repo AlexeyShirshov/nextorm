@@ -1,6 +1,6 @@
 # Колонки-длительности (`TimeSpan`)
 
-> Свойство `TimeSpan` — это **длительность**. nextorm хранит её нативно там, где у базы есть тип длительности или времени суток, и в целочисленной колонке во всех остальных случаях. Единица целочисленного хранения объявляется атрибутом [`DurationAttribute`](xref:NextORM.Core.DurationAttribute) или fluent-маппингом [`Duration(...)`](xref:NextORM.Core.EntityPropertyBuilder`1.Duration(NextORM.Core.DurationUnit,System.Int32)); по умолчанию — тики.
+> Свойство `TimeSpan` представляет **длительность**. Если у провайдера есть нативный тип длительности или времени суток, nextorm использует его; в остальных случаях значение хранится в целочисленной колонке. Для целочисленного хранения задайте единицу атрибутом [`DurationAttribute`](xref:NextORM.Core.DurationAttribute) или fluent-маппингом [`Duration(...)`](xref:NextORM.Core.EntityPropertyBuilder`1.Duration(NextORM.Core.DurationUnit,System.Int32)). Если единица не задана, используются тики.
 
 **Что нужно знать заранее:** [Запросы и проекции](../engine/index.md) · [Изменение данных (INSERT)](17-insert-statement.md) · [Обзор провайдеров](../connecting-providers/overview.md) · [Ограничения](../advanced/limitations.md)
 
@@ -15,9 +15,9 @@
 | ClickHouse | целочисленная колонка (`Int64`), по умолчанию тики |
 | In-memory | само значение CLR `TimeSpan` |
 
-На целочисленных провайдерах значение записывается в единицах `DurationUnit` и читается обратно в той же единице: `[Duration(DurationUnit.Seconds)]` над колонкой `bigint` хранит целые секунды. Чтение, запись и сравнения применяют одно и то же преобразование, поэтому свойство `TimeSpan` проходит round-trip без ручной конвертации.
+На провайдерах с целочисленным хранением nextorm записывает и читает значение в одной и той же единице `DurationUnit`. Например, `[Duration(DurationUnit.Seconds)]` хранит в колонке `bigint` целые секунды. При чтении, записи и сравнении применяется одно преобразование, поэтому свойство `TimeSpan` проходит round-trip без ручной конвертации.
 
-Генератор схемы выдаёт для объявлений ниже такие типы колонок:
+Для объявлений свойств ниже генератор схемы создаёт такие типы колонок у разных провайдеров:
 
 ```sql
 -- PostgreSQL: нативный interval
@@ -61,11 +61,16 @@ ctx.From<Task>(b => b
     .Property(x => x.Estimate).Duration(DurationUnit.Seconds).HasColumnName("estimate"));
 ```
 
-`DurationUnit` — одно из `Ticks`, `Microseconds`, `Milliseconds`, `Seconds`, `Minutes`, `Hours`, `Days`. `Precision` — точность дробных секунд **нативного** типа (например, `TIME(3)` или `interval(3)`); для целочисленной формы игнорируется. На PostgreSQL и MySQL/MariaDB единица игнорируется, потому что значение хранится нативно.
+Два параметра маппинга управляют разными аспектами хранения:
+
+| Опция | Применяется к | Действие |
+|---|---|---|
+| `DurationUnit` | Провайдерам с целочисленным хранением | Можно выбрать `Ticks`, `Microseconds`, `Milliseconds`, `Seconds`, `Minutes`, `Hours` или `Days`. PostgreSQL и MySQL/MariaDB хранят значение нативно и игнорируют единицу. |
+| `Precision` | Нативным типам | Задаёт точность дробных секунд, например `TIME(3)` или `interval(3)`. При целочисленном хранении игнорируется. |
 
 ## Запросы и сравнения
 
-Колонка-длительность проецируется и фильтруется как любая другая. Константа `TimeSpan` в сравнении приводится к форме хранения колонки, с любой стороны от оператора:
+Сопоставленное свойство-длительность можно проецировать и фильтровать как любую другую колонку. В сравнении nextorm приводит константу `TimeSpan` к форме хранения колонки независимо от того, с какой стороны оператора она стоит:
 
 ```csharp
 // Читает хранимое целое в объявленной единице на SQL Server/SQLite/ClickHouse
@@ -76,7 +81,7 @@ var overdue = ctx.From<Task>()
     .ToList();
 ```
 
-Сгенерированный SQL имеет одинаковую форму у всех провайдеров; отличаются плейсхолдер и связываемый параметр:
+Форма SQL одинакова у всех провайдеров; провайдер определяет плейсхолдер и значение, связываемое с ним:
 
 ```sql
 -- PostgreSQL / MySQL / MariaDB: @p0 несёт нативную длительность
@@ -92,15 +97,15 @@ select id, estimate
 
 В SQLite плейсхолдер — `$p0`, а не `@p0`.
 
-Запись идёт через то же преобразование, включая bulk insert.
+При записи применяется то же преобразование хранения, что и при чтении и сравнении, в том числе при bulk insert.
 
 ## Детали и ограничения
 
-* PostgreSQL `interval` хранит и месяцы, которых `TimeSpan` не выражает без потерь. Если возвращённое значение смэппированного interval несёт ненулевую месячную составляющую — любого знака, — чтение в колонку `TimeSpan` бросает `InvalidCastException` вместо приближения; значение с нулевыми месяцами (дни плюс микросекунды) конвертируется точно, когда помещается в `TimeSpan`, а непредставимое значение падает с `OverflowException` вместо переполнения-обёртки. Если месяцы важны — используйте целочисленную колонку с единицей.
+* PostgreSQL `interval` хранит и месяцы, которые `TimeSpan` не может представить без потерь. Если смэппированный `interval` возвращает ненулевую месячную составляющую любого знака, чтение в `TimeSpan` бросает `InvalidCastException`, а не приближает значение. Значение с нулевыми месяцами (дни плюс микросекунды) конвертируется точно, если помещается в `TimeSpan`; непредставимое значение вызывает `OverflowException`, а не циклическое переполнение. Если месяцы важны, используйте целочисленную колонку с единицей.
 * В SQL Server есть тип `time`, но это время суток (меньше 24 часов); nextorm поэтому использует целочисленную колонку, чтобы длительности больше суток были представимы.
 * Единица крупнее тиков отбрасывает остаток, как и колонка базы с этой единицей.
 * Объявленную единицу несёт только **непосредственно проецируемое** свойство-длительность; вычисляемое выражение длительности (`Select(x => x.Estimate + something)`) читается в единице по умолчанию — тиках. Проецируйте само свойство, если используете не-тиковую единицу.
 * `DateTimeOffset` читается напрямую драйвером провайдера; конвенция по дате (`value.Date` против `value.UtcDateTime.Date`) не применяется.
-* У MySQL/MariaDB тоже ограниченный нативный диапазон `TIME` — `−838:59:59`…`838:59:59` (примерно ±34.9 суток); более длительную длительность там нельзя хранить в свойстве `TimeSpan` (nextorm всегда использует нативный `TIME`), поэтому держите её в отдельном целочисленном свойстве (например, `long`).
+* У MySQL/MariaDB тоже ограничен нативный диапазон `TIME`: `−838:59:59`…`838:59:59` (примерно ±34.9 суток). Поскольку nextorm всегда использует там нативный `TIME`, свойство `TimeSpan` не хранит более длительную длительность; используйте отдельное целочисленное свойство, например `long`.
 
-Диалектная поверхность для генераторов схемы: [`ISqlDialect.MakeDurationType`](xref:NextORM.Core.ISqlDialect.MakeDurationType(System.Nullable{NextORM.Core.DurationUnit},System.Int32)) для non-nullable-колонки и [`ISqlDialect.MakeNullableDurationType`](xref:NextORM.Core.ISqlDialect.MakeNullableDurationType(System.Nullable{NextORM.Core.DurationUnit},System.Int32)) для nullable, а также [`SupportsNativeDuration`](xref:NextORM.Core.ISqlDialect.SupportsNativeDuration). У всех провайдеров, кроме ClickHouse, тип совпадает; у ClickHouse non-nullable `Int64` для nullable-случая становится `Nullable(Int64)`.
+Генераторы схемы используют [`ISqlDialect.MakeDurationType`](xref:NextORM.Core.ISqlDialect.MakeDurationType(System.Nullable{NextORM.Core.DurationUnit},System.Int32)) для non-nullable-колонки и [`ISqlDialect.MakeNullableDurationType`](xref:NextORM.Core.ISqlDialect.MakeNullableDurationType(System.Nullable{NextORM.Core.DurationUnit},System.Int32)) для nullable-колонки; [`SupportsNativeDuration`](xref:NextORM.Core.ISqlDialect.SupportsNativeDuration) также входит в эту диалектную поверхность. У всех провайдеров, кроме ClickHouse, оба метода возвращают один и тот же тип. В ClickHouse nullable-колонка использует `Nullable(Int64)` вместо `Int64`.

@@ -2,25 +2,32 @@
 
 > Посмотрите, как NextORM получает, переиспользует и освобождает соединение с базой данных, и чем роль жизненного цикла соединения отличается от самого контекста.
 
-**Предварительные требования:** [Quickstart](../getting-started/02-quickstart.md) · [Dependency injection](../getting-started/04-dependency-injection.md) · [Query reuse](../engine/03-plan-cache-and-reuse.md).
+**Предварительные требования:** [Быстрый старт](../getting-started/02-quickstart.md) · [Внедрение зависимостей](../getting-started/04-dependency-injection.md) · [Переиспользование запросов](../engine/03-plan-cache-and-reuse.md).
 
 ## Обзор
 
-SQL-провайдеры ([`SqliteDataContext`](xref:NextORM.Sqlite.SqliteDataContext), [`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext), [`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext)) все наследуются от [`DataContext`](xref:NextORM.Core.DataContext), который реализует и [`IDataContext`](xref:NextORM.Core.IDataContext), и [`IConnectionManager`](xref:NextORM.Core.IConnectionManager). Контекст создаётся либо из строки подключения (контекст создаёт соединение и владеет им), либо из уже созданного `DbConnection` (им владеет вызывающая сторона). Провайдер in-memory реализует только [`IDataContext`](xref:NextORM.Core.IDataContext) — у него вообще нет соединения.
+SQL-провайдеры ([`SqliteDataContext`](xref:NextORM.Sqlite.SqliteDataContext), [`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext) и [`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext)) наследуются от [`DataContext`](xref:NextORM.Core.DataContext). `DataContext` реализует и [`IDataContext`](xref:NextORM.Core.IDataContext), и [`IConnectionManager`](xref:NextORM.Core.IConnectionManager).
+
+Выбирайте способ передачи соединения по тому, кто им владеет: при передаче строки подключения
+соединение создаёт контекст и он же им владеет; при передаче `DbConnection` им владеете вы. Провайдер
+in-memory реализует только [`IDataContext`](xref:NextORM.Core.IDataContext), поскольку соединения у
+него нет.
 
 ## Строка подключения против переданного соединения
 
-Каждый SQL-провайдер предоставляет два конструктора, и расширения builder `Use…` оборачивают их:
+Выберите строку подключения, если контекст должен создать соединение и владеть им. Передайте
+`DbConnection`, если соединением должен владеть и управлять ваш код. Каждый SQL-провайдер
+предоставляет оба конструктора, а расширения builder `Use…` оборачивают их:
 
 ```csharp
-// A: the context creates and owns the connection from the string.
+// A: контекст создаёт соединение из строки и владеет им.
 using var owned = new SqliteDataContext("Data Source=app.db", new DataContextBuilder());
 
-// B: the caller owns the connection; the context reuses this exact instance.
+// B: соединением владеет вызывающий код; контекст повторно использует именно этот экземпляр.
 using var supplied = new SqliteConnection("Data Source=app.db");
 using var reused = new SqliteDataContext(supplied, new DataContextBuilder());
 
-// Equivalent through the builder:
+// Те же варианты через builder:
 var builderA = new DataContextBuilder().UseSqlite("app.db");
 var builderB = new DataContextBuilder().UseSqlite(supplied);
 ```
@@ -38,7 +45,7 @@ ctx2.ConnectionString; // supplied.ConnectionString
 
 ## Переиспользование соединения
 
-[`GetConnection`](xref:NextORM.Core.DataContext.GetConnection) создаёт соединение при первом обращении и возвращает **тот же** экземпляр при каждом последующем вызове. [`EnsureConnectionOpen`](xref:NextORM.Core.DataContext.EnsureConnectionOpen) открывает его, если оно закрыто; `EnsureConnectionOpenAsync(CancellationToken)` — отменяемая асинхронная форма.
+[`GetConnection`](xref:NextORM.Core.DataContext.GetConnection) создаёт соединение при первом обращении и возвращает **тот же** экземпляр при каждом последующем вызове. [`EnsureConnectionOpen`](xref:NextORM.Core.DataContext.EnsureConnectionOpen) открывает его, если оно закрыто; `EnsureConnectionOpenAsync(CancellationToken)` — отменяемая асинхронная форма. Например, повторные вызовы возвращают один экземпляр:
 
 ```csharp
 using var ctx = new SqliteDataContext("Data Source=app.db", new DataContextBuilder());
@@ -69,6 +76,8 @@ var rows = ctx.From<ISimpleEntity>().Select(x => x.Id).ToList(); // [42]
 
 * **Созданное контекстом** соединение (созданное из строки подключения) освобождается `Dispose()` / `DisposeAsync()`. Кэшированные подготовленные команды, которые были привязаны к нему, сбрасываются, чтобы перепривязаться при следующем использовании.
 * **Переданное** соединение никогда не освобождается контекстом — оно остаётся в том состоянии, в котором было. Им владеет вызывающая сторона.
+
+Примеры показывают, как освобождается соединение при каждом варианте владения:
 
 ```csharp
 var owned = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
@@ -156,6 +165,8 @@ var slowIds = ctx.From<ISimpleEntity>()
 
 ## Различия провайдеров
 
+В таблице указаны тип соединения и особенности каждого провайдера:
+
 | Провайдер | Тип соединения | Примечания |
 |---|---|---|
 | SQLite | `SqliteConnection` | `OnConnectionCreated` регистрирует пользовательские агрегатные функции (`stdev`, `stdevp`, `var`, `varp`) и для созданных, и для переданных соединений. |
@@ -169,10 +180,10 @@ var slowIds = ctx.From<ISimpleEntity>()
 ## См. также
 
 * [Логирование](04-logging.md)
-* [Query reuse: plan cache and `Prepare`](../engine/03-plan-cache-and-reuse.md)
-* [Dependency injection](../getting-started/04-dependency-injection.md)
-* [Quickstart](../getting-started/02-quickstart.md)
-* [Documentation index](../index.md)
+* [Переиспользование запросов: кэш планов и `Prepare`](../engine/03-plan-cache-and-reuse.md)
+* [Внедрение зависимостей](../getting-started/04-dependency-injection.md)
+* [Быстрый старт](../getting-started/02-quickstart.md)
+* [Указатель документации](../index.md)
 
 ---
 

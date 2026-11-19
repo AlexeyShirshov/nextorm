@@ -48,4 +48,5 @@
   </ItemGroup>
 
   <ItemGroup><ProjectReference Include="../../src/nextorm.extensions/nextorm.extensions.csproj" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../nextorm.aot.scenarios/nextorm.aot.scenarios.csproj" /></ItemGroup>
 </Project>

@@ -95,8 +95,8 @@ internal interface IEagerLoadNodeSource
 internal interface IEagerLoadSpec<TEntity> : IEagerLoadNodeSpec
 {
     /// <summary>
-    /// Loads and assigns the child collection for every parent using two sequential round trips
-    /// (no N+1).
+    /// Loads and assigns the child collection after the parent query
+    /// The loader issues one child query per key chunk, rather than one query per parent.
     /// </summary>
     /// <param name="context">The data context the child query is built from.</param>
     /// <param name="parentScope">The parent command's global-query-filter scope, inherited by the child side.</param>
@@ -104,8 +104,8 @@ internal interface IEagerLoadSpec<TEntity> : IEagerLoadNodeSpec
     void Execute(IDataContext context, QueryFilterScope parentScope, IReadOnlyList<TEntity> parents);
 
     /// <summary>
-    /// Asynchronously loads and assigns the child collection for every parent using two sequential
-    /// round trips (no N+1).
+    /// Asynchronously loads and assigns the child collection after the parent query.
+    /// The loader issues one child query per key chunk, rather than one query per parent.
     /// </summary>
     /// <param name="context">The data context the child query is built from.</param>
     /// <param name="parentScope">The parent command's global-query-filter scope, inherited by the child side.</param>

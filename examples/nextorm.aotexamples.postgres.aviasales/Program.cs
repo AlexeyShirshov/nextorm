@@ -11,6 +11,9 @@ using NextORM.Postgres;
 // published with PublishAot and run natively. Each query prints its row count and a digest of the
 // formatted rows, which makes a JIT run and a native run directly comparable.
 
+// Seconds per command; the demo dataset is small enough that a healthy server answers well inside it.
+const int CommandTimeoutSeconds = 600;
+
 CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
 CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
 
@@ -27,7 +30,11 @@ if (connectionString is null)
 
 Console.WriteLine("[aot-aviasales] using the provided PostgreSQL connection string");
 
-await using var ctx = new PostgresDataContext(connectionString, new DataContextBuilder());
+// The demo aggregations scan the whole Aviasales dataset and take minutes on a cold server, which is
+// past the 30-second provider default; the timeout is set on the context so a bare connection string
+// is enough to run the probe.
+await using var ctx = new PostgresDataContext(
+    connectionString, new DataContextBuilder().UseCommandTimeout(CommandTimeoutSeconds));
 
 var queries = new (string Name, Func<CancellationToken, Task<object>> Run)[]
 {

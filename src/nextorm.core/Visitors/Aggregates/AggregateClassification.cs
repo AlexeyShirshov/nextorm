@@ -4,9 +4,13 @@ using System.Reflection;
 namespace NextORM.Core;
 
 /// <summary>
-/// Public classification of an expression as an aggregate (vs. scalar/window). Single implementation
-/// shared by the engine and external operators; aggregate <c>FILTER</c>/<c>DISTINCT</c> arguments
-/// stay opaque. No duplicated magic-name list and no registry.
+/// Provides helpers for classifying expression-tree calls as aggregate or window functions, and for
+/// resolving related function metadata and projection shapes.
+/// <para>
+/// Aggregate classification is shared by the query engine and external operators. It applies only to
+/// the supplied expression; it does not inspect expressions nested in aggregate <c>FILTER</c> or
+/// <c>DISTINCT</c> arguments.
+/// </para>
 /// </summary>
 public static class AggregateClassification
 {
@@ -45,7 +49,9 @@ public static class AggregateClassification
         return names;
     }
 
-    /// <summary>Returns <see langword="true"/> when <paramref name="expression"/> is an aggregate call.</summary>
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="expression"/> is a method call recognized as an aggregate.
+    /// </summary>
     public static bool IsAggregate(Expression? expression)
     {
         if (expression is not MethodCallExpression call)
@@ -72,7 +78,10 @@ public static class AggregateClassification
         return AggregateNameSet.Contains(name);
     }
 
-    /// <summary>Returns <see langword="true"/> when <paramref name="expression"/> is a window function call.</summary>
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="expression"/> is a method call whose name maps to a
+    /// window function.
+    /// </summary>
     public static bool IsWindow(Expression? expression)
     {
         if (expression is not MethodCallExpression call)
@@ -80,23 +89,38 @@ public static class AggregateClassification
         return WindowSql.MapWindowFunctionName(call.Method.Name) is not null;
     }
 
-    /// <summary>Resolves the effective <see cref="SqlFunctionAttribute"/> for <paramref name="method"/>.</summary>
+    /// <summary>
+    /// Returns the <see cref="SqlFunctionAttribute"/> applied to <paramref name="method"/>, or the attribute
+    /// applied to its declaring type when the method has none. Returns <see langword="null"/> when neither
+    /// has an attribute.
+    /// </summary>
     public static SqlFunctionAttribute? ResolveSqlFunctionAttribute(MethodInfo method)
         => ScalarFunctionTranslator.ResolveSqlFunctionAttribute(method);
 
-    /// <summary>Returns <see langword="true"/> when <paramref name="node"/> is an advanced aggregate method.</summary>
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="node"/> calls an aggregate in an advanced family
+    /// recognized by the query engine.
+    /// </summary>
     public static bool IsAdvancedAggregateMethod(MethodCallExpression node)
         => AdvancedAggregateTranslator.IsAdvancedAggregateMethod(node);
 
-    /// <summary>Maps a method name to a window function name, or <see langword="null"/> when it is not a window.</summary>
+    /// <summary>
+    /// Maps a method name to its window-function name, or returns <see langword="null"/> when the name is not
+    /// recognized.
+    /// </summary>
     public static string? MapWindowFunctionName(string methodName)
         => WindowSql.MapWindowFunctionName(methodName);
 
-    /// <summary>Returns <see langword="true"/> when <paramref name="type"/> is a single-column projection.</summary>
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="type"/> is treated as a one-column projection.
+    /// </summary>
     public static bool IsSingleColumnProjection(Type type)
         => TypeFacts.IsSingleColumnProjection(type);
 
-    /// <summary>Unwraps a convert expression.</summary>
+    /// <summary>
+    /// Removes any <see cref="ExpressionType.Convert"/> or <see cref="ExpressionType.ConvertChecked"/> wrappers
+    /// from <paramref name="expression"/>.
+    /// </summary>
     public static Expression UnwrapConvert(Expression expression)
         => TypeFacts.UnwrapConvert(expression);
 }

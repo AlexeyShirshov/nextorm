@@ -4,26 +4,6 @@
 
 **Prerequisites:** [Provider overview](overview.md) · [MySQL](mysql.md)
 
-## Overview
-
-[`MariaDbDataContext`](xref:NextORM.MariaDb.MariaDbDataContext) (`src/nextorm.mariadb/MariaDbDataContext.cs`) derives from [`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext), so it uses
-the same `MySqlConnector` driver and the same connection and parameter handling. It returns
-[`Instance`](xref:NextORM.MariaDb.MariaDbDialect.Instance) from its `Dialect` property.
-
-[`MariaDbDialect`](xref:NextORM.MariaDb.MariaDbDialect) (`src/nextorm.mariadb/MariaDbDialect.cs`) derives from [`MySqlDialect`](xref:NextORM.MySql.MySqlDialect) and changes the
-capability set: `INTERSECT ALL` and `EXCEPT ALL` are supported by MariaDB 10.4 and later, so
-[`SupportsIntersectExceptAll`](xref:NextORM.Core.ISqlDialect.SupportsIntersectExceptAll) is `true`; MariaDB 10.3+ renders the window percentiles
-`percentile_cont`/`percentile_disc` (`... within group (order by ...) over (...)`), so
-[`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow) is `true`; the same
-analytic shape backs `SqlFunctions.MySql.median(value).Over(...)` (rendered
-`percentile_cont(0.5) within group (order by value) over (...)`, one row per input row, partition-only
-window), while the generic `SqlFunctions.MySql.percentile` has no MariaDB spelling and throws
-`NotSupportedException`; and `UPDATE ... RETURNING` is enabled only when an explicit
-server version 13.0+ is configured ([`SupportsUpdateReturning`](xref:NextORM.Core.ISqlDialect.SupportsUpdateReturning)). It also keeps the arbitrary-value
-aggregate `any_agg` gated **off**, because MariaDB has no `ANY_VALUE` in 10.4–12.x (the SQL-2023 `T626`
-feature is still pending, targeted for 13.2). Everything else (parameters, quoting, `concat`,
-coalesce, paging, aggregate names, the `if(...)` spelling of the portable `iif`) is inherited unchanged.
-
 ## Registering the provider
 
 Two overloads are available on [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder)
@@ -49,15 +29,38 @@ using IDataContext ctx = new MariaDbDataContext(
     "Server=localhost;Database=app;User ID=app;Password=secret", new DataContextBuilder());
 ```
 
+## Overview
+
+[`MariaDbDataContext`](xref:NextORM.MariaDb.MariaDbDataContext) (`src/nextorm.mariadb/MariaDbDataContext.cs`) derives from [`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext), so it uses
+the same `MySqlConnector` driver and the same connection and parameter handling. It returns
+[`Instance`](xref:NextORM.MariaDb.MariaDbDialect.Instance) from its `Dialect` property.
+
+[`MariaDbDialect`](xref:NextORM.MariaDb.MariaDbDialect) (`src/nextorm.mariadb/MariaDbDialect.cs`) derives
+from [`MySqlDialect`](xref:NextORM.MySql.MySqlDialect). It changes these capabilities:
+
+- MariaDB 10.4 and later support `INTERSECT ALL` and `EXCEPT ALL`, so
+  [`SupportsIntersectExceptAll`](xref:NextORM.Core.ISqlDialect.SupportsIntersectExceptAll) is `true`.
+- MariaDB 10.3 and later render the window percentiles `percentile_cont` and `percentile_disc` as
+  `... within group (order by ...) over (...)`, so
+  [`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow) is `true`.
+  The same analytic shape backs `SqlFunctions.MySql.median(value).Over(...)`: it renders
+  `percentile_cont(0.5) within group (order by value) over (...)`, returns one row per input row, and
+  supports a partition-only window. The generic `SqlFunctions.MySql.percentile` has no MariaDB spelling
+  and throws `NotSupportedException`.
+- `UPDATE ... RETURNING` is enabled only when you explicitly configure server version 13.0 or later
+  ([`SupportsUpdateReturning`](xref:NextORM.Core.ISqlDialect.SupportsUpdateReturning)).
+- The arbitrary-value aggregate `any_agg` is disabled. MariaDB 10.4–12.x does not provide `ANY_VALUE`.
+
+MariaDB inherits the remaining behavior from MySQL: parameters, quoting, `concat`, `coalesce`, paging,
+aggregate names, and the `if(...)` spelling of portable `iif`.
+
 ## Server version
 
 The dialect can be pinned to the server version, which gates `UPDATE ... RETURNING` and the bulk
 `Returning*` terminals. Configuration is **explicit** — nextorm never probes the live server. Pass the
 version with the context constructor's `Version` parameter. Unlike PostgreSQL, an **unset** version does
 **not** enable the feature: without an explicit 13.0+ the `Returning()` terminal of an `UPDATE` and a bulk
-`Returning*` call reject with `NotSupportedException`. Single-row insert and delete `RETURNING` are
-unchanged (MariaDB rejects them as before), and the `ANY_VALUE` gate (`any_agg`, targeted for 13.2) is also
-unchanged. Bulk `Returning*` is supported on 13.0+ and refused below; the live certification runs on
+`Returning*` call reject with `NotSupportedException`. The provider rejects `RETURNING` on single-row inserts and deletes. Bulk `Returning*` is supported on 13.0+ and refused below; the live certification runs on
 `mariadb:11.4`, so it covers the refusal arm.
 
 ```csharp
@@ -134,7 +137,10 @@ See [Bulk insert](../guide/22-bulk-insert.md).
 
 ## Provider differences
 
-MariaDB differs from [MySQL](mysql.md) in the set-operation capability, the window percentiles, the version-gated `UPDATE ... RETURNING` and the arbitrary-value aggregate:
+MariaDB differs from [MySQL](mysql.md) in its set-operation capability, window percentiles,
+version-gated `UPDATE ... RETURNING`, and arbitrary-value aggregate.
+
+The following table summarizes those differences and the inherited behavior:
 
 | Aspect | MariaDB |
 |---|---|

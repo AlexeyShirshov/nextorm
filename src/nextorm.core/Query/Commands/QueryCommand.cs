@@ -22,6 +22,8 @@ internal readonly struct QueryShape
     public LambdaExpression? Condition { get; init; }
     /// <summary>The selective query-filter scope disabled for this command, or <c>null</c> for none.</summary>
     public QueryFilterScope? FilterScope { get; init; }
+    /// <summary>The runtime mapping variant selected for this command.</summary>
+    public MappingVariant MappingVariant { get; init; }
     /// <summary>Joins accumulated by the builder.</summary>
     public JoinExpression[]? Joins { get; init; }
     /// <summary>Paging (limit/offset) applied to the query.</summary>
@@ -137,6 +139,14 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     internal bool IdentitySlotAliases { get; set; }
     private bool _dontCache;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
+    internal MappingVariant MappingVariant { get; set; } = MappingVariant.Default;
+
+    /// <summary>
+    /// The entity type the command is routed by. Projected and scalar commands have no
+    /// <see cref="EntityType"/>, so the builder records the entity it was built from here and the
+    /// planner resolves the routing rule from it.
+    /// </summary>
+    internal Type? RouteEntityType { get; set; }
     internal int ColumnsPlanHash;
     internal int JoinPlanHash;
     internal int SortingPlanHash;
@@ -404,6 +414,8 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         IdentitySlotAliases = source.IdentitySlotAliases;
         _condition = forCache ? null : source._condition;
         _filterScope = source._filterScope;
+        MappingVariant = source.MappingVariant;
+        RouteEntityType = source.RouteEntityType;
         // Own a private array, exactly like the definition constructor: preparation writes the prepared
         // copy back into the array (PrepareJoin), so sharing it would let one command's preparation
         // rewrite a source's or sibling's joins. The cache clone deep-clones instead.
@@ -464,6 +476,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _srcType = shape.SrcType;
         _condition = shape.Condition;
         _filterScope = shape.FilterScope ?? QueryFilterScope.None;
+        MappingVariant = shape.MappingVariant;
         _joins = shape.Joins is { } joins
             ? (ownJoins ? joins : CloneJoinArray(joins)!)
             : null;
@@ -772,12 +785,10 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// one document column.
     /// </summary>
     internal bool DocumentMode { get; set; }
-    /// <summary>Whether the command is shaped to return at most a single row (set by the <c>First</c>/<c>Single</c> terminals).</summary>
+    /// <summary>Whether the command uses a single-row terminal shape.</summary>
     public bool SingleRow { get; set; }
     /// <summary>
-    /// Whether the command was marked with <c>DISTINCT</c>. Named <c>IsDistinct</c> rather than
-    /// <c>Distinct</c> so the fluent <see cref="QueryCommand{TResult}.Distinct"/> method does not hide
-    /// the property on the generic command type.
+    /// Whether the query returns distinct rows.
     /// </summary>
     public bool IsDistinct { get; internal set; }
     /// <summary>

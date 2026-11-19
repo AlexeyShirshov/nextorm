@@ -1,25 +1,25 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace NextORM.Core;
 
 /// <summary>
-/// Builds and caches the synthetic <see cref="JoinIntoLink{TParentKey,TChildKey}"/> source a many-to-many
-/// <c>JoinInto</c> projects between the parent and the child, and registers its keyless mapping so the
-/// denormalized pair command can expand the derived junction link exactly like any other entity-typed
-/// projection item (see <c>QueryPreparer.TryExpandEntityItem</c>).
+/// Builds the synthetic link source a many-to-many <c>JoinInto</c> projects between the parent and child:
+/// a <see cref="JoinIntoLink{TParentKey,TChildKey}"/> for scalar junction keys or a flat carrier for
+/// composite keys. It registers the keyless mapping so the denormalized pair command can expand the
+/// derived junction link like any other entity-typed projection item (see <c>QueryPreparer.TryExpandEntityItem</c>).
 /// </summary>
 /// <remarks>
-/// The link type is not part of the user model: it is a closed generic built on demand for the two key
-/// types of the relationship and mapped by convention (the auto-built mapping carries the three columns
-/// <c>ParentKey</c>, <c>ChildKey</c> and <c>Occurrence</c>, and declares no key). Both the
-/// <c>MakeGenericType</c> call and the built mapping are cached, so the same key-type pair never rebuilds
-/// them per query. The mapping is (re)published into <see cref="DataContextCache.Metadata"/> on every
-/// request, so a <c>DataContextCache.Clear()</c> that drops the configured cache is transparently healed
-/// without rebuilding the metadata. The derived junction <c>FROM</c> join itself (the
-/// <c>row_number() over (partition by fkP, fkC order by fkC)</c> subquery) is built by the many-to-many
-/// <c>JoinInto</c> spec on top of this source.
+/// The link type is not part of the user model. Scalar keys use a closed generic with the three mapped
+/// columns <c>ParentKey</c>, <c>ChildKey</c> and <c>Occurrence</c>; composite keys use the
+/// arity-general flat carrier from <see cref="CompositeJunctionLinkFactory"/>. The scalar type and mapping
+/// are cached per key-type pair; composite carriers and their metadata are cached per component-type shape.
+/// Their mappings are (re)published into <see cref="DataContextCache.Metadata"/> when needed. The derived
+/// junction <c>FROM</c> source assigns a <c>row_number()</c> occurrence partitioned by the junction's
+/// parent and child foreign-key components.
 /// </remarks>
 internal static class JunctionLinkSourceFactory
 {
@@ -33,10 +33,14 @@ internal static class JunctionLinkSourceFactory
     /// <param name="parentKeyType">The CLR type of the parent-side key / junction parent foreign key.</param>
     /// <param name="childKeyType">The CLR type of the child-side key / junction child foreign key.</param>
     /// <returns>The closed link type.</returns>
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.PublicProperties, typeof(JoinIntoLink<,>))]
     internal static Type GetLinkType(Type parentKeyType, Type childKeyType)
     {
         ArgumentNullException.ThrowIfNull(parentKeyType);
         ArgumentNullException.ThrowIfNull(childKeyType);
+
+        if (!RuntimeFeature.IsDynamicCodeSupported)
+            return typeof(JoinIntoLink<object, object>);
 
         return LinkTypeCache.GetOrAdd(
             (parentKeyType, childKeyType),
@@ -157,9 +161,13 @@ internal static class JunctionLinkSourceFactory
 
         var bindings = new List<MemberBinding>(parentForeignKeys.Length + childForeignKeys.Length + 1);
         for (var i = 0; i < parentForeignKeys.Length; i++)
-            bindings.Add(Expression.Bind(carrier.ParentKeys[i], Expression.Property(junctionParameter, parentForeignKeys[i])));
+            bindings.Add(Expression.Bind(
+                carrier.ParentKeys[i],
+                ConvertToPropertyType(Expression.Property(junctionParameter, parentForeignKeys[i]), carrier.ParentKeys[i])));
         for (var i = 0; i < childForeignKeys.Length; i++)
-            bindings.Add(Expression.Bind(carrier.ChildKeys[i], Expression.Property(junctionParameter, childForeignKeys[i])));
+            bindings.Add(Expression.Bind(
+                carrier.ChildKeys[i],
+                ConvertToPropertyType(Expression.Property(junctionParameter, childForeignKeys[i]), carrier.ChildKeys[i])));
         bindings.Add(Expression.Bind(carrier.Occurrence, occurrence));
 
         var body = Expression.MemberInit(Expression.New(carrier.LinkType), bindings);
@@ -181,12 +189,11 @@ internal static class JunctionLinkSourceFactory
     }
 
     /// <summary>
-    /// Builds the derived junction source a many-to-many <c>JoinInto</c> joins the parent to:
-    /// <c>(SELECT fkP AS ParentKey, fkC AS ChildKey, row_number() over (partition by fkP, fkC order by fkC)
-    /// AS Occurrence FROM &lt;junction&gt;)</c>. The subquery is a normal <see cref="QueryCommand"/> over the
-    /// junction entity projected onto the synthetic <see cref="JoinIntoLink{TParentKey,TChildKey}"/> shape,
-    /// so the outer pair command expands the link item from the link metadata exactly like any other
-    /// entity item.
+    /// Builds the derived junction source a many-to-many <c>JoinInto</c> joins the parent to. It projects
+    /// every parent/child foreign-key component and a <c>row_number()</c> occurrence partitioned by those
+    /// components; scalar keys use <see cref="JoinIntoLink{TParentKey,TChildKey}"/>, while composite keys
+    /// use the flat arity-general carrier. The outer pair command expands the link item from its registered
+    /// metadata like any other entity item.
     /// </summary>
     /// <param name="dataContext">The context that executes the outer command (and the derived one).</param>
     /// <param name="relationship">The many-to-many relationship carrying the junction metadata.</param>
@@ -229,10 +236,17 @@ internal static class JunctionLinkSourceFactory
             Expression.Quote(BuildKeyLambda(junctionParameter, childForeignKey)),
             Expression.Constant(null, typeof(WindowFrame)));
 
+        var parentKeyValue = ConvertToPropertyType(
+            Expression.Property(junctionParameter, parentForeignKey),
+            linkParentKey);
+        var childKeyValue = ConvertToPropertyType(
+            Expression.Property(junctionParameter, childForeignKey),
+            linkChildKey);
+
         var body = Expression.MemberInit(
             Expression.New(linkType),
-            Expression.Bind(linkParentKey, Expression.Property(junctionParameter, parentForeignKey)),
-            Expression.Bind(linkChildKey, Expression.Property(junctionParameter, childForeignKey)),
+            Expression.Bind(linkParentKey, parentKeyValue),
+            Expression.Bind(linkChildKey, childKeyValue),
             Expression.Bind(linkOccurrence, occurrence));
 
         var selector = Expression.Lambda(
@@ -252,6 +266,11 @@ internal static class JunctionLinkSourceFactory
 
         return new FromExpression(command);
     }
+
+    private static Expression ConvertToPropertyType(Expression value, PropertyInfo property)
+        => value.Type == property.PropertyType
+            ? value
+            : Expression.Convert(value, property.PropertyType);
 
     /// <summary>
     /// Resolves the <c>FROM</c> source of the junction table. The relationship resolver maps the
@@ -336,6 +355,9 @@ internal static class JunctionLinkSourceFactory
 
     private static IEntityMetadata BuildMetadata(Type linkType)
     {
+        if (linkType == typeof(JoinIntoLink<object, object>))
+            return new EntityMetadataBuilder<JoinIntoLink<object, object>>().Build();
+
         var builderType = typeof(EntityMetadataBuilder<>).MakeGenericType(linkType);
         var builder = Activator.CreateInstance(builderType)
             ?? throw new InvalidOperationException(

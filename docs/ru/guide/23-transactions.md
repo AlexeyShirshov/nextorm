@@ -1,30 +1,21 @@
 # Транзакции
 
-> Контекст nextorm может выполнять свои запросы внутри транзакции базы данных: как начатой им самим, так и той, которой владеет EF Core, Dapper или сырой ADO.NET, — в неё контекст встраивается. Роль отделена от поверхности запросов, поэтому контекст без соединения (in-memory) её не реализует, а ClickHouse — работающий по HTTP и не имеющий транзакций — её отклоняет. Изменения не отслеживаются, `SaveChanges` нет: запись остаётся явными командами.
+> Используйте транзакцию, когда нескольким командам нужна общая фиксация или
+> откат. Контекст nextorm может начать транзакцию сам или встроиться в
+> транзакцию EF Core, Dapper либо сырого ADO.NET. Контекст привязывает к ней
+> свои команды, но не отслеживает изменения и не предоставляет `SaveChanges`.
+> Контекст in-memory не имеет соединения и не поддерживает транзакции;
+> ClickHouse также не поддерживает транзакции.
 
 **Предварительно:** [Подключения](../infrastructure/01-connections.md) · [Изменение данных (INSERT)](17-insert-statement.md) · [Обзор провайдеров](../connecting-providers/overview.md)
 
 ## Обзор
 
-[`ITransactionManager`](xref:NextORM.Core.ITransactionManager) — ось транзакций [`DataContext`](xref:NextORM.Core.DataContext), симметричная [`IConnectionManager`](xref:NextORM.Core.IConnectionManager). Приведите контекст к роли, чтобы начать транзакцию или встроиться в существующую; каждая выполненная контекстом на соединении команда затем привязывается к активной транзакции.
-
-```csharp
-public interface ITransactionManager
-{
-    DbTransaction? CurrentTransaction { get; }
-    DbTransaction BeginTransaction();
-    DbTransaction BeginTransaction(IsolationLevel isolationLevel);
-    Task<DbTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default);
-    Task<DbTransaction> BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken = default);
-    void UseTransaction(DbTransaction? transaction);
-    void CreateSavepoint(string name);
-    Task CreateSavepointAsync(string name, CancellationToken cancellationToken = default);
-    void RollbackToSavepoint(string name);
-    Task RollbackToSavepointAsync(string name, CancellationToken cancellationToken = default);
-    void ReleaseSavepoint(string name);
-    Task ReleaseSavepointAsync(string name, CancellationToken cancellationToken = default);
-}
-```
+[`ITransactionManager`](xref:NextORM.Core.ITransactionManager) — роль транзакций
+в [`DataContext`](xref:NextORM.Core.DataContext), наряду с
+[`IConnectionManager`](xref:NextORM.Core.IConnectionManager). Приведите контекст к этой роли, чтобы
+начать транзакцию или встроиться в существующую. После этого контекст привязывает каждую свою команду на
+соединении к активной транзакции.
 
 ## Запуск транзакции
 
@@ -171,6 +162,28 @@ savepoint без активной транзакции бросает `InvalidOp
   savepoint-guard, а любой вызов savepoint бросает `NotSupportedException`.
 * Откат к savepoint сохраняет строки и значения `NULL`, записанные до него, и отбрасывает последующую
   работу; судьбу транзакции решают только внешние commit или rollback.
+
+## API ITransactionManager
+
+Роль предоставляет следующие члены. Возвращаемый `DbTransaction` содержит операции фиксации и отката:
+
+```csharp
+public interface ITransactionManager
+{
+    DbTransaction? CurrentTransaction { get; }
+    DbTransaction BeginTransaction();
+    DbTransaction BeginTransaction(IsolationLevel isolationLevel);
+    Task<DbTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default);
+    Task<DbTransaction> BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken = default);
+    void UseTransaction(DbTransaction? transaction);
+    void CreateSavepoint(string name);
+    Task CreateSavepointAsync(string name, CancellationToken cancellationToken = default);
+    void RollbackToSavepoint(string name);
+    Task RollbackToSavepointAsync(string name, CancellationToken cancellationToken = default);
+    void ReleaseSavepoint(string name);
+    Task ReleaseSavepointAsync(string name, CancellationToken cancellationToken = default);
+}
+```
 
 ## Поддержка провайдеров
 

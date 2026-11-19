@@ -34,6 +34,16 @@ public class MariaDbDataContext : MySqlDataContext
         => _dialect = MariaDbDialect.Instance;
 
     /// <summary>
+    /// Creates a MariaDB context from the builder alone. The builder must configure routing and name a
+    /// default topology; its host supplies the connection, so no connection string is passed here.
+    /// </summary>
+    /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
+    /// <exception cref="InvalidOperationException">The builder configures no routing, or no default topology.</exception>
+    public MariaDbDataContext(DataContextBuilder optionsBuilder)
+        : base(null, null, optionsBuilder, null)
+        => _dialect = MariaDbDialect.Instance;
+
+    /// <summary>
     /// Creates a version-aware MariaDB context that owns a connection built lazily from
     /// <paramref name="connectionString"/>. MariaDB 13.0+ exposes <c>UPDATE ... RETURNING</c>.
     /// </summary>

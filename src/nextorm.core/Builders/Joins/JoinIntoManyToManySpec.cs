@@ -31,16 +31,16 @@ internal interface IJoinIntoManyToManySpec
     /// <summary>
     /// The number of flattened projection items one many-to-many declaration occupies in a single-query
     /// result row: the link item followed by the child item. <see cref="GetItemTypes(bool)"/> always returns
-    /// exactly this many types (only the link item's identity -- the derived <c>JoinIntoLink</c> on SQL, the
+    /// exactly this many types (only the link item's identity -- a scalar or composite carrier on SQL, the
     /// junction entity in memory -- is path-dependent), so the row layout and the stitcher's slice stride
     /// cannot disagree.
     /// </summary>
     const int ItemCount = 2;
 
     /// <summary>
-    /// The projection item types the declaration contributes for the given provider path: the derived
-    /// <see cref="JoinIntoLink{TParentKey,TChildKey}"/> followed by the child on a SQL provider; the
-    /// junction entity followed by the child on the in-memory provider.
+    /// The projection item types the declaration contributes for the given provider path: the synthetic
+    /// link carrier followed by the child on a SQL provider (the scalar <see cref="JoinIntoLink{TParentKey,TChildKey}"/>
+    /// or the flat composite-junction carrier); the junction entity followed by the child on the in-memory provider.
     /// </summary>
     /// <param name="isSql">Whether the provider maps SQL and executes the derived link source.</param>
     /// <returns>The link item type followed by the child item type.</returns>
@@ -79,10 +79,26 @@ internal interface IJoinIntoManyToManySpec
 }
 
 /// <summary>
-/// One denormalized many-to-many row: the parent, the path-dependent link item (the derived
-/// <see cref="JoinIntoLink{TParentKey,TChildKey}"/> on SQL, the junction entity in memory) and the
-/// joined child. Kept as a private-shaped type so the common <c>IJoinIntoSpec</c> row contract stays
-/// untouched.
+/// The concrete key mapping behind one object-typed synthetic link member.
+/// </summary>
+/// <param name="LinkMember">The member exposed by the synthetic link carrier.</param>
+/// <param name="ReaderType">The source foreign-key CLR type used by the typed row reader.</param>
+/// <param name="ProviderType">The provider-side CLR type, when the source key has a converter.</param>
+/// <param name="Converter">The source foreign-key value converter, if any.</param>
+/// <param name="DurationUnit">The source duration storage unit, if applicable.</param>
+/// <param name="DurationPrecision">The source duration precision, if applicable.</param>
+internal readonly record struct JoinIntoLinkKeyColumn(
+    PropertyInfo LinkMember,
+    Type ReaderType,
+    Type? ProviderType,
+    IPropertyValueConverter? Converter,
+    DurationUnit? DurationUnit,
+    int DurationPrecision);
+
+/// <summary>
+/// One denormalized many-to-many row: the parent, the path-dependent link item (a synthetic scalar or
+/// composite carrier on SQL, the junction entity in memory) and the joined child. Kept as a private-shaped
+/// type so the common <c>IJoinIntoSpec</c> row contract stays untouched.
 /// </summary>
 /// <typeparam name="TParent">The parent entity type.</typeparam>
 internal readonly struct JoinIntoManyToManyRow<TParent>
@@ -110,10 +126,11 @@ internal readonly struct JoinIntoManyToManyRow<TParent>
 
 /// <summary>
 /// <see cref="IJoinIntoSpec{TEntity}"/> for a many-to-many navigation. Unlike a one-to-many declaration
-/// it contributes <b>two</b> projection items and two joins: a synthetic
-/// <see cref="JoinIntoLink{TParentKey,TChildKey}"/> item produced by a derived junction source, followed
-/// by the child. The link join connects the parent to the junction; the child join connects the link to
-/// the child. Both edges use the declaration's <see cref="JoinType"/>.
+/// it contributes <b>two</b> projection items and two joins: a synthetic link item produced by a derived
+/// junction source, followed by the child. Scalar junctions use <see cref="JoinIntoLink{TParentKey,TChildKey}"/>;
+/// composite junctions use a flat carrier with one member per key component. The link join connects the
+/// parent to the junction; the child join connects the link to the child. Both edges use the declaration's
+/// <see cref="JoinType"/>.
 /// </summary>
 /// <typeparam name="TEntity">The parent entity type the builder projects.</typeparam>
 /// <typeparam name="TChild">The child entity type.</typeparam>
@@ -133,8 +150,7 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
     /// <param name="joinType">The join kind.</param>
     /// <param name="isSql">
     /// Whether the bound context maps SQL. It fixes the shape of the link projection item and therefore
-    /// the link accessors: the derived <see cref="JoinIntoLink{TParentKey,TChildKey}"/> on SQL, the
-    /// junction entity in memory.
+    /// the link accessors: a synthetic scalar/composite carrier on SQL, the junction entity in memory.
     /// </param>
     public JoinIntoManyToManySpec(
         EntityBuilder<TChild> child,
@@ -218,6 +234,25 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
             }
         }
 
+        if (isSql)
+        {
+            var linkKeyColumns = new List<JoinIntoLinkKeyColumn>(
+                junction.JunctionParentForeignKey.Count + junction.JunctionChildForeignKey.Count);
+            for (var i = 0; i < junction.JunctionParentForeignKey.Count; i++)
+                linkKeyColumns.Add(CreateLinkKeyColumn(
+                    LinkParentKeyProperties[i],
+                    junction.JunctionParentForeignKey[i]));
+            for (var i = 0; i < junction.JunctionChildForeignKey.Count; i++)
+                linkKeyColumns.Add(CreateLinkKeyColumn(
+                    LinkChildKeyProperties[i],
+                    junction.JunctionChildForeignKey[i]));
+            LinkKeyColumns = linkKeyColumns;
+        }
+        else
+        {
+            LinkKeyColumns = [];
+        }
+
         // The join component correspondence is resolved from the junction metadata's own declared
         // key↔foreign-key pairing (junction.ParentKey[i] ↔ junction.JunctionParentForeignKey[i] and the
         // child analog), never from a blind index over two independently-ordered lists. A declaration
@@ -288,6 +323,12 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
     /// junction carries one (<c>ChildKey</c>); a composite junction carries one per component.
     /// </summary>
     internal IReadOnlyList<PropertyInfo> LinkChildKeyProperties { get; }
+
+    /// <summary>
+    /// The original foreign-key reader mappings for the link's key members, or an empty list for the
+    /// in-memory junction-item path.
+    /// </summary>
+    internal IReadOnlyList<JoinIntoLinkKeyColumn> LinkKeyColumns { get; }
 
     /// <summary>
     /// The parent join component pairs, in declared component order: each relationship principal-key
@@ -428,6 +469,15 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
                 typeof(object)),
             parameter).Compile();
     }
+
+    private static JoinIntoLinkKeyColumn CreateLinkKeyColumn(PropertyInfo linkMember, IPropertyMetadata source)
+        => new(
+            linkMember,
+            source.PropertyInfo.PropertyType,
+            source.Converter?.ProviderType,
+            source.Converter,
+            source.DurationUnit,
+            source.DurationPrecision);
 
     /// <inheritdoc/>
     public PropertyInfo? CollectionProperty { get; }
@@ -616,15 +666,22 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
         for (var i = 0; i < spec.ParentJoinPairs.Count; i++)
         {
             var pair = spec.ParentJoinPairs[i];
+            Expression linkKey = Expression.Property(linkParameter, spec.LinkParentKeyProperties[i]);
+            if (linkKey.Type != pair.JunctionForeignKey.PropertyType)
+                linkKey = Expression.Convert(linkKey, pair.JunctionForeignKey.PropertyType);
             var equality = JoinIntoSpecHelpers.BuildKeyEquality(
                 Expression.Property(parentParameter, pair.Key),
-                Expression.Property(linkParameter, spec.LinkParentKeyProperties[i]),
+                linkKey,
                 pair.Key.PropertyType,
                 "JoinInto");
             parentEquality = parentEquality is null ? equality : Expression.AndAlso(parentEquality, equality);
         }
 
-        var linkCondition = Expression.Lambda(parentEquality!, parentParameter, linkParameter);
+        var linkCondition = BuildLinkCondition(
+            spec.LinkEntityType,
+            parentEquality!,
+            parentParameter,
+            linkParameter);
 
         // link-to-child: (p, c) => c.<child key> = <link>.ChildKey && <user predicate>
         //
@@ -642,13 +699,15 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
         for (var i = 0; i < spec.ChildJoinPairs.Count; i++)
         {
             var pair = spec.ChildJoinPairs[i];
-            var linkChildKeyValue = Expression.Property(linkItem, spec.LinkChildKeyProperties[i]);
+            Expression linkChildKeyValue = Expression.Property(linkItem, spec.LinkChildKeyProperties[i]);
+            if (linkChildKeyValue.Type != pair.JunctionForeignKey.PropertyType)
+                linkChildKeyValue = Expression.Convert(linkChildKeyValue, pair.JunctionForeignKey.PropertyType);
             var childKeyValue = Expression.Property(childParameter, pair.Key);
             var equality = JoinIntoSpecHelpers.BuildKeyEquality(childKeyValue, linkChildKeyValue, pair.Key.PropertyType, "JoinInto");
             childEquality = childEquality is null ? equality : Expression.AndAlso(childEquality, equality);
         }
 
-        var childCondition = Expression.Lambda(
+        var childCondition = Expression.Lambda<Func<TEntity, TChild, bool>>(
             Expression.AndAlso(childEquality!, predicate.Body),
             predicate.Parameters[0],
             childParameter);
@@ -661,6 +720,7 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
             From = dataContext.NeedMapping
                 ? JunctionLinkSourceFactory.BuildSource(dataContext, relationship)
                 : JunctionLinkSourceFactory.GetInMemorySource(relationship),
+            JoinIntoLinkKeyColumns = spec.LinkKeyColumns.Count == 0 ? null : spec.LinkKeyColumns,
             Strictness = options.Strictness ?? JoinStrictness.Default,
             IsGlobal = options.IsGlobal,
             JoinHint = options.JoinHint,
@@ -684,5 +744,29 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
             childJoin.SetFrom(childJoin.From.WithSourceLock(options.SourceLock));
 
         return (spec, linkJoin, childJoin);
+    }
+
+    private static LambdaExpression BuildLinkCondition(
+        Type linkType,
+        Expression body,
+        ParameterExpression parentParameter,
+        ParameterExpression linkParameter)
+    {
+        if (linkType == typeof(JoinIntoLink<object, object>))
+            return Expression.Lambda<Func<TEntity, JoinIntoLink<object, object>, bool>>(body, parentParameter, linkParameter);
+        if (linkType == typeof(CompositeJunctionLink3))
+            return Expression.Lambda<Func<TEntity, CompositeJunctionLink3, bool>>(body, parentParameter, linkParameter);
+        if (linkType == typeof(CompositeJunctionLink4))
+            return Expression.Lambda<Func<TEntity, CompositeJunctionLink4, bool>>(body, parentParameter, linkParameter);
+        if (linkType == typeof(CompositeJunctionLink5))
+            return Expression.Lambda<Func<TEntity, CompositeJunctionLink5, bool>>(body, parentParameter, linkParameter);
+        if (linkType == typeof(CompositeJunctionLink6))
+            return Expression.Lambda<Func<TEntity, CompositeJunctionLink6, bool>>(body, parentParameter, linkParameter);
+        if (linkType == typeof(CompositeJunctionLink7))
+            return Expression.Lambda<Func<TEntity, CompositeJunctionLink7, bool>>(body, parentParameter, linkParameter);
+        if (linkType == typeof(CompositeJunctionLink8))
+            return Expression.Lambda<Func<TEntity, CompositeJunctionLink8, bool>>(body, parentParameter, linkParameter);
+
+        return Expression.Lambda(body, parentParameter, linkParameter);
     }
 }

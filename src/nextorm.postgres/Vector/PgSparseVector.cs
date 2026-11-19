@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using NextORM.Core;
 
 namespace NextORM.Postgres;
 
@@ -7,7 +8,7 @@ namespace NextORM.Postgres;
 /// A PostgreSQL <c>sparsevec</c> (pgvector sparse) value: a fixed number of dimensions with only the
 /// non-zero coordinates stored, as sorted zero-based indices and their finite single-precision values.
 /// </summary>
-public readonly struct PgSparseVector : IEquatable<PgSparseVector>
+public readonly struct PgSparseVector : IEquatable<PgSparseVector>, IVectorValue
 {
     private readonly int[]? _indices;
     private readonly float[]? _values;

@@ -67,6 +67,8 @@ internal static class InValues
     // visitors are stateless apart from Found, so keep one of each per thread instead of allocating.
     [ThreadStatic] private static TupleInValuesProbe? _tupleInValuesProbe;
     [ThreadStatic] private static ScalarInValuesProbe? _scalarInValuesProbe;
+    [ThreadStatic] private static AnyInValuesProbe? _anyInValuesProbe;
+    [ThreadStatic] private static UnkeyedInValuesProbe? _unkeyedInValuesProbe;
 
     /// <summary>
     /// The single pinned rejection message for a provider that has no row-value constructor (SQL
@@ -131,6 +133,163 @@ internal static class InValues
         probe.Visit(expression);
         return probe.Found;
     }
+
+    /// <summary>
+    /// Metadata-only probe: true when <paramref name="expression"/> contains any value-list membership
+    /// node — scalar or tuple, inline <see cref="NewArrayExpression"/> or captured collection. A rendered
+    /// statement carrying one follows the list, so it is never published to the value-agnostic native
+    /// index. The probe inspects argument shapes only (no element type, no evaluation), so a null or lazy
+    /// collection cannot throw and a captured property getter does not run.
+    /// </summary>
+    internal static bool ContainsAnyInValues(Expression expression)
+    {
+        var probe = _anyInValuesProbe ??= new AnyInValuesProbe();
+        probe.Reset();
+        probe.Visit(expression);
+        return probe.Found;
+    }
+
+    private sealed class AnyInValuesProbe : ExpressionVisitor
+    {
+        public bool Found { get; private set; }
+
+        public void Reset() => Found = false;
+
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            if (!Found && TryGetValueListSource(node, out _, out _))
+                Found = true;
+
+            return base.VisitMethodCall(node);
+        }
+    }
+
+    /// <summary>
+    /// Metadata-only probe: true when <paramref name="expression"/> carries a value list the native index
+    /// can never key — a captured collection (the statement follows its length and null layout) or a tuple
+    /// list (its arity and per-cell null layout are part of the statement). An inline scalar list is keyed
+    /// by the expression graph and is deliberately not reported. Same no-evaluation discipline: only the
+    /// argument shapes and an inline array's element type are inspected.
+    /// </summary>
+    internal static bool ContainsUnkeyedInValues(Expression expression)
+    {
+        var probe = _unkeyedInValuesProbe ??= new UnkeyedInValuesProbe();
+        probe.Reset();
+        probe.Visit(expression);
+        return probe.Found;
+    }
+
+    private sealed class UnkeyedInValuesProbe : ExpressionVisitor
+    {
+        public bool Found { get; private set; }
+
+        public void Reset() => Found = false;
+
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            if (!Found
+                && TryGetValueListSource(node, out var valuesExp, out _)
+                && (valuesExp is not NewArrayExpression || IsInlineTupleList(valuesExp)))
+                Found = true;
+
+            return base.VisitMethodCall(node);
+        }
+
+    }
+
+    /// <summary>
+    /// Whether the method call is a value-list membership node (any list position). Reuses the same
+    /// metadata-only recognition as <see cref="ContainsAnyInValues"/>; no collection is evaluated.
+    /// </summary>
+    internal static bool IsAnyValueListSource(MethodCallExpression node)
+        => TryGetValueListSource(node, out _, out _);
+
+    /// <summary>
+    /// Whether the method call is a value list the raw shape cannot key (a captured collection or a
+    /// tuple list). An inline scalar list is keyed by the expression graph and is not reported.
+    /// </summary>
+    internal static bool IsUnkeyedValueListSource(MethodCallExpression node)
+        => TryGetValueListSource(node, out var valuesExp, out _)
+            && (valuesExp is not NewArrayExpression || IsInlineTupleList(valuesExp));
+
+    // An inline array's element type is its array element: no generic-method instantiation, no allocation.
+    private static bool IsInlineTupleList(Expression valuesExp)
+        => valuesExp.Type.IsArray && TypeFacts.IsTupleFamily(valuesExp.Type.GetElementType()!);
+
+    /// <summary>
+    /// Metadata-only recognition of a value-list membership node, without the element type: only the
+    /// argument shapes are inspected (<c>@in</c>/<c>global_in</c> value list; instance or static
+    /// <c>Contains</c> on a non-string collection). The translator's own <see cref="TryGetArguments"/>
+    /// additionally proves the element types; this probe does not need them and never calls
+    /// <see cref="System.Reflection.MethodInfo.GetGenericArguments"/> or <c>GetParameters</c>.
+    /// </summary>
+    private static bool TryGetValueListSource(MethodCallExpression node, out Expression valuesExp, out bool isGlobal)
+    {
+        valuesExp = null!;
+        isGlobal = false;
+
+        var declaringType = node.Method.DeclaringType;
+        if (declaringType == typeof(CommonFunctions) || declaringType == typeof(ClickHouseFunctions))
+        {
+            var name = node.Method.Name;
+            if (name != nameof(CommonFunctions.@in)
+                && name != nameof(CommonFunctions.inUntyped)
+                && name != nameof(ClickHouseFunctions.global_in))
+                return false;
+
+            if (node.Arguments is not [_, Expression inValues] || inValues.Type.IsAssignableTo(typeof(QueryCommand)))
+                return false;
+
+            valuesExp = inValues;
+            isGlobal = name == nameof(ClickHouseFunctions.global_in);
+            return true;
+        }
+
+        if (node.Method.Name != nameof(Enumerable.Contains) || node.Object?.Type == typeof(string))
+            return false;
+
+        if (node.Object is not null)
+        {
+            if (node.Arguments.Count != 1)
+                return false;
+
+            // An instance Contains is a membership test only on a collection receiver. A mapped scalar
+            // value with a [SqlFunction] Contains method is a scalar function call (the translator emits
+            // the receiver as the first argument), not a value list: the translator's own recognizer also
+            // requires an IEnumerable receiver. Metadata-only and allocation-free: a type test, no
+            // reflection instantiation.
+            if (!IsCollectionReceiver(node.Object.Type))
+                return false;
+
+            valuesExp = node.Object;
+            return true;
+        }
+
+        // Arrays bind to the span overload (MemoryExtensions.Contains) on modern runtimes and to
+        // Enumerable.Contains otherwise; both are the same membership test here.
+        if (declaringType != typeof(Enumerable) && declaringType != typeof(MemoryExtensions))
+            return false;
+
+        if (node.Arguments.Count == 3 && node.Arguments[2] is not ConstantExpression { Value: null })
+            return false;
+
+        if (node.Arguments.Count is not (2 or 3))
+            return false;
+
+        valuesExp = UnwrapSpanConversion(node.Arguments[0]);
+        return true;
+    }
+
+    /// <summary>
+    /// True for a receiver type an instance collection membership can apply to. Strings are handled by
+    /// the string translator and a scalar type carrying an unrelated <c>Contains</c> (a
+    /// <see cref="SqlFunctionAttribute"/> method) is not a collection; both are excluded without calling
+    /// <see cref="Type.GetInterfaces"/> or any generic-method reflection, so the probe stays
+    /// allocation-free.
+    /// </summary>
+    private static bool IsCollectionReceiver(Type type)
+        => type != typeof(string)
+            && (type.IsArray || typeof(IEnumerable).IsAssignableFrom(type));
 
     private sealed class ScalarInValuesProbe : ExpressionVisitor
     {

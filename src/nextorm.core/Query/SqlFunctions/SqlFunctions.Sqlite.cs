@@ -343,19 +343,34 @@ public class SqliteFunctions : CommonFunctions
     /// <summary>FTS3/4 <c>snippet(table)</c>: the default snippet with matches wrapped. SQL-only.</summary>
     public string? FTS3Snippet(string? table) => throw new NotSupportedException(InMemoryFtsMessage);
 
-    /// <summary>FTS3/4 <c>snippet(table, startMatch)</c>. SQL-only.</summary>
+    /// <summary>
+    /// FTS3/4 <c>snippet(table, start_text)</c>, passing <paramref name="startMatch"/> as SQLite's
+    /// <c>start_text</c> argument. SQL-only.
+    /// </summary>
     public string? FTS3Snippet(string? table, string? startMatch) => throw new NotSupportedException(InMemoryFtsMessage);
 
-    /// <summary>FTS3/4 <c>snippet(table, startMatch, endMatch)</c>. SQL-only.</summary>
+    /// <summary>
+    /// FTS3/4 <c>snippet(table, start_text, end_text)</c>, passing <paramref name="startMatch"/> and
+    /// <paramref name="endMatch"/> as SQLite's corresponding arguments. SQL-only.
+    /// </summary>
     public string? FTS3Snippet(string? table, string? startMatch, string? endMatch) => throw new NotSupportedException(InMemoryFtsMessage);
 
-    /// <summary>FTS3/4 <c>snippet(table, startMatch, endMatch, ellipses)</c>. SQL-only.</summary>
+    /// <summary>
+    /// FTS3/4 <c>snippet(table, start_text, end_text, ellipsis)</c>, passing
+    /// <paramref name="ellipses"/> as SQLite's <c>ellipsis</c> argument. SQL-only.
+    /// </summary>
     public string? FTS3Snippet(string? table, string? startMatch, string? endMatch, string? ellipses) => throw new NotSupportedException(InMemoryFtsMessage);
 
-    /// <summary>FTS3/4 <c>snippet(table, startMatch, endMatch, ellipses, columnIndex)</c> (<c>-1</c> selects every column). SQL-only.</summary>
+    /// <summary>
+    /// FTS3/4 <c>snippet(table, start_text, end_text, ellipsis, column_index)</c>, passing
+    /// <paramref name="columnIndex"/> as SQLite's <c>column_index</c> argument. SQL-only.
+    /// </summary>
     public string? FTS3Snippet(string? table, string? startMatch, string? endMatch, string? ellipses, int columnIndex) => throw new NotSupportedException(InMemoryFtsMessage);
 
-    /// <summary>FTS3/4 <c>snippet(table, startMatch, endMatch, ellipses, columnIndex, tokensNumber)</c>. SQL-only.</summary>
+    /// <summary>
+    /// FTS3/4 <c>snippet(table, start_text, end_text, ellipsis, column_index, num_tokens)</c>, passing
+    /// <paramref name="tokensNumber"/> as SQLite's <c>num_tokens</c> argument. SQL-only.
+    /// </summary>
     public string? FTS3Snippet(string? table, string? startMatch, string? endMatch, string? ellipses, int columnIndex, int tokensNumber) => throw new NotSupportedException(InMemoryFtsMessage);
 
     /// <summary>

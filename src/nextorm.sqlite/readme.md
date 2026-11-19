@@ -1,6 +1,6 @@
 # Nextorm — SQLite provider
 
-[![NuGet](https://img.shields.io/nuget/vpre/nextorm.sqlite?logo=nuget)](https://www.nuget.org/packages/nextorm.sqlite)
+[![NuGet](https://img.shields.io/nuget/v/nextorm.sqlite?logo=nuget)](https://www.nuget.org/packages/nextorm.sqlite)
 
 `nextorm.sqlite` adds SQLite support to [Nextorm](https://github.com/AlexeyShirshov/nextorm) — a
 zero-SQL object-relational mapper for .NET that turns typed C# queries into SQL and materializes rows
@@ -9,17 +9,26 @@ over `Microsoft.Data.Sqlite`.
 
 ## Installation
 
-All current nextorm releases are prereleases, so `--prerelease` is required:
+Stable version `1.0.9` is available. Add the packages without prerelease flags:
 
 ```bash
-dotnet add package nextorm --prerelease
-dotnet add package nextorm.sqlite --prerelease
+dotnet add package nextorm
+dotnet add package nextorm.sqlite
 ```
 
-Package Manager Console: `Install-Package nextorm -Prerelease` and
-`Install-Package nextorm.sqlite -Prerelease`.
+Package Manager Console: `Install-Package nextorm` and
+`Install-Package nextorm.sqlite`.
 
 ## Usage
+
+Before you run this sample, make sure `app.db` contains the `orders` table expected by `IOrder`:
+`id` is an integer primary key and `total` is a non-null numeric column. For example:
+
+```sql
+CREATE TABLE orders (id INTEGER PRIMARY KEY, total NUMERIC NOT NULL);
+```
+
+Query the existing table with the following mapped entity:
 
 ```csharp
 using System.ComponentModel.DataAnnotations;
@@ -69,8 +78,8 @@ open `DbConnection` when you want to own the connection yourself.
 
 ## Status
 
-Beta: every release so far is a prerelease, the public API still changes between them, and backward
-compatibility is not preserved yet. Release notes are on
+The public API may change between prereleases, and backward compatibility across prereleases is not
+guaranteed. Review the release notes before upgrading between prereleases:
 [GitHub Releases](https://github.com/AlexeyShirshov/nextorm/releases).
 
 ## License

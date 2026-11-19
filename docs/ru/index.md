@@ -1,5 +1,17 @@
 # Nextorm - высокопроизводительный zero-sql ORM
 
+Эта документация предназначена для разработчиков на .NET, которым нужно выполнять запросы к базе данных из типизированных C#-выражений. Путь ниже ведёт от установки пакетов к первому запросу SQLite, а затем показывает, как отфильтровать строки, выбрать нужные поля и соединить таблицы. Здесь рассматривается API запросов NextORM, а не проектирование баз данных и не основы SQL.
+
+## С чего начать
+
+1. [Установите NextORM и пакет провайдера](getting-started/01-installation.md).
+2. [Выполните первый запрос](getting-started/02-quickstart.md).
+3. [Отфильтруйте строки](guide/03-filtering-where.md).
+4. [Выберите нужные поля](guide/02-projections.md).
+5. [Соедините таблицы](guide/04-joins.md).
+
+Если проект уже настроен, откройте нужную тему в каталоге документации ниже.
+
 ## Русская документация
 
 ### Начало работы
@@ -8,20 +20,6 @@
 - [Быстрый старт](getting-started/02-quickstart.md)
 - [Сущности и метаданные](getting-started/03-entities-and-metadata.md)
 - [Внедрение зависимостей](getting-started/04-dependency-injection.md)
-
-### Движок
-
-- [Как работает движок](engine/index.md)
-- [Построение запроса: fluent к SQL](engine/01-query-pipeline.md)
-- [Исполнение и строки](engine/02-execution-and-rows.md)
-- [Кэш планов и переиспользование](engine/03-plan-cache-and-reuse.md)
-
-### Связи
-
-- [Связи и однозапросная загрузка](relationships/relationships.md)
-- [Неявные навигационные запросы](relationships/implicit-navigation.md)
-- [Жадная загрузка дочерних коллекций](relationships/eager-loading.md)
-- [Постраничная выборка на родителя при жадной загрузке](relationships/eager-loading-per-parent-paging.md)
 
 ### Руководство
 
@@ -56,6 +54,20 @@
 - [Динамические колонки](guide/29-dynamic-columns.md)
 - [Потоковое сохранение данных](guide/30-streaming-data.md)
 - [Специфичные для провайдеров возможности](guide/31-provider-specific-features.md)
+
+### Движок
+
+- [Как работает движок](engine/index.md)
+- [Построение запроса: fluent к SQL](engine/01-query-pipeline.md)
+- [Исполнение и строки](engine/02-execution-and-rows.md)
+- [Кэш планов и переиспользование](engine/03-plan-cache-and-reuse.md)
+
+### Связи
+
+- [Связи и однозапросная загрузка](relationships/relationships.md)
+- [Неявные навигационные запросы](relationships/implicit-navigation.md)
+- [Жадная загрузка дочерних коллекций](relationships/eager-loading.md)
+- [Постраничная выборка на родителя при жадной загрузке](relationships/eager-loading-per-parent-paging.md)
 
 ### Инфраструктура
 

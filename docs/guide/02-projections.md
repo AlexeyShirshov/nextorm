@@ -1,13 +1,56 @@
 # Projections
 
-Rules that apply to every projection:
+Use a projection to choose which values a query returns. This page starts with the `orders` table from
+the [quickstart](../getting-started/02-quickstart.md). The opening example uses its `dataContext` and
+`IOrder` entity; the later reference examples use test entities and seed data described on this page.
 
-* The lambda's shape decides the select list. Columns that are not projected are not read.
-* A projected member whose name matches the mapped column name (case-insensitive) is emitted without an alias. A renamed or calculated member is aliased: `as 'Calc'` on SQLite, `as [Calc]` on SQL Server, `as "Calc"` on PostgreSQL.
-* Constructor arguments, tuple items and member-initialiser assignments all map to select-list entries; the runtime materialiser builds the object from the reader.
-* On the in-memory provider no SQL exists; the same expression is compiled and run over the in-memory data set.
+## Select the fields you need
 
-The `Output:` tables below show the rows returned by each example against the integration-test seed data: `simple_entity` holds ids `1`-`10` and `complex_entity` three rows (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
+The following query returns each order's ID and total in cents. It doesn't return other columns:
+
+```csharp
+var rows = await dataContext.From<IOrder>()
+    .OrderBy(order => order.Id)
+    .Select(order => new { order.Id, order.TotalCents })
+    .ToListAsync();
+```
+
+For SQLite, the query is:
+
+```sql
+select id, total_cents
+ from orders
+ order by id
+```
+
+The query returns:
+
+| Id | TotalCents |
+|---:|-----------:|
+| 1 | 2550 |
+| 2 | 1800 |
+| 3 | 4250 |
+
+The anonymous result contains only the two members named in `Select`. Use this shape when the caller
+needs a few values rather than a complete entity.
+
+## How projections work
+
+The lambda passed to `Select` determines the selected columns; columns that aren't projected aren't
+read. NextORM builds the returned object from the result rows. If an output member keeps the mapped
+column's name (ignoring case), NextORM can select that column without renaming it. If the member is
+renamed or calculated, NextORM gives the SQL expression an alias that matches the output member;
+providers quote that alias differently. For example, `Calc` is quoted as `'Calc'` on SQLite,
+`[Calc]` on SQL Server, and `"Calc"` on PostgreSQL.
+
+Constructor arguments, tuple items, and object-initializer assignments each become selected values.
+The in-memory provider doesn't generate SQL; it runs the same expression against the in-memory data.
+
+The reference examples below switch to the separate `SimpleEntity` and `ComplexEntity` test model;
+they don't use the quickstart's `IOrder` and `ICustomer` entities. Their output tables use integration-
+test seed data: `simple_entity` contains IDs `1`-`10`, and `complex_entity` contains three rows
+(`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`). For information
+about mapping your own entities, see [Entities and metadata](../getting-started/03-entities-and-metadata.md).
 
 ## Anonymous type
 
@@ -487,4 +530,8 @@ uses `Projection<T1>` — the only dimension-1 projection, a plain `IProjection`
 extendable, its slot-1 transition being supplied by the generated positional members — and a named
 slot is an expression-only property added on top of the same accumulator. See
 [Joins](04-joins.md#named-join-aliases).
+
+## What's next
+
+Continue with [joins](04-joins.md) to combine values from related tables.
 

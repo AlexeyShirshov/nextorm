@@ -1,7 +1,7 @@
 # nextorm.examples.clickhouse.analytics
 
 Comparison project for ClickHouse's official «anonymized web analytics» sample (`datasets.hits_v1`) plus
-a stand-specific `AggregatingMergeTree` materialized view. Every query is implemented **twice** — with
+a stand-specific `AggregatingMergeTree` materialized view. Each comparison query is implemented **twice** — with
 nextorm and with [linq2db](https://github.com/linq2db/linq2db) — then both arms are executed against the
 same dataset and benchmarked.
 
@@ -9,8 +9,7 @@ The project shows **how a real SQL query becomes nextorm code — and where the 
 stops**. Every method pair models exactly one query file in [`Sql/`](Sql); the method comment names it.
 Missing capabilities are **not** worked around on the nextorm side: the affected method throws
 `NotSupportedException`. `Incremental` (`uniqMerge` over an `AggregateFunction` state) has no nextorm
-LINQ surface at all, so the query was removed from the example — with it went the whole-query linq2db
-`FromSql` arm that could not be compared fairly. The tables below map each SQL construct to the nextorm
+LINQ API, so the example does not run it. The tables below map each SQL construct to the nextorm
 construct that replaces it.
 
 ## Layout
@@ -82,7 +81,7 @@ clause order: `From().Where().GroupBy().Having().OrderBy().Limit().Select()`.
 | `WITH x AS (SELECT …)` | declare it as a CTE: the typed `query.AsCte("x")` + `ctx.From(cte)` (member access, type inference) or the string `ctx.With("x", query).From("x")` (columns read by name, `t.GetInt64("UserID")`, because the name carries no type); a later CTE reads an earlier one the same way |
 | `SELECT a AS x` | `.Select(h => new { x = h.A })` |
 | `JOIN u ON a = b` | `.Join<IU>((h, u) => …)`; joined items are `p.Item1`, `p.Item2`, … |
-| `JOIN u ON a = b` with slot names | `.Join<IU>((h, u) => …, Alias.U)` plus `.WithAlias(Alias.Root)` on the chain's root: the slots are then read as `p.Root`/`p.U`. A joined **CTE** passes its descriptor instead of a type parameter (`.Join(cte, …, Alias.X)`). The chain's projection must be a **named** type (the alias generator renders the chain's concrete type and reports `NORMGEN009` on an anonymous one, #229). Every query in this example names its joins. Query 4 is currently blocked by an unrelated packaging defect in the tuple-array cast ([#359](https://github.com/AlexeyShirshov/nextorm/issues/359)), not by the alias surface |
+| `JOIN u ON a = b` with slot names | `.Join<IU>((h, u) => …, Alias.U)` plus `.WithAlias(Alias.Root)` on the chain's root: the slots are then read as `p.Root`/`p.U`. A joined **CTE** passes its descriptor instead of a type parameter (`.Join(cte, …, Alias.X)`). The chain's projection must be a **named** type (the alias generator renders the chain's concrete type and reports `NORMGEN009` on an anonymous one). Every query in this example names its joins. |
 | `WHERE c` | `.Where(h => c)` |
 | `GROUP BY a` | `.GroupBy(h => new { h.A })`, or `.SelectGroup(h => new { h.A, n = SqlFunctions.Sql.count() })` to infer the keys from the projection (most demo queries). `Retention.first_visits` and `Retention.weekly` keep `GroupBy`: the first would group by the `UserId` cast, the second must stay a `Select` producer because the shipped alias generator recovers a consumed chain only through `Select` |
 | `HAVING c` | `.Having(g => c)` or a derived query + `.Where(...)` |
@@ -109,7 +108,7 @@ clause order: `From().Where().GroupBy().Having().OrderBy().Limit().Select()`.
 > **Unsigned types.** `hits_v1` stores `UserID`/`WatchID` as `UInt64`, and ClickHouse returns `UInt64`
 > from `count()`/`uniq()`/`sum()` over unsigned inputs. The dialect casts the aggregate/function results
 > that declare a signed CLR type (`count`, `uniq`, `windowFunnel`, ...) to that type; a plain `UInt64`
-> column now materialises directly as `ulong` (`UserID = h.UserId` reads `GetFieldValue<ulong>`, with no
+> column materialises directly as `ulong` (`UserID = h.UserId` reads `GetFieldValue<ulong>`, with no
 > SQL cast). These demo queries still cast to `long` (`UserID = (long)h.UserId` renders `cast(UserID as
 > Int64)`) because the rest of the query works in signed 64-bit. `Funnel`/`DailyTraffic` also rely on a
 > compile-time `new DateTime(...)` literal being bound as a parameter rather than inlined.
@@ -117,20 +116,15 @@ clause order: `From().Where().GroupBy().Having().OrderBy().Limit().Select()`.
 ## Demo queries: SQL file → method
 
 Markers: **OK** — expressed with the regular LINQ API; **FAIL** — the faithful port hits a gap and
-throws (documented in the method comment); **BLOCKED** — the port is complete but a packaged engine
-defect stops it at execution (tracked in the linked issue).
+throws (documented in the method comment).
 
 | # | SQL | Method | Coverage | Notes |
 |---|---|---|---|---|
 | 1 | [`clickhouse_array_analytics.sql`](Sql/clickhouse_array_analytics.sql) | `ClickHouseQueries.ArrayAnalytics` | OK | `splitByChar` → `split_by_char`; `arrayMap`/`arrayFilter` → `array_map`/`array_filter`; the result is grouped by the array expression |
 | 2 | [`clickhouse_funnel.sql`](Sql/clickhouse_funnel.sql) | `ClickHouseQueries.Funnel` | OK | `windowFunnel` → `window_funnel(...)`; inner `GROUP BY UserID` + outer `GROUP BY level` → two derived queries |
-| 3 | [`clickhouse_incremental.sql`](Sql/clickhouse_incremental.sql) | removed from the example | — | `uniqMerge` (`-Merge` over an `AggregateFunction` state) has no nextorm LINQ surface; its only comparison arm was a whole-query linq2db `FromSql`, which a comparison may not use |
-| 4 | [`clickhouse_retention.sql`](Sql/clickhouse_retention.sql) | `ClickHouseQueries.Retention` | **BLOCKED** ([#359](https://github.com/AlexeyShirshov/nextorm/issues/359)) | the `WITH first_visits, cohort_sizes, weekly` CTEs → typed `AsCte`; `cohort_sizes` and `weekly` are projected into named rows (`CohortSizeRow`, `RetentionWeekRow`) and the outer chain names both slots (`WithAlias(Alias.Week)` + `Alias.Cohort`); the inner join + `groupArray((…))` → `group_array(Tuple.Create(…))`. The aliased SQL is correct, but the `1.0.9-rc4` package wraps the tuple array in ``cast(… as Array(Nullable(Tuple`2)))`` — a CLR type name, not a ClickHouse type — so the server rejects the statement (`Code: 62`) |
+| 3 | [`clickhouse_incremental.sql`](Sql/clickhouse_incremental.sql) | not run | — | `uniqMerge` (`-Merge` over an `AggregateFunction` state) has no Nextorm LINQ API |
+| 4 | [`clickhouse_retention.sql`](Sql/clickhouse_retention.sql) | `ClickHouseQueries.Retention` | Nextorm only | the `WITH first_visits, cohort_sizes, weekly` CTEs → typed `AsCte`; `cohort_sizes` and `weekly` are projected into named rows (`CohortSizeRow`, `RetentionWeekRow`) and the outer chain names both slots (`WithAlias(Alias.Week)` + `Alias.Cohort`); the inner join + `groupArray((…))` → `group_array(Tuple.Create(…))` |
 | 5 | [`clickhouse_sessions.sql`](Sql/clickhouse_sessions.sql) | `ClickHouseQueries.Sessions` | OK | three chained **typed** CTEs (`AsCte`: `sessions`, `session_flags`, `session_counts`); `lagInFrame` → `lag_in_frame(...).Over(...)`; `runningAccumulate(if(…))` → cumulative `sum_over(c ? 1 : 0)`; `quantile(0.99)(…)` → `SqlFunctions.ClickHouse.quantile(0.99, …)` |
-
-> The retention query in `Sql/clickhouse_retention.sql` was corrected on porting: the original
-> referenced `UserID` outside the subquery that exposes it and divided by the cohort-week instead of the
-> cohort size.
 
 ## Course exercises (6–11)
 

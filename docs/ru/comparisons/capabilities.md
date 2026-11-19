@@ -1,18 +1,22 @@
 # Возможности: Nextorm против Dapper, linq2db и EF Core
 
-Одна матрица на уровне конструктов: что поддерживает каждая библиотека и где нет. Обозначения: **yes** —
-поддержка первого класса; **partial** — поддержка с оговорённым ограничением либо реализуемо, но не
-реализовано; **no** — не поддерживается. В ячейке Nextorm ограничение самой СУБД указано в скобках; оценку
-это не понижает. Пробелы конкурентов с открытым issue даны ссылкой. На **2026-10-04**.
+Используйте матрицу, чтобы проверить, какие конструкты запросов и функции доступа к данным
+предоставляет каждая библиотека. В каждой строке указан конструкт, а в столбцах — статус его
+поддержки. **yes** означает полноценную поддержку через публичный API библиотеки; **partial** —
+возможность поддерживается с оговорённым ограничением либо ещё не реализована, хотя её можно
+реализовать; **no** — возможность не поддерживается. В ячейке Nextorm может быть указано ограничение
+самой СУБД. Учитывайте его при выборе провайдера; оно не меняет оценку библиотеки в целом. Пробелы
+конкурентов с открытым issue даны ссылкой. Снимок на **2026-10-04**.
 
 Строки сгруппированы по областям — запросы, типы и маппинг, провайдерные функции, запись, модель и
-инструменты. Матрицу закрывает строка **Итого**: количество yes / partial / no в этом столбце (`n/a` не
-учитывается, перечень провайдеров не оценивается). Ширина API по каждому движку — на странице
-[«Функции провайдеров»](provider-features.md).
+инструменты. Строка **Итого** считает yes / partial / no в каждом столбце (`n/a` не учитывается,
+перечень провайдеров не оценивается). Это простой подсчёт, а не оценка пригодности: выбирайте по
+обязательным для приложения возможностям и ограничениям целевого провайдера. Ширина API по каждому
+движку описана на странице [«Функции провайдеров»](provider-features.md).
 
 | Область | Nextorm | linq2db | EF Core |
 |---|---|---|---|
-| Значения pgvector (`PgVector`, `PgHalfVector`, `PgSparseVector`, `PgBit`) и операции | supported (типы pgvector и перевод LINQ-маркеров PostgreSQL) | partial (поддержка зависит от провайдера) | partial (поддержка провайдера Npgsql; не перевод nextorm) |
+| Поиск ближайших соседей по векторам и значения/операции pgvector | supported (общий API поиска ближайших соседей для PostgreSQL и SQL Server 2025+; типы pgvector и маркеры PostgreSQL сохранены) | partial (поддержка зависит от провайдера) | partial (поддержка провайдера Npgsql; не перевод nextorm) |
 | Проекции (сущность, DTO, anonymous, record, tuple, скаляр; несопоставленные колонки через `SqlFunctions.Column`) | yes | yes | yes |
 | Предикаты (`WHERE`: сравнение, `and`/`or`/`!`, арифметика, битовые операции/сдвиг) | yes | yes | yes |
 | Null-safe-сравнение (`IS [NOT] DISTINCT FROM`; `SqlFunctions.Sql.is_distinct_from` / `is_not_distinct_from`) | yes (нативно на PostgreSQL, SQLite и MySQL/MariaDB; эмуляция в SQL Server и ClickHouse) | yes (`Sql.Is[Not]DistinctFrom`; покрытие зависит от провайдера) | no |
@@ -33,6 +37,9 @@
 | CTE (рекурсивные, типизированные `AsCte`/`AsRecursiveCte`; data-modifying CTE на PostgreSQL) | yes | yes (нет data-modifying CTE) | partial (нет data-modifying CTE) |
 | Выбор экстремальной строки (`SelectWhereMax`/`SelectWhereMin`) | yes | partial (оконные функции + `OrderBy`/`Take`) | partial (`OrderBy`+`First`) |
 | Per-query переопределения источника (таблица/схема/база/сервер) | yes | partial | partial (на уровне модели) |
+| Вариант сопоставления времени выполнения (имена таблицы/схемы/колонок и префикс параметров в пределах команды, по ключу) | yes (`IEntityVariantResolver` + `IEntityMetadataProvider`, `WithVariant(...)`, метаданные, планы и префиксы параметров изолированы по варианту) | partial (per-connection `MappingSchema` переименовывает таблицы и колонки; нет варианта на команду и изоляции планов по варианту) | partial (база на арендатора — только выбором строки подключения на экземпляр `DbContext`, а переключение требует времени жизни `Transient`; схема на арендатора по документации не поддерживается; переименования во время запроса нет) |
+| Маршрутизация запроса на сервер по типу сущности (правила по структуре и по данным, пиннинг хоста, транзакция на маршрутизированном хосте) | yes (`[RouteTo]`, `RouteNamespace`/`RouteAssembly`, собственный `IEntityRouteResolver`, `RoundRobinTopology`, `PinHost`, `IRoutedTransactionManager`) | no (соединение фиксировано на экземпляр `DataConnection`; правил на тип нет) | partial (строка подключения на экземпляр `DbContext`; правил на тип сущности и роутинга внутри одного контекста нет) |
+| Шардирование (размещение по бакетам и сбор по бакетам) | yes (кольцо консистентного хеширования бакетов по шардам, соединение на шард, `AcrossBuckets()` возвращает по вектору результата на бакет без склейки на клиенте) | no | no (балансировка по нескольким хостам на уровне провайдера, например Npgsql `Load Balance Hosts` / `Target Session Attributes`, выбирает хост при открытии соединения и роутингом не является) |
 | Temporal-таблицы (`FOR SYSTEM_TIME`) | yes (SQL Server, MariaDB) | no | partial (только SQL Server) |
 | Блокировки строк (`FOR UPDATE`/`FOR SHARE`, `NOWAIT`/`SKIP LOCKED`) | yes | yes | no (только сырой SQL) |
 | Хинты запроса / таблицы / индекса | yes | partial | no (сырой SQL или интерцептор) |
@@ -43,8 +50,8 @@
 | Экспорт result-set в поток (JSON, CSV) | yes | partial (клиентская сериализация) | partial (клиентская сериализация) |
 | `CASE WHEN` / тернарный оператор / `switch`, `COALESCE`, числовой `CAST` | yes | yes | yes |
 | Скалярные функции строк / математики / дат, `LIKE`, конкатенация, `NULLIF` | yes | yes | yes |
-| CLR `Regex` (`IsMatch`/`Replace`, константный шаблон) | yes (PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite, SQL Server 2025+) | partial (открытый [linq2db#698](https://github.com/linq2db/linq2db/issues/698)) | no |
-| `string.Format` / интерполяция в SQL | yes (culture-invariant подмножество) | partial ([linq2db#5921](https://github.com/linq2db/linq2db/issues/5921)) | no |
+| CLR `Regex` (`IsMatch`/`Replace`, константный шаблон) | yes (PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite, SQL Server 2025+) | partial | no |
+| `string.Format` / интерполяция в SQL | yes (culture-invariant подмножество) | partial | no |
 | Арифметика дат (`date_add`/`date_diff`/`date_trunc`/`end_of_month`/`date_from_parts`, `DateTime.Add*`) | yes | yes | yes |
 | Полнотекстовый поиск | yes (SQL Server, PostgreSQL, MySQL/MariaDB; SQLite FTS3/4/5 — запрос + `FROM`, билдер FTS5 maintenance/control) | yes | partial |
 | Условные функции (`iif`/`choose`/`multi_if`) | yes | no | no |
@@ -58,7 +65,7 @@
 | `STRING_AGG` / `ARRAY_AGG` | yes (`array_agg` на PostgreSQL) | yes | partial |
 | Конвертеры значений | yes | yes | yes (`HasConversion`) |
 | Динамические колонки (хранилище `[DynamicColumns]`) | yes | yes | no (обход через JSON/TPH) |
-| JSON-колонка ↔ объект | yes | partial ([linq2db#1661](https://github.com/linq2db/linq2db/issues/1661)) | yes (JSON-колонки) |
+| JSON-колонка ↔ объект | yes | partial | yes (JSON-колонки) |
 | Колонки-длительности / interval | yes (PostgreSQL `interval` → `TimeSpan` — только для представимых значений с нулевыми месяцами) | yes | partial (маппинг interval провайдером) |
 | Нативные JSON-документы | yes на PostgreSQL | partial (тип `json`/`jsonb` плюс `@>`, `#>>` и `Json.Value`; не полная библиотека `jsonb_*`) | partial (маппинг JSON-колонок + Npgsql `EF.Functions.Json*`) |
 | JSON-скаляры (`json_value`/`json_query`/`json_modify`, `isjson`) | yes (SQL Server, MySQL/MariaDB) | yes | partial |
@@ -66,7 +73,7 @@
 | Массивы и higher-order функции (`cardinality`/`array_*`/`@>`/`&&`, `Array(T)`, `ARRAY JOIN`) | yes на PostgreSQL и ClickHouse | partial (только операторы массивов PostgreSQL) | partial |
 | Row values / tuple (`ROW`/`(a, b)`, доступ к элементу, сравнение строк) | yes — PostgreSQL `ROW`/`(row).fN` и ClickHouse `tuple`/`tupleElement`; плоский `(a, b)` в MySQL/MariaDB/SQLite | yes (`Sql.Row`; эмуляция там, где у провайдера нет нативной строки) | partial |
 | Range-типы и range поверх пары скалярных колонок (`Range<T>`, `Overlaps`, `range_contains`, инспекция границ) | yes — нативные range/multirange на PostgreSQL; пара скалярных колонок (`[RangeColumns]`) в остальных | partial (только провайдерный маппинг `NpgsqlRange<T>`/multirange; нет переносимого `Range<T>`/пары) | partial |
-| Collation и ordinal-семантика строк | yes | partial ([linq2db#5927](https://github.com/linq2db/linq2db/issues/5927)) | partial |
+| Collation и ordinal-семантика строк | yes | partial | partial |
 | Соглашения об именах (например snake_case) | yes (opt-in, встроенный `SnakeCaseNamingConvention`) | partial (нет встроенного соглашения) | partial |
 | Квотирование идентификаторов | yes (opt-in) | yes (включено по умолчанию) | yes (всегда) |
 | Регистр ключевых слов SQL (upper/lower) | yes (opt-in `KeywordCase.Upper`) | no (ключевые слова выводятся в каноническом регистре провайдера) | no |
@@ -77,10 +84,10 @@
 | `CREATE TABLE AS SELECT`, временные таблицы | yes | yes | no |
 | `TRUNCATE` | yes (SQLite/in-memory отклоняют) | yes | no (только сырой SQL) |
 | Оптимистичная конкурентность | partial (явный паттерн с токеном; метаданных concurrency-токена нет) | yes | yes |
-| `OUTPUT ... INTO` | yes (SQL Server) | partial (`…WithOutputInto` пишет в таблицу; совмещённый returning+INTO открыт [#3832](https://github.com/linq2db/linq2db/issues/3832)) | no |
+| `OUTPUT ... INTO` | yes (SQL Server) | partial (`…WithOutputInto` пишет в таблицу; одновременно вернуть строки вызывающему коду нельзя) | no |
 | Транзакции (собственные и переданные извне) | yes (SQLite, PostgreSQL, SQL Server, MySQL/MariaDB; ClickHouse и in-memory отклоняют) | yes | yes |
 | Savepoints (создание / откат к / освобождение) | yes (через `ITransactionManager`; release в SQL Server — no-op, в ClickHouse их нет) | partial (только сырой SQL) | yes (методы savepoint у `IDbContextTransaction`; зависит от провайдера) |
-| Поиск по захваченной коллекции (`dict[column]`, `list[column]`) | yes | no (открытый [linq2db#5879](https://github.com/linq2db/linq2db/issues/5879); поддержан только `Contains` → `IN`) | no (индексатор не транслируется; клиентская оценка заблокирована) |
+| Поиск по захваченной коллекции (`dict[column]`, `list[column]`) | yes | no (поддержан только `Contains` → `IN`) | no (индексатор не транслируется; клиентская оценка заблокирована) |
 | Класс сущности необязателен (запрос без маппинга типа) | yes | partial | no |
 | Навигационные свойства / связи / eager loading | partial (декларативные метаданные O2M/M2O/O2O/M2M, `JoinInto`, eager loading `LoadWith` — split или single-query, вложенность уровня 2+ с единым режимом на граф и порядком/top-N на уровне — и неявная навигация по объявленным связям; вывод по конвенции FK отсутствует и в linq2db) | yes (`[Association]`, `LoadWith`) | yes |
 | Конфигурация контекста, логирование и DI | yes | yes | yes |
@@ -95,7 +102,7 @@
 | In-memory-провайдер (только чтение, зарегистрированные CLR-наборы) | yes | partial | partial |
 | Жизненный цикл соединения (`IConnectionManager`: переданное vs собственное, переиспользование, dispose) | yes | yes | yes |
 | Расширяемость (диалект, `[SqlFunction]`/фабрики `TvfEntityBuilder<T>`, интерцепторы, глобальные фильтры, сырой SQL; плюс **компоненты запроса** — повторно используемые структурные операторы, добавляемые третьими сторонами без friend-доступа, с сохранением кэша планов и привязки параметров) | yes (компоненты запроса) | partial (`Sql.Ext`/`Sql.Function`/интерцепторы; нет структурного контракта компонентов) | partial (интерцепторы, глобальные фильтры; нет структурного контракта компонентов) |
-| **Итого** | 73 / 5 / 3 | 49 / 22 / 10 | 28 / 27 / 25 |
+| **Итого** | 76 / 5 / 3 | 49 / 23 / 12 | 28 / 29 / 26 |
 
 ## Где Nextorm впереди
 
@@ -109,10 +116,20 @@
   целый запрос.
 - Несопоставленные колонки (`SqlFunctions.Column`), именованные алиасы join (`Alias.<Name>`) и per-query
   переопределения источника — каждое входит в ключ плана.
+
+- **Multi-tenancy и шардирование без второй модели.** Для заданного ключа runtime-вариант
+  сопоставления
+  может переименовать таблицу, схему, колонки и префикс параметров. Метаданные, планы и префиксы
+  параметров изолируются по варианту; настроить его можно через `WithVariant(...)` на билдере или
+  резолвер в контексте. Затем шардирование размещает один тип сущности на нескольких серверах.
+  linq2db
+  переименовывает через `MappingSchema` для соединения, а EF Core документирует шаблоны «колонка
+  арендатора + `HasQueryFilter`» и «модель на арендатора». Ни у одной библиотеки нет варианта на
+  команду
+  или встроенного шардирования.
 - `SelectWhereMax`/`SelectWhereMin` как отдельный оператор экстремальной строки с нативной стратегией на
   PostgreSQL и ClickHouse; linq2db собирает это из оконных функций и `OrderBy`/`Take`.
-- `[JsonColumn]` с хранилищем Auto/Native/Text — маппинг, которого у linq2db до сих пор нет
-  ([linq2db#1661](https://github.com/linq2db/linq2db/issues/1661)).
+- `[JsonColumn]` с режимами хранения Auto/Native/Text — такого маппинга в linq2db нет.
 - Полную явную поверхность записи: `INSERT`/`UPDATE`/`DELETE`/полный `MERGE`, сгенерированные ключи и
   возвращаемые строки, key upsert, массовая вставка, `CREATE TABLE AS SELECT`/временные таблицы,
   data-modifying CTE на PostgreSQL и транзакции — всё явными командами, без отслеживания изменений и
@@ -122,17 +139,22 @@
   объявленным связям, с глобальными фильтрами на дочерних уровнях.
 - Пакет интеграции с EF Core (`nextorm.entityframeworkcore`), использующий соединение, маппинг модели и
   транзакцию EF.
-- **Zero-config миграция на NativeAOT.** Внутри проверенной поверхности (SQLite, .NET 11 / `linux-x64`)
-  единственное изменение у потребителя — `PublishAot=true`: без compiled model, без шага
-  precompilation, без opt-in анализатора/интерцепторов, без регистрации сущностей и запросов, без
-  linker-дескрипторов и roots. EF Core требует compiled model и interceptor-based precompilation и
-  отвергает динамически компонуемые запросы; Dapper требует `Dapper.AOT`, `[module: DapperAot]`,
-  opt-in `InterceptorsNamespaces` и статически известный SQL; linq2db официально NativeAOT не
-  поддерживает. На реальном приложении отчётов по SQLite на 13 ГБ nextorm опубликовался нативно без
-  правок исходников (8.2 MB, 0.12 s, 30 MB RSS), а EF Core — 17.3 MB / 0.23 s / 42 MB после двух
-  обходов ошибок кодогенерации. Покрытие частичное (только SQLite;
-  [#370](https://github.com/AlexeyShirshov/nextorm/issues/370)); преимущество — в контракте миграции.
-  См. [руководство по NativeAOT](../infrastructure/05-nativeaot.md).
+- **Zero-config миграция на NativeAOT.** В проверенной области — все шесть провайдеров на .NET 11 /
+  `linux-x64` — потребителю достаточно изменить только `PublishAot=true`. Не нужны compiled model,
+  precompilation, opt-in анализатора или интерцепторов, регистрация сущностей и запросов, linker-
+  дескрипторы или roots. EF Core требует compiled model и interceptor-based precompilation и не
+  поддерживает динамически компонуемые запросы. Dapper требует `Dapper.AOT`, `[module: DapperAot]`,
+  opt-in `InterceptorsNamespaces` и статически известный SQL. linq2db официально не поддерживает
+  NativeAOT.
+
+  На приложении отчётов по SQLite объёмом 13 ГБ Nextorm опубликовался нативно без изменений
+  исходников
+  (8.2 MB, 0.12 s, 30 MB RSS), а EF Core — 17.3 MB / 0.23 s / 42 MB после двух обходных решений для
+  кодогенерации. NativeAOT поддерживает проверенные сценарии запросов, записи и сырого SQL
+  для всех шести провайдеров. Мост EF Core требует JIT. Преимущество — в контракте
+  миграции,
+  а не в полном паритете возможностей под AOT. См. [руководство по
+  NativeAOT](../infrastructure/05-nativeaot.md).
 - Кросс-провайдерные row values, переносимый range поверх пары колонок (`[RangeColumns]`), index hints,
   настраиваемый регистр ключевых слов, полнотекстовый поиск вместе с SQLite-поверхностью FTS3/4/5 и
   билдером FTS5 maintenance/control, а также трансляцию CLR `Regex`.
@@ -155,10 +177,13 @@
 - **DDL / управление схемой**: у linq2db есть `CreateTable`/`DropTable` и schema API; Nextorm меняет схему
   только через `CREATE TABLE AS SELECT` — ad-hoc DDL идёт через `ExecuteRaw` (вне области).
 
-Корреляция на SQL-провайдерах единообразна (произвольная глубина вложенности). In-memory-провайдер вычисляет
-коррелированные скаляр/агрегат/`EXISTS`/`IN` глубины один один раз на внешнюю строку и отклоняет только
-более глубокие формы (внешняя ссылка в проекции или `ORDER BY` внутреннего запроса, коррелированные
-`GROUP BY`/`HAVING`, асинхронный внутренний источник).
+SQL-провайдеры поддерживают коррелированные подзапросы произвольной глубины. In-memory-провайдер
+один раз
+на внешнюю строку вычисляет коррелированные скалярные и агрегатные формы, `EXISTS` и `IN` глубины
+один.
+Он отклоняет только более глубокие формы: внешнюю ссылку в проекции или `ORDER BY` внутреннего
+запроса,
+коррелированные `GROUP BY`/`HAVING` и асинхронный внутренний источник.
 
 ## Архитектурные различия
 
@@ -171,16 +196,20 @@
 
 ## Итог
 
-Для чтения, отчётности и явного изменения данных поверх существующей схемы Nextorm — более сильный выбор: он
-покрывает практически всю аналитическую поверхность запросов linq2db — провайдерные семейства функций,
-конструкты ClickHouse, кросс-провайдерные row values, табличные функции и многое другое — с меньшим
-аллокационным следом, результатами бенчмарков на уровне или выше Dapper, EF Core и linq2db на поставляемых
-сценариях и более настраиваемым выводом SQL (квотирование идентификаторов, соглашения об именах и регистр
-ключевых слов — opt-in и переопределяются для команды). Миграция на NativeAOT — zero-config
-(`PublishAot=true` и больше ничего), тогда как EF Core требует compiled model и precompilation, а Dapper —
-opt-in AOT-пакет. linq2db остаётся лучшим выбором только там, где тот
-же слой должен ещё и отслеживать изменения либо генерировать слой данных по живой схеме — перечисленные выше
-осознанные границы.
+Если приложение читает данные, строит отчёты или явно изменяет существующую схему, сверьте
+обязательные конструкты и ограничения нужного провайдера по строкам матрицы; сумма оценок сама по
+себе не определяет выбор. Матрица показывает, что Nextorm покрывает почти всю аналитическую
+поверхность запросов linq2db, включая провайдерные семейства функций, конструкты ClickHouse,
+кросс-провайдерные row values и табличные функции. Также настраивается вывод SQL: квотирование
+идентификаторов, соглашения об именах и регистр ключевых слов включаются явно и могут
+переопределяться для команды.
+
+Результаты бенчмарков показывают меньшие аллокации и результаты не ниже Dapper, EF
+Core и linq2db на поставляемых сценариях SQLite; эти замеры не предсказывают результат для любой
+нагрузки. В проверенной области NativeAOT для Nextorm достаточно `PublishAot=true`, тогда как EF
+Core требует compiled model и precompilation, а Dapper — opt-in AOT-пакет. linq2db лучше подходит,
+когда тому же слою нужно также отслеживать изменения или генерировать слой данных по живой схеме —
+это осознанные границы Nextorm, перечисленные выше.
 
 ## См. также
 

@@ -6,9 +6,18 @@
 
 ## Why a batch
 
-Every statement sent as its own command is a separate round trip, and under a connection-level pooler (PgBouncer in `transaction` mode, or any similar load balancer) the next query can land on a different backend. When statements are related — one prepares data the next reads, or a mutation must be visible to the following query — that relationship has to stay within one session, or the result is unavailable.
+Sending each statement as a separate command costs a round trip. With a connection-level pooler such as PgBouncer in `transaction` mode, the next query can also land on a different backend. If one statement prepares data for another, or a later query must see a mutation, separate commands can break that dependency.
 
-One open client connection does not guarantee it. An explicit transaction works around it (PgBouncer pins a server for the whole `BEGIN … COMMIT`), and is the right tool when several queries read the table across the transaction. When the goal is simply "run a few statements in sequence and read the result", a **batch** gives the same single session in one round trip, without opening a transaction: the statements travel as one packet, and an intermediate result is visible to the next statement.
+Keeping a client connection open does not by itself pin a server session. An explicit transaction does: PgBouncer pins a backend for the full `BEGIN … COMMIT`, which makes a transaction the right choice when several queries must read the table. If you only need to run statements in sequence and read the result, a **batch** keeps them on one session in one round trip without opening a transaction. The statements travel together, so each can see the preceding statement’s result.
+
+Choose a batch form based on the result you need:
+
+| Goal | Use |
+|---|---|
+| Materialize a temporary table and read it in one call | `CreateBatchBuilder()` with `CreateTempTable(...)` and `Query(...)` |
+| Reuse a declarative temporary-table source across terminal calls | `AsTempTable()` and read it through `From(...)`; each read materializes it again |
+| Run ordered materialization, DML, or raw steps before one query | `CreateBatchBuilder()` with `Query(...)` as the final step |
+| Return several result sets | `AddQuery<TResult>(...)` and `Execute()` |
 
 Materialising and immediately reading back is a common case but not the only one. `ToTempTable("recent_orders")` creates the table, so it can be read back with `From("recent_orders")`:
 
@@ -57,7 +66,7 @@ select id, total
 
 ## Lazy temporary tables
 
-A lazy temporary table from [`AsTempTable`](20-create-table-as.md#lazy-temporary-tables-astemptable) is the declarative form of this batch: nothing runs when the source is built, and reading it through `From(...)` compiles to a `CreateTempTable` step followed by the read, in one batch. It is useful when the same materialisation is read more than once or across terminal calls: every read re-materialises, so a pooler can never hand the read a backend that lacks the table.
+A lazy temporary table from [`AsTempTable`](20-create-table-as.md#lazy-temporary-tables-astemptable) expresses this batch declaratively. Building the source executes nothing; reading it through `From(...)` compiles the materialisation and the read into one batch. This is useful when you read the same materialisation more than once or across terminal calls: each read materialises it again, so a pooler cannot route the read to a backend without the table.
 
 ```csharp
 var source = ctx.From<IOrder>()
@@ -82,7 +91,7 @@ select id, total
  from __nextorm_temp_xxxxxxxx
 ```
 
-`ToBatchSql()` renders that batch without executing it, and every terminal (`ToList`, `First`, `Single`, `Count`, `Any`, `ToAsyncEnumerable`, …) runs it. A lazy source may itself read another lazy source; the tables are then materialised in dependency order before the read. The read command is re-rendered on every execution, so it is never stored in the plan cache (like every batch plan) and its captured variables become parameters as usual.
+`ToBatchSql()` renders the batch without executing it. Each terminal (`ToList`, `First`, `Single`, `Count`, `Any`, `ToAsyncEnumerable`, …) executes it. If a lazy source reads another lazy source, nextorm materialises the tables in dependency order before running the read. It re-renders the read command on every execution, so the command is not stored in the plan cache (batch plans are not cached) and captured variables become parameters as usual.
 
 `AsTempTable` is available exactly where `CreateTempTable` is — PostgreSQL, SQLite, MySQL and MariaDB; SQL Server (use `CreateTable` with a `#`-prefixed name), ClickHouse and the in-memory context reject it when the query renders.
 
@@ -261,7 +270,11 @@ select id, status
 
 `AddQuery` returns the builder, so several calls chain. Every result query must follow the side-effecting statements: a materialisation or DML step added after the first `AddQuery` throws `InvalidOperationException`. `AddQuery` and `Query` are mutually exclusive — `Query` ends the batch, so a later `AddQuery` throws, and `Query` after `AddQuery` throws too. `Execute()`/`ExecuteAsync()` with no result query added throws `InvalidOperationException`.
 
-`Execute()` returns a [`BatchResult`](xref:NextORM.Core.BatchResult). As with a raw [`ProcedureResult`](14-raw-sql.md#multiple-result-sets), the result object itself is enumerable: `foreach (var set in result)` or `await foreach (var set in result)` yields a [`ResultSet`](xref:NextORM.Core.ResultSet) cursor per set, in the order the queries were added. Each cursor exposes `Index`, `FieldCount` and `ColumnNames`, and reads **its own** set with a per-set `T` through `Read<T>()` or `ReadAsync<T>(ct)`. `BatchResult` also keeps the positional path:
+### Read the batch results
+
+`Execute()` returns a [`BatchResult`](xref:NextORM.Core.BatchResult). Enumerate it with `foreach (var set in result)` or `await foreach (var set in result)` to get a [`ResultSet`](xref:NextORM.Core.ResultSet) cursor for each query, in insertion order. Each cursor exposes `Index`, `FieldCount`, and `ColumnNames`, and reads **its own** result set with `Read<T>()` or `ReadAsync<T>(ct)`.
+
+You can also read sets positionally through `BatchResult.Read<TResult>()`:
 
 | Member | Effect |
 |---|---|
@@ -269,9 +282,15 @@ select id, status
 | `RecordsAffected` | The driver's affected-row total for the whole batch, or `-1` when the batch has no affected-row metadata. |
 | `Read<TResult>()` | Returns the next set positionally, in the order the queries were added; each set is read once. |
 
-`Read<TResult>()` is typed: the requested type must match the projected type of the next query, otherwise it throws `InvalidOperationException` **without consuming the set**; reading past the last set throws `InvalidOperationException` as well. Enumerating the result and the positional `Read<TResult>()` cannot be mixed — either usage throws `InvalidOperationException`. `BatchResult` is **eager** and owns no reader or connection — every set is buffered before `Execute()` returns, so it is not disposable and does not stream. That buffering is the only difference from the streaming `ProcedureResult`; the cursor surface and the one-shot traversal rules are identical — see [Multiple result sets](14-raw-sql.md#multiple-result-sets) for the full cursor contract.
+`Read<TResult>()` is typed: the requested type must match the projected type of the next query. A mismatch throws `InvalidOperationException` **without consuming the set**, and reading past the final set throws the same exception.
 
-`RecordsAffected` is one **driver total for the whole batch**: the rows affected by all of its DML statements together, whether they travelled as a native `DbBatch` or as a `;`-joined command. It is not `ResultSetCount`, not the number of materialised rows and not a sum nextorm computes, and there is no per-statement breakdown. The batch is eager, so the value is already fixed when `Execute()`/`ExecuteAsync()` returns; the getter owns no reader, never touches a database and is safe to read at any time. As with [`ProcedureResult`](14-raw-sql.md#rows-affected-recordsaffected), `-1` means the total is unknown or the metadata is unavailable (a batch whose statements are pure queries), while `0` is a real total from a DML that changed nothing. ClickHouse rejects batches outright (see [Provider support](#provider-support)).
+Choose either enumeration or positional reads; mixing them throws `InvalidOperationException`. `BatchResult` is **eager**: it buffers every set before `Execute()` returns and owns no reader or connection, so it is not disposable and does not stream. This buffering is the only difference from streaming `ProcedureResult`; the cursor API and one-shot traversal rules are the same. See [Multiple result sets](14-raw-sql.md#multiple-result-sets) for the full cursor contract.
+
+### Interpret `RecordsAffected`
+
+`RecordsAffected` is one **driver total for the whole batch**: it combines rows affected by all DML statements, whether the provider sends them through a native `DbBatch` or as a `;`-joined command. It is not `ResultSetCount`, the number of materialized rows, or a sum computed by nextorm; the driver provides no per-statement breakdown.
+
+Because the batch is eager, the value is fixed when `Execute()` or `ExecuteAsync()` returns. Reading the property never accesses the database and is safe at any time. As with [`ProcedureResult`](14-raw-sql.md#rows-affected-recordsaffected), `-1` means the total is unknown or unavailable (for example, when every statement is a query); `0` is a real total from DML that changed no rows. ClickHouse rejects batches entirely (see [Provider support](#provider-support)).
 
 For a batch with a single result the `Query<TResult>` terminal still renders without executing through `BatchQuery<TResult>.ToSql()`, and the multi-result `AddQuery`/`Execute` form renders the whole batch without executing through `BatchBuilder.ToSql()` — both render the same text that execution runs, and `BatchBuilder.ToSql()` requires at least one result step (it throws `InvalidOperationException` otherwise).
 
@@ -297,6 +316,7 @@ The capability is [`ISqlDialect.SupportsBatch`](xref:NextORM.Core.ISqlDialect.Su
 * Batch execution is **not** routed through the query interceptors: their events carry a `DbCommand`, while a `DbBatch` command is a `DbBatchCommand`.
 * `SqlFunctions.Parameter` runtime placeholders cannot be used in a batched query; capture the value in a local variable instead (as in any query rendered as a source). Captured variables become parameters automatically.
 * Batch plans are not cached: each terminal call re-renders the batch.
+* A batch is one session and one round trip, so it also runs on **one host**: the entity types of all its steps must resolve to one topology and one mapping variant. The first routed step selects the host, a step with no rule follows it, and a step that would need another topology or variant is rejected when the batch renders — see [One batch, one topology](34-routing-data-to-topologies.md#one-batch-one-topology).
 
 ## See also
 

@@ -12,11 +12,11 @@
   одной командой в зависимости от **scope**, вычисленного из самой сущности.
 - **Цель (база, ничего не знает про шардирование):**
   1. **scope, зависящий от сущности** — резолвер получает тип и (опционально) инстанс/значения свойств
-     и возвращает `MappingScope`;
+     и возвращает `MappingVariant`;
   2. **подмена названий** — per-scope таблица, схема и имена колонок;
   3. **префикс параметров** — per-scope префикс сгенерированных имён параметров, чтобы варианты одного
      запроса не сталкивались в SQL и кэшах.
-- **Критерий приёмки:** при `MappingScope.Default` поведение и производительность не меняются
+- **Критерий приёмки:** при `MappingVariant.Default` поведение и производительность не меняются
   (zero-cost); при двух scope один и тот же `From<T>()` даёт разные SQL (таблица/схема/колонки) и разные
   имена параметров; врезка резолвера и провайдера метаданных покрыта тестами.
 
@@ -60,33 +60,33 @@
 
 ```csharp
 /// <summary>Identifies a mapping variant: how names and parameters are substituted.</summary>
-public readonly record struct MappingScope(string? Key)
+public readonly record struct MappingVariant(string? Key)
 {
     /// <summary>The default scope; mapping is resolved exactly as before.</summary>
-    public static readonly MappingScope Default = new(null);
+    public static readonly MappingVariant Default = new(null);
 
     /// <summary>Prefix applied to generated parameter names, or empty for the default scope.</summary>
     public string ParameterPrefix => string.IsNullOrEmpty(Key) ? string.Empty : Key + "_";
 }
 ```
 
-- Ключ всех метаданных-кэшей: `(Type, MappingScope)`.
+- Ключ всех метаданных-кэшей: `(Type, MappingVariant)`.
 - `Default` (`Key is null`) обязан повторять текущее поведение и не аллоцировать.
 
 ### 4.2. Резолвер scope (зависит от сущности)
 
 ```csharp
-/// <summary>Resolves the mapping scope for an entity type and/or a concrete value source.</summary>
-public interface IEntityScopeResolver
+/// <summary>Resolves the mapping variant for an entity type and/or a concrete value source.</summary>
+public interface IEntityVariantResolver
 {
     /// <summary>Scope for the CLR type alone (static).</summary>
-    MappingScope Resolve(Type entityType);
+    MappingVariant Resolve(Type entityType);
 
     /// <summary>Scope derived from a concrete instance (for example its key properties).</summary>
-    MappingScope Resolve(Type entityType, object entity);
+    MappingVariant Resolve(Type entityType, object entity);
 
     /// <summary>Scope derived from explicit key values (query predicate, fluent call).</summary>
-    MappingScope Resolve(Type entityType, IReadOnlyList<object?> keyValues);
+    MappingVariant Resolve(Type entityType, IReadOnlyList<object?> keyValues);
 }
 ```
 
@@ -98,14 +98,14 @@ public interface IEntityScopeResolver
 ### 4.3. Провайдер метаданных
 
 ```csharp
-/// <summary>Resolves entity mapping metadata and column names for a mapping scope.</summary>
+/// <summary>Resolves entity mapping metadata and column names for a mapping variant.</summary>
 public interface IEntityMetadataProvider
 {
     /// <summary>Metadata for <paramref name="entityType"/> under <paramref name="scope"/>.</summary>
-    IEntityMetadata GetMetadata(Type entityType, in MappingScope scope);
+    IEntityMetadata GetMetadata(Type entityType, in MappingVariant variant);
 
     /// <summary>Column name for <paramref name="property"/> under <paramref name="scope"/>.</summary>
-    string GetColumnName(PropertyInfo property, in MappingScope scope, INamingConvention? convention);
+    string GetColumnName(PropertyInfo property, in MappingVariant variant, INamingConvention? convention);
 }
 ```
 
@@ -145,7 +145,7 @@ public sealed class PrefixedParameterProvider(IParameterProvider inner, string p
 ```
 
 - `NormParam` (`DataContext/NormParam.cs:12`) становится scope-aware:
-  `GetName(MappingScope scope, int index)` / `IsName(scope, name)`; кэш `ParamNameCache` — на префикс,
+  `GetName(MappingVariant variant, int index)` / `IsName(scope, name)`; кэш `ParamNameCache` — на префикс,
   `"norm_p"` для default (без аллокаций и без смены имён в default-режиме).
 - Точки, которые обязаны прокидывать scope в имена: `QueryPlanner.cs:59,108`,
   `Visitors/NormSqlTranslator.cs:75`, `Cache/DbPreparedQueryCommand.cs:119`,
@@ -158,13 +158,13 @@ public sealed class PrefixedParameterProvider(IParameterProvider inner, string p
 
 ```csharp
 public DataContextBuilder UseEntityMetadataProvider(IEntityMetadataProvider provider);
-public DataContextBuilder UseScopeResolver(IEntityScopeResolver resolver);
+public DataContextBuilder UseVariantResolver(IEntityVariantResolver resolver);
 
 // per-query (fluent, на EntityBuilder<T> / DML-билдерах):
-public TBuilder WithScope(MappingScope scope);
+public TBuilder WithVariant(MappingVariant variant);
 ```
 
-- Default-реализации регистрируются автоматически; при `MappingScope.Default` — fast-path.
+- Default-реализации регистрируются автоматически; при `MappingVariant.Default` — fast-path.
 
 ## 5. Точки встраивания
 
@@ -188,9 +188,9 @@ public TBuilder WithScope(MappingScope scope);
 - **Фаза 0 (schema, без scope):** `IEntityMetadata.Schema`, `EntityMetadataBuilder.Schema()`,
   `FromExpression` со схемой, рендер `schema.table`; per-query `Table("s.t")`/`Schema("s")`. Кэши не
   трогаем.
-- **Фаза 1 (scope + подмена названий):** `MappingScope`, `IEntityScopeResolver`,
+- **Фаза 1 (scope + подмена названий):** `MappingVariant`, `IEntityVariantResolver`,
   `IEntityMetadataProvider`, составные ключи `Metadata`/`SelectListCache`/`_columnNames`; прокинуть
-  scope в `QueryPlanner`, мутации, in-memory; `WithScope`.
+  scope в `QueryPlanner`, мутации, in-memory; `WithVariant`.
 - **Фаза 2 (префикс параметров):** `PrefixedParameterProvider` + scope-aware `NormParam`; единая
   фабрика параметров; тест на два scope в одной команде.
 - **Вне области:** логика выбора scope по значениям (это уже шардинг, `todo_sharding.md`),
@@ -203,7 +203,7 @@ public TBuilder WithScope(MappingScope scope);
 - **План-кэш `[ThreadStatic]`:** scope захватывается в команду на build-time, а не читается в
   `QueryPlan`/терминале на другом потоке.
 - **Prepared-команды:** `Prepare`/`DbPreparedQueryCommand` ключуются scope.
-- **Zero-cost default:** при `MappingScope.Default` сохранить существующий словарь/ключ (fast-path),
+- **Zero-cost default:** при `MappingVariant.Default` сохранить существующий словарь/ключ (fast-path),
   иначе просядут бенчмарки.
 - **Префикс параметров и `norm_p`:** статический `NormParam` — единственное место, где имена не идут
   через `IParameterProvider`. Смена формата имени ломает контракт `SqlFunctions.Parameter`
@@ -214,11 +214,11 @@ public TBuilder WithScope(MappingScope scope);
 ## 8. План тестов
 
 - **Core (`tests/nextorm.core.tests`):**
-  - `MappingScope.Default` — регресс SQL и имён параметров;
+  - `MappingVariant.Default` — регресс SQL и имён параметров;
   - два scope → разные `IEntityMetadata` (table/schema/column) и разные SQL;
   - разные `ColumnName` per scope → нет протухания `_columnNames`/`SelectListCache`;
   - префикс параметров: `p0` → `<scope>_p0`, `norm_p0` → `<scope>_norm_p0`;
-  - кастомные `IEntityScopeResolver`/`IEntityMetadataProvider`.
+  - кастомные `IEntityVariantResolver`/`IEntityMetadataProvider`.
 - **In-memory (`tests/nextorm.core.tests/InMemoryTests.cs`):** scoped-метаданные.
 - **SQL-gen (`tests/nextorm.<provider>.tests`):** `FROM "scope_a"."orders"`, quoting по частям.
 - **Интеграция (`tests/nextorm.integration.tests/CommonTestSuite.*.cs`):** PostgreSQL + SQL Server —
@@ -230,8 +230,8 @@ public TBuilder WithScope(MappingScope scope);
 ## 9. Открытые вопросы
 
 1. **Носитель scope:** `IContextEnvironment.Properties` (Фаза 1) vs `AsyncLocal` (позже) vs явный
-   `WithScope`. Рекомендация — оба: ambient по умолчанию, явный override.
-2. **Тип ключа scope:** `record struct MappingScope(string?)` vs объект-дескриптор.
+   `WithVariant`. Рекомендация — оба: ambient по умолчанию, явный override.
+2. **Тип ключа scope:** `record struct MappingVariant(string?)` vs объект-дескриптор.
 3. **Convention × scope:** применять ли `INamingConvention` к auto-именам внутри провайдера.
 4. **Схема:** отдельное `Schema` vs `TableName = "schema.table"` (первое чище; второе уже рендерится
    через `QuoteQualifiedIdentifier`, `SqlSourceRenderer.cs:845`).
@@ -241,8 +241,8 @@ public TBuilder WithScope(MappingScope scope);
 
 ## 10. Файлы к изменению
 
-- Новое: `src/nextorm.core/DataContext/Meta/MappingScope.cs`,
-  `DataContext/Meta/IEntityScopeResolver.cs`, `DataContext/Meta/DefaultEntityScopeResolver.cs`,
+- Новое: `src/nextorm.core/DataContext/Meta/MappingVariant.cs`,
+  `DataContext/Meta/IEntityVariantResolver.cs`, `DataContext/Meta/DefaultEntityVariantResolver.cs`,
   `DataContext/Meta/IEntityMetadataProvider.cs`, `DataContext/Meta/DefaultEntityMetadataProvider.cs`,
   `Query/PrefixedParameterProvider.cs`.
 - Правки: `DataContext/Meta/IEntityMetadata.cs` (`Schema`), `Meta/Implementation/EntityMetadata.cs`,
@@ -252,9 +252,11 @@ public TBuilder WithScope(MappingScope scope);
   `DataContextDependencies.cs`, `Expressions/FromExpression.cs`, `DataContext/SqlSourceRenderer.cs`,
   `DataContext/SqlMutationBuilder.cs`, `DataContext/NormParam.cs`, `DataContext/ParamNameCache.cs`,
   `Query/IParameterProvider.cs`, все `Builders/*Builder.cs`, `Query/QueryCommand.QueryPreparer.cs`.
-- Тесты: `tests/nextorm.core.tests/MappingScopeTests.cs`, правки `InMemoryTests.cs`, SQL-gen
+- Тесты: `tests/nextorm.core.tests/MappingVariantTests.cs`, правки `InMemoryTests.cs`, SQL-gen
   провайдеров, `tests/nextorm.integration.tests/CommonTestSuite.*.cs`.
-- Документация: `docs/getting-started/03-entities-and-metadata.md` (+RU), раздел по multi-tenancy,
+- Документация: гайд `docs/guide/33-runtime-mapping-variant.md` (+RU, запись в `toc.yml`), раздел
+  «Runtime mapping variant» в `docs/getting-started/03-entities-and-metadata.md` (+RU), ссылки из
+  гайдов 21 (merge) и 34 (шардирование),
   `docs/specs/design/API-NAMING-REVIEW.md`, `docs/specs/design/code-smells-review.md`.
 
 ## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
@@ -262,15 +264,15 @@ public TBuilder WithScope(MappingScope scope);
 > Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
 > Вердикт: **нужен пересмотр до старта фазы 1 — 1 блокер + 8 🟡**.
 
-- **[TYPE] 🔴** `QueryPlanner._fromCache` не scope-aware: `QueryPlanner.cs:509-519` — process-wide `ConcurrentDictionary<Type, FromExpression>` по типу; при двух scope второй получит `FromExpression` default-scope (table/schema). В «Точках встраивания» (`:169-184`) и «Файлах» (`:242-254`) `_fromCache` отсутствует. Fix: ключ `(Type, MappingScope)` или перенос кэша в scoped-провайдер.
-- **[TYPE]/[DIP] 🟡** Scope не протянут через `SqlBuildContext`/`VisitorOptions`: `MemberInfoExtensions.cs:22-43` резолвит имя колонки из process-wide `DataContextCache.Metadata` без scope/provider; рендер получает параметры через `SqlBuildContext` (`SqlBuildContext.cs:44`) и `VisitorOptions` (`VisitorOptions.cs:67`), где scope нет. Fix: добавить `MappingScope`/scoped-resolver в эти два типа.
-- **[SRP]/[KISS] 🟡** Публичные seam'ы при одном потребителе (`:80-110,159-167`): `IEntityScopeResolver`/`IEntityMetadataProvider` имеют только default-реализацию, 2-й потребитель — нереализованный `todo_sharding.md:100-106`. Инвариант 1 запрещает `IX/X` «на будущее». Fix: оставить seam внутренним до шипнутого потребителя либо явно принять YAGNI-цену.
+- **[TYPE] 🔴** `QueryPlanner._fromCache` не scope-aware: `QueryPlanner.cs:509-519` — process-wide `ConcurrentDictionary<Type, FromExpression>` по типу; при двух scope второй получит `FromExpression` default-scope (table/schema). В «Точках встраивания» (`:169-184`) и «Файлах» (`:242-254`) `_fromCache` отсутствует. Fix: ключ `(Type, MappingVariant)` или перенос кэша в scoped-провайдер.
+- **[TYPE]/[DIP] 🟡** Scope не протянут через `SqlBuildContext`/`VisitorOptions`: `MemberInfoExtensions.cs:22-43` резолвит имя колонки из process-wide `DataContextCache.Metadata` без scope/provider; рендер получает параметры через `SqlBuildContext` (`SqlBuildContext.cs:44`) и `VisitorOptions` (`VisitorOptions.cs:67`), где scope нет. Fix: добавить `MappingVariant`/scoped-resolver в эти два типа.
+- **[SRP]/[KISS] 🟡** Публичные seam'ы при одном потребителе (`:80-110,159-167`): `IEntityVariantResolver`/`IEntityMetadataProvider` имеют только default-реализацию, 2-й потребитель — нереализованный `todo_sharding.md:100-106`. Инвариант 1 запрещает `IX/X` «на будущее». Fix: оставить seam внутренним до шипнутого потребителя либо явно принять YAGNI-цену.
 - **[SRP] 🟡** Две из трёх перегрузок резолвера без call-site (`:80-90`): `Resolve(Type, object)` и `Resolve(Type, IReadOnlyList<object?>)`. Fix: в фазе 1 только `Resolve(Type)`.
-- **[TYPE] 🟡** Публичная форма кэшей ломается: `DataContextCache.Metadata`/`SelectListCache` — `public static IDictionary<Type, …>` (`DataContextCache.cs:30,35`); смена ключа на `(Type, MappingScope)` — бинарный public-API брейк, тогда как `:167,206` обещает сохранить словарь/ключ. Fix: `Type`-словарь fast-path для `Default` + отдельный scoped-кэш; брейк оформить осознанно через EN+RU (инвариант 5).
+- **[TYPE] 🟡** Публичная форма кэшей ломается: `DataContextCache.Metadata`/`SelectListCache` — `public static IDictionary<Type, …>` (`DataContextCache.cs:30,35`); смена ключа на `(Type, MappingVariant)` — бинарный public-API брейк, тогда как `:167,206` обещает сохранить словарь/ключ. Fix: `Type`-словарь fast-path для `Default` + отдельный scoped-кэш; брейк оформить осознанно через EN+RU (инвариант 5).
 - **[DRY] 🟡** `IEntityMetadataProvider.GetColumnName` дублирует знание о колонке (`:102-109` vs `IEntityMetadata.Properties[].ColumnName` и `MemberInfoExtensions._columnNames` `:15`) — три источника истины. Fix: имя колонки только через метаданные.
 - **[DRY] 🟡** Параллельный механизм префикса поверх существующего: уже есть `SqlBuildContext.ParameterNamePrefix` (`:44`) и `VisitorOptions.ParameterNamePrefix` (`:67`), протянутые через `RenderSource`/`RenderPredicate`/`RenderAssignments` (`QueryPlanner.cs:83,137,221`). Fix: расширить существующий prefix-путь либо обосновать wrapper.
 - **[TYPE]/[PERF] 🟡** `:69` `ParameterPrefix => Key + "_"` аллоцирует на каждое чтение; `:147-149` делает `NormParam` статическим по scope — process-wide `ParamNameCache` без эвикции (`ParamNameCache.cs:12-41`), при tenant/shard-ключах неограниченный рост. Fix: кэшировать префикс в структуре, norm-кэш — per-context/с ограничением.
 - **[TYPE]/[LSP] 🟡** `Schema` не доезжает до DML (`:115-123,128-135,177`): мутации несут лишь `TableName`/`IsTableNameAuto` (`MutationCommand.cs:147-150`, `InsertBuilder.cs:425`) и рендерятся через `SqlMutationBuilder.ResolveTableName` (`:888-891`) без схемы → `Schema("s")` молча не квалифицирует `INSERT/UPDATE/DELETE/MERGE/TRUNCATE`. Fix: добавить `Schema` в mutation-команды и `ResolveTableName`/`Make*Head`. ℹ️ (30.09.2026, #123) правка target-filter MERGE затронула `SqlMutationBuilder.AppendMergeOnKeys`/`AppendMergeWhen` и `MakeMerge`, но `Schema` в mutation-команды по-прежнему не добавлена — расхождение этой находки сохраняется.
-- **[TYPE] ℹ️** `:244-247` `DefaultEntityScopeResolver`/`DefaultEntityMetadataProvider` без `sealed`; `:105` `in MappingScope` на 8-байтной структуре выгоды не даёт. Fix: `sealed`/`internal`, по значению.
+- **[TYPE] ℹ️** `:244-247` `DefaultEntityVariantResolver`/`DefaultEntityMetadataProvider` без `sealed`; `:105` `in MappingVariant` на 8-байтной структуре выгоды не даёт. Fix: `sealed`/`internal`, по значению.
 - **[SRP] ℹ️** Ambient scope и `Properties`: `IContextEnvironment.cs:26` — мутабельный `Dictionary<string,object>`; план оговаривает потокобезопасность (`:211-212`). Deferred: документировать «не менять во время запроса»/снапшот.
 - **ℹ️** `:184` ссылается на `DataContextDependencies.cs:21` как на регистрацию — фактически это внутренние хуки, регистрация в `DataContextBuilder.cs:68-140`. Fix.

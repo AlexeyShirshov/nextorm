@@ -68,7 +68,8 @@ internal static class RowMapperFactory
             throw new NotSupportedException(
                 $"Column '{column.PropertyName}' is a streaming LOB column and cannot be materialized by the buffered row mapper; stream the row with ToAsyncEnumerable, or read a single LOB column with ToStream/ToTextReader instead.");
 
-        var realType = Nullable.GetUnderlyingType(column.PropertyType) ?? column.PropertyType;
+        var readType = column.ReaderType ?? column.PropertyType;
+        var realType = Nullable.GetUnderlyingType(readType) ?? readType;
 
         var converter = ResolveConverter(column.Converter, dialect);
         if (converter is not null)
@@ -382,6 +383,25 @@ internal static class RowMapperFactory
     }
 
     /// <summary>
+    /// Whether the row-materializer expression tree must be interpreted instead of compiled.
+    /// Off by default: JIT compiles the tree, and NativeAOT already compiles it through the
+    /// interpreter fallback. <c>NEXTORM_EXPRESSION_INTERPRETATION=1</c> forces interpretation so a
+    /// benchmark can compare the two regimes with one binary.
+    /// </summary>
+    private static readonly bool InterpretMaterializerExpressions =
+        Environment.GetEnvironmentVariable("NEXTORM_EXPRESSION_INTERPRETATION") is "1" or "true";
+
+    /// <summary>
+    /// Compiles a row-materializer lambda, or interprets its tree when dynamic code is unavailable
+    /// or interpretation is requested. The JIT path with compilation is unchanged.
+    /// </summary>
+    private static TDelegate CompileMaterializer<TDelegate>(Expression<TDelegate> lambda)
+        where TDelegate : Delegate
+        => InterpretMaterializerExpressions
+            ? lambda.Compile(preferInterpretation: true)
+            : lambda.Compile();
+
+    /// <summary>
     /// Builds the boxed counterpart of <see cref="Build{TResult}(QueryCommand, ILogger?, Func{SelectExpression, Expression, Expression}, bool)"/>:
     /// the same projection materializer for <paramref name="resultType"/>, with each row converted to
     /// <see cref="object"/> (required for value-typed projections) so the delegate can be held by a
@@ -436,7 +456,7 @@ internal static class RowMapperFactory
 
         if (logger?.IsEnabled(LogLevel.Debug) ?? false) logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
 
-        return lambda.Compile();
+        return CompileMaterializer(lambda);
     }
 
     private static Func<IDataRecord, TResult> Build<TResult>(
@@ -449,6 +469,15 @@ internal static class RowMapperFactory
         var resultType = typeof(TResult);
         var param = Expression.Parameter(typeof(IDataRecord));
         Expression<Func<IDataRecord, TResult>> lambda;
+
+        // A compile-time materializer for this shape wins over building and compiling a tree. The
+        // one-column scalar path is left alone: its accessor carries provider-specific widening that
+        // a generated factory would have to duplicate first.
+        if (!oneColumn && RowMaterializerRegistry.TryCreate(resultType, selectList, out var provided)
+            && provided is Func<IDataRecord, TResult> materializer)
+        {
+            return materializer;
+        }
 
         // A streaming LOB column is read through the sequential-access accessor; the buffered path
         // (streaming: false) routes it back through MapColumn, which rejects it with a clear error.
@@ -492,7 +521,7 @@ internal static class RowMapperFactory
 
         if (logger?.IsEnabled(LogLevel.Debug) ?? false) logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
 
-        return lambda.Compile();
+        return CompileMaterializer(lambda);
     }
 
     /// <summary>
@@ -608,6 +637,7 @@ internal static class RowMapperFactory
                     signature = signature * 31 + (column.PropertyName?.GetHashCode() ?? 0);
                     signature = signature * 31 + (column.DurationUnit?.GetHashCode() ?? 0);
                     signature = signature * 31 + (column.ProviderType?.GetHashCode() ?? 0);
+                    signature = signature * 31 + (column.ReaderType?.GetHashCode() ?? 0);
                     signature = signature * 31 + (column.Converter is null ? 0 : RuntimeHelpers.GetHashCode(column.Converter));
                     signature = signature * 31 + (column.ProjectionItem is { } item ? item.EntityType.GetHashCode() * 31 + item.Slot : 0);
                     // #173: the target member is part of the materialized shape, so the compiled-mapper

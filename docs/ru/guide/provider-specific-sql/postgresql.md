@@ -31,21 +31,27 @@ select id
 ```
 
 См. [Массивы (PostgreSQL)](../../scalar-functions/06-arrays.md#массивы-postgresql). Функции, возвращающие
-массив, можно использовать внутри запроса или проецировать напрямую: row reader материализует
-результат `Array(T)` как CLR `T[]`.
+массив, можно использовать в запросе или проецировать в результат: при чтении nextorm преобразует
+`Array(T)` в CLR-массив `T[]`.
+
+Оставляйте массив значением, если нужны `any`/`all` или операторы массива. Если для каждого элемента нужна
+отдельная строка результата, разверните массив через `unnest` из раздела
+[«Функции, возвращающие наборы»](#функции-возвращающие-наборы).
 
 ## Range-типы
 
-У PostgreSQL есть нативные range-типы (`int4range`, `int8range`, `numrange`, `tsrange`, `tstzrange`,
-`daterange`). nextorm представляет их provider-agnostic value-типом
-[`Range<T>`](xref:NextORM.Core.Range`1) — `Lower`/`Upper`, `LowerInclusive`/`UpperInclusive`,
-`LowerInfinite`/`UpperInfinite`, `IsEmpty` и [`Range<T>.Empty`](xref:NextORM.Core.Range`1.Empty) — который
-провайдер PostgreSQL биндит через Npgsql, сохраняя unbounded стороны и пустой диапазон. Поверхность
-гейтится [`SupportsRanges`](xref:NextORM.Core.ISqlDialect.SupportsRanges) и живёт на
-[`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres). Операторы вынесены в статические методы с именами
-SQL-токенов, поэтому ни один член не конфликтует с CLR-оператором или полнотекстовым `Contains`:
+У PostgreSQL есть встроенные типы диапазонов (`int4range`, `int8range`, `numrange`, `tsrange`,
+`tstzrange`, `daterange`). Для работы с ними nextorm предоставляет общий для провайдеров тип-значение
+[`Range<T>`](xref:NextORM.Core.Range`1): `Lower`/`Upper`, `LowerInclusive`/`UpperInclusive`,
+`LowerInfinite`/`UpperInfinite`, `IsEmpty` и [`Range<T>.Empty`](xref:NextORM.Core.Range`1.Empty). Провайдер
+PostgreSQL передаёт его через Npgsql, сохраняя отсутствие нижней или верхней границы и пустой диапазон.
+Поддержка проверяется через [`SupportsRanges`](xref:NextORM.Core.ISqlDialect.SupportsRanges) и доступна
+через [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres). Операторы доступны как статические методы с
+именами SQL-токенов, поэтому они не конфликтуют с операторами CLR или полнотекстовым `Contains`:
 
-На базе без нативного range-типа отобразите свойство `Range<T>` на пару скалярных колонок через [`RangeColumns`](../27-range-columns.md); те же операторы транслируются поверх пары.
+Используйте встроенный тип PostgreSQL, когда значение диапазона хранится в одной колонке. В другой СУБД
+без такого типа сопоставьте свойство `Range<T>` с парой скалярных колонок через
+[`RangeColumns`](../27-range-columns.md); те же операторы транслируются и для этой пары.
 
 | Член | SQL |
 |---|---|
@@ -85,11 +91,12 @@ select id
 
 ### Multirange
 
-Multirange-типы PostgreSQL (`int4multirange`, `int8multirange`, `nummultirange`, `tsmultirange`,
-`tstzmultirange`, `datemultirange`) представляются как `Range<T>[]` — биндятся и читаются как
+Для нескольких диапазонов в одном значении PostgreSQL предоставляет мультидиапазонные типы
+(`int4multirange`, `int8multirange`, `nummultirange`, `tsmultirange`, `tstzmultirange`,
+`datemultirange`). nextorm представляет их как `Range<T>[]`, а провайдер передаёт и читает их как
 `NpgsqlRange<T>[]`. Массив канонический: отсортирован по нижней границе, перекрывающиеся и смежные
 диапазоны объединены. Сопоставьте свойство или параметр напрямую с `Range<T>[]`; имена операторов выше
-перегружены для multirange (`overlaps`, `range_contains`, `range_contained_by`, `range_union`,
+перегружены для мультидиапазонов (`overlaps`, `range_contains`, `range_contained_by`, `range_union`,
 `range_intersection`, `range_difference`, `range_adjacent` и позиционные), плюс `multirange(range)`,
 `range_merge`, функции проверки и агрегаты `range_agg` / `range_intersect_agg`:
 
@@ -108,16 +115,15 @@ var rows = dataContext.From<IReservation>()
 
 ## `json` и `jsonb`
 
-PostgreSQL — единственный провайдер с нативными типами `json`/`jsonb`. JSON-операнды — это нативные
-JSON-колонки (свойство `[JsonColumn]` отображает CLR-объект на `jsonb` на чтение и запись), другие
-JSON-функции или параметры, чьё значение во время выполнения — `JsonDocument`/`JsonElement`/`JsonNode`
-(Npgsql биндит их как `jsonb`). «Голое» свойство `JsonNode`/`JsonNode?` (объявленное ровно как `JsonNode`,
-не `JsonObject`/`JsonArray`) читает нативную колонку `json`/`jsonb` для корней-объектов, массивов и
-скаляров, в скалярной и составной проекциях; SQL `NULL` и JSON-литерал `null` оба становятся CLR `null`.
-Объявленные свойства `JsonObject`/`JsonArray` и «голая» *скалярная* проекция `JsonDocument`/`JsonElement`
-в эту поддержку не входят. Семейство `jsonb_*` покрывает построение,
-извлечение, вложенность и агрегацию: `jsonb_build_object`, `jsonb_agg`, `json_get_text`,
-`json_cast`, операторы `->`, `->>`.
+PostgreSQL — единственный провайдер со встроенными типами `json`/`jsonb`. Для хранения CLR-объекта
+используйте `[JsonColumn]`: свойство читается и записывается как `jsonb`. Для JSON-параметра передайте
+`JsonDocument`/`JsonElement`/`JsonNode` во время выполнения; Npgsql передаст его как `jsonb`. Чтобы прочитать
+нативную колонку `json`/`jsonb`, объявите свойство в точности как `JsonNode` или `JsonNode?` (не
+`JsonObject`/`JsonArray`): поддерживаются корни-объекты, массивы и скаляры в скалярной и составной
+проекциях. SQL `NULL` и JSON-литерал `null` оба становятся CLR `null`. Свойства `JsonObject`/`JsonArray`
+и отдельная скалярная проекция `JsonDocument`/`JsonElement` не поддерживаются. Семейство `jsonb_*`
+покрывает построение, извлечение, проверку вхождения и агрегацию: `jsonb_build_object`, `jsonb_agg`,
+`json_get_text`, `json_cast`, операторы `->`, `->>`.
 
 Четыре аксессора `json_get`, `json_get_text`, `json_get_path` и `json_get_path_text` (перегрузки по
 строковому ключу и по индексу) применяют **контекстную SQL-типизацию**: сырое клиентское значение документа
@@ -198,13 +204,13 @@ select id, ts_rank(to_tsvector(somestring), to_tsquery('cat'))
 Native-поверхность реализована только в PostgreSQL; остальные провайдеры отклоняют её на этапе
 построения SQL.
 
-Дополнения `#281` расширяют ту же поверхность: конструкторы вектора и запроса `array_to_tsvector`,
+API PostgreSQL также включает конструкторы вектора и запроса `array_to_tsvector`,
 `json_to_tsvector` и `jsonb_to_tsvector`; члены проверки и перезаписи `numnode`, `querytree`,
 `setweight`, `strip`, `ts_delete`, `ts_filter`, `ts_rewrite` и `tsquery_phrase`; пару преобразования и
 лексирования `tsvector_to_array` и `ts_lexize`; и читатели токенизатора `ts_debug`, `ts_parse` и
 `ts_token_type` как `FROM`-источники. Их SQL-формы, интерфейсы строк и мост `cast(... as text)`
 перечислены в разделе
-[Строковые функции › Полнотекстовый поиск (PostgreSQL, #281)](../../scalar-functions/01-string-functions.md#полнотекстовый-поиск-postgresql-281).
+[Строковые функции › Полнотекстовый поиск (PostgreSQL)](../../scalar-functions/01-string-functions.md#полнотекстовый-поиск-postgresql).
 
 ## Расширенные скаляры и regexp
 
@@ -215,7 +221,7 @@ Native-поверхность реализована только в PostgreSQL;
 (`to_char`/`to_date`/`to_number`/`to_timestamp`/`timezone`/`make_interval`/`justify_*`) и
 конструкторы массивов, всё гейтится `SupportsExtendedScalarFunctions`.
 
-Остаточный строковый каталог #281 живёт на той же поверхности `Postgres`, один член на серверную
+API `Postgres` также включает строковые функции, один член на серверную
 перегрузку: `btrim` (одноаргументная, с набором символов и формы `bytea`), двухаргументные и
 `bytea`-формы `ltrim`/`rtrim`, `starts_with`, `parse_ident`, перегрузки `text` у
 `quote_ident`/`quote_literal`/`quote_nullable`, `to_ascii(value, encoding)` (кодировка текстом или её
@@ -232,7 +238,7 @@ SQL PostgreSQL до него не доходит. `normalize` принимает
 `anyelement`, — отклоняются во время подготовки запроса; проверенные причины собраны в таблице
 отказов в статье [Строковые функции](../../scalar-functions/01-string-functions.md#проверенные-отказы).
 
-Остаточное семейство даты/времени #281 подчиняется тому же правилу: `date_subtract` (двухаргументная
+То же правило применяется к функциям даты и времени: `date_subtract` (двухаргументная
 форма с `interval` и зонированная трёхаргументная форма, обе возвращают `timestamp with time zone`),
 `justify_interval`, `make_timestamptz` (с зоной и без), часы
 `clock_timestamp`/`statement_timestamp`/`transaction_timestamp`, `timeofday` и `isfinite` над
@@ -339,10 +345,10 @@ select distinct on (somestring) id, somestring
 
 ## Функции, возвращающие наборы
 
-Функции PostgreSQL, возвращающие набор, доступны как табличные функции через
-[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) с вызовом runtime-фабрики:
+Функции PostgreSQL, возвращающие строки, можно использовать как источники табличного запроса через
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) и вызов фабрики при построении запроса:
 
-| `SqlFunctions.Postgres.*` | Колонки SQL | Row-shape |
+| `SqlFunctions.Postgres.*` | Колонки SQL | Интерфейс строки |
 | --- | --- | --- |
 | `generate_series(start, stop[, step])` | `generate_series` | `IGenerateSeriesRow` |
 | `unnest(array)` | `unnest` | `IUnnestRow<T>` |
@@ -353,6 +359,10 @@ select distinct on (somestring) id, somestring
 | `jsonb_object_keys(json)` | `jsonb_object_keys` | `IJsonObjectKeysRow` |
 | `jsonb_path_query(json, jsonpath)` | `jsonb_path_query` | `IJsonPathQueryRow` |
 | `ts_stat(query)` | `word`, `ndoc`, `nentry` | `ITsStatRow` |
+
+Используйте `generate_series`, чтобы получить строки последовательности, а `unnest` — чтобы развернуть
+существующий массив: каждый его элемент станет отдельной строкой. JSON-функции из таблицы аналогично
+разворачивают JSON-значения или объекты в строки.
 
 JSONPath-аргумент передаётся текстом через `SqlFunctions.Postgres.jsonpath(path)`, что рендерится как
 `cast(path as jsonpath)`.
@@ -571,10 +581,45 @@ var nearest = ctx.From<Document>()
     .Select(x => new { x.Id, Distance = SqlFunctions.Postgres.cosine_distance(x.Embedding, target) });
 ```
 
-Агрегаты PostgreSQL `avg`/`sum` над векторами и их полуточными формами пока не представлены LINQ-маркерами.
+Агрегаты PostgreSQL `avg`/`sum` над векторами и их полуточными формами не представлены LINQ-маркерами.
 DDL вне области охвата nextorm: расширение, столбцы и индексы (HNSW/IVFFlat, `vector_l2_ops` и т.п.) создаёт
 приложение. Операции расстояния с разными размерностями и операции `bit` с разной длиной завершаются ошибкой
 PostgreSQL.
+
+### Унифицированный API поиска ближайших соседей
+
+Общий `EntityBuilder<TEntity>.VectorSearch(...)` возвращает ту же форму результата в PostgreSQL и SQL
+Server: `VectorSearchResult<TEntity>` содержит найденную `Entity` и nullable-значение `Distance`.
+Можно использовать общий тип `Vector` или существующий тип PostgreSQL `PgVector`, `PgHalfVector` либо
+`PgSparseVector`, соответствующий отображённому свойству; тип вектора запроса должен совпадать с типом
+этого свойства. `PgBit` остаётся доступен для PostgreSQL-only маркеров расстояния между битовыми
+строками, но не для общего набора метрик. Например:
+
+```csharp
+var nearest = ctx.From<Document>()
+    .VectorSearch(x => x.Embedding, new Vector(new[] { 1f, 2f, 3f }),
+        VectorDistanceMetric.Cosine, topK: 10, mode: VectorSearchMode.Approximate)
+    .ToList();
+```
+
+В PostgreSQL SQL-формы режимов различаются. `Exact` вызывает функцию расстояния pgvector и сортирует
+по результату, гарантируя точный поиск ближайших соседей среди строк, отобранных источником; например
+`ORDER BY cosine_distance(embedding, @queryVector) LIMIT 10`
+(`l2_distance` — евклидова/L2-метрика, `negative_inner_product` — dot product). Эти вызовы функций
+не соответствуют сортировке по операторам расстояния индексов HNSW/IVFFlat, поэтому ANN-индекс не
+может обслужить точный поиск ближайших соседей; вычисление расстояний для всех кандидатов может быть
+медленнее. `Approximate` использует оператор расстояния pgvector, например
+`ORDER BY embedding <=> @queryVector LIMIT 10` (`<->` — евклидова/L2-метрика, `<#>` — отрицательное
+скалярное произведение), который допускает использование подходящего индекса HNSW или IVFFlat.
+Планировщик PostgreSQL сам решает, использовать ли подходящий индекс. Обе формы возвращают расстояние
+выбранной метрики, меньшие значения ближе. Приведённые выше PostgreSQL-only маркеры по-прежнему
+дополнительно дают L1, Hamming и Jaccard. Провайдеры без поддержки векторного поиска отклоняют общий
+вызов при подготовке, а не подменяют метрику или путь поиска. Поведение SQL Server не изменилось:
+точный поиск использует `VECTOR_DISTANCE`, приближённый — явно выбранную грамматику `VECTOR_SEARCH`.
+См. [SQL Server: формы SQL для поиска по векторам](sqlserver.md#поиск-ближайших-соседей-по-векторам).
+
+Общий контракт векторов и конвейер эмбеддингов/поиска на уровне приложения описаны в руководстве
+[«ИИ и векторный поиск»](../../guide/36-ai-and-vector-search.md).
 
 ## См. также
 

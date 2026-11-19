@@ -1,6 +1,23 @@
 ﻿# Examples verification report
 
-> **Last verified: 2026-11-11** (the examples are now **comparison projects**: native comparison queries have
+## Package update to 1.0.10 (2026-11-18)
+
+All seven example projects built in Release without warnings or errors. The `oc-report` example
+and all three NativeAOT provider probes resolved their Nextorm dependencies from the published
+`1.0.10` NuGet packages. The comparison projects used the checkout's source projects, not NuGet.
+The provider probe results for `1.0.9` in the historical section aren't runtime verification of
+`1.0.10`.
+
+On the synthetic SQLite dataset, `oc-report` exited successfully for the three-day report in both
+JIT and NativeAOT (`linux-x64`). The reports matched apart from the timestamp in the `window:` line.
+
+On the existing Podman dataset volumes, the comparison apps returned matching row counts for
+every query: PostgreSQL Aviasales **10/10**, SQL Server AdventureWorks **11/11**, and ClickHouse
+Analytics **9/9**. All three processes exited with code `0`.
+
+## Verification history for 1.0.9
+
+> **Last verified: 2026-11-11; the NativeAOT probes re-verified 2026-11-13** (the examples are now **comparison projects**: native comparison queries have
 > nextorm and linq2db arms, and both are executed against the same dataset; BenchmarkDotNet runs
 > through `--benchmark`). Re-run the examples whenever the engine gains features and update the tables
 > below. This file is the source of truth for "what works / what does not and why"; the topics are owned
@@ -57,18 +74,28 @@ for mssql and clickhouse):
 * clickhouse: array analytics 10, funnel 3, sessions 100, daily traffic 7, top landing pages 10, device
   split 2, top referrers 10, session depth 5, rolling activity 7; `Retention` (nextorm-only) is excluded from comparison; `Incremental` was removed with the whole-query `FromSql` cleanup.
 
-## NativeAOT provider probes (2026-11-12)
+## NativeAOT provider probes (2026-11-13)
 
 Three connection-free AOT probes run the nextorm arm of each comparison example: `nextorm.aotexamples.postgres.aviasales`
 (published `1.0.9`), `nextorm.aotexamples.mssql.adventureworks` (published `1.0.9`) and
 `nextorm.aotexamples.clickhouse.analytics` (published `1.0.9`). Each query prints a row count and a
-digest, so a native run is compared with the JIT run directly:
+digest, so a native run is compared with the JIT run directly. Every probe sets a **600-second command
+timeout** on its context: the aggregations scan the whole demo dataset and do not fit the 30-second
+provider default on a cold server (postgres `FrequentFlyers` failed on that default before the change).
 
-| Probe | Native binary | Native result |
-|---|---|---|
-| postgres | 18 MB | **5/10** complete, digests equal to JIT |
-| mssql | 28 MB | **3/11** |
-| clickhouse | 16 MB | **0/9** |
+| Probe | Native binary | Native, published `1.0.9` | JIT, published `1.0.9` |
+|---|---|---|---|
+| postgres | 18 MB | **5/10**, digests equal to JIT where both run | **10/10** |
+| mssql | 28 MB | **3/11** | **11/11** |
+| clickhouse | 16 MB | **0/9** | **9/9** |
+
+Re-verified 2026-11-13 against live containers started on the same named volumes
+(`nextorm-examples-{aviasales,adventureworks,clickhouse}-data`): `bookings.flights` = 21 758,
+`Sales.SalesOrderHeader` = 31 465, `datasets.hits_v1` = 8 873 898. The native column is the **released**
+surface — what the committed `NextOrmVersion` pin selects — while the JIT column shows the queries
+themselves are valid, so every gap is AOT-only. The development build of the next release (`1.0.10`)
+fixes the three classes below; the guide holds those numbers, and this table is updated when
+`NextOrmVersion` moves to a release that carries them.
 
 Failures happen in query preparation: `decimal` operators resolved by reflection and removed by
 trimming, `Tuple<T1,T2>` constructors discovered by reflection, and runtime expression-tree

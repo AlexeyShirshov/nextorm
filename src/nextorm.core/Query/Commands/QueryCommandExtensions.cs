@@ -4,13 +4,11 @@ using System.Reflection;
 namespace NextORM.Core;
 
 /// <summary>
-/// Extension methods that run a <see cref="QueryCommand{TResult}"/> against raw SQL instead of the
-/// generated query, and the terminal operators that stream LOB columns through
-/// <see cref="System.Data.CommandBehavior.SequentialAccess"/>: the single-column
-/// <see cref="ToStream(QueryCommand{byte[]}, ReadOnlySpan{object?})"/> /
-/// <see cref="ToTextReader(QueryCommand{string}, ReadOnlySpan{object?})"/> and the multi-column
-/// <see cref="ToDataReader{TResult}(QueryCommand{TResult}, ReadOnlySpan{object?})"/>, with their
-/// asynchronous counterparts.
+/// Adds raw-SQL preparation and override methods for <see cref="QueryCommand{TResult}"/>, plus
+/// large-object, multi-column reader, and CSV streaming terminals. Database providers use sequential
+/// access where supported; SQLite uses a buffered, non-sequential path for
+/// <see cref="ToDataReader{TResult}(QueryCommand{TResult}, ReadOnlySpan{object?})"/>. Asynchronous
+/// counterparts are available.
 /// </summary>
 public static class QueryCommandExtensions
 {

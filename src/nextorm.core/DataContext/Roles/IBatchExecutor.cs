@@ -22,7 +22,10 @@ internal interface IBatchExecutor
     /// </summary>
     /// <param name="steps">The steps in execution order; the result-bearing query is last.</param>
     /// <returns>The rendered statements and the result-bearing query.</returns>
-    /// <exception cref="NotSupportedException">The dialect has no batch form, or a materialisation option is unsupported.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The dialect has no batch form, a materialisation option is unsupported, or the steps resolve to
+    /// different topologies or mapping variants (a batch runs on one host).
+    /// </exception>
     BatchPlan RenderBatch(IReadOnlyList<BatchStepSpec> steps);
 
     /// <summary>
@@ -210,6 +213,46 @@ internal sealed class BatchResultSpec
 }
 
 /// <summary>
+/// The host one rendered batch runs on. A batch is one session and one round trip, so every statement of
+/// it must belong to one topology and one mapping variant — the same rule a single statement applies to its
+/// sources. The route carries the step that decided it; the context turns it into a connection when it
+/// executes the plan, so <c>ToSql</c> can validate the batch without opening anything.
+/// </summary>
+internal readonly struct BatchRoute
+{
+    /// <summary>Creates a route decided by one step of the batch.</summary>
+    /// <param name="plan">The resolved topology, or none.</param>
+    /// <param name="variant">The mapping variant the deciding step runs under.</param>
+    /// <param name="sources">The entity types the deciding step reads or writes, or <see langword="null"/>.</param>
+    /// <param name="kind">Whether the batch must be served by a writer.</param>
+    public BatchRoute(RoutePlan plan, MappingVariant variant, IReadOnlyList<Type>? sources, CommandKind kind)
+    {
+        Plan = plan;
+        Scope = variant;
+        Sources = sources;
+        Kind = kind;
+    }
+
+    /// <summary>No step of the batch belongs to a topology: it runs on the context connection.</summary>
+    /// <param name="kind">Whether the batch must be served by a writer.</param>
+    /// <returns>The context route.</returns>
+    public static BatchRoute OnContext(CommandKind kind)
+        => new(RoutePlan.None, MappingVariant.Default, null, kind);
+
+    /// <summary>The topology the batch belongs to, or none.</summary>
+    public RoutePlan Plan { get; }
+
+    /// <summary>The mapping variant the deciding step runs under.</summary>
+    public MappingVariant Scope { get; }
+
+    /// <summary>The entity types the deciding step reads or writes, or <see langword="null"/>.</summary>
+    public IReadOnlyList<Type>? Sources { get; }
+
+    /// <summary>Whether the batch has a side-effecting statement and must be served by a writer.</summary>
+    public CommandKind Kind { get; }
+}
+
+/// <summary>
 /// A rendered batch: the statements with their (globally unique) parameters plus the ordered result
 /// specs. Produced by <see cref="IBatchExecutor.RenderBatch"/>. The result-bearing queries are the
 /// trailing statements and only they may return rows; every preceding statement is side-effecting — a
@@ -222,17 +265,22 @@ internal sealed class BatchPlan
     /// <summary>Creates a rendered plan.</summary>
     /// <param name="statements">The rendered statements, in execution order.</param>
     /// <param name="results">The result specs, in result-set order; at least one.</param>
+    /// <param name="route">The host the batch runs on.</param>
     /// <param name="useJoinedCommand">When <see langword="true"/>, execute the statements as one <c>;</c>-joined command even if the connection exposes a <see cref="System.Data.Common.DbBatch"/>.</param>
     /// <param name="multiline">When <see langword="true"/>, <see cref="ToSql"/> places each statement on its own line.</param>
-    public BatchPlan(IReadOnlyList<BatchStatement> statements, IReadOnlyList<BatchResultSpec> results, bool useJoinedCommand, bool multiline = false)
+    public BatchPlan(IReadOnlyList<BatchStatement> statements, IReadOnlyList<BatchResultSpec> results, BatchRoute route, bool useJoinedCommand, bool multiline = false)
     {
         Statements = statements;
         Results = results;
+        Route = route;
         ResultQuery = results[0].Query;
         ResultSql = results[0].Sql;
         UseJoinedCommand = useJoinedCommand;
         Multiline = multiline;
     }
+
+    /// <summary>The host the batch runs on, resolved while it was rendered.</summary>
+    public BatchRoute Route { get; }
 
     /// <summary>The rendered statements, in execution order.</summary>
     public IReadOnlyList<BatchStatement> Statements { get; }

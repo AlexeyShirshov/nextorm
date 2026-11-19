@@ -8,11 +8,12 @@ namespace NextORM.Core;
 /// <summary>One projected CSV column: its header and the compiled delegate that appends its formatted value to a row buffer.</summary>
 internal sealed class CsvColumn
 {
-    public CsvColumn(string header, Action<IDataRecord, CsvRowBuffer>? write, int? binaryOrdinal = null)
+    public CsvColumn(string header, Action<IDataRecord, CsvRowBuffer>? write, int? binaryOrdinal = null, bool isDirect = false)
     {
         Header = header;
         Write = write;
         BinaryOrdinal = binaryOrdinal;
+        IsDirect = isDirect;
     }
 
     /// <summary>The header cell, derived from the projection's property name.</summary>
@@ -28,6 +29,12 @@ internal sealed class CsvColumn
     /// <see langword="null"/> so no whole-array getter is ever compiled for the field.
     /// </summary>
     public int? BinaryOrdinal { get; }
+
+    /// <summary>
+    /// Whether <see cref="Write"/> is the direct (already-compiled) column writer rather than a compiled
+    /// expression tree. Test/evidence observability: the two must produce identical bytes.
+    /// </summary>
+    public bool IsDirect { get; }
 }
 
 /// <summary>The compiled column plan of one CSV terminal call.</summary>
@@ -94,6 +101,9 @@ internal static class CsvStreamWriter
     private static readonly MethodInfo WriteNullFieldMethod =
         typeof(CsvRowBuffer).GetMethod(nameof(CsvRowBuffer.WriteNullField))!;
 
+    private static readonly MethodInfo IsDBNullMethod =
+        typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
+
     /// <summary>
     /// Validates the prepared projection before the query is executed, using only static information.
     /// An unsupported CLR type, an object-bridged <see cref="IPropertyValueConverter"/> and a
@@ -142,15 +152,21 @@ internal static class CsvStreamWriter
     /// <param name="mapTypedColumn">The provider's typed column mapper (<see cref="DataContext.MapTypedColumnExpression(SelectExpression, Expression, Type)"/>).</param>
     /// <param name="sequentialAccess">The mode the preparation actually applied to the reader; carried on the plan for the binary path.</param>
     /// <param name="options">The call's CSV options, needed to decide whether a binary column's framing is knowable before it is read; <see langword="null"/> keeps every column buffered.</param>
+    /// <param name="allowDirectColumnWriters">
+    /// When <see langword="true"/> (the default), a column whose mapped accessor is one of the plain
+    /// <see cref="IDataRecord"/> getters is written by a delegate built from already-compiled code instead
+    /// of a compiled expression tree. The caller passes <see langword="false"/> to obtain the expression
+    /// writer, which the parity tests compare the direct one against.
+    /// </param>
     /// <returns>The compiled column plan.</returns>
-    public static CsvPlan Build(SelectExpression[]? selectList, IDataRecord? schema, Func<SelectExpression, Expression, Type, Expression> mapTypedColumn, bool sequentialAccess = false, CsvStreamOptions? options = null)
+    public static CsvPlan Build(SelectExpression[]? selectList, IDataRecord? schema, Func<SelectExpression, Expression, Type, Expression> mapTypedColumn, bool sequentialAccess = false, CsvStreamOptions? options = null, bool allowDirectColumnWriters = true)
     {
         if (selectList is null || selectList.Length == 0)
             throw new InvalidOperationException("The query has no projected columns; there is nothing to write as CSV.");
 
         var columns = new CsvColumn[selectList.Length];
         for (var i = 0; i < selectList.Length; i++)
-            columns[i] = BuildColumn(selectList[i], schema, mapTypedColumn, sequentialAccess, options);
+            columns[i] = BuildColumn(selectList[i], schema, mapTypedColumn, sequentialAccess, options, allowDirectColumnWriters);
 
         return new CsvPlan(columns, sequentialAccess);
     }
@@ -265,7 +281,7 @@ internal static class CsvStreamWriter
         }
     }
 
-    private static CsvColumn BuildColumn(SelectExpression column, IDataRecord? schema, Func<SelectExpression, Expression, Type, Expression> mapTypedColumn, bool sequentialAccess, CsvStreamOptions? options)
+    private static CsvColumn BuildColumn(SelectExpression column, IDataRecord? schema, Func<SelectExpression, Expression, Type, Expression> mapTypedColumn, bool sequentialAccess, CsvStreamOptions? options, bool allowDirectColumnWriters)
     {
         var propertyType = column.PropertyType;
         var underlyingType = Nullable.GetUnderlyingType(propertyType);
@@ -286,6 +302,14 @@ internal static class CsvStreamWriter
         // whole-field getter out of the chunked path entirely.
         if (IsBinaryChunkedColumn(column, storageType, value, sequentialAccess, options))
             return new CsvColumn(header, write: null, column.Index);
+
+        // The supported scalar set is closed, so a column read through a plain typed getter needs no tree
+        // at all: the getter, the formatter and the NULL branch are already compiled code. Under
+        // NativeAOT an expression tree cannot be compiled and is interpreted per row, which is the cost
+        // this branch removes; the mapped accessor is still the source of truth, so a shape whose
+        // accessor is anything else keeps the expression path unchanged.
+        if (allowDirectColumnWriters && TryDirectColumn(column, value, out var direct))
+            return new CsvColumn(header, direct, isDirect: true);
 
         if (value.Type != propertyType)
             value = Expression.Convert(value, propertyType);
@@ -319,6 +343,136 @@ internal static class CsvStreamWriter
     /// mapping or streaming LOB projection), and the call's field policy must make the framing knowable
     /// before the whole Base64 is produced. Everything else keeps the buffered path byte-identical.
     /// </summary>
+    /// <summary>
+    /// Builds the direct writer for a column whose mapped accessor is one of the plain
+    /// <see cref="IDataRecord"/> getters, or declines the column so the caller keeps the expression path.
+    /// The decision is made from the mapped accessor itself, never from the declared type alone: a
+    /// provider that reads the column through a wider getter, a value converter, a boxed read or a typed
+    /// <c>GetFieldValue&lt;T&gt;</c> wrapper does not match and keeps the tree.
+    /// </summary>
+    /// <param name="column">The projected column.</param>
+    /// <param name="mappedValue">The accessor the provider's column mapper produced for it.</param>
+    /// <param name="writer">The direct writer, or <see langword="null"/> when the column is declined.</param>
+    private static bool TryDirectColumn(SelectExpression column, Expression mappedValue, out Action<IDataRecord, CsvRowBuffer>? writer)
+    {
+        writer = null;
+        var propertyType = column.PropertyType;
+        var readType = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
+
+        if (!TryMatchPlainGetter(mappedValue, column.Index, readType, out var nullGuarded))
+            return false;
+
+        // A Nullable<T> column is always mapped through the NULL guard, so an unguarded read would not be
+        // the accessor this branch reproduces.
+        if (Nullable.GetUnderlyingType(propertyType) is not null && !nullGuarded)
+            return false;
+
+        writer = DirectColumnWriter(column.Index, readType, nullGuarded);
+        return writer is not null;
+    }
+
+    /// <summary>
+    /// Matches the two accessor shapes the shared mapper emits for a plain column: the bare typed getter,
+    /// and the <c>IsDBNull(ordinal) ? null : getter</c> guard it wraps a nullable column in (with the
+    /// widening <see cref="Expression.Convert(Expression, Type)"/> to <see cref="Nullable{T}"/> unwrapped).
+    /// </summary>
+    /// <param name="value">The mapped accessor.</param>
+    /// <param name="ordinal">The reader ordinal the getter must read.</param>
+    /// <param name="readType">The non-nullable type the getter must return.</param>
+    /// <param name="nullGuarded">Whether the accessor carries the DBNull guard.</param>
+    private static bool TryMatchPlainGetter(Expression value, int ordinal, Type readType, out bool nullGuarded)
+    {
+        nullGuarded = false;
+
+        if (value is ConditionalExpression { Test: MethodCallExpression test, IfTrue: ConstantExpression { Value: null } } guarded
+            && test.Method == IsDBNullMethod
+            && IsOrdinalArgument(test.Arguments, ordinal)
+            && TryMatchPlainGetter(guarded.IfFalse, ordinal, readType, out _))
+        {
+            nullGuarded = true;
+            return true;
+        }
+
+        value = TypeFacts.UnwrapConvert(value);
+        return value is MethodCallExpression { Object: ParameterExpression, Arguments: { Count: 1 } arguments } call
+            && call.Method.DeclaringType == typeof(IDataRecord)
+            && call.Method.ReturnType == readType
+            && IsPlainGetterName(call.Method.Name)
+            && IsOrdinalArgument(arguments, ordinal);
+    }
+
+    /// <summary>True when the arguments are the single constant reader ordinal.</summary>
+    private static bool IsOrdinalArgument(System.Collections.ObjectModel.ReadOnlyCollection<Expression> arguments, int ordinal)
+        => arguments.Count == 1 && arguments[0] is ConstantExpression { Value: int index } && index == ordinal;
+
+    /// <summary>
+    /// The non-generic, non-boxing getters of <see cref="IDataRecord"/>. Every other accessor (the
+    /// <c>GetFieldValue&lt;T&gt;</c> wrappers, <c>GetValue</c>) is excluded on purpose.
+    /// </summary>
+    private static bool IsPlainGetterName(string name)
+        => name is nameof(IDataRecord.GetBoolean) or nameof(IDataRecord.GetByte)
+            or nameof(IDataRecord.GetInt16) or nameof(IDataRecord.GetInt32) or nameof(IDataRecord.GetInt64)
+            or nameof(IDataRecord.GetFloat) or nameof(IDataRecord.GetDouble) or nameof(IDataRecord.GetDecimal)
+            or nameof(IDataRecord.GetString) or nameof(IDataRecord.GetGuid) or nameof(IDataRecord.GetDateTime);
+
+    /// <summary>
+    /// Creates the direct writer for one scalar type: the typed getter followed by the same formatter the
+    /// expression body calls. A guarded writer reproduces the mapper's NULL branch (the configured marker
+    /// for a SQL NULL); an unguarded one reads the value unconditionally, exactly like the bare accessor.
+    /// </summary>
+    /// <param name="ordinal">The reader ordinal baked into the delegate.</param>
+    /// <param name="readType">The non-nullable CLR type of the column.</param>
+    /// <param name="nullGuarded">Whether NULL must be written as the configured marker.</param>
+    private static Action<IDataRecord, CsvRowBuffer>? DirectColumnWriter(int ordinal, Type readType, bool nullGuarded)
+    {
+        if (nullGuarded)
+        {
+            return readType switch
+            {
+                _ when readType == typeof(bool) => Guarded(ordinal, static (record, index) => record.GetBoolean(index), CsvValueFormatter.WriteBoolean),
+                _ when readType == typeof(byte) => Guarded(ordinal, static (record, index) => record.GetByte(index), CsvValueFormatter.WriteByte),
+                _ when readType == typeof(short) => Guarded(ordinal, static (record, index) => record.GetInt16(index), CsvValueFormatter.WriteInt16),
+                _ when readType == typeof(int) => Guarded(ordinal, static (record, index) => record.GetInt32(index), CsvValueFormatter.WriteInt32),
+                _ when readType == typeof(long) => Guarded(ordinal, static (record, index) => record.GetInt64(index), CsvValueFormatter.WriteInt64),
+                _ when readType == typeof(float) => Guarded(ordinal, static (record, index) => record.GetFloat(index), CsvValueFormatter.WriteSingle),
+                _ when readType == typeof(double) => Guarded(ordinal, static (record, index) => record.GetDouble(index), CsvValueFormatter.WriteDouble),
+                _ when readType == typeof(decimal) => Guarded(ordinal, static (record, index) => record.GetDecimal(index), CsvValueFormatter.WriteDecimal),
+                _ when readType == typeof(string) => Guarded(ordinal, static (record, index) => record.GetString(index), CsvValueFormatter.WriteString),
+                _ when readType == typeof(Guid) => Guarded(ordinal, static (record, index) => record.GetGuid(index), CsvValueFormatter.WriteGuid),
+                _ when readType == typeof(DateTime) => Guarded(ordinal, static (record, index) => record.GetDateTime(index), CsvValueFormatter.WriteDateTime),
+                _ => null,
+            };
+        }
+
+        return readType switch
+        {
+            _ when readType == typeof(bool) => Unguarded(ordinal, static (record, index) => record.GetBoolean(index), CsvValueFormatter.WriteBoolean),
+            _ when readType == typeof(byte) => Unguarded(ordinal, static (record, index) => record.GetByte(index), CsvValueFormatter.WriteByte),
+            _ when readType == typeof(short) => Unguarded(ordinal, static (record, index) => record.GetInt16(index), CsvValueFormatter.WriteInt16),
+            _ when readType == typeof(int) => Unguarded(ordinal, static (record, index) => record.GetInt32(index), CsvValueFormatter.WriteInt32),
+            _ when readType == typeof(long) => Unguarded(ordinal, static (record, index) => record.GetInt64(index), CsvValueFormatter.WriteInt64),
+            _ when readType == typeof(float) => Unguarded(ordinal, static (record, index) => record.GetFloat(index), CsvValueFormatter.WriteSingle),
+            _ when readType == typeof(double) => Unguarded(ordinal, static (record, index) => record.GetDouble(index), CsvValueFormatter.WriteDouble),
+            _ when readType == typeof(decimal) => Unguarded(ordinal, static (record, index) => record.GetDecimal(index), CsvValueFormatter.WriteDecimal),
+            _ when readType == typeof(string) => Unguarded(ordinal, static (record, index) => record.GetString(index), CsvValueFormatter.WriteString),
+            _ when readType == typeof(Guid) => Unguarded(ordinal, static (record, index) => record.GetGuid(index), CsvValueFormatter.WriteGuid),
+            _ when readType == typeof(DateTime) => Unguarded(ordinal, static (record, index) => record.GetDateTime(index), CsvValueFormatter.WriteDateTime),
+            _ => null,
+        };
+    }
+
+    private static Action<IDataRecord, CsvRowBuffer> Guarded<T>(int ordinal, Func<IDataRecord, int, T> read, Action<CsvRowBuffer, T> write)
+        => (record, buffer) =>
+        {
+            if (record.IsDBNull(ordinal))
+                buffer.WriteNullField();
+            else
+                write(buffer, read(record, ordinal));
+        };
+
+    private static Action<IDataRecord, CsvRowBuffer> Unguarded<T>(int ordinal, Func<IDataRecord, int, T> read, Action<CsvRowBuffer, T> write)
+        => (record, buffer) => write(buffer, read(record, ordinal));
+
     private static bool IsBinaryChunkedColumn(SelectExpression column, Type storageType, Expression mappedValue, bool sequentialAccess, CsvStreamOptions? options)
     {
         if (!sequentialAccess || options is null)

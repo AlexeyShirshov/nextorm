@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>NextORM.Benchmark.AotReadme</RootNamespace>
+    <AssemblyName>nextorm.benchmark.aot.readme</AssemblyName>
+    <!--
+      Deliberate net10.0: BenchmarkDotNet 0.15.8 exposes NativeAotRuntime only up to Net10_0, and the
+      packages ship a net10.0 asset. Both arms (JIT and NativeAOT) run on net10.0 so the runtime TFM is
+      matched; nothing here is compared with the historical net11 README JIT numbers.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- AOT benchmark harness: keep the harness assembly's metadata so expression trees it builds at
+         runtime are resolvable, and keep ILC diagnostics as warnings (never suppressed, never fatal). -->
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <WarningsNotAsErrors>IL2*;IL3*</WarningsNotAsErrors>
+    <IlcTreatWarningsAsErrors>false</IlcTreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <TrimmerRootAssembly Include="nextorm.benchmark.aot.readme" />
+    <!-- Match the AOT runtime patch to the JIT host (10.0.12): the pack is present in the local cache,
+         so pinning is offline-safe. If the toolchain ignores the pin, the reported runtime patch is
+         recorded as a caveat instead of being hidden. -->
+    <PackageReference Update="Microsoft.DotNet.ILCompiler" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <KnownILCompilerPack Update="Microsoft.DotNet.ILCompiler">
+      <ILCompilerPackVersion>10.0.12</ILCompilerPackVersion>
+    </KnownILCompilerPack>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\nextorm.core.sourcegenerator\nextorm.core.sourcegenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.sqlite\nextorm.sqlite.csproj" />
+  </ItemGroup>
+
+</Project>

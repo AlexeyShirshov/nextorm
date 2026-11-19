@@ -1800,12 +1800,17 @@ namespace NextORM.Core;
         public string? current_setting(string? name) => default!;
 
         /// <summary>
-        /// The current value of the run-time setting <paramref name="name"/>, or null when it does not
-        /// exist if <paramref name="missingOk"/> is true (<c>current_setting(name, missing_ok)</c>).
+        /// The current value of the run-time setting <paramref name="name"/>
+        /// (<c>current_setting(name, missing_ok)</c>). If <paramref name="missingOk"/> is true, returns
+        /// NULL when the setting does not exist; if false, PostgreSQL raises an error.
         /// </summary>
         public string? current_setting(string? name, bool missingOk) => default!;
 
-        /// <summary>Sets the run-time setting <paramref name="name"/> to <paramref name="value"/> (<c>set_config</c>).</summary>
+        /// <summary>
+        /// Sets the run-time setting <paramref name="name"/> to <paramref name="value"/>
+        /// (<c>set_config</c>). If <paramref name="isLocal"/> is true, the change lasts only for the
+        /// current transaction; if false, it lasts for the session. Returns the new setting value.
+        /// </summary>
         public string? set_config(string? name, string? value, bool isLocal) => default!;
 
         /// <summary>The number of null arguments (<c>num_nulls</c>).</summary>

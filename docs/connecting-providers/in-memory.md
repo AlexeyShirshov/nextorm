@@ -4,6 +4,36 @@
 
 **Prerequisites:** [Provider overview](overview.md) · [Dependency injection](../getting-started/04-dependency-injection.md)
 
+## Registration and usage
+
+With dependency injection:
+
+```csharp
+using NextORM.Core;
+
+services.AddNextOrmContext<InMemoryDataContext>();
+```
+
+To run a query, attach data to an in-memory context:
+
+```csharp
+using NextORM.Core;
+
+using var ctx = new InMemoryDataContext();
+ctx.From<SimpleEntity>().WithData(new[]
+{
+    new SimpleEntity { Id = 1 },
+    new SimpleEntity { Id = 2 },
+});
+
+var ids = ctx.From<SimpleEntity>()
+    .Where(it => it.Id == 1)
+    .Select(it => new { it.Id })
+    .SingleOrDefault();
+
+// ids.Id == 1
+```
+
 ## Overview
 
 The in-memory provider is built into `nextorm` (no extra package) and lives in
@@ -23,34 +53,6 @@ Use it when you want:
 
 It is not a SQL engine: it does not validate that a query would run on a real provider, and several
 features are deliberately unsupported (see below).
-
-## Registration and usage
-
-With dependency injection:
-
-```csharp
-using NextORM.Core;
-
-services.AddNextOrmContext<InMemoryDataContext>();
-```
-
-```csharp
-using NextORM.Core;
-
-using var ctx = new InMemoryDataContext();
-ctx.From<SimpleEntity>().WithData(new[]
-{
-    new SimpleEntity { Id = 1 },
-    new SimpleEntity { Id = 2 },
-});
-
-var ids = ctx.From<SimpleEntity>()
-    .Where(it => it.Id == 1)
-    .Select(it => new { it.Id })
-    .SingleOrDefault();
-
-// ids.Id == 1
-```
 
 [`WithData`](xref:NextORM.Core.InMemoryCommandBuilderExtensions.WithData``1(NextORM.Core.EntityBuilder{``0},System.Collections.Generic.IEnumerable{``0})) and [`WithAsyncData`](xref:NextORM.Core.InMemoryCommandBuilderExtensions.WithAsyncData``1(NextORM.Core.EntityBuilder{``0},System.Collections.Generic.IAsyncEnumerable{``0})) (`src/nextorm.core/Builders/InMemoryCommandBuilder.cs`) attach a
 collection to the context's `Data` dictionary keyed by entity type; [`WithData`](xref:NextORM.Core.InMemoryCommandBuilderExtensions.WithData``1(NextORM.Core.EntityBuilder{``0},System.Collections.Generic.IEnumerable{``0})) takes an `IEnumerable<T>`
@@ -149,6 +151,8 @@ The provider fails loudly instead of returning wrong results:
   correlated `GROUP BY`/`HAVING` and an async inner source throw `NotSupportedException`.
 
 ## Provider differences
+
+The following table summarizes how this provider differs from SQL providers:
 
 | Aspect | In-memory |
 |---|---|

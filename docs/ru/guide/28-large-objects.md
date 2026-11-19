@@ -6,9 +6,9 @@
 
 ## Обзор
 
-По умолчанию проекция `byte[]`/`string` материализуется целиком: row reader вызывает `GetValue`/`GetString`, и всё значение попадает в managed-массив или строку. Для колонки с файлом, изображением или документом в несколько мегабайт это лишняя аллокация, которая может исчерпать память. Терминалы LOB вместо этого открывают потоковые аксессоры провайдера (`DbDataReader.GetStream`/`GetTextReader`) и возвращают объект, который вы читаете постепенно.
+Обычная проекция `byte[]`/`string` загружает всё значение в managed-память: row reader вызывает `GetValue`/`GetString` и создаёт массив или строку целиком. Для файла, изображения или документа размером в несколько мегабайт такая аллокация может оказаться дорогой и исчерпать память. У провайдеров с поддержкой потокового чтения терминалы LOB вместо этого открывают потоковый аксессор (`DbDataReader.GetStream`/`GetTextReader`) и возвращают объект для чтения по частям.
 
-Для целого набора результатов, а не одной LOB-колонки, ту же идею применяет к строкам терминал потоковой записи JSON: [`WriteJson`](30-streaming-data.md#json) / `WriteJsonAsync` записывают проекцию `Select` запроса в принадлежащий вызывающему `Stream` с живой памятью O(buffer) и никогда не закрывают приёмник. См. [Потоковое сохранение данных](30-streaming-data.md).
+Эти LOB-терминалы стримят одну колонку одной строки. Чтобы стримить весь набор результатов, используйте JSON-терминал: [`WriteJson`](30-streaming-data.md#json) / `WriteJsonAsync` записывает проекцию `Select` в принадлежащий вызывающему `Stream`, удерживая живую память на уровне O(buffer), и оставляет приёмник открытым. См. [Потоковое сохранение данных](30-streaming-data.md).
 
 ## Терминалы
 
@@ -32,7 +32,17 @@ public static Task<TextReader> ToTextReaderAsync(this QueryCommand<string> comma
 public static Task<TextReader> ToTextReaderAsync(this QueryCommand<string> command, CancellationToken cancellationToken, params object?[] parameters);
 ```
 
-Терминалы — extension-методы на [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1), том самом типе, который возвращает [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), поэтому запрос должен сначала спроецировать одну колонку `byte[]` или `string`. Они создаются с `storeInCache: false`: LOB-команда является per-call и никогда не переиспользует общую буферизованную команду той же формы запроса.
+Терминалы — extension-методы на [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1), типе, который возвращает [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})). Перед вызовом спроецируйте ровно одну колонку `byte[]` или `string`. Каждый вызов создаёт свежую команду с `storeInCache: false`, поэтому LOB-терминал не переиспользует общую буферизованную команду той же формы запроса.
+
+Выбирайте терминал по типу значения, которое нужно читать:
+
+| Задача | Проекция | Терминал |
+|---|---|---|
+| Постепенно читать одну бинарную колонку | Ровно одна колонка `byte[]` | `ToStream` / `ToStreamAsync` |
+| Постепенно читать одну текстовую колонку | Ровно одна колонка `string` | `ToTextReader` / `ToTextReaderAsync` |
+| Читать многоколоночный или многострочный результат через reader провайдера | Проекция запроса | `ToDataReader` / `ToDataReaderAsync` |
+
+Поддержка зависит от провайдера: потоковое чтение из базы доступно не везде, а in-memory оборачивает уже материализованное значение. Перед выбором терминала проверьте раздел [Провайдеры](#провайдеры).
 
 ## Использование
 
@@ -73,25 +83,13 @@ Stream stream = await ctx.From<BinaryEntity>()
 
 ## Именованные колонки и построчный стриминг
 
-Потоковые аксессоры доступны и на поверхности именованных колонок (`From("table")`), и их можно
-читать построчно в проекции `IAsyncEnumerable`. Член проекции `Stream`/`TextReader` открывается
-лениво из sequential-access reader'а и **валиден только до перехода перечислителя к следующей
-строке** (`MoveNext`): нижележащим reader'ом и его per-call командой владеет перечислитель, поэтому
-значение нужно полностью прочитать внутри тела цикла и не сохранять за пределами шага. Освобождайте каждый построчный stream/reader до следующей итерации: это освобождает per-row handle провайдера (обязательно для SQLite, где локатор `rowid` удерживает statement, пока значение не освобождено).
+Потоковые аксессоры доступны и для именованных колонок (`From("table")`), в том числе в построчной проекции `IAsyncEnumerable`. Для именованных колонок используйте [`TableAlias.GetStream`](xref:NextORM.Core.TableAlias.GetStream(System.String)) / [`TableAlias.GetTextReader`](xref:NextORM.Core.TableAlias.GetTextReader(System.String)) или члены индексатора [`TableColumn.AsStream`](xref:NextORM.Core.TableColumn.AsStream) / [`TableColumn.AsTextReader`](xref:NextORM.Core.TableColumn.AsTextReader).
 
-После `MoveNext` handle **использовать нельзя**: его поведение не определено и зависит от
-провайдера. PostgreSQL может вернуть байты **следующей** строки, SQL Server бросает
-`ObjectDisposedException`, а SQLite возвращает конец потока на конце blob'а. Единственная гарантия —
-это safety-свойство: устаревший handle никогда не возвращает данные наблюдённой строки. Поэтому
-считайте значение недействительным в момент перехода перечислителя и не полагайтесь на конкретный
-сценарий отказа.
+Для каждой строки соблюдайте следующие правила:
 
-Аксессоры именованных колонок —
-[`TableAlias.GetStream`](xref:NextORM.Core.TableAlias.GetStream(System.String)) /
-[`TableAlias.GetTextReader`](xref:NextORM.Core.TableAlias.GetTextReader(System.String)), а также
-члены индексатора [`TableColumn.AsStream`](xref:NextORM.Core.TableColumn.AsStream) /
-[`TableColumn.AsTextReader`](xref:NextORM.Core.TableColumn.AsTextReader). Потоковый член обязан быть
-**последним** в проекции, чтобы sequential-access reader дошёл до LOB-колонки после всех скалярных:
+1. Поместите член `Stream` или `TextReader` **последним** в проекции, после всех скалярных колонок. Он открывается лениво из sequential-access reader'а.
+2. Полностью прочитайте значение и освободите поток или reader внутри цикла до перехода дальше. Перечислитель владеет reader'ом и per-call-командой; SQLite также требует освободить per-row handle, потому что его локатор `rowid` удерживает statement.
+3. Считайте handle недействительным сразу после перехода `MoveNext`. Не полагайтесь на поведение при его последующем использовании: PostgreSQL может вернуть байты **следующей** строки, SQL Server бросает `ObjectDisposedException`, а SQLite возвращает конец потока в конце blob'а. Единственная гарантия — устаревший handle не вернёт данные прочитанной строки.
 
 ```csharp
 await foreach (var row in ctx.From("documents")
@@ -130,7 +128,7 @@ await foreach (var row in ctx.From("documents")
 
 Стриминг реализован для **PostgreSQL, SQL Server и SQLite** в этом выпуске. Терминал стриминга — opt-in: обычная буферизованная проекция `byte[]`/`string` продолжает работать у каждого провайдера, а запись LOB — вне области охвата. MySQL/MariaDB и ClickHouse отклоняют терминал через `NotSupportedException`, в сообщении которого назван провайдер, потому что их драйверы не дают потокового чтения LOB с ограниченной памятью (они буферизуют всё значение; `SequentialAccess` не меняет аллокации, а `GetStream` в ClickHouse не реализован), поэтому [`SupportsSequentialAccess`](xref:NextORM.Core.ISqlDialect.SupportsSequentialAccess) у них осознанно `false` — поддерживаемый путь там — буферизованная проекция. Провайдер in-memory тоже поддерживает скалярные терминалы, но стримить не из чего — `DbDataReader` нет, поэтому он возвращает обычный BCL-объект над материализованным значением; см. [In-memory](#in-memory).
 
-Многоколоночный терминал [`ToDataReader`](#многоколоночность-todatareader) доступен на PostgreSQL, SQL Server и SQLite. PostgreSQL и SQL Server отдают sequential-access команду; SQLite возвращает **буферизованный reader без локатора** (запрос не открывается с `SequentialAccess`, `rowid` не добавляется, поэтому `FieldCount` равен числу колонок проекции, а ordinals соответствуют `Select`). MySQL/MariaDB и ClickHouse отклоняют его, потому что у них нет поддержки sequential access; провайдер in-memory отклоняет его, потому что у него вообще нет `DbDataReader`:
+Многоколоночный терминал [`ToDataReader`](#многоколоночность-todatareader) доступен на PostgreSQL, SQL Server и SQLite. PostgreSQL и SQL Server возвращают команду с sequential access. SQLite вместо этого возвращает **буферизованный reader без локатора**: запрос не открывается с `SequentialAccess` и `rowid` не добавляется, поэтому `FieldCount` совпадает с проекцией, а ordinals — с `Select`. MySQL/MariaDB и ClickHouse отклоняют этот терминал из-за отсутствия sequential access; провайдер in-memory — потому что `DbDataReader` там отсутствует:
 
 | Провайдер | `ToDataReader` / `ToDataReaderAsync` |
 |---|---|
@@ -153,7 +151,9 @@ await foreach (var row in ctx.From("documents")
 
 ### Формы запросов в SQLite
 
-Локатор SQLite можно добавить только к **одноисточниковой проекции, раскрывающей `rowid`**. Запросы, соединяющие несколько источников, а также `DISTINCT`/`DISTINCT ON`, `UNION`, `GROUP BY` или агрегат, **не поддерживаются**; они могут проявиться ошибкой драйвера SQLite, а не аккуратным ранним отказом. Для одноколоночной проекции переопределение сырым [`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String)) отклоняется с `NotSupportedException`, потому что `rowid`-локатор нельзя безопасно добавить к SQL, поставляемому вызывающим кодом; сырая проекция из двух и более колонок отклоняется обычным `InvalidOperationException`.
+SQLite может добавить локатор только к **проекции из одного источника с доступным `rowid`**. Запросы с соединениями, `DISTINCT`/`DISTINCT ON`, `UNION`, `GROUP BY` или агрегатами **не поддерживаются**; вместо ранней проверки может возникнуть ошибка драйвера SQLite.
+
+Для одноколоночной проекции переопределение сырым [`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String)) отклоняется с `NotSupportedException`: nextorm не может безопасно добавить `rowid`-локатор к SQL, предоставленному вызывающим кодом. Сырая проекция из двух и более колонок отклоняется с обычным `InvalidOperationException`.
 
 ## Ровно одна колонка
 

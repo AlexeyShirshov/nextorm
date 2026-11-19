@@ -2,24 +2,24 @@
   href: index.md
 - name: Getting started
   href: getting-started/
-- name: Engine
-  href: engine/
+- name: Query guide
+  href: guide/
+- name: Provider configuration
+  href: connecting-providers/
 - name: Relationships
   href: relationships/
-- name: Guide
-  href: guide/
 - name: Infrastructure
   href: infrastructure/
-- name: Scalar functions
+- name: Scalar function reference
   href: scalar-functions/
 - name: Culture-invariant string formatting
   href: string-format-invariant-provider.md
-- name: Connecting providers
-  href: connecting-providers/
 - name: Comparisons
   href: comparisons/
-- name: Advanced
+- name: Advanced topics
   href: advanced/
+- name: Engine internals
+  href: engine/
 - name: API reference
   href: api/
 - name: Русская документация

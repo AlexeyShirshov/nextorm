@@ -1,5 +1,11 @@
 # Math functions
 
+Start with a `Math` member for an operation listed in this table. In a database-backed query, nextorm
+translates the member and the database evaluates the SQL; the same call outside the query runs locally
+in the CLR. Use [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) for the additional angle
+functions below when the selected provider supports them. The provider-specific sections are for queries
+that intentionally depend on one provider.
+
 | C# | SQL | Notes |
 |---|---|---|
 | `Math.Abs(x)` | `abs(x)` | |
@@ -23,9 +29,8 @@ select abs((id - 5))
  from complex_entity
 ```
 
-The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
-
-Output:
+On the SQLite integration-test seed data (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`),
+this query returns:
 
 | Abs |
 |-----|
@@ -152,7 +157,7 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
-### Delivered numeric, rounding and bit functions (#286, T286b)
+### Numeric, rounding and bit functions
 
 The remaining ClickHouse-only numeric families are typed members too. `is_finite`/`is_infinite`/`is_nan`
 return `bool`, the integer forms keep the vendor width (`int_div`/`int_exp2`/`int_exp10` are `UInt64` →
@@ -206,9 +211,9 @@ The remaining math functions are part of the extended scalar library
 PostgreSQL function returns `void`, so a projected value is always `null` and the call is made for its
 side effect (subsequent `random()` calls in the session become reproducible).
 
-### Delivered math and degree-trigonometric helpers (#281)
+### Math and degree-trigonometric helpers
 
-The remainder of the PostgreSQL math catalogue is exposed on the same surface, one member per server
+The `Postgres` API exposes the following functions, one member per server
 overload. Every name is gated **individually** by
 [`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)), so a
 provider that does not implement the interface rejects the call with `NotSupportedException`:

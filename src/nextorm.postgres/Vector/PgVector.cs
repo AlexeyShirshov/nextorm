@@ -1,10 +1,11 @@
 using System.Globalization;
 using System.Text;
+using NextORM.Core;
 
 namespace NextORM.Postgres;
 
 /// <summary>A PostgreSQL <c>vector</c> value backed by finite single-precision coordinates.</summary>
-public readonly struct PgVector : IEquatable<PgVector>
+public readonly struct PgVector : IEquatable<PgVector>, IVectorValue
 {
     private readonly float[]? _values;
 
@@ -22,6 +23,13 @@ public readonly struct PgVector : IEquatable<PgVector>
 
     /// <summary>Gets the vector dimensions.</summary>
     public int Dimensions => _values?.Length ?? 0;
+
+    /// <summary>Converts the PostgreSQL-specific value to the provider-independent vector representation.</summary>
+    public static implicit operator Vector(PgVector value) => new(value.ToArray());
+
+    /// <summary>Converts the shared vector representation to the PostgreSQL-specific value.</summary>
+    public static implicit operator PgVector(Vector value)
+        => new((value ?? throw new ArgumentNullException(nameof(value))).ToArray());
 
     /// <summary>Gets a coordinate by its zero-based index.</summary>
     public float this[int index] => (_values ?? Array.Empty<float>())[index];

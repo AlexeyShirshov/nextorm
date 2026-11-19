@@ -364,7 +364,7 @@ public struct XxHash32
     }
 
     /// <summary>Adds a span of bytes to the hash code.</summary>
-    /// <param name="value">The span.</param>
+    /// <param name="value">The bytes to add.</param>
     /// <remarks>
     /// This method does not guarantee that the result of adding a span of bytes will match
     /// the result of adding the same bytes individually.

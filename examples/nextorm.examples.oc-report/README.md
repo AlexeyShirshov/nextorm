@@ -53,12 +53,11 @@ dotnet publish examples/nextorm.examples.oc-report -c Release -r linux-x64
 of the project is the whole command; a consumer app sets the same property in its own csproj or on the
 command line. The csproj also carries `IlcTreatWarningsAsErrors=false` and
 `WarningsNotAsErrors=IL2*;IL3*` for **repository policy only** (`TreatWarningsAsErrors=true` is global
-here) and pins `Microsoft.DotNet.ILCompiler` 11.0.0, matching the repository's NativeAOT runner — the
-pin exists because a historical SDK default carried a NuGet audit advisory (NU1903) that the
-warnings-as-errors gate turned into an error; nextorm itself needs none of that.
+here) and pins `Microsoft.DotNet.ILCompiler` 11.0.0 to match the repository's NativeAOT runner.
+Nextorm doesn't require these settings.
 
-The project consumes the published `nextorm` / `nextorm.sqlite` `1.0.9` packages (version pinned by
-`NextOrmVersion` in [`Directory.Packages.props`](../Directory.Packages.props)), like the postgres example.
+The project uses the published `nextorm`, `nextorm.sqlite`, and `nextorm.extensions` packages.
+[`Directory.Packages.props`](../Directory.Packages.props) pins their version through `NextOrmVersion`.
 
 ## Reference numbers
 

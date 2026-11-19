@@ -18,10 +18,9 @@ namespace NextORM.Core;
 /// </summary>
 internal sealed class BatchRunner
 {
-    private readonly IConnectionManager _connectionManager;
     private readonly Func<DbCommand, string, object?, DbParameter> _createParamAware;
     private readonly Func<string, object?, DbParameter> _createParam;
-    private readonly Func<DbTransaction?> _currentTransaction;
+    private readonly Func<IConnectionManager, DbTransaction?> _currentTransaction;
     private readonly Func<bool> _isDisposed;
     private readonly ILogger? _logger;
     private readonly bool _logParams;
@@ -31,16 +30,14 @@ internal sealed class BatchRunner
     private SqlStringLiteralPolicy? _stringLiteralPolicy;
 
     internal BatchRunner(
-        IConnectionManager connectionManager,
+        Func<IConnectionManager, DbTransaction?> currentTransaction,
         Func<DbCommand, string, object?, DbParameter> createParamAware,
         Func<string, object?, DbParameter> createParam,
-        Func<DbTransaction?> currentTransaction,
         Func<bool> isDisposed,
         LoggingOptions logging,
         int? commandTimeout,
         Func<ISqlDialect> dialect)
     {
-        _connectionManager = connectionManager;
         _createParamAware = createParamAware;
         _createParam = createParam;
         _currentTransaction = currentTransaction;
@@ -68,39 +65,39 @@ internal sealed class BatchRunner
     }
 
     /// <summary>Executes a rendered batch in one round trip and materialises its result rows.</summary>
-    public List<TResult> Run<TResult>(BatchPlan plan, Func<IDataRecord, TResult> mapper)
+    public List<TResult> Run<TResult>(BatchPlan plan, Func<IDataRecord, TResult> mapper, IConnectionManager connectionManager)
     {
         CheckDisposed();
-        _connectionManager.EnsureConnectionOpen();
-        var conn = _connectionManager.GetConnection();
+        connectionManager.EnsureConnectionOpen();
+        var conn = connectionManager.GetConnection();
 
         if (!plan.UseJoinedCommand && conn.CanCreateBatch)
         {
-            using var batch = CreateBatch(conn, plan);
+            using var batch = CreateBatch(conn, plan, connectionManager);
             using var reader = batch.ExecuteReader();
             return Read(reader, mapper);
         }
 
-        using var command = CreateJoinedCommand(conn, plan);
+        using var command = CreateJoinedCommand(conn, plan, connectionManager);
         using var joinedReader = command.ExecuteReader();
         return Read(joinedReader, mapper);
     }
 
     /// <summary>Asynchronously executes a rendered batch in one round trip and materialises its result rows.</summary>
-    public async Task<List<TResult>> RunAsync<TResult>(BatchPlan plan, Func<IDataRecord, TResult> mapper, CancellationToken cancellationToken)
+    public async Task<List<TResult>> RunAsync<TResult>(BatchPlan plan, Func<IDataRecord, TResult> mapper, CancellationToken cancellationToken, IConnectionManager connectionManager)
     {
         CheckDisposed();
-        await _connectionManager.EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
-        var conn = _connectionManager.GetConnection();
+        await connectionManager.EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
+        var conn = connectionManager.GetConnection();
 
         if (!plan.UseJoinedCommand && conn.CanCreateBatch)
         {
-            await using var batch = CreateBatch(conn, plan);
+            await using var batch = CreateBatch(conn, plan, connectionManager);
             await using var reader = await batch.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             return await ReadAsync(reader, mapper, cancellationToken).ConfigureAwait(false);
         }
 
-        await using var command = CreateJoinedCommand(conn, plan);
+        await using var command = CreateJoinedCommand(conn, plan, connectionManager);
         await using var joinedReader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         return await ReadAsync(joinedReader, mapper, cancellationToken).ConfigureAwait(false);
     }
@@ -108,21 +105,22 @@ internal sealed class BatchRunner
     /// <summary>Executes a rendered batch in one round trip and eagerly materialises every result set.</summary>
     /// <param name="plan">The rendered batch.</param>
     /// <param name="materializers">One materialiser per result set, in result-set order.</param>
+    /// <param name="connectionManager">The connection the batch was routed to.</param>
     /// <returns>The eagerly materialised result sets.</returns>
-    public BatchResult RunBatchMultiple(BatchPlan plan, IReadOnlyList<IBatchResultMaterializer> materializers)
+    public BatchResult RunBatchMultiple(BatchPlan plan, IReadOnlyList<IBatchResultMaterializer> materializers, IConnectionManager connectionManager)
     {
         CheckDisposed();
-        _connectionManager.EnsureConnectionOpen();
-        var conn = _connectionManager.GetConnection();
+        connectionManager.EnsureConnectionOpen();
+        var conn = connectionManager.GetConnection();
 
         if (!plan.UseJoinedCommand && conn.CanCreateBatch)
         {
-            using var batch = CreateBatch(conn, plan);
+            using var batch = CreateBatch(conn, plan, connectionManager);
             using var reader = batch.ExecuteReader();
             return ReadMultiple(reader, plan, materializers);
         }
 
-        using var command = CreateJoinedCommand(conn, plan);
+        using var command = CreateJoinedCommand(conn, plan, connectionManager);
         using var joinedReader = command.ExecuteReader();
         return ReadMultiple(joinedReader, plan, materializers);
     }
@@ -131,42 +129,44 @@ internal sealed class BatchRunner
     /// <param name="plan">The rendered batch.</param>
     /// <param name="materializers">One materialiser per result set, in result-set order.</param>
     /// <param name="cancellationToken">Cancels execution.</param>
+    /// <param name="connectionManager">The connection the batch was routed to.</param>
     /// <returns>A task producing the eagerly materialised result sets.</returns>
-    public async Task<BatchResult> RunBatchMultipleAsync(BatchPlan plan, IReadOnlyList<IBatchResultMaterializer> materializers, CancellationToken cancellationToken)
+    public async Task<BatchResult> RunBatchMultipleAsync(BatchPlan plan, IReadOnlyList<IBatchResultMaterializer> materializers, CancellationToken cancellationToken, IConnectionManager connectionManager)
     {
         CheckDisposed();
-        await _connectionManager.EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
-        var conn = _connectionManager.GetConnection();
+        await connectionManager.EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
+        var conn = connectionManager.GetConnection();
 
         if (!plan.UseJoinedCommand && conn.CanCreateBatch)
         {
-            await using var batch = CreateBatch(conn, plan);
+            await using var batch = CreateBatch(conn, plan, connectionManager);
             await using var reader = await batch.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             return await ReadMultipleAsync(reader, plan, materializers, cancellationToken).ConfigureAwait(false);
         }
 
-        await using var command = CreateJoinedCommand(conn, plan);
+        await using var command = CreateJoinedCommand(conn, plan, connectionManager);
         await using var joinedReader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         return await ReadMultipleAsync(joinedReader, plan, materializers, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Executes a rendered batch in one round trip and returns the first column of the result-bearing query's first row.</summary>
     /// <param name="plan">The rendered batch.</param>
+    /// <param name="connectionManager">The connection the batch was routed to.</param>
     /// <returns>The scalar value, with <see cref="DBNull"/> normalized to <see langword="null"/>, or <see langword="null"/> when the query returns no rows.</returns>
-    public object? RunScalar(BatchPlan plan)
+    public object? RunScalar(BatchPlan plan, IConnectionManager connectionManager)
     {
         CheckDisposed();
-        _connectionManager.EnsureConnectionOpen();
-        var conn = _connectionManager.GetConnection();
+        connectionManager.EnsureConnectionOpen();
+        var conn = connectionManager.GetConnection();
 
         if (!plan.UseJoinedCommand && conn.CanCreateBatch)
         {
-            using var batch = CreateBatch(conn, plan);
+            using var batch = CreateBatch(conn, plan, connectionManager);
             using var reader = batch.ExecuteReader();
             return ReadScalar(reader);
         }
 
-        using var command = CreateJoinedCommand(conn, plan);
+        using var command = CreateJoinedCommand(conn, plan, connectionManager);
         using var joinedReader = command.ExecuteReader();
         return ReadScalar(joinedReader);
     }
@@ -174,35 +174,41 @@ internal sealed class BatchRunner
     /// <summary>Asynchronously executes a rendered batch in one round trip and returns the first column of the result-bearing query's first row.</summary>
     /// <param name="plan">The rendered batch.</param>
     /// <param name="cancellationToken">Cancels execution.</param>
+    /// <param name="connectionManager">The connection the batch was routed to.</param>
     /// <returns>The scalar value, with <see cref="DBNull"/> normalized to <see langword="null"/>, or <see langword="null"/> when the query returns no rows.</returns>
-    public async Task<object?> RunScalarAsync(BatchPlan plan, CancellationToken cancellationToken)
+    public async Task<object?> RunScalarAsync(BatchPlan plan, CancellationToken cancellationToken, IConnectionManager connectionManager)
     {
         CheckDisposed();
-        await _connectionManager.EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
-        var conn = _connectionManager.GetConnection();
+        await connectionManager.EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
+        var conn = connectionManager.GetConnection();
 
         if (!plan.UseJoinedCommand && conn.CanCreateBatch)
         {
-            await using var batch = CreateBatch(conn, plan);
+            await using var batch = CreateBatch(conn, plan, connectionManager);
             await using var reader = await batch.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             return await ReadScalarAsync(reader, cancellationToken).ConfigureAwait(false);
         }
 
-        await using var command = CreateJoinedCommand(conn, plan);
+        await using var command = CreateJoinedCommand(conn, plan, connectionManager);
         await using var joinedReader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         return await ReadScalarAsync(joinedReader, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Streams a rendered batch's result rows; the reader stays open for the whole batch.</summary>
-    public async IAsyncEnumerable<TResult> RunStream<TResult>(BatchPlan plan, Func<IDataRecord, TResult> mapper, [EnumeratorCancellation] CancellationToken cancellationToken)
+    /// <param name="plan">The rendered batch.</param>
+    /// <param name="mapper">The compiled row mapper.</param>
+    /// <param name="cancellationToken">Cancels enumeration.</param>
+    /// <param name="connectionManager">The connection the batch was routed to.</param>
+    /// <returns>The result rows.</returns>
+    public async IAsyncEnumerable<TResult> RunStream<TResult>(BatchPlan plan, Func<IDataRecord, TResult> mapper, [EnumeratorCancellation] CancellationToken cancellationToken, IConnectionManager connectionManager)
     {
         CheckDisposed();
-        await _connectionManager.EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
-        var conn = _connectionManager.GetConnection();
+        await connectionManager.EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
+        var conn = connectionManager.GetConnection();
 
         if (!plan.UseJoinedCommand && conn.CanCreateBatch)
         {
-            await using var batch = CreateBatch(conn, plan);
+            await using var batch = CreateBatch(conn, plan, connectionManager);
             await using var reader = await batch.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             await ResultSetNavigator.AdvanceToResultSetAsync(reader, cancellationToken).ConfigureAwait(false);
 
@@ -212,7 +218,7 @@ internal sealed class BatchRunner
             yield break;
         }
 
-        await using var command = CreateJoinedCommand(conn, plan);
+        await using var command = CreateJoinedCommand(conn, plan, connectionManager);
         await using var joinedReader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         await ResultSetNavigator.AdvanceToResultSetAsync(joinedReader, cancellationToken).ConfigureAwait(false);
 
@@ -220,12 +226,12 @@ internal sealed class BatchRunner
             yield return mapper(joinedReader);
     }
 
-    private DbBatch CreateBatch(DbConnection conn, BatchPlan plan)
+    private DbBatch CreateBatch(DbConnection conn, BatchPlan plan, IConnectionManager connectionManager)
     {
         GuardPostgresParameters(plan);
 
         var batch = conn.CreateBatch();
-        if (_currentTransaction() is { } transaction)
+        if (_currentTransaction(connectionManager) is { } transaction)
             batch.Transaction = transaction;
 
         if (_commandTimeout is int timeout)
@@ -251,14 +257,14 @@ internal sealed class BatchRunner
         return batch;
     }
 
-    private DbCommand CreateJoinedCommand(DbConnection conn, BatchPlan plan)
+    private DbCommand CreateJoinedCommand(DbConnection conn, BatchPlan plan, IConnectionManager connectionManager)
     {
         GuardPostgresParameters(plan);
 
         var cmd = conn.CreateCommand();
         cmd.CommandText = plan.ToSql();
 
-        if (_currentTransaction() is { } transaction)
+        if (_currentTransaction(connectionManager) is { } transaction)
             cmd.Transaction = transaction;
 
         if (_commandTimeout is int timeout)

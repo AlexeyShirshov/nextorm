@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "run": {
+    "startedUtc": "2026-11-17T18:38:46Z",
+    "finishedUtc": "2026-11-18T02:56:28Z",
+    "groupRuns": [
+      {
+        "group": "01-projection",
+        "startedUtc": "2026-11-17T18:38:46Z",
+        "finishedUtc": "2026-11-17T18:46:00Z"
+      },
+      {
+        "group": "02-aggregates",
+        "startedUtc": "2026-11-17T18:46:00Z",
+        "finishedUtc": "2026-11-17T18:53:03Z"
+      },
+      {
+        "group": "03-paging",
+        "startedUtc": "2026-11-17T18:53:03Z",
+        "finishedUtc": "2026-11-17T19:00:05Z"
+      },
+      {
+        "group": "04-streaming",
+        "startedUtc": "2026-11-18T02:22:17Z",
+        "finishedUtc": "2026-11-18T02:29:56Z"
+      },
+      {
+        "group": "05-write-json",
+        "startedUtc": "2026-11-18T02:29:56Z",
+        "finishedUtc": "2026-11-18T02:47:27Z"
+      },
+      {
+        "group": "06-csv",
+        "startedUtc": "2026-11-18T02:47:27Z",
+        "finishedUtc": "2026-11-18T02:56:28Z"
+      }
+    ],
+    "sourceHead": "9226f0415d96eb1c4364c81ac3c4acaa8f9db6a8",
+    "sourceTreeDirty": false,
+    "sourceEvidence": "iteration22-local-20261117T172248Z/manifest.md, validation.md, logs/07-app-identity.sha256",
+    "localNextormProjects": 10,
+    "localSourceGenerator": true,
+    "matchedBuildRuntimeHashRows": 11,
+    "runtimeAssemblySha256": {
+      "nextorm.clickhouse": "5a06b8a6577b3e5a0c09b5d9b421bdf45243ad122c9852323a2368b9eeb4f695",
+      "nextorm.core": "f5c6c83899eebea5ddb0e62bd48c24abbd6c5fab530b286808b0e098ec4dced4",
+      "nextorm.entityframeworkcore": "04c10fde6c8b4506c3f5a99f970347ea0b5d727c17d811dbe348a94d073dfca1",
+      "nextorm.examples.postgres.aviasales": "195709bdf1a65d3eb42eae788a2d8f628b3ac686d279eb839bd2f18aa6554512",
+      "nextorm.extensions": "35051f21450dbb8c330be9b18aa0b0d55bce5951086320e4f51231abc64c4d41",
+      "nextorm.mysql": "91eff085a18cd6413dba2200016216edbff7e1205935ae51b2d09179e04ef3a9",
+      "nextorm.postgres": "9a79021a8a5a6dfc4ea474c161e3d7d53f82059db395e8d4eecbce7331374122",
+      "nextorm.querycomponents": "d76cebdbe63576f0148dd92e7d9ba28782e48278f882eb2a75c5cdfa16d497a8",
+      "nextorm.sqlite": "b2b83108ba0ec8be3bf333bdf061448415a6ef021112737c3ad3650c71809fce",
+      "nextorm.sqlserver": "1b6347e4573fe1ee34fc4995d4c2fe5f7a63f9ffe7fd64f4c5491c9afbfe2dbb"
+    },
+    "sourceGeneratorAnalyzerSha256": "c8a72bcb4591cd1cf3d31e3f9965996af154f9dd0d41294528c1bea29b2c62e6",
+    "cpu": "AMD Ryzen 7 5800HS with Radeon Graphics",
+    "logicalProcessors": 8,
+    "physicalCores": 4,
+    "sdk": "11.0.100",
+    "runtime": ".NET 11.0.0",
+    "benchmarkDotNet": "0.15.8",
+    "toolchain": "InProcessEmitToolchain",
+    "defaultJobRows": 89,
+    "defaultUnrollFactor": 16,
+    "rawReaderRows": 9,
+    "rawReaderInvocationCount": 1,
+    "rawReaderUnrollFactor": 1,
+    "tier1Rows": 98,
+    "totalRunCases": 118,
+    "additionalDiagnosticCases": 20,
+    "failedRows": 0,
+    "minIterationTimeWarnings": 9,
+    "multimodalWarnings": 5
+  },
+  "reportsSha256": {
+    "NextORM.Benchmark.SqliteBenchmarkProjection-report-github.md": "7856c8f7f332f06ebfe285aaae5e8a6693d6a2d0ceff5f9fba799e5bac9e63f7",
+    "NextORM.Benchmark.SqliteBenchmarkProjection-report.csv": "7e1c8a1b2fe5f13e6e2354e97b2d73be35a1b0be7bc85fe6da4f68fe3d9a1c7f",
+    "NextORM.Benchmark.SqliteBenchmarkAggregates-report-github.md": "b4345c3bd9280182b3150b7883948f10649d843c356a3e3f2d7389934fedfbe4",
+    "NextORM.Benchmark.SqliteBenchmarkAggregates-report.csv": "90cc659c210ce5e0dd04055c57b9666830f20e012a05001d96e4decb399f5f3f",
+    "NextORM.Benchmark.SqliteBenchmarkPaging-report-github.md": "484e63ab3d30b99eaf7fb7e97263b3a3bf6aa03dabba068dbddd02fada744fd8",
+    "NextORM.Benchmark.SqliteBenchmarkPaging-report.csv": "1a146970112a16adbeadb5183853a21a8cb8173709278d38cccd0c22780b04bf",
+    "NextORM.Benchmark.SqliteBenchmarkStreaming-report-github.md": "a21cd1ab59c57886859dcecdc7e52d2dd24202c7645839cc60115a1531b5f2de",
+    "NextORM.Benchmark.SqliteBenchmarkStreaming-report.csv": "7089b43450ed7a2d8d83f35ae7143d42931a9fb3dc2e1cdb5fab18233f2f6280",
+    "NextORM.Benchmark.SqliteBenchmarkWriteJson-report-github.md": "e4ee1250fb1c911bb3fa79caa5971908692ae590ba6fc6e379fab9c39d20be85",
+    "NextORM.Benchmark.SqliteBenchmarkWriteJson-report.csv": "a9ce1051424cbbf99a7ec7bf731195181922509c7ecb3704cbe59670283a3626",
+    "NextORM.Benchmark.SqliteBenchmarkCsv-report-github.md": "815a36c6e19dd8cb06e960d566de46be1fb7dedc22a450b1ccd3316bdf4c2082",
+    "NextORM.Benchmark.SqliteBenchmarkCsv-report.csv": "2bea5d6eaeecbb49367082a7448b992cec88738059df61aedb9a859f711bbac3"
+  }
+}

@@ -50,6 +50,9 @@ artifacts/
 !/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWriteJson-report.csv
 !/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCsv-report-github.md
 !/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCsv-report.csv
+# Machine-readable run provenance and report hashes for generated benchmark tables.
+!/benchmarks/BenchmarkDotNet.Artifacts/results/suite-run-dates.json
+!/benchmarks/BenchmarkDotNet.Artifacts/results/tier1-run.json
 
 # Stryker.NET mutation output
 /StrykerOutput/

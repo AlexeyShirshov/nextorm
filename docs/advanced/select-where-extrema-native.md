@@ -101,7 +101,22 @@ Eligibility is intentionally narrow, and is decided from a prepared description 
 | ClickHouse payload | integral types (`sbyte`/`byte`/`short`/`ushort`/`int`/`uint`/`long`/`ulong`, including nullable), floating-point types (`float`/`double`, including nullable) and `string` |
 | Everything else (an `All` request, whatever its keys) | the portable lowering of that tie policy: the window for `One`, the aggregate form for `All` — except a floating-point value key on ClickHouse, which keeps the window |
 
-A composite key is compared lexicographically component by component. A `Float32`/`Float64` component of the extreme key is adapted in the same query instead of being passed to `argMin`/`argMax` verbatim: a leading `isNaN` rank keeps NaN last in both directions, matching the portable contract, and a `Float32` component is widened to `Float64` for the comparison. The raw direct aggregate is deliberately not used, because ClickHouse seeds it with the first row and `x > NaN`/`x < NaN` are both false, so a leading NaN would otherwise win. The adaptation covers single, two- and three-component keys across `Min`/`Max`, global/grouped, and nullable/non-nullable components. The arity limits are deliberately asymmetric: a purely integral extreme key or group key is a plain lexicographic tuple and is not arity-capped, while only a key that contains a floating component is capped at three components, because only that adaptation was proven arity by arity. The group selector must be compound (`e => new { e.TeamId }`); a bare single-column group selector keeps the portable path. Everything outside the table above keeps the portable lowering with the same results contract: the other providers, every `ExtremeRowTies.All` request (which takes the aggregate form, since there is no native `All` renderer, except a floating-point value key on ClickHouse — that server's `max()`/`min()` treat `NaN` as the extreme value while its `ORDER BY` ranks it last, so the rank window stays the reference there), floating-point group keys, floating extreme keys with more than three components, `Float16`/`Decimal` keys, value converters, computed expressions, and other key or payload types.
+Composite keys use lexicographic, component-by-component comparison. For a `Float32`/`Float64` extreme-key component:
+
+- nextorm adapts it in the same query instead of passing it verbatim to `argMin`/`argMax`;
+- a leading `isNaN` rank keeps NaN last in both directions, matching the portable contract; and
+- `Float32` is widened to `Float64` for comparison.
+
+The direct aggregate is deliberately avoided. ClickHouse seeds it with the first row, and both `x > NaN` and `x < NaN` are false, so a leading NaN would otherwise win.
+
+The adaptation covers one-, two-, and three-component keys for `Min`/`Max`, global and grouped forms, and nullable and non-nullable components. Arity limits differ by key shape: purely integral extreme and group keys are lexicographic tuples with no arity limit; only a key containing a floating-point component is limited to three components, because only that adaptation was proven for each arity. The group selector must be compound (`e => new { e.TeamId }`); a bare single-column selector keeps the portable path.
+
+Outside the table, the portable lowering preserves the same result contract for these cases:
+
+- providers other than PostgreSQL and ClickHouse;
+- every `ExtremeRowTies.All` request, which uses the aggregate form because there is no native `All` renderer, except a floating-point value key on ClickHouse, which keeps the ranking window because `max()`/`min()` treat NaN as the extreme value while `ORDER BY` ranks it last;
+- floating-point group keys and floating-point extreme keys with more than three components; and
+- `Float16`/`Decimal` keys, value converters, computed expressions, and other key or payload types.
 
 ## Semantics
 

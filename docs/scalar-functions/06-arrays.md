@@ -1,10 +1,13 @@
 # Arrays (PostgreSQL)
 
-PostgreSQL has native array types. An array operand is always passed as a **single parameter** (the
-whole array), never expanded into a value list, so the SQL text does not depend on the number of
-elements and the plan stays cacheable. An array can be a runtime parameter ([`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32))), a
-captured local/field or an inline `new[]`. Only a dialect that opts in with [`SupportsArrays`](xref:NextORM.Core.ISqlDialect.SupportsArrays)
-(PostgreSQL) can render the array surface; every other provider throws `NotSupportedException`.
+PostgreSQL has native array types. When an operand comes from a CLR array—a runtime
+[`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32)), a captured local or field, or
+an inline `new[]`—nextorm binds the whole array as **one PostgreSQL array parameter**; it never expands
+the elements into a value list. The SQL text therefore does not depend on the array length, so the
+query plan remains cacheable. A runtime parameter also lets you prepare the query before you
+know the array value. SQL array columns and expressions are array operands too; they are not CLR
+parameters. Only a dialect that opts in with [`SupportsArrays`](xref:NextORM.Core.ISqlDialect.SupportsArrays)
+(PostgreSQL) can render this array surface; every other provider throws `NotSupportedException`.
 
 `SqlFunctions.Postgres.any` / `SqlFunctions.Postgres.all` accept an array, either as a complete predicate (`column = any(@array)`)
 or as the right-hand side of a comparison:
@@ -44,8 +47,6 @@ var rows = prepared.ToList(new long[] { 1, 2, 3 });
 select id
  from complex_entity where id = any(@norm_p0)
 ```
-
-The array functions and operators map to their PostgreSQL names:
 
 | C# | SQL |
 |---|---|
@@ -99,7 +100,7 @@ select cardinality(@norm_p1) as "N"
  from complex_entity where array_length(@norm_p0, 1) = 3
 ```
 
-### Shaping and expanding arrays (#281)
+### Shaping and expanding arrays
 
 `trim_array` returns a shortened copy of a one-dimensional array, and the multi-array `unnest`, the
 `WITH ORDINALITY` and the `generate_subscripts` forms expand arrays into rows. The six set-returning
@@ -161,10 +162,14 @@ select value, ordinality
 
 ## Arrays (ClickHouse)
 
-ClickHouse has a native `Array(T)` type. The array functions operate on array **columns** (or on nested
-array expressions) and are gated by `ISqlDialect.SupportsArrayFunctions`; `arrayJoin` additionally
-requires `SupportsArrayJoin`. `arrayJoin(array)` expands the array into one row per element, so its
-result can be projected like a scalar column.
+Choose the array surface by provider, not by the CLR `T[]` type alone. PostgreSQL `Postgres.any` and
+`Postgres.all` can take a CLR array as one PostgreSQL array parameter. ClickHouse has its own native
+`Array(T)` type: its functions operate on array **columns**, nested array expressions, or bound array
+values. When you bind a CLR array for ClickHouse, its declared element type determines the ClickHouse
+array type (including `Nullable(T)`; see the nullable-element note below), rather than using PostgreSQL's
+array type or SQL syntax. The functions are gated by `ISqlDialect.SupportsArrayFunctions`;
+`arrayJoin` additionally requires `SupportsArrayJoin`. `arrayJoin(array)` expands the array into one row
+per element, so its result can be projected like a scalar column.
 
 | Function | SQL |
 |---|---|
@@ -199,7 +204,7 @@ result can be projected like a scalar column.
 | `SqlFunctions.ClickHouse.array_last(f, a)` | `arrayLast(f, a)` |
 | `SqlFunctions.ClickHouse.array_last_index(f, a)` | `arrayLastIndex(f, a)` |
 
-### Delivered array, tuple and map functions (#286, T286b)
+### Array, tuple and map functions
 
 The members below complete the array catalogue on the pinned 25.8.33.6 server. Result shapes are
 declared explicitly: element-wise predicates return `bool`, aggregations return the scalar/array CLR
@@ -254,7 +259,7 @@ type they declare, and the sort/split/fill families return `T[]`.
 
 `arrayReduce`/`arrayReduceInRanges` stay refused: the aggregate is named by a runtime SQL string, so no
 typed contract can close it (see
-[ClickHouse-specific SQL › Not yet supported](../guide/provider-specific-sql/clickhouse.md#not-yet-supported)).
+[ClickHouse-specific SQL › Unsupported functions](../guide/provider-specific-sql/clickhouse.md#unsupported-functions)).
 `untuple` is refused for the same structural reason: one projection expression maps to exactly one
 result column.
 
@@ -306,11 +311,9 @@ result column.
 > preparation. SQL Server and the in-memory provider reject that **row-constructor/row-comparison**
 > surface; the in-memory provider still evaluates a tuple `IN`/`Contains` value list in process (it is
 > not rejected). Tuple `IN`/`Contains` over a
-> **value list** of flat `System.Tuple`/`System.ValueTuple` entries of arity 1..7 is shipped
-> ([#193](https://github.com/AlexeyShirshov/nextorm/issues/193)); the exact provider forms and semantics
+> **value list** of flat `System.Tuple`/`System.ValueTuple` entries of arity 1..7 is supported; the exact provider forms and semantics
 > are documented in the tuple `IN` block below.
-> Materialising a raw `ROW(...)` is shipped on PostgreSQL
-> ([#194](https://github.com/AlexeyShirshov/nextorm/issues/194)): a single `ROW(...)` (arity 1..7) or a
+> PostgreSQL supports raw `ROW(...)` materialization: a single `ROW(...)` (arity 1..7) or a
 > caller-registered named composite result column materialises into the matching
 > `System.Tuple<...>`/named type (see
 > [Raw SQL](../guide/14-raw-sql.md#postgresql-raw-rows-and-composites)); `ValueTuple`, arity ≥8, a
@@ -342,8 +345,7 @@ result column.
 > reference-tuple entry (`null` inside the collection) throws `NotSupportedException` rather than
 > degrading into an all-null row, and arity ≥8, the `Rest` form and nested tuple components throw
 > `NotSupportedException`; on SQL Server all of these surface the provider rejection above instead.
-> Deferred in the current milestone: a tuple-typed `QueryCommand` (subquery) right-hand side and
-> `Rest`/nested tuples are **not supported yet**; no future milestone is promised.
+> A tuple-typed `QueryCommand` (subquery) is not supported as the right-hand operand.
 
 > The higher-order (lambda) functions take an inline C# lambda whose parameter is the array element,
 > for example `array_map(v => -v, e.Nums)` renders `arrayMap(v -> -(v), nums)`. `array_exists`/`array_all`

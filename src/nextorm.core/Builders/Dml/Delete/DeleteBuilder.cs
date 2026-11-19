@@ -15,14 +15,18 @@ public sealed class DeleteBuilder<TEntity>
 {
     private readonly IDataContext _dataContext;
     private readonly IEntityMetadata _metadata;
+    private readonly IEntityMetadata _targetMetadata;
+    private readonly MappingVariant _mappingVariant;
     private EntityBuilder<TEntity>? _filter;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
     private bool _all;
 
-    internal DeleteBuilder(IDataContext dataContext, IEntityMetadata metadata)
+    internal DeleteBuilder(IDataContext dataContext, IEntityMetadata metadata, MappingVariant mappingVariant = default, IEntityMetadata? targetMetadata = null)
     {
         _dataContext = dataContext;
         _metadata = metadata;
+        _mappingVariant = mappingVariant;
+        _targetMetadata = targetMetadata ?? metadata;
     }
 
     /// <summary>The context the delete executes on; used by <see cref="DeleteReturningBuilder{TEntity, TResult}"/>.</summary>
@@ -43,7 +47,7 @@ public sealed class DeleteBuilder<TEntity>
         if (_all)
             throw new InvalidOperationException("Where(...) cannot be combined with All(); a delete is either filtered or full-table.");
 
-        _filter = (_filter ?? _dataContext.From<TEntity>()).Where(predicate);
+        _filter = (_filter ?? _dataContext.From<TEntity>().WithVariant(_mappingVariant)).Where(predicate);
         return this;
     }
 
@@ -214,7 +218,7 @@ public sealed class DeleteBuilder<TEntity>
         // deletes the whole table (no condition, no keys).
         var condition = _filter is null ? null : ApplyFilterScope(_filter).ToCommand();
 
-        return new DeleteCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, condition, null);
+        return CreateCommand(condition, null);
     }
 
     internal DeleteCommand BuildKeyCommand(TEntity entity)
@@ -235,8 +239,8 @@ public sealed class DeleteBuilder<TEntity>
         // The key form carries the target entity's global filter through a no-predicate source command:
         // preparing it injects the filter (minus the IgnoreFilters scope) into the condition, which the
         // planner ANDs to the key equalities.
-        var condition = ApplyFilterScope(_filter ?? _dataContext.From<TEntity>()).ToCommand();
-        return new DeleteCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, condition, keys);
+        var condition = ApplyFilterScope(_filter ?? _dataContext.From<TEntity>().WithVariant(_mappingVariant)).ToCommand();
+        return CreateCommand(condition, keys);
     }
 
     /// <summary>Builds the delete command for use as a side-effecting step of a batch.</summary>
@@ -253,7 +257,7 @@ public sealed class DeleteBuilder<TEntity>
             throw new InvalidOperationException("A delete needs a predicate; call Where(...) or All() to delete every row.");
 
         var condition = _filter is null ? null : ApplyFilterScope(_filter).ToCommand();
-        return new DeleteCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, condition, null, returningColumns, outputInto);
+        return CreateCommand(condition, null, returningColumns, outputInto);
     }
 
     /// <summary>Builds the delete command for an <c>OUTPUT ... INTO</c>-only terminal: the removed rows are written into the target and nothing is returned to the client.</summary>
@@ -265,7 +269,44 @@ public sealed class DeleteBuilder<TEntity>
             throw new InvalidOperationException("A delete needs a predicate; call Where(...) or All() to delete every row.");
 
         var condition = _filter is null ? null : ApplyFilterScope(_filter).ToCommand();
-        return new DeleteCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, condition, null, null, outputInto);
+        return CreateCommand(condition, null, null, outputInto);
+    }
+
+    private DeleteCommand CreateCommand(QueryCommand? condition, IReadOnlyList<KeyValue>? keys, IReadOnlyList<IPropertyMetadata>? returningColumns = null, OutputIntoClause? outputInto = null)
+    {
+        // The condition command resolves the shard scope from the predicate when the builder carries no
+        // explicit scope; the DELETE target has to follow it, because the renderer reads the command's
+        // scope rather than the condition's.
+        var scope = condition is not null && condition.MappingVariant != MappingVariant.Default
+            ? condition.MappingVariant
+            : _mappingVariant;
+
+        EnsureShardScopeResolved(scope);
+
+        return new(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, condition, keys, returningColumns, outputInto,
+            scope == MappingVariant.Default ? null : _targetMetadata.Schema, scope);
+    }
+
+    /// <summary>
+    /// Rejects a sharded delete that carries no resolved shard scope. Without it the statement would name
+    /// the default table and run on the context connection — exactly the silent wrong target the other
+    /// sharded mutations (insert, truncate, merge) already refuse.
+    /// </summary>
+    /// <param name="scope">The scope the statement resolved, or <see cref="MappingVariant.Default"/>.</param>
+    private void EnsureShardScopeResolved(MappingVariant scope)
+    {
+        if (scope != MappingVariant.Default)
+            return;
+
+        if (_dataContext is not DataContext dataContext || dataContext.EntityVariantResolver is not IShardRouter router)
+            return;
+
+        if (!router.IsSharded(typeof(TEntity)))
+            return;
+
+        throw new InvalidOperationException(
+            $"Entity '{typeof(TEntity)}' is sharded. A delete must name the bucket: add an equality on the shard key " +
+            "to the predicate, or delete by entity.");
     }
 
     // Applies the builder's selective filter scope to the source command that carries the DELETE's

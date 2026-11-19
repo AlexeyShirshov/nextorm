@@ -1,5 +1,9 @@
 # String functions
 
+String members in a query are translated to SQL and run by the provider; the table lists common
+translations. If a query depends on comparison behavior, distinguish the database column's collation from
+an explicit `StringComparison` overload; see [Ordinal comparison and collation](#ordinal-comparison-and-collation).
+
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
     .Where(e => e.String!.Contains("df"))
@@ -90,14 +94,21 @@ select id
 
 ## Ordinal comparison and collation
 
-C# `string` comparisons are **ordinal** (byte order), while a SQL `=`/`LIKE` uses the column's database
-collation — on SQL Server the default is case-insensitive. nextorm makes the ordinal overloads explicit
-and honest: `string.Equals`, `string.Compare`/`CompareOrdinal`, `Contains`/`StartsWith`/`EndsWith` and
-`IndexOf`/`LastIndexOf` accept a constant `StringComparison`, and only `Ordinal` and `OrdinalIgnoreCase`
-have a portable SQL form. `Ordinal` uses the provider's binary collation, `OrdinalIgnoreCase` additionally
-case-folds both operands; `InvariantCulture`/`CurrentCulture` (and the culture-sensitive
-`string.Compare(s, t)` overload without a comparison) throw `NotSupportedException`
-([`SupportsOrdinalComparison`](xref:NextORM.Core.ISqlDialect.SupportsOrdinalComparison)).
+In .NET, `Ordinal` compares strings without linguistic or culture-specific rules. Choose the query form
+based on whether you want that explicit behavior or the database's own collation:
+
+* `==` stays the provider's SQL `=` and follows the column's database collation; SQL Server's default
+  collation is case-insensitive. The basic `Contains`/`StartsWith`/`EndsWith` forms use `LIKE`, so their
+  matching also follows the SQL collation rather than explicitly requesting C# ordinal behavior.
+* `string.Equals` and `string.CompareOrdinal` request ordinal comparison. The `string.Equals`,
+  `string.Compare`/`CompareOrdinal`, `Contains`/`StartsWith`/`EndsWith` and `IndexOf`/`LastIndexOf`
+  overloads that take a constant `StringComparison` accept only `Ordinal` and `OrdinalIgnoreCase` for
+  portable SQL translation. The comparison still executes on the database, using the provider's binary
+  collation shown below; it is not evaluated by the CLR on the client. `OrdinalIgnoreCase` also applies
+  SQL `lower` to both operands before comparing them.
+* `InvariantCulture` and `CurrentCulture`, as well as the two-argument, culture-sensitive
+  `string.Compare(s, t)` overload without a `StringComparison`, throw `NotSupportedException`
+  ([`SupportsOrdinalComparison`](xref:NextORM.Core.ISqlDialect.SupportsOrdinalComparison)).
 
 ```csharp
 var strict = dataContext.From<IComplexEntity>()
@@ -119,15 +130,12 @@ var loose = dataContext.From<IComplexEntity>()
 | SQLite | `s collate binary` | `lower(s) collate binary` |
 | ClickHouse | `s` (native byte order) | `lower(s)` |
 
-The plain `==` operator is intentionally left as the provider's `=`; it follows the database collation,
-not C#. Use `string.Equals`/`string.CompareOrdinal` when byte order is required.
-
 SQLite's `LIKE` is always case-insensitive for ASCII regardless of the operand's collation, so the
 **case-sensitive** ordinal `Contains`/`StartsWith`/`EndsWith` are rejected there
 ([`SupportsOrdinalLike`](xref:NextORM.Core.ISqlDialect.SupportsOrdinalLike)); `CompareOrdinal`,
 `Equals` and `OrdinalIgnoreCase` work.
 
-Apply any provider collation explicitly with `SqlFunctions.Sql.collate` (requires
+For a one-off provider-native collation, apply it explicitly with `SqlFunctions.Sql.collate` (requires
 [`SupportsCollation`](xref:NextORM.Core.ISqlDialect.SupportsCollation), so every SQL provider except
 ClickHouse):
 
@@ -144,12 +152,14 @@ select id
  from complex_entity where somestring collate "C" = 'x' collate "C"
 ```
 
-`collate` takes the provider-native collation name; it must be a constant. The in-memory provider has no
+`collate` takes a constant provider-native collation name. This changes the SQL expression's collation;
+it does not define a portable collation or create one in the database. The in-memory provider has no
 collations and treats the call as the ordinal identity.
 
 ### Column collation
 
-Instead of wrapping every expression, a collation can be declared on a mapped property with
+If the same collation should apply whenever a mapped column participates in a collation-sensitive
+operation, declare it on the property with
 [`CollationAttribute`](xref:NextORM.Core.CollationAttribute) or the fluent
 [`EntityPropertyBuilder<T>.Collation`](xref:NextORM.Core.EntityPropertyBuilder`1.Collation(System.String)). It is then applied to the column in
 every collation-sensitive operation (comparison, `LIKE`, `ORDER BY`, `GROUP BY`), so the column follows
@@ -391,7 +401,7 @@ var rows = dataContext.From<IComplexEntity>()
 The in-memory provider evaluates the same calls through their CLR equivalents, so the same query runs
 without a database.
 
-## ClickHouse string functions (#286, T286b)
+## ClickHouse string functions
 
 The ClickHouse-only string surface lives on `SqlFunctions.ClickHouse`; every member renders the exact
 vendor name and is rejected by every other dialect. Result shapes are explicit: `overlay`/`initcap`/
@@ -457,9 +467,9 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
-### Residual string, encoding and regexp helpers (#281)
+### String, encoding and regexp helpers
 
-The rest of the PostgreSQL string catalogue is exposed on the same surface, one member per server
+The `Postgres` API exposes the following functions, one member per server
 overload. Every name is gated **individually** by
 [`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)), and a
 provider that does not implement the interface rejects the call with `NotSupportedException`:
@@ -545,9 +555,9 @@ encoding code and the emitted statement fails on the server with `42704`. The `b
 the binary helpers (`get_bit`/`set_bit`/`bit_count` over `bit`) have no CLR mapping, so no member is
 offered for them and the call is refused instead of being translated.
 
-## Full-text search (PostgreSQL, #281)
+## Full-text search (PostgreSQL)
 
-The cross-provider predicates and the earlier native surface — `contains`/`freetext`, `to_tsvector`,
+The cross-provider predicates and native functions — `contains`/`freetext`, `to_tsvector`,
 `to_tsquery`, `plainto_tsquery`/`phraseto_tsquery`/`websearch_to_tsquery`, `ts_match`, `ts_rank`,
 `ts_rank_cd`, `ts_headline` and `@@` — are described in
 [PostgreSQL-specific SQL › Full-text search](../guide/provider-specific-sql/postgresql.md#full-text-search).

@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Runtime.CompilerServices;
 
 namespace NextORM.Core;
 
@@ -56,7 +58,9 @@ internal static class CompositeJunctionLinkFactory
     private static readonly ConcurrentDictionary<string, Lazy<CarrierInfo>> CarrierCache = new();
     private static readonly ConcurrentDictionary<Type, CarrierInfo> CarrierByType = new();
     private static readonly object EmitGate = new();
-    private static readonly ModuleBuilder Module = CreateModule();
+    private static readonly Lazy<ModuleBuilder> Module = new(
+        CreateModule,
+        LazyThreadSafetyMode.ExecutionAndPublication);
     private static int _emittedTypeCounter;
 
     private static ModuleBuilder CreateModule()
@@ -75,6 +79,12 @@ internal static class CompositeJunctionLinkFactory
     /// <param name="parentForeignKeys">The junction foreign-key members referencing the parent, in order.</param>
     /// <param name="childForeignKeys">The junction foreign-key members referencing the child, in order.</param>
     /// <returns>The carrier information for the shape.</returns>
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.PublicProperties, typeof(CompositeJunctionLink3))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.PublicProperties, typeof(CompositeJunctionLink4))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.PublicProperties, typeof(CompositeJunctionLink5))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.PublicProperties, typeof(CompositeJunctionLink6))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.PublicProperties, typeof(CompositeJunctionLink7))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.PublicProperties, typeof(CompositeJunctionLink8))]
     internal static CarrierInfo Ensure(IReadOnlyList<PropertyInfo> parentForeignKeys, IReadOnlyList<PropertyInfo> childForeignKeys)
     {
         ArgumentNullException.ThrowIfNull(parentForeignKeys);
@@ -90,7 +100,9 @@ internal static class CompositeJunctionLinkFactory
         var carrier = CarrierCache.GetOrAdd(
             BuildKey(parentForeignKeys, childForeignKeys),
             _ => new Lazy<CarrierInfo>(
-                () => Emit(parentForeignKeys, childForeignKeys),
+                () => RuntimeFeature.IsDynamicCodeSupported
+                    ? Emit(parentForeignKeys, childForeignKeys)
+                    : BuildStatic(parentForeignKeys, childForeignKeys),
                 LazyThreadSafetyMode.ExecutionAndPublication)).Value;
         CarrierByType[carrier.LinkType] = carrier;
         Publish(carrier);
@@ -144,7 +156,7 @@ internal static class CompositeJunctionLinkFactory
     {
         lock (EmitGate)
         {
-            var typeBuilder = Module.DefineType(
+            var typeBuilder = Module.Value.DefineType(
                 $"CompositeJunctionLink_{parentForeignKeys.Count}_{childForeignKeys.Count}_{Interlocked.Increment(ref _emittedTypeCounter)}",
                 TypeAttributes.Public | TypeAttributes.Sealed | TypeAttributes.Class | TypeAttributes.BeforeFieldInit);
 
@@ -173,6 +185,46 @@ internal static class CompositeJunctionLinkFactory
             var resolvedOccurrence = linkType.GetProperty(OccurrencePropertyName)!;
             return new CarrierInfo(linkType, resolvedParents, resolvedChildren, resolvedOccurrence);
         }
+    }
+
+    /// <summary>
+    /// Builds the bounded statically declared carrier used when runtime type emission is unavailable.
+    /// The JIT path keeps the arity-general emitter above; NativeAOT supports up to eight total key
+    /// components through one of the compiled flat carrier definitions.
+    /// </summary>
+    private static CarrierInfo BuildStatic(
+        IReadOnlyList<PropertyInfo> parentForeignKeys,
+        IReadOnlyList<PropertyInfo> childForeignKeys)
+    {
+        var componentCount = parentForeignKeys.Count + childForeignKeys.Count;
+        if (componentCount is < 3 or > 8)
+            throw new NotSupportedException(
+                $"NativeAOT composite many-to-many loading supports up to eight total junction key components; this relationship has {componentCount}.");
+
+        var linkType = componentCount switch
+        {
+            3 => typeof(CompositeJunctionLink3),
+            4 => typeof(CompositeJunctionLink4),
+            5 => typeof(CompositeJunctionLink5),
+            6 => typeof(CompositeJunctionLink6),
+            7 => typeof(CompositeJunctionLink7),
+            8 => typeof(CompositeJunctionLink8),
+            _ => throw new InvalidOperationException("The bounded composite carrier arity was not handled.")
+        };
+        var keyProperties = new PropertyInfo[componentCount];
+        for (var i = 0; i < componentCount; i++)
+            keyProperties[i] = linkType.GetProperty($"Key{i + 1}")!;
+
+        var parentKeys = new PropertyInfo[parentForeignKeys.Count];
+        Array.Copy(keyProperties, parentKeys, parentKeys.Length);
+        var childKeys = new PropertyInfo[childForeignKeys.Count];
+        Array.Copy(keyProperties, parentKeys.Length, childKeys, 0, childKeys.Length);
+
+        return new CarrierInfo(
+            linkType,
+            parentKeys,
+            childKeys,
+            linkType.GetProperty(OccurrencePropertyName)!);
     }
 
     private static PropertyInfo DefineProperty(TypeBuilder typeBuilder, string name, Type propertyType)
@@ -208,6 +260,19 @@ internal static class CompositeJunctionLinkFactory
 
     private static IEntityMetadata BuildMetadata(Type linkType)
     {
+        if (linkType == typeof(CompositeJunctionLink3))
+            return new EntityMetadataBuilder<CompositeJunctionLink3>().Build();
+        if (linkType == typeof(CompositeJunctionLink4))
+            return new EntityMetadataBuilder<CompositeJunctionLink4>().Build();
+        if (linkType == typeof(CompositeJunctionLink5))
+            return new EntityMetadataBuilder<CompositeJunctionLink5>().Build();
+        if (linkType == typeof(CompositeJunctionLink6))
+            return new EntityMetadataBuilder<CompositeJunctionLink6>().Build();
+        if (linkType == typeof(CompositeJunctionLink7))
+            return new EntityMetadataBuilder<CompositeJunctionLink7>().Build();
+        if (linkType == typeof(CompositeJunctionLink8))
+            return new EntityMetadataBuilder<CompositeJunctionLink8>().Build();
+
         var builderType = typeof(EntityMetadataBuilder<>).MakeGenericType(linkType);
         var builder = Activator.CreateInstance(builderType)
             ?? throw new InvalidOperationException($"Cannot create the metadata builder for the composite link type '{linkType.Name}'.");
@@ -217,4 +282,73 @@ internal static class CompositeJunctionLinkFactory
         return build.Invoke(builder, BindingFlags.DoNotWrapExceptions, null, null, null) as IEntityMetadata
             ?? throw new InvalidOperationException($"Building the metadata for the composite link type '{linkType.Name}' returned no metadata.");
     }
+}
+
+internal sealed class CompositeJunctionLink3
+{
+    public CompositeJunctionLink3() { }
+    public object? Key1 { get; set; }
+    public object? Key2 { get; set; }
+    public object? Key3 { get; set; }
+    public int Occurrence { get; set; }
+}
+
+internal sealed class CompositeJunctionLink4
+{
+    public CompositeJunctionLink4() { }
+    public object? Key1 { get; set; }
+    public object? Key2 { get; set; }
+    public object? Key3 { get; set; }
+    public object? Key4 { get; set; }
+    public int Occurrence { get; set; }
+}
+
+internal sealed class CompositeJunctionLink5
+{
+    public CompositeJunctionLink5() { }
+    public object? Key1 { get; set; }
+    public object? Key2 { get; set; }
+    public object? Key3 { get; set; }
+    public object? Key4 { get; set; }
+    public object? Key5 { get; set; }
+    public int Occurrence { get; set; }
+}
+
+internal sealed class CompositeJunctionLink6
+{
+    public CompositeJunctionLink6() { }
+    public object? Key1 { get; set; }
+    public object? Key2 { get; set; }
+    public object? Key3 { get; set; }
+    public object? Key4 { get; set; }
+    public object? Key5 { get; set; }
+    public object? Key6 { get; set; }
+    public int Occurrence { get; set; }
+}
+
+internal sealed class CompositeJunctionLink7
+{
+    public CompositeJunctionLink7() { }
+    public object? Key1 { get; set; }
+    public object? Key2 { get; set; }
+    public object? Key3 { get; set; }
+    public object? Key4 { get; set; }
+    public object? Key5 { get; set; }
+    public object? Key6 { get; set; }
+    public object? Key7 { get; set; }
+    public int Occurrence { get; set; }
+}
+
+internal sealed class CompositeJunctionLink8
+{
+    public CompositeJunctionLink8() { }
+    public object? Key1 { get; set; }
+    public object? Key2 { get; set; }
+    public object? Key3 { get; set; }
+    public object? Key4 { get; set; }
+    public object? Key5 { get; set; }
+    public object? Key6 { get; set; }
+    public object? Key7 { get; set; }
+    public object? Key8 { get; set; }
+    public int Occurrence { get; set; }
 }

@@ -1,36 +1,51 @@
 ---
 name: nextorm-pdca
-description: "nextorm overlay for the global `pdca-dotnet` cycle: design invariants for PLAN, audit registers and toolchain for CHECK, cached-path performance acceptance, and plan hygiene for ACT. Load together with `pdca-dotnet` before PLAN whenever a PDCA cycle runs in this repository."
+description: "nextorm overlay for the global `pdca-dotnet` cycle: project implementation constraints, the DO design pass for code changes, independent CHECK assessment, cached-path performance acceptance, and ACT hygiene. Load together with `pdca-dotnet` before PLAN whenever a PDCA cycle runs in this repository."
 ---
 
-# nextorm: PDCA-оверлей (Plan/Check)
+# nextorm: PDCA-оверлей (DO/Check)
 
 Проектные дополнения к глобальному скиллу **`pdca-dotnet`**. Загружай их **вместе** с ним и
 **до PLAN**: сначала `pdca-dotnet` (машина состояний, гейты, делегирование), затем этот
-оверлей. Здесь — только nextorm-специфика: инварианты, регистры, перф-приёмка и гигиена
-планов. Гейты и машину состояний оверлей **не меняет** — уточняет содержание фаз.
+оверлей. Здесь — nextorm-ограничения реализации, DO-дизайн-проход, CHECK-оценка его evidence,
+перф-приёмка и гигиена ACT. Гейты и машину состояний оверлей **не меняет** — уточняет содержание фаз.
 
 ## Политика агентов
 
 - Предметные агенты (`nextorm-design-engineer`, `nextorm-code-auditor`,
   `nextorm-db-perf-analyst`, `nextorm-inmemory-perf-analyst`) существуют для интерактивной
-  работы. В цикле их **не диспатчат** и не читают: у `pdca-planner` чтение закрыто (`"*": deny`),
-  у `pdca-check` оно ограничено `.pdca/**`/`TestResults/**`, а `task` не выдан ни одному из них.
-  Поэтому нужные инварианты и процедура аудита **встроены текстом** ниже в PLAN/CHECK.
-- Встраивание **не отменяет** общий §CHECK глобального `pdca-dotnet`: воркфлоу CHECK (шаги 1–13),
-  **загрузка скиллов аудита** (шаг 1, список — §CHECK контракта) и **обязательный скан
-  suppression/slop со счётчиками и ratio** (шаг 4), а также per-finding вывод (шаг 8), выполняются
-  в полном объёме. Оверлей ниже — только проектное **дополнение** к ним, а не сокращённая замена.
+  работы. В цикле их **не диспатчат**. Нужные ограничения и процедура дизайн-прохода встроены
+  ниже: standalone `nextorm-design-engineer` не требуется читать или запускать.
+- Driver передаёт применимые инструкции этого оверлея **inline** в DO и каждый CHECK. В DO
+  `pdca-executor` готовит design/audit evidence; CHECK получает отчёт и независимые наблюдения,
+  достаточные для суждения. CHECK не загружает скиллы, не читает product source, не запускает
+  сканы и не создаёт субагентов. Недостающее evidence запрашивается driver у уже разрешённых ролей;
+  permission и роль CHECK не расширяются.
 - Записи в регистры (`docs/specs/design/*`) и правки кода/конфигов делает `pdca-executor`
   в фазе Do, не оркестратор.
 
-## PLAN: nextorm-инварианты (из nextorm-design-engineer)
+## Владение фазами и проектные ограничения
 
-Встроено текстом намеренно: `pdca-planner` (`"*": deny`) и `pdca-check` (scoped read)
-не читают `.opencode/agents/*.md` — ссылка вместо текста до них не доходит. Правишь
-инварианты — синхронизируй `.opencode/agents/nextorm-design-engineer.md`.
+### Граница PLAN / DO / CHECK
 
-Приоритетнее generic-советов; ограничивают fix, а не только review.
+Базовый контракт `pdca`/`pdca-dotnet` авторитетен: PLAN определяет только результат, критерии
+приёмки, ограничения, границы, риски и условия остановки. Этот оверлей не добавляет критерии и
+не поручает PLAN проектировать исполнение или проверку.
+
+- Вариантную матрицу из фактических путей исполнения, test strategy, coverage/mutation strategy,
+  конкретные команды, oracle/evidence methods и подготовку артефактов выбирает и выполняет DO
+  (`pdca-executor`) в пределах утверждённой задачи. Project policy может войти в PLAN как
+  ограничение, но не как замороженная процедура проверки.
+- CHECK самостоятельно выбирает метод и достаточность проверки по базовому контракту. PLAN не
+  обязан заранее доказать конкретный oracle или закрепить evidence-source/command. Если факт о
+  measurability действительно неясен, base допускает один bounded choice probe; unusable method
+  при CHECK пере-выбирается, а недостающее evidence дособирается. Только критерий, который нельзя
+  измерить доступными средствами, использует существующий PLAN → ACT outcome.
+- Design/audit отчёт — candidate evidence от DO, не самосертификация. Каждый CHECK оценивает его
+  применимость, полноту и findings; правила и конкретный формат приведены ниже.
+
+Следующие nextorm-инварианты ограничивают реализацию и fix; они не превращают findings или
+технические решения в обязанности PLAN.
 
 1. **Абстракция только на втором потребителе / наблюдаемом шве.** Не предлагать
    `IX`/`X` «потому что чище»: при единственном потребителе сплит запрещён
@@ -60,14 +75,7 @@ description: "nextorm overlay for the global `pdca-dotnet` cycle: design invaria
    текущим milestone, а не `deferred` в будущий релиз. Запись ограничения в
    `docs/advanced/limitations.md` фиксирует поведение, но **не заменяет** задачу в
    текущем milestone.
-9. **PLAN отвечает за качество плана, а не за качество входа.** Сырой материал (расплывчатый issue,
-   неполные критерии, без списка краевых случаев) PLAN **доводит**: выводит/дополняет критерии приёмки
-   (наблюдаемое поведение + негативный кейс), строит **variant matrix** из **пути исполнения** (а не из
-   формулировки требований) и закрывает все строки, поднимает невысказанные неизвестные. Незавершённость
-   в DO не транслируется. Пропущенная ветка — это **дефект PLAN**: гейт 1 не проходит, а при
-   обнаружении в CHECK — **loop-back CHECK → PLAN**, а не сноска в отчёте. Слабая постановка
-   **повышает** планку PLAN, а не понижает. Контракт: `pdca-dotnet` §PLAN → «PLAN owns the quality of the plan».
-10. **Поиск — ignore-aware; символы — `roslyn`.** Для C#-символов (типы/члены/`refs`/`callers`/overloads/
+9. **Поиск — ignore-aware; символы — `roslyn`.** Для C#-символов (типы/члены/`refs`/`callers`/overloads/
     implementations/renames) — только инструмент `roslyn`, не текстовый поиск. В V2 `roslyn` не
     top-level: вызов — **внутри `execute`** (`const r = await tools.roslyn({ action: "members",
     target: "Ns.Type" }); return r`), батч — одним `execute` (`Promise.all`); если его нет в каталоге
@@ -76,39 +84,71 @@ description: "nextorm overlay for the global `pdca-dotnet` cycle: design invaria
     (`rg -n --glob '*.cs' "<lit>" src tests`). **Никогда `grep -r`/`grep -rn`/`find`** по дереву: они
     игнорируют `.gitignore` и читают `bin/`/`obj/`/`TestResults/` (≈1.3 GB артефактов под `src`/`tests`),
     т.е. ~1 GB диска на один вызов. См. `AGENTS.md` → «Searching text».
-11. **Недоказуемый критерий — GAP, а не `ready`.** Критерий, чьё решающее evidence невоспроизводимо из
-   закоммиченных/декларируемых источников (напр. «красное» плечо red↔green есть только в
-   отклонённом/незакоммиченном артефакте, или probe не исполняется против baseline), — это gap:
-   `planner` **переопределяет оракул** (или задача остаётся gap'ом), а не тащит его в DO как
-   «in-cycle prerequisite». Получаемость решающего probe **демонстрируется до фиксации плана**.
-12. **Повторный заход после терминального `incomplete`/STOP** не перезапускает провалившийся критерий
-   без изменений: прежняя терминальная причина — обязательный вход PLAN; `planner` либо показывает,
-   что доказательство теперь получаемо (новое evidence/починенный харнесс), либо переформулирует
-   критерий (переопределяет оракул).
+10. **Повторный заход после терминального `incomplete`/STOP** не перезапускает провалившийся критерий
+    без изменений: прежняя терминальная причина — обязательный вход PLAN; `planner` либо показывает,
+    что новые факты/evidence устранили терминальную причину. Это не разрешает менять supplied
+    criteria и не создаёт отдельного правила oracle для PLAN.
 
-Выход Plan: severity (🔴/🟡/ℹ️), `file:line`, one-line fix, применимый инвариант
-(1–12); split **fix now** vs **deferred с триггером** (deferred остаётся в текущем
-milestone, см. инвариант 8);
-lens-префикс (`[SRP]`/`[OCP]`/`[LSP]`/`[ISP]`/`[DIP]`/`[DRY]`/`[TYPE]`/`[PERF]`).
+### Вариантная матрица DO/CHECK (не PLAN)
 
-При изменении пути исполнения PLAN фиксирует **variant matrix** (оси: тип/`null`/отсутствующий ctor/
-проекция/провайдер/флаги; каждая строка — `тест` / `guard` / `deferred + триггер`) и план **branch**-дельты
-и **mutation**-тестинга. Контракт — `pdca-dotnet` §PLAN → «Test strategy»; проверка — в CHECK
-(см. «Краевые ветки и покрытие»).
-
-### Класс-приоритет nextorm (по умолчанию)
-
-Общий принцип «приоритет фиксирует PLAN, CHECK применяет его и не назначает заново» — в
-`pdca-dotnet` §PLAN («PLAN assigns priority»). Ниже — nextorm-классы и их обязательные строки
-(**P1 по построению**): CHECK закрывает каждую (тест / guard / `deferred + триггер`) либо объявляет
-находку. Для класса, которого в таблице нет, строки авторит PLAN. Таблица — не потолок:
-PLAN/CHECK вправе **добавлять** строки, но не удалять обязательные.
+При изменении code path DO строит матрицу по затронутым путям исполнения, а не только по тексту
+требований. Каждая применимая строка получает `тест` / `guard` / `deferred + триггер`. CHECK
+сверяет её с candidate и наблюдениями, добавляет пропущенные фактические варианты и сообщает о
+незакрытых строках. Это project-policy guide для исполнения/оценки, не новая PLAN-criteria set.
+Ниже — nextorm-классы и обязательные строки (**P1 по построению**); для других изменений DO
+определяет строки из фактического scope. Таблица не потолок: CHECK может добавить релевантные строки.
 
 | класс изменения | обязательные строки (P1 по построению) |
 |---|---|
 | стриминговый терминал | обе поверхности (`QueryCommand<TResult>` + `EntityBuilder<TEntity>`); sync **и** async; `CancellationToken` у async; `params`-паритет с сиблингами; fail-closed на неподдержанной форме; владение ресурсами (приёмник не закрывать/не `Dispose`; flush-семантика); покрытие провайдеров |
 | новая SQL-функция/оператор | паритет формы с SQL-сиблингом; capability-флаг по диалектам; тест на каждом провайдере; nullable-семантика |
 | изменение query-path / plan cache | cached-vs-prepared ratio (перф-приёмка); не мутировать shared `QueryCommand`; покрытие temp-table/TVP-веток |
+
+## DO: дизайн-проход для изменений кода
+
+Каждый DO, меняющий .NET/C# source (product или tests), выполняет scoped design pass. Он не расширяет
+критерии и не запускает полный репозиторный аудит.
+
+1. **Load the procedure.** До анализа загрузи `dotnet-csharp` и его always-load baseline, включая
+   `references/solid-principles.md`, а также `references/type-design-performance.md`. Загрузи
+   `analyzing-dotnet-performance` и topic references, выбранные его workflow по сигналам.
+   `references/` относятся к каталогу соответствующего skill. Если skill не зарегистрирован,
+   прочитай его `SKILL.md` и нужные references из установленного полного пакета
+   `~/.config/opencode/skills-deepseek/<skill>/`; недоступный обязательный skill/reference запиши
+   с точным именем и незавершённой частью как blocker, не называй отчёт полным.
+2. **Scope and order.** Рассмотри изменённый код и только затронутые execution paths/соседний контекст,
+   нужный для проверки контракта. Выполни последовательность: **SOLID/DRY design → type design →
+   performance recipes** из загруженных материалов.
+   - SOLID/DRY: SRP/OCP/LSP/ISP/DIP, god classes/fat interfaces, leaky contracts, switch-on-type,
+     дублированное знание и `IFoo` без второго consumer.
+   - Type design: sealing (с учётом инварианта ниже), mutable/defensive-copy structs, public
+     collection return types, `ValueTask`, `Span<T>` в async и per-call `Dictionary`/`List`.
+3. **Recipe evidence.** Для recipe set `analyzing-dotnet-performance` сохрани execution checklist:
+   каждый recipe имеет число hit'ов, включая явные нули; `N/A` допустим только с обоснованием по
+   scope. Не делай performance-выводов без измерения или очевидной аллокации на per-row пути; числа
+   и интерпретацию передавай профильному perf analyst.
+4. **Structural sealing.** Посчитай sealed/unsealed classes в явно названном scope, укажи оба числа,
+   denominator и ratio. Это не verdict по единственному экземпляру; если классов нет, объясни N/A.
+5. **Findings.** Для каждого finding укажи severity (🔴 Critical / 🟡 Moderate / ℹ️ Info) и lens
+   (`[SRP]`/`[OCP]`/`[LSP]`/`[ISP]`/`[DIP]`/`[DRY]`/`[TYPE]`/`[PERF]`), count, точный `file:line`,
+   one-line fix, применимый проектный инвариант и disposition: `fix now` в утверждённом scope либо
+    `deferred + trigger`/обоснованно неактуально. Используй severity/scale rules загруженных skills;
+    повышай severity на подтверждённых hot paths; findings сами по себе не меняют scope. Регистр смотри
+    on-demand — только относящуюся находку;
+   settled finding не открывай снова без нового evidence/измерения.
+6. **Fix and verify.** Исправления делай по одной связной оси за шаг. Проверяй каждый фикс по
+   применимому проектному build/test gate и сохраняй результат. Обновляй только соответствующий
+   регистр, если изменился status/evidence находки. Все оставшиеся findings и причины disposition
+   явно остаются в отчёте.
+7. **Candidate-bound report.** Сохрани `design-review.md` в текущем `evidence_root`, привязав его к
+   candidate согласно базовому evidence identity (не вводи отдельный hash gate). Включи scope/identity,
+   загруженные skills/references, полный recipe checklist, sealing ratio с denominator, findings,
+   фиксы и их verification, unresolved/deferred items и логи. После изменений кода обнови все
+   затронутые части анализа и отчёта. Для повторного CHECK того же неизменившегося candidate валидный
+   отчёт переиспользуется; новый CHECK всё равно оценивает его заново.
+
+Для DO без code changes design pass не нужен; каждый CHECK обязан явно записать обоснованный `N/A`
+по фактическому diff (см. CHECK ниже).
 
 ## DO: формирование гайдов (документация)
 
@@ -127,8 +167,9 @@ PLAN/CHECK вправе **добавлять** строки, но не удал�
 
 ## DO: применение фиксов (pdca-executor)
 
-Фиксы (из PLAN-ревью, из design/type/perf-линз или из CHECK loop-back) применяет `pdca-executor` по
-общему «Coder editing discipline» (`pdca-dotnet` §Delegation), с nextorm-конкретикой:
+Фиксы в пределах утверждённых критериев и scope (из DO design/type/perf-прохода или CHECK loop-back)
+применяет `pdca-executor` по общему «Coder editing discipline» (`pdca-dotnet` §Delegation), с
+nextorm-конкретикой:
 
 - **Одна ось за шаг**, затем сборка+тесты — не паковать несвязанные рефакторы.
 - **Сборка — гейт:** `dotnet build nextorm.slnx -c Debug` = `0 Warning(s) 0 Error(s)`
@@ -144,15 +185,46 @@ PLAN/CHECK вправе **добавлять** строки, но не удал�
 - **BDN-артефакты трекаются:** после бенчмарка вернуть `benchmarks/BenchmarkDotNet.Artifacts`.
 - **Без бенчмарк-выводов** (дельты <~20% — шум); числа — на perf-аналитика (через субагента).
 
-## CHECK: nextorm-аудит ⊇ общее ревью (nextorm-code-auditor + dotnet-code-review-agent)
+## CHECK: независимая оценка audit evidence
 
-Аудитор — суперсет: сначала общий ревью-проход, затем аудит smells/API. Оба такта
-идут в **Gather** (исполнительская модель + команды); судит сводку `check`
-(medium-tier, §CHECK контракта `pdca-dotnet`) в такте 2. Дифф режется по
-файлам/чанкам и ревьюится отдельно.
-Встраивание — это перенос **содержания**, а не понижение планки: проектные скиллы аудита
-(шаг 1) и измеримые счётчики/ratio (шаг 4) обязательны при любой модели `check` (см. ниже).
-Молча принимать «всё ОК» от слабого `check` запрещено.
+Каждый CHECK, включая recheck, явно оценивает design-review report для текущего candidate. CHECK
+не выполняет сам дизайн-проход: он получает inline применимые инструкции, report из `evidence_root`
+и независимые source observations, собранные driver через уже разрешённые роли. Авторский report —
+candidate evidence, не самосертификация; его выводы сверяются с наблюдениями и identity candidate.
+
+### Обязательная оценка design review на каждом CHECK
+
+CHECK возвращает все пункты:
+
+1. **Applicability и identity.** Есть ли code changes в scope; если да, относится ли `design-review.md`
+   к тому же candidate и охватывает ли изменённый код и affected paths. Если code changes нет, записать
+   обоснованный `N/A` по фактическому diff в этом CHECK.
+2. **Completeness.** Для применимого отчёта проверены ли три линзы в требуемом порядке, загрузка
+   обязательных skills/references, каждый recipe checklist item (включая нули/обоснованные N/A),
+   sealing ratio с scope и denominator, все findings с полями и disposition, а для fixes — актуальные
+   build/test evidence. Ни одно поле не считается выполненным только со слов автора.
+3. **Findings.** По каждому finding оценить связь с criteria и project invariants по независимым
+   source observations: действительный defect в candidate маршрутизировать CHECK → DO; report-only
+   улучшение вне утверждённого scope явно оставить unresolved/deferred с trigger. Не скрывать ни один
+   unresolved finding и не расширять scope/criteria.
+4. **Повторный CHECK.** При неизменившихся code inputs можно переиспользовать валидный report, но
+   текущий CHECK всё равно заново оценивает его применимость, полноту и findings. Любое изменение
+   затронутого кода после report делает затронутый анализ stale: driver запрашивает у executor его
+   refresh; это evidence re-gather, а не автоматический product defect/attempt.
+5. **Недостаток evidence.** Отсутствующий/неполный report, source observation или run сначала
+   помечается `unverified`; driver организует bounded re-gather через существующую разрешённую роль
+   (обычно executor для design report, scout для независимого наблюдения) и возвращает evidence на
+   CHECK. Отсутствие evidence само по себе не доказывает defect, но незавершённый/невалидный review
+   не может молча пройти или быть помечен PASS. Если mandatory evidence не получить, применяются
+   базовые recovery/STOP правила.
+
+CHECK не загружает skills, не читает product source, не запускает сканы и не создаёт субагентов.
+Driver доставляет все применимые инструкции inline; недостающее наблюдение/evidence получает через
+уже разрешённые роли. Права CHECK не расширяются.
+
+Design/audit evidence охватывает общее ревью и применимые smells/API findings; CHECK выносит
+независимое суждение medium-tier по §CHECK `pdca-dotnet`. Дифф и observation evidence организуются
+по файлам/чанкам; самостоятельное исполнение scan/review в CHECK не требуется.
 
 Общее ревью (из `dotnet-code-review-agent`), per-finding severity
 Critical/Warning/Suggestion + роутинг специалистам:
@@ -183,21 +255,29 @@ Critical/Warning/Suggestion + роутинг специалистам:
 
 Дополнительно к общему §CHECK:
 
-- **Скиллы аудита обязательны (шаг 1 §CHECK).** Грузятся: `dotnet-csharp-code-smells`,
-  `slopwatch`, `dotnet-api-surface-validation`, `api-design` (+ on-demand:
-  `dotnet-library-api-compat`, `dotnet-editorconfig`, `dotnet-add-analyzers`, `dotnet-api-docs`,
-  `dotnet-csharp-nullable-reference-types`). CHECK без загруженных профильных скиллов — незачётный.
-- **Счётчики обязательны (шаг 4 §CHECK).** Отчёт suppression/slop содержит числа
-  (suppressed vs justified) и ratio (напр. `0/6`, `12/15`), а не «пробежался». Суждение без
-  измеримого артефакта не принимается.
-- **Само-сертификация запрещена.** Если `check` в текущей конфигурации не на strong-модели,
-  CHECK не имеет права закрывать цикл «на слово»: незакрытая строка variant matrix, отсутствие
-  счётчиков/ratio или невыполненный шаг 1 — это **loop-back CHECK → PLAN/DO**, а не запись «done».
+- **Подготовка audit skills/scans — не работа CHECK.** Если scope требует smell/API audit, DO или
+  иной уже разрешённый gather загружает `dotnet-csharp` (baseline и `references/api-design.md`),
+  `dotnet-api` (`references/api-surface-validation.md`) и `dotnet-testing`
+  (`references/slopwatch.md`). По необходимости дополнительно загружает из соответствующего
+  skill `dotnet-api/references/library-api-compat.md`, `dotnet-api/references/api-docs.md`,
+  `dotnet-csharp/references/editorconfig.md`, `dotnet-csharp/references/nullable-reference-types.md`
+  и `dotnet-tooling/references/add-analyzers.md`. Незарегистрированный skill и его references
+  читаются из полного пакета по правилу DO выше; недоступное обязательное содержание фиксируется
+  как blocker, а не подменяется утверждением о выполнении. Gather готовит report/наблюдения;
+  CHECK получает инструкции inline и оценивает evidence, но не загружает skills и не сканирует source.
+- **Счётчики обязательны.** Report suppression/slop содержит числа (suppressed vs justified) и ratio
+  (напр. `0/6`, `12/15`), а не «пробежался». CHECK проверяет полноту этих чисел по supporting evidence;
+  оценка без измеримого артефакта не принимается.
+- **Самосертификация запрещена.** CHECK самостоятельно сличает report с candidate identity и
+  независимыми source observations. Незакрытая variant row, неполный report или отсутствие
+  счётчиков/ratio означают `unverified` и re-gather; действительный defect — CHECK → DO. Не принимать
+  вывод «всё ОК» только по авторскому отчёту.
 - **Автор ≠ заверитель регистра (nextorm).** Запись в `docs/specs/design/code-smells-review.md` /
-  `docs/specs/design/API-NAMING-REVIEW.md` делает `pdca-executor`, но **заверяет** её независимый
-  read-only поток CHECK: по каждому новому утверждению открывает указанный `file:line` и сверяет с
-  кодом; расхождение или само-переоценка (`deferred`/`acceptable` без опоры на код) — **находка**.
-  Общий принцип «non-author» — в `pdca-dotnet` §CHECK.
+  `docs/specs/design/API-NAMING-REVIEW.md` делает `pdca-executor`, но **заверяют** её независимые
+  source observations, переданные driver, и CHECK: по каждому новому утверждению сверяется указанный
+  `file:line` и доказательная опора; расхождение или само-переоценка (`deferred`/`acceptable` без
+  опоры) — **находка**. CHECK не открывает product source. Общий принцип «non-author» — в
+  `pdca-dotnet` §CHECK.
 - Не переоткрывать `Отмечено, но менять не рекомендуется` / `Исключения (по решению
   автора)` / «Чистые категории».
 - Optional-`null` референс: `TempTableExtensions.cs`
@@ -207,42 +287,97 @@ Critical/Warning/Suggestion + роутинг специалистам:
   (`dotnet_diagnostic.<ID>.severity`), `TreatWarningsAsErrors=true` → включённое
   правило валит сборку (gate: `dotnet build nextorm.slnx -c Release` = 0/0); inert
   Sonar `S*` без пакета `SonarAnalyzer` — мёртвые записи; `slopwatch` не установлен
-  локально (`.config/dotnet-tools.json` — coverage/reportgenerator/docfx/dotnet-stryker) —
-  либо поставь, либо скажи, что сканировал вручную; mutation testing — `dotnet-stryker`;
+  локально (`.config/dotnet-tools.json` — coverage/reportgenerator/docfx/dotnet-stryker): DO/gather
+  либо готовит скан установленным инструментом, либо явно фиксирует ручной scan и его scope; CHECK
+  оценивает evidence, но сам source не сканирует. Mutation testing — `dotnet-stryker`;
   public surface ещё не заперт (нет `PublicAPI.Shipped/Unshipped.txt`, ApiCompat,
   API-approval); baseline XML-doc и недокументированные public-типы — Appendix A
   `API-NAMING-REVIEW.md` (число берётся из реестра, не хардкодится); любой public
   rename доходит и до `docs/**`, и до `docs/ru/**`.
-- Границы: править только два регистра; renames/analyzer-policy — в Do; out of scope:
-  profiling (`nextorm-*-perf-analyst`), security, ASP.NET/HTTP, дизайн-рефакторинг
-  сверх smell-отчёта.
-- **Краевые ветки и покрытие (обязательно).** По диффу: есть ли **variant matrix** и закрыта ли
-  каждая строка (тест / guard / `deferred + триггер`); **CHECK дополняет** матрицу строками, которых
-  план не назвал, — по edge-списку **сиблинга** (готовые тесты существующего аналога,
-  напр. `ToStream`/`ToTextReader`/`ToList`) и по nextorm-классу (см. «Класс-приоритет nextorm»).
-  Отчитана **branch**-дельта (не только line); прогнан **mutation testing** (Stryker.NET) по
-  изменённым типам — выжившие мутанты убиты или обоснованы. Ветки без теста перечислить явно, не
-  маскировать строчным процентом. Общий контракт (PLAN авторит / CHECK дополняет / PASS-гейт /
-  итерации ≠ полнота) — `pdca-dotnet` §CHECK → «Test strategy». Ориентир-пример дыры: непокрытая
-  ветка value-type-сущности в #94 (dynamic columns).
+- **Границы CHECK.** CHECK не правит код или регистры. `pdca-executor` обновляет соответствующий
+  registry только когда изменился finding/status/evidence; smell/API-аудит остаётся в пределах двух
+  регистров выше. Renames/analyzer-policy и design fixes выполняются в DO, только если они входят в
+  утверждённый scope. Profiling и выводы о производительности маршрутизируются профильному
+  `nextorm-*-perf-analyst`; security и ASP.NET/HTTP — соответствующим специалистам.
+- **Краевые ветки и покрытие (обязательно).** DO готовит variant matrix по фактическому diff/path;
+  CHECK оценивает её через предоставленные observations, закрытие каждой строки (тест / guard /
+  `deferred + триггер`) и дополняет фактическими ветками, включая edge-список сиблинга (готовые тесты
+  существующего аналога, напр. `ToStream`/`ToTextReader`/`ToList`) и nextorm-класса (см. таблицу выше).
+  DO готовит **branch delta** (не только line) по изменённым файлам/типам с явным denominator и
+  применимое **mutation testing** (Stryker.NET) по изменённым типам; CHECK оценивает отчёты, выжившие
+  мутанты убиты или обоснованы. Ветки без теста перечислить явно, не маскировать строчным процентом.
+  Branch delta не заменяет project coverage gates ниже. Общий контракт (criteria/required evidence /
+  PASS-гейт / итерации ≠ полнота) — `pdca-dotnet` §CHECK → «Test strategy». Ориентир дыры:
+  непокрытая ветка value-type-сущности в #94 (dynamic columns).
+
+#### Coverage evidence lifecycle (nextorm)
+
+Это проектное уточнение к `pdca-coder` §Coverage evidence lifecycle и `pdca-dotnet` §Coverage
+comparison and report reuse; прочие правила identity, повторного сбора и безопасности остаются
+базовыми. При coverage-проверке передай CHECK этот подраздел и абзац «Связь `rv` и coverage-run»
+ниже **целиком и verbatim inline**; не направляй CHECK открывать installed overlay или `AGENTS.md`.
+
+- **Пороги и scope неизменны.** Whole-solution gate `coverage.settings.xml` по-прежнему охватывает
+  `nextorm.{core,sqlite,postgres,sqlserver}` и требует `MIN_LINE_COVERAGE=85` /
+  `MIN_BRANCH_COVERAGE=75`. Integration gate `coverage.integration.settings.xml` требует
+  `MIN_INTEGRATION_LINE_COVERAGE=65` / `MIN_INTEGRATION_BRANCH_COVERAGE=75` на полном union
+  `tests/nextorm.integration.tests` + `tests/nextorm.extensions.integration.tests` и настроенном
+  denominator для assemblies `nextorm.{core,sqlite,postgres,sqlserver,mysql,mariadb,clickhouse,entityframeworkcore,extensions}`;
+  исключение `NextORM.Core.InMemory*` сохраняется. Используй объявленные команды и фильтры без
+  изменений; обе проверки, как и прежде, hard-fail только на `main`. Branch delta не заменяет эти
+  gates; явно предписанная global coverage
+  campaign сохраняет свою команду и scope.
+- **Локальная дельта и baseline.** Обычный DO inner loop — затронутые тесты без instrumentation.
+  Обязательная branch delta — наблюдаемый результат для изменённых файлов/типов с указанным
+  denominator и сопоставимыми baseline/candidate; это локальная диагностика/атрибуция, не полный
+  gate. Исходники baseline и candidate обычно различаются. Переиспользуй baseline между `r`, `n` и
+  сессиями, пока его собственные inputs и basis сравнения сопоставимы; один лишь новый `r`, `n`,
+  session или `rv` не требует recollect. Когда coverage criterion/project gate применим, на границе
+  stream/DO→CHECK собирай полную обязательную coverage scope на coherent candidate только если
+  подходящего полного evidence нет или его валидность потеряна; CHECK может переиспользовать
+  соответствующие Cobertura и full logs.
+- **Integration union и отчёт.** Полное integration evidence включает оба raw Cobertura отчёта,
+  собранных по `coverage.integration.settings.xml`, с существующими denominator/exclusions; один
+  suite не закрывает gate. Храни raw reports неизменно; ReportGenerator запускай один раз после
+  готовности полного релевантного набора на candidate/configuration. Пока inputs/configuration
+  эквивалентны, переиспользуй raw reports и summary. При ошибке ReportGenerator исправь генерацию
+  и пересобери summary из валидных неизменённых raw reports — не recollect и не rebuild их. Изменение
+  только report/filter config также требует лишь новой summary, если collection inputs не изменились.
+- **Инвалидация и сбои.** Изменения product/tests/build/provider/runtime/tool/coverage config
+  инвалидируют только зависящие от них evidence; общий Core может влиять на несколько suite-отчётов,
+  поэтому разбиение по проектам само по себе не доказывает независимость unit/integration или двух
+  integration suites. Status/report-only правка не требует свежей сборки или collection. Сохраняй
+  каждый failed run; retry допустим как infrastructure только при подтверждающей диагностике и
+  доказанном восстановлении причины, пока evidence ещё нужен. Завершившийся assertion failure —
+  результат теста, не infrastructure (`pdca-coder` §Test run safety).
 
 ### Обязательный evidence contract
 
-**PLAN обязан закрепить контракт до DO:** применяются разделы «Versioned evidence contract»
-и «CHECK completeness gate — mandatory evidence contract» глобального скилла `pdca-dotnet`.
-Этот оверлей не вводит отдельную схему контракта.
+Executor готовит project evidence contract в DO из неизменённых критериев, применимой policy и
+base `evidence_root`; PLAN не выбирает его команды, evidence methods или artifact preparation.
+Схема и completeness rules наследуются из «Versioned evidence contract» и «CHECK completeness
+gate — mandatory evidence contract» глобального скилла `pdca-dotnet`; этот оверлей не вводит
+конкурирующую схему.
 
 **Frozen evidence manifest (nextorm).** Путь — базовый дефолт `pdca-dotnet` §«Versioned evidence
 contract» (`.pdca/<task>/rv<k>/manifest.json`, `<task>` — `D<issue>`/kebab-slug, `<k>` — ревизия
 контракта `rv`). `.pdca/` — фиксированный workspace-корень скилла (§«Skill workspace» базового
 `pdca`), nextorm его **не переопределяет** и не дублирует, а схему не копирует: она — там же.
 Валидируется in-repo `python3 .pdca/scripts/validate_inner_loop.py manifest <путь>` (покрытие
-`required_rows` + форма строк и evidence). Пишет его DO на границе DO→CHECK; CHECK открывает его
-первым и по каждой строке читает `path`.
+`required_rows` + форма строк и evidence). Пишет его DO на границе DO→CHECK; CHECK получает его
+как candidate evidence и оценивает строки по base procedure.
 
-**Локальный provenance-гейт (nextorm).** До того как CHECK прочитает манифест, обязателен прогон
+**Связь `rv` и coverage-run.** `rv<k>` — ревизия evidence-контракта, не номер запуска. Текущий
+manifest может ссылаться на прежний immutable receipt/run, если он относится к тому же frozen
+candidate и его существенные inputs/условия эквивалентны; одна новая `rv`, `r`, `n` или session не
+требует повторного запуска. Обязательная проверка `lint` по-прежнему привязывает candidate receipts
+к текущему frozen tree. Baseline хранит собственную provenance и comparison basis (его исходники
+обычно отличаются от candidate); не выдавай его за receipt текущего tree и не пересобирай только
+из-за новой ревизии manifest.
+
+**Локальный provenance-гейт (nextorm).** До handoff на CHECK executor выполняет
 `python3 .pdca/scripts/pdca_evidence.py lint --repo . --manifest .pdca/<task>/rv<k>/manifest.json`
-с rc 0: он пересчитывает frozen-tree тем же рецептом и требует
+и передаёт rc 0 плюс log как evidence: lint пересчитывает frozen-tree тем же рецептом и требует
 `manifest.tree == recomputed == tree/tree_binding каждого receipt` (включая невыбранные), ловит
 path-escape, дубли id и плейсхолдерные деревья. Гейт **принят в канонический контракт**
 `pdca-dotnet` (R234-03G закрыт): `scripts/pdca_evidence.py` вместе с harness/tests/fixtures — это
@@ -266,8 +401,9 @@ path-escape, дубли id и плейсхолдерные деревья. Ге�
 Строки проектной таблицы приоритетов классов — строки контракта с обязательными слотами
 и сохранёнными приоритетами. Безусловные проектные проверки нельзя снимать через N/A.
 
-**Недостающее evidence — не продуктовый дефект:** его дособирают внутри CHECK в пределах
-закреплённого бюджета, без итерации DO и без product FAIL только из-за отсутствия отчёта.
+**Недостающее evidence — не продуктовый дефект:** driver организует re-gather через уже разрешённые
+роли в пределах закреплённого бюджета, без product FAIL только из-за отсутствия отчёта. CHECK
+оценивает пополненное evidence; сама роль CHECK не запускает gather и не расширяет permissions.
 Доказанный дефект требует FAIL; новый обязательный вариант — обоснованного CHECK → PLAN
 с явным supersession ревизии контракта и сохранением обязательств.
 
@@ -306,10 +442,10 @@ dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=
   провал gate: зафиксировать измеренное время; критерий молча не менять.
 - Для несвязанных documentation-only циклов приёмка не требуется.
 - **Параметро-биндинг / TVP (per-row путь).** Если цикл трогает биндинг параметров
-  или TVP, PLAN обязан явно решить вопрос замера: либо прогон/бенчмарк, либо аргумент
-  с `file:line`, что изменение one-time/per-column, а не в цикле по строкам
-  (per-row циклы: `Project`/`BuildRows`/`WriteJson`/`ToTypedArray`). «Не нужен» без
-  аргумента — gate 1 не проходит; per-row работу без замера цикл не закрывает.
+  или TVP, DO явно решает вопрос замера: либо прогон/бенчмарк, либо аргумент с `file:line`,
+  что изменение one-time/per-column, а не в цикле по строкам (per-row циклы:
+  `Project`/`BuildRows`/`WriteJson`/`ToTypedArray`). CHECK оценивает это evidence; «не нужен» без
+  аргумента не принимается, а per-row работу без замера не закрывает.
 
 Выход: русский, H2/H3, `P0/P1/P2` или `Находка N` с `Было`/`Стало`/`Проверка`;
 вперёд — baseline сборки + suppression ratio; в конце — summary table и

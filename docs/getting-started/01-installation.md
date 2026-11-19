@@ -1,71 +1,72 @@
 # Installation
 
-> Add the `nextorm` core package plus one database-provider package to a `net10.0` or `net11.0` project, then use the [`NextORM.Core`](xref:NextORM.Core) types from code.
+Install NextORM and the database provider packages your application needs, then prepare to follow the [quickstart](02-quickstart.md). The quickstart uses SQLite. This page covers package installation; it doesn't configure a live database or teach query syntax.
 
-**Prerequisites:** A project targeting `net10.0` or `net11.0`.
+## Before you begin
 
-## Overview
-
-NextORM is split into a small, driver-free core package and one package per relational provider:
-
-* `nextorm` (assembly `nextorm.core`) contains the query builder and compiler, entity metadata, the
-  dependency-injection helpers, the plan cache **and the in-memory provider** ([`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext)). It
-  references `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Logging` and
-  `Microsoft.Extensions.ObjectPool`, but no database driver.
-* `nextorm.sqlite`, `nextorm.sqlserver`, `nextorm.postgres`, `nextorm.mysql`, `nextorm.mariadb` and
-  `nextorm.clickhouse` each add one concrete context
-  ([`SqliteDataContext`](xref:NextORM.Sqlite.SqliteDataContext), [`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext), [`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext), [`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext), [`MariaDbDataContext`](xref:NextORM.MariaDb.MariaDbDataContext),
-  [`ClickHouseDataContext`](xref:NextORM.ClickHouse.ClickHouseDataContext)) and a `Use…` registration extension.
-  The provider packages depend on `nextorm` transitively.
-* `nextorm.extensions` is an optional product package that adds the query-component operators
-  `SelectWhereMin` / `SelectWhereMax` and `SelectGroup` / `SelectGroupHaving` on top of the public
-  query-component layer. It references `nextorm.core` only, needs no provider package of its own and
-  works with every provider; see [Extensions package](../advanced/extensions-package.md).
-* `nextorm.entityframeworkcore` is an optional bridge package that runs nextorm queries and commands
-  over an existing EF Core `DbContext` connection and transaction, reusing the EF model mapping
-  (`db.CreateNextOrmContext()`); see [EF Core integration](../advanced/integration-efcore.md).
-
-1.0.9 is the first stable release, so the install commands below no longer need `--prerelease`.
-Preview builds (`1.0.10-a.x` and later) still do.
+- A project that targets `net10.0` or `net11.0`.
+- A terminal opened in the directory that contains the project file.
 
 ## Install the core package
+
+From that directory, add the core package:
 
 ```bash
 dotnet add package nextorm
 ```
 
-Then add exactly one provider package for the database you target:
+Add the provider package for the database you use. For the quickstart, use SQLite:
 
 ```bash
 dotnet add package nextorm.sqlite
-dotnet add package nextorm.sqlserver
-dotnet add package nextorm.postgres
-dotnet add package nextorm.mysql
-dotnet add package nextorm.mariadb
-dotnet add package nextorm.clickhouse
 ```
 
-The `nextorm.extensions` package is optional. Add it when you need the component-based
-`SelectWhereMin` / `SelectWhereMax` or the inferred-grouping `SelectGroup` / `SelectGroupHaving`; it
-works with any provider:
+To follow the quickstart, the project file must reference `nextorm` and `nextorm.sqlite`. For an
+application that uses other databases, add the corresponding provider package or packages. See the
+[package reference](#package-reference) for the supported provider IDs.
 
-```bash
-dotnet add package nextorm.extensions
-```
-
-The `nextorm.entityframeworkcore` package is optional as well — add it when an application already has
-an EF Core `DbContext` and you want nextorm queries over the same connection:
-
-```bash
-dotnet add package nextorm.entityframeworkcore
-```
-
-The Package Manager Console equivalent:
+If you use Visual Studio's Package Manager Console, select the application project and run:
 
 ```powershell
 Install-Package nextorm
 Install-Package nextorm.sqlite
 ```
+
+## Optional packages
+
+The core and provider packages are enough for the quickstart. Add `nextorm.extensions` only when you
+need its query-component operators:
+
+```bash
+dotnet add package nextorm.extensions
+```
+
+This package adds `SelectWhereMin` / `SelectWhereMax` and `SelectGroup` / `SelectGroupHaving`. It
+works with every provider; see [Extensions package](../advanced/extensions-package.md).
+
+If your application already uses an Entity Framework Core `DbContext` and you want NextORM to use the
+same connection and transaction, add the optional bridge:
+
+```bash
+dotnet add package nextorm.entityframeworkcore
+```
+
+See [EF Core integration](../advanced/integration-efcore.md) for details.
+
+## Overview
+
+NextORM separates its query engine from database drivers:
+
+* `nextorm` (assembly `nextorm.core`) contains the query builder and compiler, entity metadata,
+  dependency-injection helpers, the plan cache, and the in-memory provider
+  ([`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext)). It references
+  `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Logging`, and
+  `Microsoft.Extensions.ObjectPool`, but no database driver.
+* Each provider package adds a context and a `Use…` registration extension. Provider packages depend
+  on `nextorm` transitively.
+
+Version `1.0.9` is the first stable release, so the stable package commands don't need
+`--prerelease`. Preview builds (`1.0.10-a.x` and later) still do.
 
 ## Package reference
 
@@ -85,9 +86,18 @@ The in-memory provider lives in the core package, so it is available without ins
 
 ## Target framework
 
-The packages multi-target `net10.0` and `net11.0`, so NuGet resolves the asset that matches the
-consuming project, and enable implicit usings and nullable reference types. A
-`PackageReference` looks like this:
+The packages support `net10.0` and `net11.0`; NuGet selects the assembly that matches your project's
+target framework. The examples assume that implicit usings and nullable reference types are enabled.
+If your project doesn't already set these properties, add this property group to its `.csproj` file:
+
+```xml
+<PropertyGroup>
+  <ImplicitUsings>enable</ImplicitUsings>
+  <Nullable>enable</Nullable>
+</PropertyGroup>
+```
+
+A `PackageReference` looks like this:
 
 ```xml
 <ItemGroup>

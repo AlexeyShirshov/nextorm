@@ -1,0 +1,22 @@
+{
+  "reviewedBy": "primary assistant",
+  "count": 14,
+  "affectedFileCount": 8,
+  "note": "Manually confirmed truncated clauses or missing API-list entries. Raw double-backtick matches are not equivalent to defects; paired spans containing literal backticks are valid.",
+  "locations": [
+    {"path":"docs/advanced/api-reference.md","line":94,"fragment":"exposes `Item1`…``"},
+    {"path":"docs/advanced/api-reference.md","line":149,"fragment":"[`Streaming`](xref:NextORM.Core.PrepareFromSqlMode.Streaming), ``"},
+    {"path":"docs/advanced/api-reference.md","line":203,"fragment":"[`Asc`](xref:NextORM.Core.OrderDirection.Asc) / ``"},
+    {"path":"docs/ru/advanced/api-reference.md","line":91,"fragment":"предоставляет `Item1`…``"},
+    {"path":"docs/ru/advanced/api-reference.md","line":148,"fragment":"[`Streaming`](xref:NextORM.Core.PrepareFromSqlMode.Streaming), ``"},
+    {"path":"docs/ru/advanced/api-reference.md","line":201,"fragment":"[`Asc`](xref:NextORM.Core.OrderDirection.Asc) / ``"},
+    {"path":"docs/getting-started/04-dependency-injection.md","line":18,"fragment":"`` This is the path used with the provider `Use…` methods."},
+    {"path":"docs/ru/getting-started/04-dependency-injection.md","line":17,"fragment":"`` Это путь, используемый с методами `Use…` провайдеров."},
+    {"path":"docs/guide/05-grouping-and-aggregates.md","line":3,"fragment":"variants through ``"},
+    {"path":"docs/guide/05-grouping-and-aggregates.md","line":42,"fragment":"have no entity terminal and are used through ``"},
+    {"path":"docs/ru/guide/05-grouping-and-aggregates.md","line":3,"fragment":"варианты через ``"},
+    {"path":"docs/ru/guide/05-grouping-and-aggregates.md","line":44,"fragment":"нет терминала на сущности, и они используются через ``"},
+    {"path":"docs/guide/06-sorting-and-paging.md","line":432,"fragment":"whether or not the query already had a [`Limit`](xref:NextORM.Core.Paging.Limit)/``"},
+    {"path":"docs/ru/guide/06-sorting-and-paging.md","line":435,"fragment":"того, были ли уже у запроса [`Limit`](xref:NextORM.Core.Paging.Limit)/``"}
+  ]
+}

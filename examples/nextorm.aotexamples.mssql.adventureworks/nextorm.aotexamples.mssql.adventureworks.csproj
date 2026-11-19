@@ -24,7 +24,9 @@
     -->
   </PropertyGroup>
 
-  <ItemGroup>
+  <!-- Default: consume the published packages. Build with -p:NextormExamplesUseSource=true
+       to compile the same probe against the repository sources instead. -->
+  <ItemGroup Condition="'$(NextormExamplesUseSource)' != 'true'">
     <!--
       Published packages, like the PostgreSQL probe: the typed `Pivot` overload is part of the
       shipped `nextorm.sqlserver` surface since 1.0.9 (`PublicAPI.Shipped.txt` lists both overloads),
@@ -33,6 +35,17 @@
     <PackageReference Include="nextorm" />
     <PackageReference Include="nextorm.extensions" />
     <PackageReference Include="nextorm.sqlserver" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(NextormExamplesUseSource)' == 'true'">
+    <!-- The published package ships the join-alias generator as an analyzer; a project
+         reference does not, so the source arm references it explicitly. -->
+    <ProjectReference Include="..\..\src\nextorm.core.sourcegenerator\nextorm.core.sourcegenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.extensions\nextorm.extensions.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.sqlserver\nextorm.sqlserver.csproj" />
   </ItemGroup>
 
 </Project>

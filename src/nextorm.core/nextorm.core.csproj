@@ -75,6 +75,9 @@
     <!-- The integration suite exercises the key form (BuildEntityCommand/UpdateEntity/DeleteEntity) of
          the DML builders, which is internal; the filter scope of the key form is asserted end to end. -->
     <InternalsVisibleTo Include="nextorm.integration.tests" />
+    <!-- The NativeAOT benchmark switches the generated provider off for its baseline arm, so the same
+         binary can measure the expression path and the generated path. -->
+    <InternalsVisibleTo Include="nextorm.benchmark.aot" />
     <!-- The ClickHouse provider re-exposes the ClickHouse-only fluent members (Final/PreWhere/Settings/
          LimitBy/WithTotals/ArrayJoin*/Semi|Anti|PasteJoin, FromOptions.Sample, JoinOptions.Global)
          as public extension methods over the now-internal instance members. -->

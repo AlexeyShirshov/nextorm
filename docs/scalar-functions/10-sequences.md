@@ -1,15 +1,20 @@
 # Sequences and UUID generators
 
 Server-side value generators: sequences advance and read, and UUID generators mint unique
-identifiers. Neither has a single portable spelling, because the providers do not offer the same set
-of operations. For sequences, PostgreSQL, MariaDB and SQL Server are supported today.
+identifiers. Neither has a single portable spelling, because providers do not offer the same set of
+operations. For sequences, PostgreSQL, MariaDB, and SQL Server expose different subsets:
 
 | Operation | PostgreSQL | MariaDB | SQL Server |
 |---|---|---|---|
 | Next value | `SqlFunctions.Postgres.nextval(seq)` | `SqlFunctions.MySql.nextval(seq)` / `next_value_for(seq)` | `SqlFunctions.SqlServer.next_value_for(seq)` / `nextval(seq)` |
-| Set the next value | `SqlFunctions.Postgres.setval(seq, value)` | `SqlFunctions.MySql.setval(seq, value)` | — |
+| Set sequence value | `SqlFunctions.Postgres.setval(seq, value)` | `SqlFunctions.MySql.setval(seq, value)` | — |
 | Current value (session) | `SqlFunctions.Postgres.currval(seq)` | — | — |
 | Last value (session/connection) | `SqlFunctions.Postgres.lastval()` | `SqlFunctions.MySql.lastval(seq)` | — |
+
+`nextval` and `next_value_for` advance a sequence and return a value. `currval` and `lastval` read
+session- or connection-scoped state; they are not interchangeable across providers. `setval` changes
+sequence state rather than reading it. Check the provider section before relying on a value across
+queries, because a later query must use the same database session or connection where required.
 
 ## PostgreSQL
 
@@ -30,8 +35,11 @@ var next = dataContext.From<IComplexEntity>()
     .First();
 ```
 
-`currval` and `lastval` are **session-scoped**: they require the same connection that last advanced
-the sequence.
+`currval(sequence)` reads the value most recently returned by `nextval` for that sequence in the
+current session; `lastval()` reads the value most recently returned by `nextval` for any sequence in
+that session. Neither read advances a sequence. Both are **session-scoped** and rely on the same
+database connection that performed the relevant `nextval`; a later query is safe only if it uses that
+same connection.
 
 ## MariaDB
 
@@ -52,8 +60,9 @@ var rows = dataContext.From<IOrderEntity>()
 ```
 
 These names are MariaDB-only: MySQL, PostgreSQL, SQL Server, SQLite, ClickHouse and the in-memory
-context reject them with `NotSupportedException`. `lastval` reads the **connection's** last generated
-value.
+context reject them with `NotSupportedException`. `lastval(sequence)` reads the **connection's** last
+generated sequence value; it does not advance the sequence, so read it on the same database connection
+that generated the value.
 
 MariaDB sequence functions and their availability are listed in the
 [MariaDB catalogue](08-reference.md#mariadb-catalogue).
@@ -84,8 +93,7 @@ value. SQL Server has no session-scoped `currval`/`lastval` and no value-returni
 equivalent is the DDL `ALTER SEQUENCE ... RESTART WITH`), so only the next value is exposed. These
 names require a provider that reports them through
 [`ISqlDialect.SqlServerFunctions`](xref:NextORM.Core.ISqlDialect.SqlServerFunctions); every other
-provider rejects them. Tracked in
-[#218](https://github.com/AlexeyShirshov/nextorm/issues/218).
+provider rejects them.
 
 ## UUID generators
 

@@ -437,7 +437,7 @@ internal static class MemberTranslator
             return node;
         }
 
-        // #324: an outer-reference marker (`OuterRefMarker<T>(idx).Ref.Member`) is never a column of the
+        // #324: an outer-reference marker (`((T)OuterRefMarker(idx).Ref).Member`) is never a column of the
         // rendered source, even when the marker's `Ref` CLR type is the same entity as the source it is
         // rendered over (for example `Person` joined to `Person`). Resolving it first keeps the
         // entity-column branch below from claiming it and emitting a bare identifier that would silently
@@ -477,7 +477,7 @@ internal static class MemberTranslator
                 if (!visitor.IsParamMode)
                 {
                     var colName = ResolveRangeColumnsMember(visitor, node.Member)
-                        ?? node.Member.GetPropertyColumnName(visitor.Options.NamingConvention, visitor.EntityType);
+                        ?? node.Member.GetPropertyColumnName(visitor.Options, visitor.EntityType);
                     if (!string.IsNullOrEmpty(colName))
                     {
                         if (TryTranslateDerivedProjectionMember(visitor, node, hasTableAliasForColumn: false))
@@ -581,7 +581,7 @@ internal static class MemberTranslator
         }
         else if (node.Expression is NewExpression n)
         {
-            if (!visitor.IsParamMode && n.Type.IsGenericType && n.Type.GetGenericTypeDefinition() == typeof(OuterRefMarker<>) && n.Arguments is [ConstantExpression cexp] && cexp.Value is int idx)
+            if (!visitor.IsParamMode && n.Type == typeof(OuterRefMarker) && n.Arguments is [ConstantExpression cexp] && cexp.Value is int idx)
             {
                 var memberAccessExp = (MemberExpression)visitor.QueryProvider.OuterReferences![idx];
                 string? tableAliasForColumn = null;
@@ -601,7 +601,7 @@ internal static class MemberTranslator
                     tableAliasForColumn = AliasResolver.GetOuterAliasFromParam(visitor, (ParameterExpression)memberAccessExp.Expression!, false);
 
                 var colName = memberAccessExp.Member.GetPropertyColumnName(
-                    visitor.Options.NamingConvention,
+                    visitor.Options,
                     (memberAccessExp.Expression as ParameterExpression)?.Type);
                 if (!string.IsNullOrEmpty(colName))
                 {
@@ -677,7 +677,12 @@ internal static class MemberTranslator
                 twoTypeVisitor.Visit(node.Expression);
 
                 //if (node.Expression is ConstantExpression ce)
-                if (!twoTypeVisitor.Has1 && twoTypeVisitor.Has2)
+                // OuterRefMarker stores its slot index as an int constant. That is expression
+                // syntax, not a captured closure; compiling the whole member as a closure accessor
+                // dereferences the marker's null receiver during SQL rendering.
+                if (!twoTypeVisitor.Has1 && twoTypeVisitor.Has2
+                    && twoTypeVisitor.Target2!.Value is { } capturedOwner
+                    && !capturedOwner.GetType().IsValueType)
                 {
                     //var ce = twoTypeVisitor.Target2!;
                     // Note: expression caching is currently unconditional (the CacheExpressions flag is not wired).
@@ -1208,7 +1213,7 @@ internal static class MemberTranslator
 
     /// <summary>
     /// Translates a column of a join-projection outer reference
-    /// (<c>OuterRefMarker&lt;T&gt;(idx).Ref.Member</c>) into <c>alias.column</c>. The marker's
+    /// (<c>((T)OuterRefMarker(idx).Ref).Member</c>) into <c>alias.column</c>. The marker's
     /// <c>Ref</c> is only written when a row is materialized, so it cannot be evaluated while SQL is
     /// built; the accessed member supplies the column and the enclosing projection item (stored as the
     /// outer reference, for example <c>p.Item1</c>) supplies the table alias. The plain, non-projection
@@ -1217,16 +1222,25 @@ internal static class MemberTranslator
     /// </summary>
     private static bool TryTranslateProjectionOuterReference(BaseExpressionVisitor visitor, MemberExpression node)
     {
-        if (node.Expression is not MemberExpression
+        // The marker value is the non-generic `new OuterRefMarker(idx).Ref`; the element type is the
+        // conversion that wraps it, so the receiver is unwrapped first.
+        var receiver = node.Expression is null ? null : TypeFacts.UnwrapConvert(node.Expression);
+        if (receiver is not MemberExpression
             {
-                Member.Name: nameof(OuterRefMarker<int>.Ref),
-                Expression: NewExpression { Type: { IsGenericType: true } markerType } marker
+                Member.Name: nameof(OuterRefMarker.Ref),
+                Expression: NewExpression { Type: var markerType } marker
             }
-            || markerType.GetGenericTypeDefinition() != typeof(OuterRefMarker<>)
+            || markerType != typeof(OuterRefMarker)
             || marker.Arguments is not [ConstantExpression { Value: int idx }])
             return false;
 
-        var colName = node.Member.GetPropertyColumnName(visitor.Options.NamingConvention);
+        // The visitor entity is the inner query source, not necessarily the entity represented by
+        // this correlated outer member. Resolve scoped metadata against the outer member's declaring
+        // type; passing the inner type makes the metadata provider return no column and lets the
+        // marker's integer slot leak into parameter extraction.
+        var colName = visitor.Options.MappingVariant == MappingVariant.Default
+            ? node.Member.GetPropertyColumnName(visitor.Options.NamingConvention)
+            : node.Member.GetPropertyColumnName(visitor.Options, node.Member.DeclaringType);
         if (string.IsNullOrEmpty(colName))
             return false;
 

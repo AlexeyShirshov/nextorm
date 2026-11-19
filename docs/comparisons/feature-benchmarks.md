@@ -2,22 +2,24 @@
 
 **Snapshot:** 2026-10-17 · **Release:** 1.0.9-rc2 (branch `1.0.9-rc3`, HEAD `881bf497`) · **Provider:** SQLite
 
-A per-feature comparison that answers "how fast is this query shape, and what does it allocate" instead of
-"which library wins an end-to-end request". The [benchmarks](benchmarks.md) page measures whole scenarios and
-the prepared/compiled path; this page splits the query surface into tiers and compares every row per query,
-with Nextorm on its implicit plan cache only.
+This page compares the time and allocated memory for individual query shapes; it does not rank
+libraries by an end-to-end request. The [benchmarks](benchmarks.md) page measures whole scenarios
+and includes the explicit prepared path. Here, results are grouped into tiers and reported per
+query, with Nextorm using only its implicit plan cache.
 
 - **No prepared path.** Every Nextorm number comes from the implicit plan cache (`B_Nextorm_Cached_*`) or a
-  direct terminal (`WriteJson`/`WriteCsv`). No `Prepare()` / `A_*` Nextorm arm is used. The prepared path
-  is omitted on purpose: Nextorm leads it unconditionally, winning on every feature (Category A on the
-  [benchmarks](benchmarks.md) page), so the only contest left is the cached path this report covers.
+  direct terminal (`WriteJson`/`WriteCsv`). No `Prepare()` / `A_*` Nextorm arm is used. The separate
+  Category A results on the [benchmarks](benchmarks.md) page show Nextorm fastest on every listed
+  prepared feature; this report focuses on the implicit-cache path and compares it with the
+  competitors' regular APIs.
 - **One table per feature group.** Columns are the libraries; rows are scenarios. There is no Category A/B
   split inside a table.
-- **Per query.** Each cell is `mean time / allocated`. Category B methods execute 10 queries per invocation,
-  so their BenchmarkDotNet `Mean`/`Allocated` are divided by 10; Tier-1 methods execute one query per
-  invocation. Tier-5 cells are one query plus serialization of 10,000 rows.
-- **Marks.** `**time**` is the fastest time in the row; `**alloc**` is the smallest allocation; a fully bold
-  cell is both.
+- **Per query.** Each cell is `mean time / allocated memory` for one query. Category B methods
+  execute 10 queries per invocation, so their BenchmarkDotNet `Mean`/`Allocated` values are divided
+  by 10; Tier-1 methods execute one query per invocation. Tier-5 cells include one query plus
+  serialization of 10,000 rows.
+- **Marks.** `**time**` marks the fastest time in the row; `**alloc**` marks the smallest
+  allocation. A fully bold cell leads on both measures.
 - **Noise.** `ShortRun` + `InProcessEmitToolchain` is exploratory: treat differences below ~20 % as noise
   and read the full reports before drawing conclusions.
 
@@ -28,8 +30,9 @@ with Nextorm on its implicit plan cache only.
   the database lives on tmpfs.
 - **Nextorm:** implicit plan cache for the Category B–derived groups, and the cached Tier-1 arms
   (`B_Nextorm_Cached_*`, `B_Nextorm_ToDataReader`). No `Prepare()` and no compiled-query arm.
-- **Dapper:** raw SQL with its cached IL. Dapper has no prepared or compiled form, so its raw-SQL arm is
-  the only Dapper path and is used unchanged.
+- **Dapper:** raw SQL with its cached IL. Dapper has no separate prepared or compiled query arm in
+  this suite, so its raw-SQL arm is used
+  unchanged.
 - **linq2db and EF Core:** regular, non-compiled APIs (`B_Linq2Db_*`, `B_EFCore_*`). No
   `CompiledQuery`/`Compile()` arms.
 - **Missing arms:** EF Core has no equivalent in this suite for CTE, recursive CTE, window functions or the
@@ -131,34 +134,20 @@ above.
 
 ## Verdict
 
-Across the 22 like-for-like query rows, Nextorm is fastest on 9, Dapper on 12 and linq2db on 1; allocations
-lead on 5, 17 and 0 respectively. Dapper remains the warm-path baseline to beat. Nextorm's wins are
-concentrated in projection/streaming/aggregates, `SELECT DISTINCT`, `CASE WHEN` and `String.Contains`; the
-relational shapes, set operations and most scalar/expression rows still trail. On the two serialization
-rows, CSV is a Nextorm win on both metrics; JSON allocates least but is 1.10–1.13× behind on time. Both
-serialization rows compare a direct writer with materialize-then-serialize arms, so read them with that
-caveat.
+Across the 22 like-for-like query rows in this snapshot, Nextorm is fastest on 9, Dapper on 12, and
+linq2db on 1; the allocation lead goes to Nextorm on 5 rows, Dapper on 17, and linq2db on 0. Dapper
+is the warm-path baseline in these results. Nextorm's faster rows cluster around projection,
+streaming, aggregates, `SELECT DISTINCT`, `CASE WHEN`, and `String.Contains`; it trails on
+relational shapes, set operations, and most scalar/expression rows.
 
-This report intentionally says nothing about the prepared path: Nextorm leads it unconditionally, winning
-on every feature (Category A on the dated [benchmarks](benchmarks.md) page), so there is nothing to compare
-against competitors — they only get a contest on the cached path. It also does not measure startup or
-NativeAOT: the zero-config AOT reference and its JIT/AOT numbers are in the same
-[benchmarks](benchmarks.md) page.
+For the two serialization rows, Nextorm leads on both CSV measures; on JSON, it allocates least but
+takes 1.10–1.13× as long. Both compare a direct writer with materialize-then-serialize arms, so they
+are closest-equivalent comparisons rather than shared-terminal tests.
 
-## Optimization follow-ups
-
-The cases where this snapshot is behind linq2db are tracked in the rc3 milestone:
-[#243](https://github.com/AlexeyShirshov/nextorm/issues/243) (Count/Sum allocations),
-[#244](https://github.com/AlexeyShirshov/nextorm/issues/244) (CTE/recursive CTE allocations),
-[#245](https://github.com/AlexeyShirshov/nextorm/issues/245) (EXCEPT/INTERSECT allocations),
-[#246](https://github.com/AlexeyShirshov/nextorm/issues/246) (raw reader) and
-[#247](https://github.com/AlexeyShirshov/nextorm/issues/247) (JSON streaming).
-
-
-**T246 status (2026-10-17, rv2):** **GAP / incomplete — qualification exhausted, no qualified final result, empty
-arm unmeasured.** The canonical out-of-process oracle gives empty-arm allocation **7.86–7.94×**, not **2.31×**;
-2.31× is a historical in-process `ShortRun` figure from a different regime and the two are not comparable (no
-conversion factor between jobs). No PASS is claimed and no final ratios are published.
+This report does not compare the prepared path: the separate Category A results on the dated
+[benchmarks](benchmarks.md) page show Nextorm fastest on every listed feature. It also does not
+measure startup or NativeAOT; see the [benchmarks](benchmarks.md) page for the zero-config AOT
+reference and JIT/AOT numbers.
 
 ## Reproducing
 

@@ -1,4 +1,46 @@
 #nullable enable
+NextORM.Core.EntityBuilder<TEntity>.WithVariant(NextORM.Core.MappingVariant variant) -> NextORM.Core.EntityBuilder<TEntity>!
+NextORM.Core.EntityBuilder<TEntity>.WithShardKey(params object?[]! shardKeyValues) -> NextORM.Core.EntityBuilder<TEntity>!
+NextORM.Core.InsertBuilder<TEntity>.WithShardKey(params object?[]! shardKeyValues) -> NextORM.Core.InsertBuilder<TEntity>!
+NextORM.Core.EntityMetadataBuilder<T>.Schema(string! schema) -> NextORM.Core.EntityMetadataBuilder<T>!
+NextORM.Core.DataContextBuilder.EntityMetadataProvider.get -> NextORM.Core.IEntityMetadataProvider!
+NextORM.Core.DataContextBuilder.EntityVariantResolver.get -> NextORM.Core.IEntityVariantResolver!
+NextORM.Core.DataContextBuilder.UseEntityMetadataProvider(NextORM.Core.IEntityMetadataProvider! provider) -> NextORM.Core.DataContextBuilder!
+NextORM.Core.DataContextBuilder.UseVariantResolver(NextORM.Core.IEntityVariantResolver! resolver) -> NextORM.Core.DataContextBuilder!
+NextORM.Core.DefaultEntityVariantResolver
+NextORM.Core.DefaultEntityVariantResolver.DefaultEntityVariantResolver() -> void
+NextORM.Core.DefaultEntityVariantResolver.Resolve(System.Type! entityType) -> NextORM.Core.MappingVariant
+NextORM.Core.DefaultEntityVariantResolver.Resolve(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingVariant
+NextORM.Core.DefaultEntityVariantResolver.Resolve(System.Type! entityType, object! entity) -> NextORM.Core.MappingVariant
+NextORM.Core.DefaultEntityMetadataProvider
+NextORM.Core.DefaultEntityMetadataProvider.DefaultEntityMetadataProvider() -> void
+NextORM.Core.DefaultEntityMetadataProvider.GetColumnName(System.Reflection.PropertyInfo! property, in NextORM.Core.MappingVariant variant, NextORM.Core.INamingConvention? convention) -> string!
+NextORM.Core.DefaultEntityMetadataProvider.GetMetadata(System.Type! entityType, in NextORM.Core.MappingVariant variant) -> NextORM.Core.IEntityMetadata!
+NextORM.Core.IEntityMetadataProvider
+NextORM.Core.IEntityMetadataProvider.GetColumnName(System.Reflection.PropertyInfo! property, in NextORM.Core.MappingVariant variant, NextORM.Core.INamingConvention? convention) -> string!
+NextORM.Core.IEntityMetadataProvider.GetMetadata(System.Type! entityType, in NextORM.Core.MappingVariant variant) -> NextORM.Core.IEntityMetadata!
+NextORM.Core.IEntityMetadata.Schema.get -> string?
+NextORM.Core.IEntityVariantResolver
+NextORM.Core.IEntityVariantResolver.Resolve(System.Type! entityType) -> NextORM.Core.MappingVariant
+NextORM.Core.IEntityVariantResolver.Resolve(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingVariant
+NextORM.Core.IEntityVariantResolver.Resolve(System.Type! entityType, object! entity) -> NextORM.Core.MappingVariant
+NextORM.Core.MappingVariant
+NextORM.Core.MappingVariant.Equals(NextORM.Core.MappingVariant other) -> bool
+NextORM.Core.MappingVariant.Key.get -> string?
+NextORM.Core.MappingVariant.Key.init -> void
+NextORM.Core.MappingVariant.MappingVariant() -> void
+NextORM.Core.MappingVariant.MappingVariant(string? Key) -> void
+NextORM.Core.MappingVariant.ParameterPrefix.get -> string!
+NextORM.Core.MappingVariant.Deconstruct(out string? Key) -> void
+~override NextORM.Core.MappingVariant.Equals(object obj) -> bool
+~override NextORM.Core.MappingVariant.ToString() -> string
+override NextORM.Core.MappingVariant.GetHashCode() -> int
+static readonly NextORM.Core.MappingVariant.Default -> NextORM.Core.MappingVariant
+static NextORM.Core.MappingVariant.operator !=(NextORM.Core.MappingVariant left, NextORM.Core.MappingVariant right) -> bool
+static NextORM.Core.MappingVariant.operator ==(NextORM.Core.MappingVariant left, NextORM.Core.MappingVariant right) -> bool
+NextORM.Core.PrefixedParameterProvider
+NextORM.Core.PrefixedParameterProvider.GetParamName() -> string!
+NextORM.Core.PrefixedParameterProvider.PrefixedParameterProvider(NextORM.Core.IParameterProvider! inner, string! prefix) -> void
 NextORM.Core.PostgresFunctions.binary_quantize<T, TResult>(T value) -> TResult?
 NextORM.Core.PostgresFunctions.cosine_distance<T>(T left, T right) -> double?
 NextORM.Core.PostgresFunctions.hamming_distance<T>(T left, T right) -> double?
@@ -14,4 +56,356 @@ NextORM.Core.PostgresFunctions.vector_concat<T>(T left, T right) -> T
 NextORM.Core.PostgresFunctions.vector_dims<T>(T value) -> int?
 NextORM.Core.PostgresFunctions.vector_multiply<T>(T left, T right) -> T
 NextORM.Core.PostgresFunctions.vector_norm<T>(T value) -> double?
+NextORM.Core.MergeBuilder<TEntity>.WithVariant(NextORM.Core.MappingVariant variant) -> NextORM.Core.MergeBuilder<TEntity>!
 NextORM.Core.PostgresFunctions.vector_subtract<T>(T left, T right) -> T
+*REMOVED*NextORM.Core.OuterRefMarker<T>
+*REMOVED*NextORM.Core.OuterRefMarker<T>.I.get -> int
+*REMOVED*NextORM.Core.OuterRefMarker<T>.OuterRefMarker(int i) -> void
+*REMOVED*NextORM.Core.OuterRefMarker<T>.Ref.get -> T?
+*REMOVED*static NextORM.Core.ReplaceConstantsExpressionVisitor.GetOuterRefMarkerCI(System.Type! type) -> System.Reflection.ConstructorInfo!
+NextORM.Core.OuterReference
+static NextORM.Core.OuterReference.Create(NextORM.Core.IQueryRegistry! registry, System.Linq.Expressions.Expression! outerExpression) -> System.Linq.Expressions.Expression!
+NextORM.Core.AttributeShardKeyProvider
+NextORM.Core.AttributeShardKeyProvider.AttributeShardKeyProvider() -> void
+NextORM.Core.AttributeShardKeyProvider.GetShardKey(System.Type! entityType) -> System.Collections.Generic.IReadOnlyList<System.Reflection.PropertyInfo!>!
+NextORM.Core.AttributeShardKeyProvider.IsSharded(System.Type! entityType) -> bool
+NextORM.Core.BucketGroup<TEntity>
+NextORM.Core.BucketGroup<TEntity>.Bucket.get -> int
+NextORM.Core.BucketGroup<TEntity>.BucketGroup(int bucket, NextORM.Core.MappingVariant variant, System.Collections.Generic.IReadOnlyList<TEntity>! rows) -> void
+NextORM.Core.BucketGroup<TEntity>.Rows.get -> System.Collections.Generic.IReadOnlyList<TEntity>!
+NextORM.Core.BucketGroup<TEntity>.Variant.get -> NextORM.Core.MappingVariant
+NextORM.Core.ConsistentHashRing
+NextORM.Core.ConsistentHashRing.AddShard(string! shardId) -> void
+NextORM.Core.ConsistentHashRing.GetBucket(System.ReadOnlySpan<byte> key) -> int
+NextORM.Core.ConsistentHashRing.GetShard(int bucket) -> string!
+NextORM.Core.ConsistentHashRing.RemoveShard(string! shardId) -> void
+NextORM.Core.ConsistentHashRing.BucketCount.get -> int
+NextORM.Core.ConsistentHashRing.ShardIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+NextORM.Core.ConsistentHashRing.Version.get -> int
+NextORM.Core.IConsistentHashRing
+NextORM.Core.IConsistentHashRing.BucketCount.get -> int
+NextORM.Core.IConsistentHashRing.GetBucket(System.ReadOnlySpan<byte> key) -> int
+NextORM.Core.IConsistentHashRing.GetShard(int bucket) -> string!
+NextORM.Core.IConsistentHashRing.ShardIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+NextORM.Core.IConsistentHashRing.Version.get -> int
+NextORM.Core.IShardKeyProvider
+NextORM.Core.IShardKeyProvider.GetShardKey(System.Type! entityType) -> System.Collections.Generic.IReadOnlyList<System.Reflection.PropertyInfo!>!
+NextORM.Core.IShardKeyProvider.IsSharded(System.Type! entityType) -> bool
+NextORM.Core.IShardRouter
+NextORM.Core.IShardRouter.GetShardKey(System.Type! entityType) -> System.Collections.Generic.IReadOnlyList<System.Reflection.PropertyInfo!>!
+NextORM.Core.IShardRouter.IsSharded(System.Type! entityType) -> bool
+NextORM.Core.IShardRouter.ResolveShard(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingVariant
+NextORM.Core.IShardTopology
+NextORM.Core.IShardTopology.Ring.get -> NextORM.Core.IConsistentHashRing!
+NextORM.Core.IShardTopology.ShardIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+NextORM.Core.IShardTopology.Version.get -> int
+NextORM.Core.ShardDataContextBuilderExtensions
+NextORM.Core.ShardDataContextExtensions
+static NextORM.Core.ShardDataContextExtensions.GetShardRouter(this NextORM.Core.IDataContext! context) -> NextORM.Core.IShardRouter!
+static NextORM.Core.ShardDataContextExtensions.GroupByBucket<TEntity>(this NextORM.Core.IDataContext! context, System.Collections.Generic.IEnumerable<TEntity>! entities) -> System.Collections.Generic.IReadOnlyList<NextORM.Core.BucketGroup<TEntity>!>!
+static NextORM.Core.ShardDataContextExtensions.TryGetShardRouter(this NextORM.Core.IDataContext! context, out NextORM.Core.IShardRouter? router) -> bool
+static NextORM.Core.ShardDataContextBuilderExtensions.UseSharding(this NextORM.Core.DataContextBuilder! builder, NextORM.Core.IShardTopology! topology, NextORM.Core.IShardKeyProvider? keyProvider = null) -> NextORM.Core.DataContextBuilder!
+NextORM.Core.ShardEntityMetadataProvider
+NextORM.Core.ShardEntityMetadataProvider.GetColumnName(System.Reflection.PropertyInfo! property, in NextORM.Core.MappingVariant variant, NextORM.Core.INamingConvention? convention) -> string!
+NextORM.Core.ShardEntityMetadataProvider.GetMetadata(System.Type! entityType, in NextORM.Core.MappingVariant variant) -> NextORM.Core.IEntityMetadata!
+NextORM.Core.ShardEntityMetadataProvider.ShardEntityMetadataProvider(NextORM.Core.IEntityMetadataProvider! inner, NextORM.Core.IShardTopology! topology) -> void
+NextORM.Core.ShardKeyAttribute
+NextORM.Core.ShardKeyAttribute.PropertyNames.get -> System.Collections.Generic.IReadOnlyList<string!>!
+NextORM.Core.ShardKeyAttribute.ShardKeyAttribute(params string![]! propertyNames) -> void
+NextORM.Core.ShardKeyPredicateExtractor
+static NextORM.Core.ShardKeyPredicateExtractor.TryGetValues<T>(System.Linq.Expressions.Expression<System.Func<T, bool>!>! predicate, System.Collections.Generic.IReadOnlyList<System.Reflection.PropertyInfo!>! shardKey, out object?[]! values) -> bool
+NextORM.Core.ShardPlacement
+NextORM.Core.ShardPlacement.Deconstruct(out string? Schema, out string? TableName) -> void
+NextORM.Core.ShardPlacement.Equals(NextORM.Core.ShardPlacement other) -> bool
+NextORM.Core.ShardPlacement.Schema.get -> string?
+NextORM.Core.ShardPlacement.Schema.init -> void
+NextORM.Core.ShardPlacement.ShardPlacement() -> void
+NextORM.Core.ShardPlacement.ShardPlacement(string? Schema, string? TableName) -> void
+NextORM.Core.ShardPlacement.TableName.get -> string?
+NextORM.Core.ShardPlacement.TableName.init -> void
+override NextORM.Core.ShardPlacement.GetHashCode() -> int
+~override NextORM.Core.ShardPlacement.ToString() -> string
+~override NextORM.Core.ShardPlacement.Equals(object obj) -> bool
+static NextORM.Core.ShardPlacement.operator ==(NextORM.Core.ShardPlacement left, NextORM.Core.ShardPlacement right) -> bool
+static NextORM.Core.ShardPlacement.operator !=(NextORM.Core.ShardPlacement left, NextORM.Core.ShardPlacement right) -> bool
+NextORM.Core.ShardRouter
+NextORM.Core.ShardRouter.GetShardKey(System.Type! entityType) -> System.Collections.Generic.IReadOnlyList<System.Reflection.PropertyInfo!>!
+NextORM.Core.ShardRouter.GetBucket(System.Type! entityType, object! entity) -> int
+NextORM.Core.ShardRouter.GetBucket(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> int
+NextORM.Core.ShardRouter.GetScope(int bucket) -> NextORM.Core.MappingVariant
+NextORM.Core.ShardRouter.IsSharded(System.Type! entityType) -> bool
+NextORM.Core.ShardRouter.Resolve(System.Type! entityType) -> NextORM.Core.MappingVariant
+NextORM.Core.ShardRouter.Resolve(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingVariant
+NextORM.Core.ShardRouter.Resolve(System.Type! entityType, object! entity) -> NextORM.Core.MappingVariant
+NextORM.Core.ShardRouter.ResolveShard(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> NextORM.Core.MappingVariant
+NextORM.Core.ShardRouter.ShardRouter(NextORM.Core.IShardTopology! topology, NextORM.Core.IShardKeyProvider? keyProvider = null) -> void
+NextORM.Core.ShardRouterExtensions
+static NextORM.Core.ShardRouterExtensions.GetBucket<TEntity>(this NextORM.Core.IShardRouter! router, TEntity entity) -> int
+NextORM.Core.ShardTopology
+NextORM.Core.ShardTopology.RemoveShard(string! shardId) -> void
+NextORM.Core.ShardTopology.Ring.get -> NextORM.Core.IConsistentHashRing!
+NextORM.Core.ShardTopology.ShardIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+NextORM.Core.ShardTopology.Version.get -> int
+NextORM.Core.IShardRouter.ShardIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+NextORM.Core.ShardQuery<TEntity, TResult>
+NextORM.Core.ShardQuery<TEntity, TResult>.Where(System.Linq.Expressions.Expression<System.Func<TEntity, bool>!>! predicate) -> NextORM.Core.ShardQuery<TEntity, TResult>!
+NextORM.Core.ShardQuery<TEntity>
+NextORM.Core.ShardQuery<TEntity>.Distinct() -> NextORM.Core.ShardQuery<TEntity>!
+NextORM.Core.ShardQuery<TEntity>.Select<TResult>(System.Linq.Expressions.Expression<System.Func<TEntity, TResult>!>! selector) -> NextORM.Core.ShardQuery<TEntity, TResult>!
+NextORM.Core.ShardQuery<TEntity>.Where(System.Linq.Expressions.Expression<System.Func<TEntity, bool>!>! predicate) -> NextORM.Core.ShardQuery<TEntity>!
+NextORM.Core.ShardRouter.ShardIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+NextORM.Core.BucketHash
+NextORM.Core.ConsistentHashRing.ConsistentHashRing(System.Collections.Generic.IEnumerable<string!>! shardIds, int bucketCount, NextORM.Core.BucketHash? bucketHash = null, NextORM.Core.ShardHash? shardHash = null) -> void
+NextORM.Core.ShardHash
+virtual NextORM.Core.BucketHash.Invoke(System.ReadOnlySpan<byte> key, int bucketCount) -> int
+virtual NextORM.Core.ShardHash.Invoke(int bucket, string! shardId) -> ulong
+NextORM.Core.BucketPlacementMode
+NextORM.Core.BucketPlacementMode.SchemaPerBucket = 0 -> NextORM.Core.BucketPlacementMode
+NextORM.Core.BucketPlacementMode.TableSuffix = 1 -> NextORM.Core.BucketPlacementMode
+NextORM.Core.IShardTopology.GetConnectionString(string! shardId) -> string!
+NextORM.Core.IShardTopology.PlacementMode.get -> NextORM.Core.BucketPlacementMode
+NextORM.Core.ShardTopology.AddShard(string! shardId, string! connectionString) -> void
+NextORM.Core.ShardTopology.GetConnectionString(string! shardId) -> string!
+NextORM.Core.ShardTopology.PlacementMode.get -> NextORM.Core.BucketPlacementMode
+NextORM.Core.ShardTopology.ShardTopology(int bucketCount, NextORM.Core.BucketPlacementMode placementMode = NextORM.Core.BucketPlacementMode.SchemaPerBucket) -> void
+NextORM.Core.IShardRouter.BucketCount.get -> int
+NextORM.Core.IShardRouter.GetBucket(System.Type! entityType, object! entity) -> int
+NextORM.Core.IShardRouter.GetBucket(System.Type! entityType, System.Collections.Generic.IReadOnlyList<object?>! keyValues) -> int
+NextORM.Core.IShardRouter.GetScope(int bucket) -> NextORM.Core.MappingVariant
+NextORM.Core.IShardRouter.GetShard(int bucket) -> string!
+NextORM.Core.ShardRouter.BucketCount.get -> int
+NextORM.Core.ShardRouter.GetShard(int bucket) -> string!
+NextORM.Core.PreparedQueryCommand<TResult, TRecord>.MappingVariant.get -> NextORM.Core.MappingVariant
+NextORM.Core.EntityBuilder<TEntity>.AcrossBuckets(int? parallelism = null) -> NextORM.Core.ShardQuery<TEntity>!
+NextORM.Core.ShardQuery<TEntity, TResult>.Any() -> bool[]!
+NextORM.Core.ShardQuery<TEntity, TResult>.AsAsyncEnumerable(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<TResult[]!>!
+NextORM.Core.ShardQuery<TEntity, TResult>.Count() -> int[]!
+NextORM.Core.ShardQuery<TEntity, TResult>.ToArray() -> TResult[]![]!
+NextORM.Core.ShardQuery<TEntity, TResult>.ToArrayAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TResult[]![]!>!
+NextORM.Core.ShardQuery<TEntity, TResult>.ToList() -> System.Collections.Generic.List<TResult>![]!
+NextORM.Core.ShardQuery<TEntity, TResult>.ToListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<TResult>![]!>!
+NextORM.Core.ShardQuery<TEntity>.Any() -> bool[]!
+NextORM.Core.ShardQuery<TEntity>.AsAsyncEnumerable(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<TEntity[]!>!
+NextORM.Core.ShardQuery<TEntity>.Buckets.get -> System.Collections.Generic.IReadOnlyList<int>!
+NextORM.Core.ShardQuery<TEntity>.Count() -> int[]!
+NextORM.Core.ShardQuery<TEntity>.First() -> TEntity[]!
+NextORM.Core.ShardQuery<TEntity>.OrderBy(System.Linq.Expressions.Expression<System.Func<TEntity, object?>!>! keySelector) -> NextORM.Core.ShardQuery<TEntity>!
+NextORM.Core.ShardQuery<TEntity>.Single() -> TEntity[]!
+NextORM.Core.ShardQuery<TEntity>.ToArray() -> TEntity[]![]!
+NextORM.Core.ShardQuery<TEntity>.ToArrayAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TEntity[]![]!>!
+NextORM.Core.ShardQuery<TEntity>.ToList() -> System.Collections.Generic.List<TEntity>![]!
+NextORM.Core.ShardQuery<TEntity>.ToListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<TEntity>![]!>!
+NextORM.Core.IVectorValue
+NextORM.Core.IVectorValue.Dimensions.get -> int
+NextORM.Core.Vector
+NextORM.Core.Vector.Vector(System.Collections.Generic.IEnumerable<float>! coordinates) -> void
+NextORM.Core.Vector.Dimensions.get -> int
+NextORM.Core.Vector.this[int index].get -> float
+NextORM.Core.Vector.ToArray() -> float[]!
+NextORM.Core.Vector.Equals(NextORM.Core.Vector? other) -> bool
+override NextORM.Core.Vector.Equals(object? obj) -> bool
+override NextORM.Core.Vector.GetHashCode() -> int
+static NextORM.Core.Vector.operator ==(NextORM.Core.Vector? left, NextORM.Core.Vector? right) -> bool
+static NextORM.Core.Vector.operator !=(NextORM.Core.Vector? left, NextORM.Core.Vector? right) -> bool
+override NextORM.Core.Vector.ToString() -> string!
+static NextORM.Core.Vector.Parse(string! text) -> NextORM.Core.Vector!
+NextORM.Core.VectorDistanceMetric
+NextORM.Core.VectorDistanceMetric.Cosine = 0 -> NextORM.Core.VectorDistanceMetric
+NextORM.Core.VectorDistanceMetric.Euclidean = 1 -> NextORM.Core.VectorDistanceMetric
+NextORM.Core.VectorDistanceMetric.DotProduct = 2 -> NextORM.Core.VectorDistanceMetric
+NextORM.Core.VectorSearchMode
+NextORM.Core.VectorSearchMode.Exact = 0 -> NextORM.Core.VectorSearchMode
+NextORM.Core.VectorSearchMode.Approximate = 1 -> NextORM.Core.VectorSearchMode
+NextORM.Core.VectorSearchResult<TEntity>
+NextORM.Core.VectorSearchResult<TEntity>.VectorSearchResult(TEntity entity, double? distance) -> void
+NextORM.Core.VectorSearchResult<TEntity>.Entity.get -> TEntity
+NextORM.Core.VectorSearchResult<TEntity>.Distance.get -> double?
+static NextORM.Core.SqlFunctions.VectorDistance<TVector>(TVector left, TVector right, NextORM.Core.VectorDistanceMetric metric) -> double?
+NextORM.Core.ISqlDialect.SupportsVectorSearch.get -> bool
+NextORM.Core.ISqlDialect.MakeApproximateTop(string! limitSql, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+NextORM.Core.ISqlDialect.ApproximateVectorSearchTopNArgumentName.get -> string?
+virtual NextORM.Core.SqlDialectBase.SupportsVectorSearch.get -> bool
+virtual NextORM.Core.SqlDialectBase.MakeApproximateTop(string! limitSql, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+virtual NextORM.Core.SqlDialectBase.ApproximateVectorSearchTopNArgumentName.get -> string?
+NextORM.Core.EntityBuilder<TEntity>.VectorSearch<TVector>(System.Linq.Expressions.Expression<System.Func<TEntity, TVector>!>! vectorSelector, TVector queryVector, NextORM.Core.VectorDistanceMetric metric, int topK, NextORM.Core.VectorSearchMode mode = NextORM.Core.VectorSearchMode.Exact) -> NextORM.Core.QueryCommand<NextORM.Core.VectorSearchResult<TEntity>!>!
+NextORM.Core.IRowMaterializerProvider
+NextORM.Core.IRowMaterializerProvider.TryCreate(System.Type! resultType, System.ReadOnlySpan<NextORM.Core.RowMaterializerColumn> columns) -> System.Delegate?
+NextORM.Core.RowMaterializerColumn
+NextORM.Core.RowMaterializerColumn.Name.get -> string?
+NextORM.Core.RowMaterializerColumn.Nullable.get -> bool
+NextORM.Core.RowMaterializerColumn.Ordinal.get -> int
+NextORM.Core.RowMaterializerColumn.RowMaterializerColumn() -> void
+NextORM.Core.RowMaterializerColumn.RowMaterializerColumn(int ordinal, string? name, System.Type! type, bool nullable) -> void
+NextORM.Core.RowMaterializerColumn.Type.get -> System.Type!
+NextORM.Core.RowMaterializerRegistry
+static NextORM.Core.RowMaterializerRegistry.Register(NextORM.Core.IRowMaterializerProvider! provider) -> void
+NextORM.Core.RowMaterializerAttribute
+NextORM.Core.RowMaterializerAttribute.RowMaterializerAttribute() -> void
+NextORM.Core.CommandKind
+NextORM.Core.CommandKind.Read = 0 -> NextORM.Core.CommandKind
+NextORM.Core.CommandKind.Write = 1 -> NextORM.Core.CommandKind
+NextORM.Core.DataContextBuilder.AddTopology(NextORM.Core.IHostTopology! topology) -> NextORM.Core.DataContextBuilder!
+NextORM.Core.DataContextBuilder.RouteAssembly(System.Reflection.Assembly! assembly, string! topology) -> NextORM.Core.DataContextBuilder!
+NextORM.Core.DataContextBuilder.RouteNamespace(string! namespacePrefix, string! topology) -> NextORM.Core.DataContextBuilder!
+NextORM.Core.DataContextBuilder.UseRouteResolver(NextORM.Core.IEntityRouteResolver! resolver) -> NextORM.Core.DataContextBuilder!
+NextORM.Core.DataRoutingBuilder
+NextORM.Core.DataRoutingBuilder.AddTopology(NextORM.Core.IHostTopology! topology) -> NextORM.Core.DataRoutingBuilder!
+NextORM.Core.DataRoutingBuilder.RouteAssembly(System.Reflection.Assembly! assembly, string! topology) -> NextORM.Core.DataRoutingBuilder!
+NextORM.Core.DataRoutingBuilder.RouteNamespace(string! namespacePrefix, string! topology) -> NextORM.Core.DataRoutingBuilder!
+NextORM.Core.DataRoutingBuilder.UseResolver(NextORM.Core.IEntityRouteResolver! resolver) -> NextORM.Core.DataRoutingBuilder!
+NextORM.Core.DataRoutingBuilderExtensions
+NextORM.Core.HostTarget
+NextORM.Core.HostTarget.ConnectionString.get -> string!
+NextORM.Core.HostTarget.ConnectionString.init -> void
+NextORM.Core.HostTarget.Deconstruct(out string! Id, out string! ConnectionString) -> void
+NextORM.Core.HostTarget.Equals(NextORM.Core.HostTarget other) -> bool
+NextORM.Core.HostTarget.HostTarget() -> void
+NextORM.Core.HostTarget.HostTarget(string! Id, string! ConnectionString) -> void
+NextORM.Core.HostTarget.Id.get -> string!
+NextORM.Core.HostTarget.Id.init -> void
+NextORM.Core.IEntityRouteResolver
+NextORM.Core.IEntityRouteResolver.TryResolve(System.Type! entityType, in NextORM.Core.MappingVariant variant, out NextORM.Core.RouteTarget target) -> bool
+NextORM.Core.IHostTopology
+NextORM.Core.IHostTopology.Name.get -> string!
+NextORM.Core.IHostTopology.TryGetHost(in NextORM.Core.TopologyContext context, out NextORM.Core.HostTarget host) -> bool
+NextORM.Core.RouteTarget
+NextORM.Core.RouteTarget.Deconstruct(out string! Topology) -> void
+NextORM.Core.RouteTarget.Equals(NextORM.Core.RouteTarget other) -> bool
+NextORM.Core.RouteTarget.RouteTarget() -> void
+NextORM.Core.RouteTarget.RouteTarget(string! Topology) -> void
+NextORM.Core.RouteTarget.Topology.get -> string!
+NextORM.Core.RouteTarget.Topology.init -> void
+NextORM.Core.RouteToAttribute
+NextORM.Core.RouteToAttribute.RouteToAttribute(string! topology) -> void
+NextORM.Core.RouteToAttribute.Topology.get -> string!
+NextORM.Core.ShardTopology.Name.get -> string!
+NextORM.Core.ShardTopology.TryGetHost(in NextORM.Core.TopologyContext context, out NextORM.Core.HostTarget host) -> bool
+NextORM.Core.TopologyContext
+NextORM.Core.TopologyContext.Kind.get -> NextORM.Core.CommandKind
+NextORM.Core.TopologyContext.Variant.get -> NextORM.Core.MappingVariant
+NextORM.Core.TopologyContext.TopologyContext() -> void
+override NextORM.Core.HostTarget.GetHashCode() -> int
+override NextORM.Core.RouteTarget.GetHashCode() -> int
+static NextORM.Core.DataRoutingBuilderExtensions.UseDataRouting(this NextORM.Core.DataContextBuilder! builder, System.Action<NextORM.Core.DataRoutingBuilder!>? configure = null) -> NextORM.Core.DataContextBuilder!
+static NextORM.Core.HostTarget.operator !=(NextORM.Core.HostTarget left, NextORM.Core.HostTarget right) -> bool
+static NextORM.Core.HostTarget.operator ==(NextORM.Core.HostTarget left, NextORM.Core.HostTarget right) -> bool
+static NextORM.Core.RouteTarget.operator !=(NextORM.Core.RouteTarget left, NextORM.Core.RouteTarget right) -> bool
+static NextORM.Core.RouteTarget.operator ==(NextORM.Core.RouteTarget left, NextORM.Core.RouteTarget right) -> bool
+~override NextORM.Core.HostTarget.Equals(object obj) -> bool
+~override NextORM.Core.HostTarget.ToString() -> string
+~override NextORM.Core.RouteTarget.Equals(object obj) -> bool
+~override NextORM.Core.RouteTarget.ToString() -> string
+NextORM.Core.DataContext.PinHost(string! topology, string! hostId) -> NextORM.Core.HostPin!
+NextORM.Core.DataContext.UnpinHost(string! topology) -> NextORM.Core.DataContext!
+NextORM.Core.IRoutedTransactionManager
+NextORM.Core.IRoutedTransactionManager.CurrentTransaction(NextORM.Core.RouteTarget target) -> System.Data.Common.DbTransaction?
+NextORM.Core.RoundRobinTopology
+NextORM.Core.RoundRobinTopology.Hosts.get -> System.Collections.Generic.IReadOnlyList<NextORM.Core.HostTarget>!
+NextORM.Core.RoundRobinTopology.Name.get -> string!
+NextORM.Core.RoundRobinTopology.RoundRobinTopology(string! name, System.Collections.Generic.IEnumerable<NextORM.Core.HostTarget>! hosts) -> void
+NextORM.Core.RoundRobinTopology.RoundRobinTopology(string! name, params string![]! connectionStrings) -> void
+NextORM.Core.RoundRobinTopology.TryGetHost(in NextORM.Core.TopologyContext context, out NextORM.Core.HostTarget host) -> bool
+NextORM.Core.RoutedTransactionExtensions
+NextORM.Core.TopologyContext.HostId.get -> string?
+NextORM.Core.TopologyContext.TopologyContext(NextORM.Core.MappingVariant variant, NextORM.Core.CommandKind kind, string? hostId = null) -> void
+static NextORM.Core.RoutedTransactionExtensions.GetCurrentTransaction(this NextORM.Core.DataContext! context, NextORM.Core.RouteTarget target) -> System.Data.Common.DbTransaction?
+NextORM.Core.IRoutedTransactionManager.BeginTransaction(NextORM.Core.RouteTarget target, NextORM.Core.MappingVariant variant = default(NextORM.Core.MappingVariant), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified) -> System.Data.Common.DbTransaction!
+NextORM.Core.IRoutedTransactionManager.BeginTransactionAsync(NextORM.Core.RouteTarget target, NextORM.Core.MappingVariant variant = default(NextORM.Core.MappingVariant), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Data.Common.DbTransaction!>!
+static NextORM.Core.RoutedTransactionExtensions.BeginTransaction(this NextORM.Core.DataContext! context, NextORM.Core.RouteTarget target, NextORM.Core.MappingVariant variant = default(NextORM.Core.MappingVariant), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified) -> System.Data.Common.DbTransaction!
+static NextORM.Core.RoutedTransactionExtensions.BeginTransactionAsync(this NextORM.Core.DataContext! context, NextORM.Core.RouteTarget target, NextORM.Core.MappingVariant variant = default(NextORM.Core.MappingVariant), System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.Unspecified, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Data.Common.DbTransaction!>!
+NextORM.Core.DataContextBuilder.DefaultTopologyName.get -> string?
+NextORM.Core.DataContextBuilder.UseDefaultTopology(string! topologyName) -> NextORM.Core.DataContextBuilder!
+NextORM.Core.DataRoutingBuilder.UseDefaultTopology(string! topologyName) -> NextORM.Core.DataRoutingBuilder!
+NextORM.Core.DataRoutingBuilder.UseDefaultTopology(string! topologyName, string! connectionString) -> NextORM.Core.DataRoutingBuilder!
+
+NextORM.Core.HostPin
+NextORM.Core.HostPin.Dispose() -> void
+NextORM.Core.HostPin.HostId.get -> string!
+NextORM.Core.HostPin.Topology.get -> string!
+NextORM.Core.DataContext.GetPhysicalTableName<TEntity>(NextORM.Core.MappingVariant variant = default(NextORM.Core.MappingVariant)) -> NextORM.Core.PhysicalTableName
+NextORM.Core.PhysicalTableName
+NextORM.Core.PhysicalTableName.Deconstruct(out string? Schema, out string! TableName) -> void
+NextORM.Core.PhysicalTableName.Equals(NextORM.Core.PhysicalTableName other) -> bool
+NextORM.Core.PhysicalTableName.PhysicalTableName() -> void
+NextORM.Core.PhysicalTableName.PhysicalTableName(string? Schema, string! TableName) -> void
+NextORM.Core.PhysicalTableName.QualifiedName.get -> string!
+NextORM.Core.PhysicalTableName.Schema.get -> string?
+NextORM.Core.PhysicalTableName.Schema.init -> void
+NextORM.Core.PhysicalTableName.TableName.get -> string!
+NextORM.Core.PhysicalTableName.TableName.init -> void
+override NextORM.Core.PhysicalTableName.GetHashCode() -> int
+override NextORM.Core.PhysicalTableName.ToString() -> string!
+static NextORM.Core.PhysicalTableName.operator !=(NextORM.Core.PhysicalTableName left, NextORM.Core.PhysicalTableName right) -> bool
+static NextORM.Core.PhysicalTableName.operator ==(NextORM.Core.PhysicalTableName left, NextORM.Core.PhysicalTableName right) -> bool
+~override NextORM.Core.PhysicalTableName.Equals(object obj) -> bool
+NextORM.Core.EntityMetadataDescriptor
+NextORM.Core.EntityMetadataDescriptor.Build() -> NextORM.Core.IEntityMetadata!
+NextORM.Core.EntityMetadataDescriptor.EntityMetadataDescriptor() -> void
+NextORM.Core.EntityMetadataDescriptor.IsTableNameAuto.get -> bool
+NextORM.Core.EntityMetadataDescriptor.IsTableNameAuto.init -> void
+NextORM.Core.EntityMetadataDescriptor.Properties.get -> System.Collections.Generic.IReadOnlyList<NextORM.Core.EntityPropertyDescriptor!>!
+NextORM.Core.EntityMetadataDescriptor.Properties.init -> void
+NextORM.Core.EntityMetadataDescriptor.Schema.get -> string?
+NextORM.Core.EntityMetadataDescriptor.Schema.init -> void
+NextORM.Core.EntityMetadataDescriptor.TableName.get -> string?
+NextORM.Core.EntityMetadataDescriptor.TableName.init -> void
+NextORM.Core.EntityMetadataDescriptor.TypeName.get -> string!
+NextORM.Core.EntityMetadataDescriptor.TypeName.init -> void
+NextORM.Core.EntityPropertyDescriptor
+NextORM.Core.EntityPropertyDescriptor.ColumnName.get -> string!
+NextORM.Core.EntityPropertyDescriptor.ColumnName.init -> void
+NextORM.Core.EntityPropertyDescriptor.EntityPropertyDescriptor() -> void
+NextORM.Core.EntityPropertyDescriptor.IsColumnNameAuto.get -> bool
+NextORM.Core.EntityPropertyDescriptor.IsColumnNameAuto.init -> void
+NextORM.Core.EntityPropertyDescriptor.IsComputed.get -> bool
+NextORM.Core.EntityPropertyDescriptor.IsComputed.init -> void
+NextORM.Core.EntityPropertyDescriptor.IsIdentity.get -> bool
+NextORM.Core.EntityPropertyDescriptor.IsIdentity.init -> void
+NextORM.Core.EntityPropertyDescriptor.IsKey.get -> bool
+NextORM.Core.EntityPropertyDescriptor.IsKey.init -> void
+NextORM.Core.EntityPropertyDescriptor.Property.get -> System.Reflection.PropertyInfo!
+NextORM.Core.EntityPropertyDescriptor.Property.init -> void
+NextORM.Core.GeneratedEntityMetadata
+static NextORM.Core.GeneratedEntityMetadata.Register(System.Type! entityType, System.Func<NextORM.Core.IEntityMetadata!>! factory) -> bool
+NextORM.Core.EntityPropertyDescriptor.Collation.get -> string?
+NextORM.Core.EntityPropertyDescriptor.Collation.init -> void
+NextORM.Core.EntityPropertyDescriptor.DecimalPrecision.get -> int?
+NextORM.Core.EntityPropertyDescriptor.DecimalPrecision.init -> void
+NextORM.Core.EntityPropertyDescriptor.DecimalScale.get -> int?
+NextORM.Core.EntityPropertyDescriptor.DecimalScale.init -> void
+NextORM.Core.EntityPropertyDescriptor.DurationPrecision.get -> int
+NextORM.Core.EntityPropertyDescriptor.DurationPrecision.init -> void
+NextORM.Core.EntityPropertyDescriptor.DurationUnit.get -> NextORM.Core.DurationUnit?
+NextORM.Core.EntityPropertyDescriptor.DurationUnit.init -> void
+NextORM.Core.EntityPropertyDescriptor.RangeColumns.get -> NextORM.Core.RangeColumnsMetadata?
+NextORM.Core.EntityPropertyDescriptor.RangeColumns.init -> void
+NextORM.Core.EntityFilterDescriptor
+NextORM.Core.EntityFilterDescriptor.EntityFilterDescriptor() -> void
+NextORM.Core.EntityFilterDescriptor.Func.get -> System.Delegate?
+NextORM.Core.EntityFilterDescriptor.Func.init -> void
+NextORM.Core.EntityFilterDescriptor.Key.get -> string?
+NextORM.Core.EntityFilterDescriptor.Key.init -> void
+NextORM.Core.EntityFilterDescriptor.Lambda.get -> System.Linq.Expressions.LambdaExpression?
+NextORM.Core.EntityFilterDescriptor.Lambda.init -> void
+NextORM.Core.EntityMetadataDescriptor.Filters.get -> System.Collections.Generic.IReadOnlyList<NextORM.Core.EntityFilterDescriptor!>!
+NextORM.Core.EntityMetadataDescriptor.Filters.init -> void
+NextORM.Core.EntityPropertyDescriptor.Converter.get -> NextORM.Core.IPropertyValueConverter?
+NextORM.Core.EntityPropertyDescriptor.Converter.init -> void
+NextORM.Core.JsonColumnConverters
+static NextORM.Core.JsonColumnConverters.Create<TModel>(NextORM.Core.JsonColumnStorage storage = NextORM.Core.JsonColumnStorage.Auto, System.Text.Json.JsonSerializerOptions? options = null) -> NextORM.Core.IPropertyValueConverter!
+NextORM.Core.EntityMetadataDescriptor.Relationships.get -> System.Collections.Generic.IReadOnlyList<NextORM.Core.EntityRelationshipDescriptor!>!
+NextORM.Core.EntityMetadataDescriptor.Relationships.init -> void
+NextORM.Core.EntityRelationshipDescriptor
+NextORM.Core.EntityRelationshipDescriptor.DeclaringType.get -> System.Type!
+NextORM.Core.EntityRelationshipDescriptor.DeclaringType.init -> void
+NextORM.Core.EntityRelationshipDescriptor.EntityRelationshipDescriptor() -> void
+NextORM.Core.EntityRelationshipDescriptor.ForeignKeys.get -> System.Collections.Generic.IReadOnlyList<System.Reflection.PropertyInfo!>!
+NextORM.Core.EntityRelationshipDescriptor.ForeignKeys.init -> void
+NextORM.Core.EntityRelationshipDescriptor.IsCollection.get -> bool
+NextORM.Core.EntityRelationshipDescriptor.IsCollection.init -> void
+NextORM.Core.EntityRelationshipDescriptor.Navigation.get -> System.Reflection.PropertyInfo!
+NextORM.Core.EntityRelationshipDescriptor.Navigation.init -> void
+NextORM.Core.EntityRelationshipDescriptor.PrincipalKeys.get -> System.Collections.Generic.IReadOnlyList<System.Reflection.PropertyInfo!>?
+NextORM.Core.EntityRelationshipDescriptor.PrincipalKeys.init -> void
+NextORM.Core.EntityRelationshipDescriptor.RelatedType.get -> System.Type!
+NextORM.Core.EntityRelationshipDescriptor.RelatedType.init -> void

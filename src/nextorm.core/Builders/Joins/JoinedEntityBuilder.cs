@@ -6,10 +6,6 @@ namespace NextORM.Core;
 /// Join builder over a two-table projection, produced by a <c>Join</c>/<c>LeftJoin</c>/<c>RightJoin</c>/
 /// <c>FullJoin</c>/<c>CrossJoin</c> call.
 /// </summary>
-/// <remarks>
-/// The <c>P</c> in the name denotes projection arity and is not self-explanatory. Recommended name:
-/// <c>JoinedEntityBuilder&lt;T1, T2&gt;</c>. See <c>docs/specs/design/API-NAMING-REVIEW.md</c> finding P0-4.
-/// </remarks>
 public class JoinedEntityBuilder<T1, T2> : EntityBuilder<Projection<T1, T2>>
 {
     /// <summary>The join expression that produced this two-table projection.</summary>
@@ -196,7 +192,7 @@ public class JoinedEntityBuilder<T1, T2> : EntityBuilder<Projection<T1, T2>>
     public new JoinedEntityBuilder<T1, T2, T3> OuterApply<T3>(Expression<Func<Projection<T1, T2>, QueryCommand<T3>>> source, Action<JoinOptions>? options = null)
         => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3>, Projection<T1, T2, T3>, T3>(source, JoinType.OuterApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3>(dataProvider));
     // #159 direct Cte<T> continuation overloads (receiver arity 2).
-    /// <summary>Adds a inner join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <summary>Adds an inner join over the typed CTE <paramref name="cte"/>.</summary>
     /// <typeparam name="T3">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
@@ -204,7 +200,7 @@ public class JoinedEntityBuilder<T1, T2> : EntityBuilder<Projection<T1, T2>>
     /// <exception cref="ArgumentNullException">A required reference argument is <see langword="null"/>.</exception>
     public new JoinedEntityBuilder<T1, T2, T3> Join<T3>(Cte<T3> cte, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition)
         => Join(cte, joinCondition, null);
-    /// <summary>Adds a inner join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <summary>Adds an inner join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
     /// <typeparam name="T3">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
@@ -316,14 +312,14 @@ public class JoinedEntityBuilder<T1, T2> : EntityBuilder<Projection<T1, T2>>
         ArgumentNullException.ThrowIfNull(cte);
         return CrossApply(DataProvider.From(cte), options);
     }
-    /// <summary>Adds a outer apply over the typed CTE <paramref name="cte"/>.</summary>
+    /// <summary>Adds an outer apply over the typed CTE <paramref name="cte"/>.</summary>
     /// <typeparam name="T3">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <returns>A builder over the projection extended with the CTE's type.</returns>
     /// <exception cref="ArgumentNullException">A required reference argument is <see langword="null"/>.</exception>
     public new JoinedEntityBuilder<T1, T2, T3> OuterApply<T3>(Cte<T3> cte)
         => OuterApply(cte, null);
-    /// <summary>Adds a outer apply over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <summary>Adds an outer apply over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
     /// <typeparam name="T3">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <param name="options">Per-join configuration.</param>
@@ -572,7 +568,7 @@ public class JoinedEntityBuilder<T1, T2, T3> : EntityBuilder<Projection<T1, T2, 
     public new JoinedEntityBuilder<T1, T2, T3, T4> OuterApply<T4>(Expression<Func<Projection<T1, T2, T3>, QueryCommand<T4>>> source, Action<JoinOptions>? options = null)
         => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4>, Projection<T1, T2, T3, T4>, T4>(source, JoinType.OuterApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4>(dataProvider));
     // #159 direct Cte<T> continuation overloads (receiver arity 3).
-    /// <summary>Adds a inner join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <summary>Adds an inner join over the typed CTE <paramref name="cte"/>.</summary>
     /// <typeparam name="T4">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
@@ -580,7 +576,7 @@ public class JoinedEntityBuilder<T1, T2, T3> : EntityBuilder<Projection<T1, T2, 
     /// <exception cref="ArgumentNullException">A required reference argument is <see langword="null"/>.</exception>
     public new JoinedEntityBuilder<T1, T2, T3, T4> Join<T4>(Cte<T4> cte, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition)
         => Join(cte, joinCondition, null);
-    /// <summary>Adds a inner join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <summary>Adds an inner join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
     /// <typeparam name="T4">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
@@ -692,14 +688,14 @@ public class JoinedEntityBuilder<T1, T2, T3> : EntityBuilder<Projection<T1, T2, 
         ArgumentNullException.ThrowIfNull(cte);
         return CrossApply(DataProvider.From(cte), options);
     }
-    /// <summary>Adds a outer apply over the typed CTE <paramref name="cte"/>.</summary>
+    /// <summary>Adds an outer apply over the typed CTE <paramref name="cte"/>.</summary>
     /// <typeparam name="T4">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <returns>A builder over the projection extended with the CTE's type.</returns>
     /// <exception cref="ArgumentNullException">A required reference argument is <see langword="null"/>.</exception>
     public new JoinedEntityBuilder<T1, T2, T3, T4> OuterApply<T4>(Cte<T4> cte)
         => OuterApply(cte, null);
-    /// <summary>Adds a outer apply over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <summary>Adds an outer apply over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
     /// <typeparam name="T4">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <param name="options">Per-join configuration.</param>
@@ -932,7 +928,7 @@ public class JoinedEntityBuilder<T1, T2, T3, T4> : EntityBuilder<Projection<T1, 
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5> OuterApply<T5>(Expression<Func<Projection<T1, T2, T3, T4>, QueryCommand<T5>>> source, Action<JoinOptions>? options = null)
         => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5>, Projection<T1, T2, T3, T4, T5>, T5>(source, JoinType.OuterApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5>(dataProvider));
     // #159 direct Cte<T> continuation overloads (receiver arity 4).
-    /// <summary>Adds a inner join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <summary>Adds an inner join over the typed CTE <paramref name="cte"/>.</summary>
     /// <typeparam name="T5">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
@@ -940,7 +936,7 @@ public class JoinedEntityBuilder<T1, T2, T3, T4> : EntityBuilder<Projection<T1, 
     /// <exception cref="ArgumentNullException">A required reference argument is <see langword="null"/>.</exception>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5> Join<T5>(Cte<T5> cte, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition)
         => Join(cte, joinCondition, null);
-    /// <summary>Adds a inner join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <summary>Adds an inner join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
     /// <typeparam name="T5">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
@@ -1052,14 +1048,14 @@ public class JoinedEntityBuilder<T1, T2, T3, T4> : EntityBuilder<Projection<T1, 
         ArgumentNullException.ThrowIfNull(cte);
         return CrossApply(DataProvider.From(cte), options);
     }
-    /// <summary>Adds a outer apply over the typed CTE <paramref name="cte"/>.</summary>
+    /// <summary>Adds an outer apply over the typed CTE <paramref name="cte"/>.</summary>
     /// <typeparam name="T5">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <returns>A builder over the projection extended with the CTE's type.</returns>
     /// <exception cref="ArgumentNullException">A required reference argument is <see langword="null"/>.</exception>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5> OuterApply<T5>(Cte<T5> cte)
         => OuterApply(cte, null);
-    /// <summary>Adds a outer apply over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <summary>Adds an outer apply over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
     /// <typeparam name="T5">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <param name="options">Per-join configuration.</param>
@@ -1292,7 +1288,7 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5> : EntityBuilder<Projection<
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> OuterApply<T6>(Expression<Func<Projection<T1, T2, T3, T4, T5>, QueryCommand<T6>>> source, Action<JoinOptions>? options = null)
         => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>, Projection<T1, T2, T3, T4, T5, T6>, T6>(source, JoinType.OuterApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>(dataProvider));
     // #159 direct Cte<T> continuation overloads (receiver arity 5).
-    /// <summary>Adds a inner join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <summary>Adds an inner join over the typed CTE <paramref name="cte"/>.</summary>
     /// <typeparam name="T6">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
@@ -1300,7 +1296,7 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5> : EntityBuilder<Projection<
     /// <exception cref="ArgumentNullException">A required reference argument is <see langword="null"/>.</exception>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> Join<T6>(Cte<T6> cte, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition)
         => Join(cte, joinCondition, null);
-    /// <summary>Adds a inner join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <summary>Adds an inner join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
     /// <typeparam name="T6">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
@@ -1412,14 +1408,14 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5> : EntityBuilder<Projection<
         ArgumentNullException.ThrowIfNull(cte);
         return CrossApply(DataProvider.From(cte), options);
     }
-    /// <summary>Adds a outer apply over the typed CTE <paramref name="cte"/>.</summary>
+    /// <summary>Adds an outer apply over the typed CTE <paramref name="cte"/>.</summary>
     /// <typeparam name="T6">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <returns>A builder over the projection extended with the CTE's type.</returns>
     /// <exception cref="ArgumentNullException">A required reference argument is <see langword="null"/>.</exception>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> OuterApply<T6>(Cte<T6> cte)
         => OuterApply(cte, null);
-    /// <summary>Adds a outer apply over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <summary>Adds an outer apply over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
     /// <typeparam name="T6">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <param name="options">Per-join configuration.</param>
@@ -1652,7 +1648,7 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> : EntityBuilder<Project
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> OuterApply<T7>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, QueryCommand<T7>>> source, Action<JoinOptions>? options = null)
         => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>, Projection<T1, T2, T3, T4, T5, T6, T7>, T7>(source, JoinType.OuterApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>(dataProvider));
     // #159 direct Cte<T> continuation overloads (receiver arity 6).
-    /// <summary>Adds a inner join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <summary>Adds an inner join over the typed CTE <paramref name="cte"/>.</summary>
     /// <typeparam name="T7">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
@@ -1660,7 +1656,7 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> : EntityBuilder<Project
     /// <exception cref="ArgumentNullException">A required reference argument is <see langword="null"/>.</exception>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> Join<T7>(Cte<T7> cte, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition)
         => Join(cte, joinCondition, null);
-    /// <summary>Adds a inner join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <summary>Adds an inner join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
     /// <typeparam name="T7">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
@@ -1772,14 +1768,14 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> : EntityBuilder<Project
         ArgumentNullException.ThrowIfNull(cte);
         return CrossApply(DataProvider.From(cte), options);
     }
-    /// <summary>Adds a outer apply over the typed CTE <paramref name="cte"/>.</summary>
+    /// <summary>Adds an outer apply over the typed CTE <paramref name="cte"/>.</summary>
     /// <typeparam name="T7">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <returns>A builder over the projection extended with the CTE's type.</returns>
     /// <exception cref="ArgumentNullException">A required reference argument is <see langword="null"/>.</exception>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> OuterApply<T7>(Cte<T7> cte)
         => OuterApply(cte, null);
-    /// <summary>Adds a outer apply over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <summary>Adds an outer apply over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
     /// <typeparam name="T7">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <param name="options">Per-join configuration.</param>
@@ -2012,7 +2008,7 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> : EntityBuilder<Pro
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> OuterApply<T8>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, QueryCommand<T8>>> source, Action<JoinOptions>? options = null)
         => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>, Projection<T1, T2, T3, T4, T5, T6, T7, T8>, T8>(source, JoinType.OuterApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>(dataProvider));
     // #159 direct Cte<T> continuation overloads (receiver arity 7).
-    /// <summary>Adds a inner join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <summary>Adds an inner join over the typed CTE <paramref name="cte"/>.</summary>
     /// <typeparam name="T8">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
@@ -2020,7 +2016,7 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> : EntityBuilder<Pro
     /// <exception cref="ArgumentNullException">A required reference argument is <see langword="null"/>.</exception>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> Join<T8>(Cte<T8> cte, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition)
         => Join(cte, joinCondition, null);
-    /// <summary>Adds a inner join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <summary>Adds an inner join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
     /// <typeparam name="T8">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
@@ -2132,14 +2128,14 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> : EntityBuilder<Pro
         ArgumentNullException.ThrowIfNull(cte);
         return CrossApply(DataProvider.From(cte), options);
     }
-    /// <summary>Adds a outer apply over the typed CTE <paramref name="cte"/>.</summary>
+    /// <summary>Adds an outer apply over the typed CTE <paramref name="cte"/>.</summary>
     /// <typeparam name="T8">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <returns>A builder over the projection extended with the CTE's type.</returns>
     /// <exception cref="ArgumentNullException">A required reference argument is <see langword="null"/>.</exception>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> OuterApply<T8>(Cte<T8> cte)
         => OuterApply(cte, null);
-    /// <summary>Adds a outer apply over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <summary>Adds an outer apply over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
     /// <typeparam name="T8">The CTE's projection type.</typeparam>
     /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <param name="options">Per-join configuration.</param>

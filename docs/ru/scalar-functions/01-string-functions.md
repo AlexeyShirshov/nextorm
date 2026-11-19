@@ -1,5 +1,10 @@
 # Строковые функции
 
+Строковые члены внутри запроса транслируются в SQL и выполняются провайдером; в таблице приведены
+распространённые трансляции. Если результат зависит от сравнения строк, различайте коллацию столбца
+(правила сравнения в БД) и явную перегрузку `StringComparison`; см.
+[Ordinal-сравнение и коллация](#ordinal-сравнение-и-коллация).
+
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
     .Where(e => e.String!.Contains("df"))
@@ -92,15 +97,21 @@ select id
 
 ## Ordinal-сравнение и коллация
 
-Сравнения `string` в C# — **ordinal** (побайтовые), тогда как SQL `=`/`LIKE` использует коллацию
-столбца — в SQL Server по умолчанию регистронезависимую. nextorm делает ordinal-перегрузки явными и
-честными: `string.Equals`, `string.Compare`/`CompareOrdinal`, `Contains`/`StartsWith`/`EndsWith` и
-`IndexOf`/`LastIndexOf` принимают константный `StringComparison`, и только `Ordinal` и
-`OrdinalIgnoreCase` имеют переносимую SQL-форму. `Ordinal` использует бинарную коллацию провайдера,
-`OrdinalIgnoreCase` дополнительно сворачивает регистр обоих операндов;
-`InvariantCulture`/`CurrentCulture` (и culture-sensitive `string.Compare(s, t)` без сравнения)
-бросают `NotSupportedException`
-([`SupportsOrdinalComparison`](xref:NextORM.Core.ISqlDialect.SupportsOrdinalComparison)).
+В .NET `Ordinal` сравнивает строки без языковых и культурных правил. Выбирайте форму запроса в
+зависимости от того, нужно ли именно такое поведение или коллация самой базы данных:
+
+* `==` остаётся SQL-оператором `=` провайдера и следует коллации столбца в БД; стандартная коллация
+  SQL Server не учитывает регистр. Простые формы `Contains`/`StartsWith`/`EndsWith` используют `LIKE`,
+  поэтому совпадения тоже определяются SQL-коллацией, а не явным запросом ordinal-поведения C#.
+* `string.Equals` и `string.CompareOrdinal` задают ordinal-сравнение. Перегрузки `string.Equals`,
+  `string.Compare`/`CompareOrdinal`, `Contains`/`StartsWith`/`EndsWith` и `IndexOf`/`LastIndexOf` с
+  константным `StringComparison` имеют переносимую SQL-трансляцию только для `Ordinal` и
+  `OrdinalIgnoreCase`. Сравнение всё равно выполняется в БД по бинарной коллации провайдера из таблицы
+  ниже, а не в CLR на клиенте. `OrdinalIgnoreCase` дополнительно применяет SQL `lower` к обоим
+  операндам перед сравнением.
+* `InvariantCulture`, `CurrentCulture` и двухаргументная языково-зависимая перегрузка
+  `string.Compare(s, t)` без `StringComparison` бросают `NotSupportedException`
+  ([`SupportsOrdinalComparison`](xref:NextORM.Core.ISqlDialect.SupportsOrdinalComparison)).
 
 ```csharp
 var strict = dataContext.From<IComplexEntity>()
@@ -122,15 +133,12 @@ var loose = dataContext.From<IComplexEntity>()
 | SQLite | `s collate binary` | `lower(s) collate binary` |
 | ClickHouse | `s` (нативный побайтовый порядок) | `lower(s)` |
 
-Оператор `==` намеренно оставлен как SQL `=` провайдера: он следует коллации БД, а не C#. Для
-побайтового порядка используйте `string.Equals`/`string.CompareOrdinal`.
-
 `LIKE` в SQLite всегда регистронезависим для ASCII независимо от коллации операнда, поэтому
 **регистрозависимые** ordinal `Contains`/`StartsWith`/`EndsWith` там отклоняются
 ([`SupportsOrdinalLike`](xref:NextORM.Core.ISqlDialect.SupportsOrdinalLike)); `CompareOrdinal`,
 `Equals` и `OrdinalIgnoreCase` работают.
 
-Применить произвольную коллацию провайдера можно через `SqlFunctions.Sql.collate` (требует
+Для разовой коллации провайдера задайте её через `SqlFunctions.Sql.collate` (требует
 [`SupportsCollation`](xref:NextORM.Core.ISqlDialect.SupportsCollation), то есть все SQL-провайдеры
 кроме ClickHouse):
 
@@ -147,12 +155,14 @@ select id
  from complex_entity where somestring collate "C" = 'x' collate "C"
 ```
 
-`collate` принимает родное для провайдера имя коллации; оно должно быть константой. У in-memory
-провайдера коллаций нет, и вызов трактуется как ordinal-тождество.
+`collate` принимает константное имя коллации, родное для провайдера. Оно меняет коллацию SQL-выражения,
+но не задаёт переносимую коллацию и не создаёт её в БД. У in-memory-провайдера коллаций нет, поэтому
+вызов трактуется как ordinal-тождество.
 
 ### Коллация на уровне столбца
 
-Вместо обёртки каждого выражения коллацию можно объявить на свойстве сущности через
+Если одна и та же коллация должна применяться каждый раз, когда столбец участвует в чувствительной к
+коллации операции, объявите её на свойстве сущности через
 [`CollationAttribute`](xref:NextORM.Core.CollationAttribute) или fluent-метод
 [`EntityPropertyBuilder<T>.Collation`](xref:NextORM.Core.EntityPropertyBuilder`1.Collation(System.String)). Тогда она применяется к
 столбцу во всех collation-чувствительных операциях (сравнение, `LIKE`, `ORDER BY`, `GROUP BY`), и
@@ -334,7 +344,7 @@ var scores = dataContext.From<IComplexEntity>()
 сборке (`17.0.5005.3`) дополнительно требуют уровень совместимости БД 170, `PREVIEW_FEATURES = ON`
 (по умолчанию выключен) и Windows-коллацию — коллация `SQL_*` даёт Msg 9847, а без preview-флага
 функция даёт Msg 195. Версионный флаг выражает только гейт мажорной версии; рантайм-предусловия
-документируются и проверяются вживую, и обещаний для будущих сборок не даётся.
+документируются и проверяются на сервере.
 
 Доступность строковых функций в MariaDB, ограничения версий и отказы перечислены в
 [каталоге MariaDB](08-reference.md#mariadb-catalogue).
@@ -396,7 +406,7 @@ var rows = dataContext.From<IComplexEntity>()
 In-memory провайдер вычисляет те же вызовы через их CLR-эквиваленты, поэтому тот же запрос выполняется
 без базы данных.
 
-## Строковые функции ClickHouse (#286, T286b)
+## Строковые функции ClickHouse
 
 Строковая поверхность, существующая только в ClickHouse, живёт на `SqlFunctions.ClickHouse`; каждый
 член рендерит точное имя вендора и отклоняется всеми остальными диалектами. Формы результатов
@@ -463,9 +473,9 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
-### Остаточные строковые, кодировочные и regexp-помощники (#281)
+### Строковые, кодировочные и regexp-помощники
 
-Оставшаяся часть строкового каталога PostgreSQL доступна на той же поверхности, один член на
+API `Postgres` предоставляет следующие функции, один член на
 серверную перегрузку. Каждое имя гейтится **отдельно** через
 [`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)), а
 провайдер, не реализующий интерфейс, отклоняет вызов `NotSupportedException`:
@@ -550,13 +560,13 @@ NULL-аргумент даёт NULL для каждого из них. Неоч�
 бинарных помощников (`get_bit`/`set_bit`/`bit_count` над `bit`) нет CLR-отображения, поэтому для них
 не выставлено ни одного члена, и вызов отклоняется, а не транслируется.
 
-## Полнотекстовый поиск (PostgreSQL, #281)
+## Полнотекстовый поиск (PostgreSQL)
 
-Кросс-провайдерные предикаты и более ранняя native-поверхность — `contains`/`freetext`, `to_tsvector`,
+Кросс-провайдерные предикаты и нативные функции — `contains`/`freetext`, `to_tsvector`,
 `to_tsquery`, `plainto_tsquery`/`phraseto_tsquery`/`websearch_to_tsquery`, `ts_match`, `ts_rank`,
 `ts_rank_cd`, `ts_headline` и `@@` — описаны в разделе
 [SQL для конкретных провайдеров › Полнотекстовый поиск](../guide/provider-specific-sql/postgresql.md#полнотекстовый-поиск).
-17 поставленных имён ниже живут на той же поверхности, гейтятся
+17 функций ниже живут на той же поверхности, гейтятся
 [`SupportsTextSearchFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTextSearchFunctions), и все
 остальные провайдеры отклоняют их на этапе построения SQL.
 

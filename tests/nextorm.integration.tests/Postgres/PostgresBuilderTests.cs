@@ -72,18 +72,78 @@ public sealed class PostgresBuilderTests : ProviderTestSuite
         count.Should().Be(10);
     }
 
+    // The query-command-producing terminal family is verified shape by shape, each as its own test:
+    // every shape is prepared explicitly and executed, so a terminal that only constructs a command can
+    // no longer pass unnoticed. Entity results are asserted through a null-safe projection instead of a
+    // null-forgiving dereference.
+
     [Fact]
-    public void CommandBuilders_ShouldProduceCommands()
+    public void AnyCommand_ShouldPrepareAndExecute()
     {
         var simple = _sut.SimpleEntityAsClass;
+        var command = simple.Where(x => x.Id > 5).AnyCommand()
+            .Prepare(cancellationToken: TestContext.Current.CancellationToken);
 
-        simple.AnyCommand().Should().NotBeNull();
-        simple.FirstOrFirstOrDefaultCommand().Should().NotBeNull();
-        simple.FirstOrFirstOrDefaultCommand(x => x.Id).Should().NotBeNull();
-        simple.SingleOrSingleOrDefaultCommand().Should().NotBeNull();
-        simple.Where(x => x.Id == 1).SingleOrSingleOrDefaultCommand(x => x.Id).Should().NotBeNull();
+        // AnyCommand is executed through the Any terminal; ToList is not its execution contract
+        // (the same NRE reproduces in the JIT oracle control, so this is the documented shape, not a
+        // provider failure).
+        _sut.DataProvider.Any(command).Should().BeTrue();
+    }
 
+    [Fact]
+    public void FirstOrFirstOrDefaultCommand_Entity_ShouldPrepareAndExecute()
+    {
+        var simple = _sut.SimpleEntityAsClass;
+        var db = _sut.DataProvider;
+
+        // Fixture/mapping precondition: the same entity projection read as a list must produce the seed
+        // rows, otherwise a null single-row result would say nothing about the terminal itself.
+        simple.OrderBy(x => x.Id).ToList().Should().HaveCount(10, "the seed must expose ten rows to this shape");
+
+        var command = simple.OrderBy(x => x.Id).FirstOrFirstOrDefaultCommand()
+            .Prepare(cancellationToken: TestContext.Current.CancellationToken);
+
+        var row = command.FirstOrDefault(db);
+        (row?.Id).Should().Be(1, "FirstOrDefault over a ten-row ordered seed must return the first row");
+    }
+
+    [Fact]
+    public void FirstOrFirstOrDefaultCommand_Scalar_ShouldPrepareAndExecute()
+    {
+        var simple = _sut.SimpleEntityAsClass;
+        var command = simple.OrderBy(x => x.Id).FirstOrFirstOrDefaultCommand(x => x.Id)
+            .Prepare(cancellationToken: TestContext.Current.CancellationToken);
+
+        command.FirstOrDefault(_sut.DataProvider).Should().Be(1);
+    }
+
+    [Fact]
+    public void SingleOrSingleOrDefaultCommand_Entity_ShouldPrepareAndExecute()
+    {
+        var simple = _sut.SimpleEntityAsClass;
+        var command = simple.Where(x => x.Id == 1).SingleOrSingleOrDefaultCommand()
+            .Prepare(cancellationToken: TestContext.Current.CancellationToken);
+
+        var row = command.SingleOrDefault(_sut.DataProvider);
+        (row?.Id).Should().Be(1);
+    }
+
+    [Fact]
+    public void SingleOrSingleOrDefaultCommand_Scalar_ShouldPrepareAndExecute()
+    {
+        var simple = _sut.SimpleEntityAsClass;
+        var command = simple.Where(x => x.Id == 1).SingleOrSingleOrDefaultCommand(x => x.Id)
+            .Prepare(cancellationToken: TestContext.Current.CancellationToken);
+
+        command.SingleOrDefault(_sut.DataProvider).Should().Be(1);
+    }
+
+    [Fact]
+    public void Prepare_List_ShouldReturnEverySeededRow()
+    {
+        var simple = _sut.SimpleEntityAsClass;
         var prepared = simple.Where(x => x.Id > 0).Prepare(default, TestContext.Current.CancellationToken);
+
         _sut.DataProvider.ToList(prepared).Should().HaveCount(10);
     }
 

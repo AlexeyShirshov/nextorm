@@ -1,25 +1,27 @@
 # Provider overview
 
-> A provider supplies a dialect (SQL text rules) and a [`DataContext`](xref:NextORM.Core.DataContext) subclass (connection + parameter creation); pick the one that matches the database you already run.
+> Choose the provider package that matches your database. Each provider supplies SQL-specific rules and a [`DataContext`](xref:NextORM.Core.DataContext) subclass that creates connections and parameters.
 
 **Prerequisites:** [Quickstart](../getting-started/02-quickstart.md) · [Dependency injection](../getting-started/04-dependency-injection.md)
 
 ## Overview
 
-nextorm is split into a provider-neutral core (`nextorm`, namespace [`NextORM.Core`](xref:NextORM.Core)) and one package per
-database: `nextorm.sqlite`, `nextorm.sqlserver`, `nextorm.postgres`, `nextorm.mysql`, `nextorm.mariadb`
-and `nextorm.clickhouse`. The in-memory provider is built
-into the core package. A provider contributes two things:
+NextORM has a provider-neutral core package and a separate package for each SQL database:
+`nextorm.sqlite`, `nextorm.sqlserver`, `nextorm.postgres`, `nextorm.mysql`, `nextorm.mariadb`, and
+`nextorm.clickhouse`. The in-memory provider is included in the core package.
+
+Each SQL provider supplies two parts:
 
 1. a **dialect** — a stateless object that renders everything that differs between databases (parameter
    placeholders, paging, quoting, function names, capability flags); and
 2. a **context** — a [`DataContext`](xref:NextORM.Core.DataContext) subclass that knows how to create a connection and parameters, and
    exposes the dialect through its `Dialect` property.
 
-SQL generation is driven entirely by [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) (`src/nextorm.core/DataContext/Dialect/ISqlDialect.cs`),
-so the SQL builder and expression visitors never contain provider names. Query semantics (projection,
-filtering, joins, grouping, set operations, CTE, window functions, scalar/UDF/TVF support) are shared;
-only the rendering differs.
+The core builds SQL through [`ISqlDialect`](xref:NextORM.Core.ISqlDialect). Query behavior—such as
+projections, filters, joins, grouping, set operations, common table expressions (CTEs), and window
+functions—is shared. The dialect controls how each provider renders that behavior. Provider-specific
+scalar functions, user-defined functions (UDFs), and table-valued functions (TVFs) are listed in the
+support matrix.
 
 ## Choosing a provider
 
@@ -33,8 +35,31 @@ only the rendering differs.
 | You already run ClickHouse | `nextorm.clickhouse` |
 | Unit tests that must not touch a database, plan-cache tests, query-shape tests | [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) (core) |
 
-Use the same query code against every provider; the provider differences below are the only things that
-change.
+Use the choice table to select a package. Use the support matrix as a reference when you need to know
+whether a feature has a provider-specific implementation. SQL providers share the query API, but that
+does not mean every feature is supported by every database.
+
+## Registering a provider
+
+Every provider package adds `UseXxx` extension methods on [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder), and every context also has a
+public constructor that takes a connection string or an existing `DbConnection`:
+
+```csharp
+using NextORM.Core;
+using NextORM.Sqlite;      // or nextorm.sqlserver / nextorm.postgres
+
+var builder = new DataContextBuilder().UseSqlite("app.db");   // provider-specific overload
+using var ctx = builder.CreateDataContext();                   // returns IDataContext
+```
+
+With dependency injection:
+
+```csharp
+services.AddNextOrmContext(builder => builder.UseSqlite("app.db"));
+```
+
+See [Dependency injection](../getting-started/04-dependency-injection.md) for keyed and generic
+registrations.
 
 ## Support matrix
 
@@ -111,11 +136,11 @@ change.
 | Provider table functions (`FROM` source) | `json_each`/`json_tree` | `string_split`/`openjson`/`containstable`/`freetexttable` | `generate_series`/`unnest`/`regexp_matches`/`jsonb_to_recordset` | throws `NotSupportedException` | throws `NotSupportedException` | `numbers`/`zeros`/`generateRandom`/`values` (`url`/`s3`/`file`/`remote`/`cluster` pre-declared, distributed execution out of scope) | TVF source not supported |
 | Filtered aggregates (`FILTER (WHERE …)` / `-If`) | ANSI `count(*) filter (where …)` | throws `NotSupportedException` | ANSI `filter (where …)` (9.4+; version-gated) | throws `NotSupportedException` | throws `NotSupportedException` | `-If` combinator (`countIf`/`sumIf`/…) | throws `NotSupportedException` |
 | Ordered-set / boolean / regression aggregates | throws `NotSupportedException` | window `percentile_cont(f) within group (order by x) over (…)` (2012+) | `percentile_cont`/`percentile_disc`/`mode`, `bool_and`/`bool_or`/`every`, `regr_*` | throws `NotSupportedException` | window `percentile_cont` (10.3+) | `quantile*`/`median` (own family); no `bool_and`/`regr_*` | throws `NotSupportedException` |
-| Median (native composition) | throws `NotSupportedException` (`SqlFunctions.Sqlite.median`) | `SqlFunctions.SqlServer.median(v).Over(…)` → `percentile_cont(0.5) within group (order by v) over (…)`, analytic: one row per input row, partition-only window | `SqlFunctions.Postgres.median(() => v)` → `percentile_cont(0.5) within group (order by v)`, aggregate: one row per group; the sort expression must be floating-point | throws `NotSupportedException` (`SqlFunctions.MySql.median`; message names MySQL) | `SqlFunctions.MySql.median(v).Over(…)` → `percentile_cont(0.5) within group (order by v) over (…)`, analytic: one row per input row, partition-only window | `SqlFunctions.ClickHouse.median(v)` → `toFloat64(median(v))`, aggregate: one row per group (the T286b native form) | throws `NotSupportedException` |
+| Median (native composition) | throws `NotSupportedException` (`SqlFunctions.Sqlite.median`) | `SqlFunctions.SqlServer.median(v).Over(…)` → `percentile_cont(0.5) within group (order by v) over (…)`, analytic: one row per input row, partition-only window | `SqlFunctions.Postgres.median(() => v)` → `percentile_cont(0.5) within group (order by v)`, aggregate: one row per group; the sort expression must be floating-point | throws `NotSupportedException` (`SqlFunctions.MySql.median`; message names MySQL) | `SqlFunctions.MySql.median(v).Over(…)` → `percentile_cont(0.5) within group (order by v) over (…)`, analytic: one row per input row, partition-only window | `SqlFunctions.ClickHouse.median(v)` → `toFloat64(median(v))`, aggregate: one row per group | throws `NotSupportedException` |
 | Generic `percentile(fraction, value)` | throws `NotSupportedException` (`SqlFunctions.Sqlite.percentile`) | throws `NotSupportedException` (`SqlFunctions.SqlServer.percentile`) | throws `NotSupportedException` (`SqlFunctions.Postgres.percentile`) | throws `NotSupportedException` (`SqlFunctions.MySql.percentile`, names MySQL) | throws `NotSupportedException` (`SqlFunctions.MySql.percentile`, names MariaDB) | throws `NotSupportedException` (`SqlFunctions.ClickHouse.percentile`) | throws `NotSupportedException` |
 | PostgreSQL settings & sequences | throws `NotSupportedException` | throws `NotSupportedException` | `current_setting`/`set_config`, `nextval`/`setval`/`currval`/`lastval` | throws `NotSupportedException` | sequences via `SqlFunctions.MySql` (`next_value_for`/`nextval`/`setval`/`lastval`) | throws `NotSupportedException` | throws `NotSupportedException` |
 | Provider scalar-function library (`SqlFunctions.<Provider>`) | `SqlFunctions.Sqlite` (core scalars, JSON1, date, math, FTS3/4/5 query) | `SqlFunctions.SqlServer` (T-SQL library, XML methods, JSON-as-text, `string_split`/`openjson`) | `SqlFunctions.Postgres` (arrays, JSON/JSONB, ranges, aggregate families, full-text `ts_*`, settings/sequences, `regexp_*`) | `SqlFunctions.MySql` (string/date/hash/inet/JSON) | inherits `SqlFunctions.MySql` + MariaDB additions (`nvl`, `add_months`, `to_char`, `xxh3`, sequences, …); `months_between`/`to_date`/`to_number`, `xxh3`/`xxh32` and the UUID generators are version-gated (12.2.1 / 12.3 / 12.2.1; 13.1; 11.7) and refused by an unversioned context | `SqlFunctions.ClickHouse` (quantile/uniq/topK/sequence aggregates, arrays, maps, hashes, dictionaries, table functions) | none (`SqlFunctions.Sql` evaluates in-process) |
-| Row values / tuples (`(a, b)`, element access, row comparison) | flat `(a, b)` constructor as a direct `==`/`!=` predicate operand (inline `.ItemN` folds; projection/ordering/grouping/function arguments and server-side `.ItemN` throw `NotSupportedException`) | throws `NotSupportedException` | `ROW(a, b)`, `(row).fN`, `ROW(...) = ROW(...)`; a single raw `ROW(...)` (arity 1..7) materialises into `System.Tuple<...>` via `ExecuteRaw(...).Read<T>()` over the ordinary connection string, while a caller-registered named composite materialises into the named type when the caller supplies a configured `NpgsqlDataSource` ([#194](https://github.com/AlexeyShirshov/nextorm/issues/194)); `ValueTuple`, arity ≥8, a nested/empty `ROW`, several/mixed record columns, an unregistered composite and a composite declared as `System.Tuple` throw `NotSupportedException` | flat `(a, b)` constructor as a direct `==`/`!=` predicate operand (inline `.ItemN` folds; server-side `.ItemN` throws) | same as MySQL | `tuple(a, b)`, `tupleElement`, comparison | throws `NotSupportedException` |
+| Row values / tuples (`(a, b)`, element access, row comparison) | flat `(a, b)` constructor as a direct `==`/`!=` predicate operand (inline `.ItemN` folds; projection/ordering/grouping/function arguments and server-side `.ItemN` throw `NotSupportedException`) | throws `NotSupportedException` | `ROW(a, b)`, `(row).fN`, `ROW(...) = ROW(...)`; a single raw `ROW(...)` (arity 1..7) materialises into `System.Tuple<...>` via `ExecuteRaw(...).Read<T>()` over the ordinary connection string, while a caller-registered named composite materialises into the named type when the caller supplies a configured `NpgsqlDataSource`; `ValueTuple`, arity ≥8, a nested/empty `ROW`, several/mixed record columns, an unregistered composite and a composite declared as `System.Tuple` throw `NotSupportedException` | flat `(a, b)` constructor as a direct `==`/`!=` predicate operand (inline `.ItemN` folds; server-side `.ItemN` throws) | same as MySQL | `tuple(a, b)`, `tupleElement`, comparison | throws `NotSupportedException` |
 | Tuple `IN`/`Contains` over a value list (arity 1..7) | `(a, b) IN (VALUES (@p0, @p1), ...)` | throws `NotSupportedException` for **every** tuple form (incl. null collection/entry, arity ≥8, nested) — `SQL Server does not support tuple IN/Contains translation.` | `ROW(a, b) IN (ROW(@p0, @p1), ...)` | `(a, b) IN ((@p0, @p1), ...)` | same as MySQL | `tuple(a, b) IN (tuple(@p0, @p1), ...)`; `global_in` renders `GLOBAL IN` | evaluated in process against the in-memory rows (`Enumerable.Contains`; no rejection) |
 
 Explicit NULL placement ([`NullsPosition`](xref:NextORM.Core.NullsPosition)) is **native** on SQLite,
@@ -165,8 +190,7 @@ verification status of each provider is stated on its own page.
 
 Two capabilities depend on the server version, and both are gated by an **explicitly configured
 version** — nextorm never probes the live server. Pass the server version when the context is created
-(the provider context has a constructor overload with a `Version` parameter); leaving it unset keeps the
-historical behaviour: PostgreSQL assumes 9.4 or later and emits `FILTER (WHERE ...)`, while MariaDB
+(the provider context has a constructor overload with a `Version` parameter); leaving it unset means PostgreSQL assumes 9.4 or later and emits `FILTER (WHERE ...)`, while MariaDB
 leaves `UPDATE ... RETURNING` and the post-11.4 native functions disabled. PostgreSQL's filtered
 aggregates require 9.4+ and throw `NotSupportedException` below it; MariaDB's `UPDATE ... RETURNING`
 requires an explicit 13.0+, while `months_between`/`to_number` (12.2.1), `to_date` (12.3) and the UUID
@@ -209,28 +233,6 @@ public class SqliteDataContext : DataContext
 The dialect contract deliberately excludes connection/parameter creation (`CreateConnection`/
 `CreateParam`) and column mapping (`MapColumnExpression`): those live on the context, because they are a
 separate axis from SQL text.
-
-## Registering a provider
-
-Every provider package adds `UseXxx` extension methods on [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder), and every context also has a
-public constructor that takes a connection string or an existing `DbConnection`:
-
-```csharp
-using NextORM.Core;
-using NextORM.Sqlite;      // or nextorm.sqlserver / nextorm.postgres
-
-var builder = new DataContextBuilder().UseSqlite("app.db");   // provider-specific overload
-using var ctx = builder.CreateDataContext();                   // returns IDataContext
-```
-
-With dependency injection:
-
-```csharp
-services.AddNextOrmContext(builder => builder.UseSqlite("app.db"));
-```
-
-See [Dependency injection](../getting-started/04-dependency-injection.md) for keyed and generic
-registrations.
 
 ## See also
 

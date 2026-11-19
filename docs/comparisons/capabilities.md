@@ -1,17 +1,22 @@
 # Capabilities: Nextorm vs Dapper, linq2db and EF Core
 
-One construct-level matrix: what each library supports and where it does not. Legend: **yes** =
-first-class; **partial** = supported with a named limitation, or implementable but not implemented; **no** =
-not supported. A Nextorm cell names a database-engine restriction in parentheses; it does not lower the mark.
-Competitor gaps with an open tracking issue link to it. As of **2026-10-04**.
+Use this matrix to check which query constructs and data-access features each library exposes. Each
+row names a construct; the columns show its support status. **yes** means first-class support
+through the library's public API; **partial** means support has a named limitation or the feature is
+possible to implement but is not implemented; **no** means the feature is not supported. A Nextorm
+cell may name a database-engine restriction in parentheses. Check that restriction when choosing a
+provider; it does not lower the library-level mark. Competitor gaps with an open tracking issue link
+to it. Snapshot date: **2026-10-04**.
 
-Rows are ordered by area — querying, types and mapping, provider functions, writes, model and tooling. A
-**Total** row closes the matrix: the yes / partial / no counts for that column (`n/a` is excluded, and the
-provider list is not scored). The per-engine API breadth is on [Provider features](provider-features.md).
+Rows are ordered by area — querying, types and mapping, provider functions, writes, model, and
+tooling. The **Total** row counts yes / partial / no entries in each column (`n/a` is excluded, and
+the provider list is not scored). This is an unweighted inventory, not a suitability score: choose
+by the features your application requires and the limits of its target provider. For per-engine API
+breadth, see [Provider features](provider-features.md).
 
 | Area | Nextorm | linq2db | EF Core |
 |---|---|---|---|
-| pgvector values (`PgVector`, `PgHalfVector`, `PgSparseVector`, `PgBit`) and operations | supported (PostgreSQL pgvector value types and LINQ marker translation) | partial (provider-specific support varies) | partial (Npgsql/provider-specific support; not a nextorm translation) |
+| Vector nearest-neighbor search and pgvector values/operations | supported (shared nearest-neighbor API on PostgreSQL and SQL Server 2025+; PostgreSQL pgvector types and marker translation remain available) | partial (provider-specific support varies) | partial (Npgsql/provider-specific support; not a nextorm translation) |
 | Projections (entity, DTO, anonymous, record, tuple, scalar; unmapped columns via `SqlFunctions.Column`) | yes | yes | yes |
 | Predicates (`WHERE`: comparison, `and`/`or`/`!`, arithmetic, bitwise/shift) | yes | yes | yes |
 | Null-safe comparison (`IS [NOT] DISTINCT FROM`; `SqlFunctions.Sql.is_distinct_from` / `is_not_distinct_from`) | yes (native on PostgreSQL, SQLite and MySQL/MariaDB; emulated on SQL Server and ClickHouse) | yes (`Sql.Is[Not]DistinctFrom`; provider coverage varies) | no |
@@ -32,6 +37,9 @@ provider list is not scored). The per-engine API breadth is on [Provider feature
 | CTEs (recursive, typed `AsCte`/`AsRecursiveCte`; PostgreSQL data-modifying CTEs) | yes | yes (no data-modifying CTEs) | partial (no data-modifying CTEs) |
 | Extreme-row selection (`SelectWhereMax`/`SelectWhereMin`) | yes | partial (window functions + `OrderBy`/`Take`) | partial (`OrderBy`+`First`) |
 | Per-query source overrides (table/schema/database/server) | yes | partial | partial (model-level) |
+| Runtime mapping variant (per-command table/schema/column names and parameter prefix, chosen from a key) | yes (`IEntityVariantResolver` + `IEntityMetadataProvider`, `WithVariant(...)`, metadata, plans and parameter prefixes isolated per variant) | partial (a per-connection `MappingSchema` renames tables and columns; no per-command variant and no per-variant plan isolation) | partial (database per tenant only by choosing the connection string per `DbContext` instance, and switching it needs a `Transient` lifetime; schema per tenant is documented as unsupported; no renaming at query time) |
+| Routing a statement to a server by entity type (structure and data rules, host pinning, transactions on a routed host) | yes (`[RouteTo]`, `RouteNamespace`/`RouteAssembly`, a custom `IEntityRouteResolver`, `RoundRobinTopology`, `PinHost`, `IRoutedTransactionManager`) | no (the connection is fixed per `DataConnection` instance; no per-type rules) | partial (a connection string per `DbContext` instance; no per-entity rules and no routing inside one context) |
+| Sharding (bucket placement across servers and per-bucket fan-out) | yes (consistent-hash bucket ring over shards, a connection per shard, `AcrossBuckets()` returning one result vector per bucket with no client-side merge) | no | no (provider-level multi-host load balancing, e.g. Npgsql `Load Balance Hosts` / `Target Session Attributes`, picks a host when a connection opens and is not routing) |
 | Temporal tables (`FOR SYSTEM_TIME`) | yes (SQL Server, MariaDB) | no | partial (SQL Server only) |
 | Row locking (`FOR UPDATE`/`FOR SHARE`, `NOWAIT`/`SKIP LOCKED`) | yes | yes | no (raw SQL only) |
 | Query / table / index hints | yes | partial | no (raw SQL or an interceptor) |
@@ -42,8 +50,8 @@ provider list is not scored). The per-engine API breadth is on [Provider feature
 | Result-set export to a stream (JSON, CSV) | yes | partial (client serialization) | partial (client serialization) |
 | `CASE WHEN` / ternary / `switch`, `COALESCE`, numeric `CAST` | yes | yes | yes |
 | String / math / date scalar functions, `LIKE`, concatenation, `NULLIF` | yes | yes | yes |
-| CLR `Regex` (`IsMatch`/`Replace`, constant pattern) | yes (PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite, SQL Server 2025+) | partial (open [linq2db#698](https://github.com/linq2db/linq2db/issues/698)) | no |
-| `string.Format` / interpolation in SQL | yes (culture-invariant subset) | partial ([linq2db#5921](https://github.com/linq2db/linq2db/issues/5921)) | no |
+| CLR `Regex` (`IsMatch`/`Replace`, constant pattern) | yes (PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite, SQL Server 2025+) | partial | no |
+| `string.Format` / interpolation in SQL | yes (culture-invariant subset) | partial | no |
 | Date arithmetic (`date_add`/`date_diff`/`date_trunc`/`end_of_month`/`date_from_parts`, `DateTime.Add*`) | yes | yes | yes |
 | Full-text search | yes (SQL Server, PostgreSQL, MySQL/MariaDB; SQLite FTS3/4/5 query + `FROM`, FTS5 maintenance builder) | yes | partial |
 | Conditional functions (`iif`/`choose`/`multi_if`) | yes | no | no |
@@ -57,7 +65,7 @@ provider list is not scored). The per-engine API breadth is on [Provider feature
 | `STRING_AGG` / `ARRAY_AGG` | yes (`array_agg` on PostgreSQL) | yes | partial |
 | Value converters | yes | yes | yes (`HasConversion`) |
 | Dynamic columns (`[DynamicColumns]` store) | yes | yes | no (JSON/TPH workarounds) |
-| JSON column ↔ object | yes | partial ([linq2db#1661](https://github.com/linq2db/linq2db/issues/1661)) | yes (JSON columns) |
+| JSON column ↔ object | yes | partial | yes (JSON columns) |
 | Duration / interval columns | yes (PostgreSQL `interval` → `TimeSpan` only for representable zero-month values) | yes | partial (provider interval mapping) |
 | Native JSON documents | yes on PostgreSQL | partial (the `json`/`jsonb` type plus `@>`, `#>>` and `Json.Value`; not the full `jsonb_*` library) | partial (JSON column mapping + Npgsql `EF.Functions.Json*`) |
 | JSON scalar functions (`json_value`/`json_query`/`json_modify`, `isjson`) | yes (SQL Server, MySQL/MariaDB) | yes | partial |
@@ -65,7 +73,7 @@ provider list is not scored). The per-engine API breadth is on [Provider feature
 | Arrays and higher-order array functions (`cardinality`/`array_*`/`@>`/`&&`, `Array(T)`, `ARRAY JOIN`) | yes on PostgreSQL and ClickHouse | partial (PostgreSQL array operators only) | partial |
 | Row values / tuples (`ROW`/`(a, b)`, element access, row comparison) | yes — PostgreSQL `ROW`/`(row).fN` and ClickHouse `tuple`/`tupleElement`; flat `(a, b)` on MySQL/MariaDB/SQLite | yes (`Sql.Row`; emulated where the provider has no native row) | partial |
 | Range types and range-over-scalar-columns (`Range<T>`, `Overlaps`, `range_contains`, bound inspection) | yes — native range/multirange on PostgreSQL; a mapped pair of scalar columns (`[RangeColumns]`) elsewhere | partial (provider-native `NpgsqlRange<T>`/multirange mapping only; no portable `Range<T>`/pair) | partial |
-| Collation and ordinal string semantics | yes | partial ([linq2db#5927](https://github.com/linq2db/linq2db/issues/5927)) | partial |
+| Collation and ordinal string semantics | yes | partial | partial |
 | Naming conventions (e.g. snake_case) | yes (opt-in, built-in `SnakeCaseNamingConvention`) | partial (no built-in convention) | partial |
 | Identifier quoting | yes (opt-in) | yes (on by default) | yes (always) |
 | SQL keyword casing (upper/lower) | yes (opt-in `KeywordCase.Upper`) | no (keywords are emitted in the provider's canonical case) | no |
@@ -76,10 +84,10 @@ provider list is not scored). The per-engine API breadth is on [Provider feature
 | `CREATE TABLE AS SELECT`, temporary tables | yes | yes | no |
 | `TRUNCATE` | yes (SQLite/in-memory reject) | yes | no (raw SQL only) |
 | Optimistic concurrency | partial (explicit token-guarded pattern; no concurrency-token metadata) | yes | yes |
-| `OUTPUT ... INTO` | yes (SQL Server) | partial (`…WithOutputInto` writes to a table; combined returning+INTO open [#3832](https://github.com/linq2db/linq2db/issues/3832)) | no |
+| `OUTPUT ... INTO` | yes (SQL Server) | partial (`…WithOutputInto` writes to a table; does not also return the rows to the caller) | no |
 | Transactions (own and enlisted) | yes (SQLite, PostgreSQL, SQL Server, MySQL/MariaDB; ClickHouse and in-memory reject) | yes | yes |
 | Savepoints (create / rollback to / release) | yes (through `ITransactionManager`; SQL Server release is a no-op, ClickHouse has none) | partial (raw SQL only) | yes (`IDbContextTransaction` savepoint methods; provider-dependent) |
-| Captured-collection lookup (`dict[column]`, `list[column]`) | yes | no (open [linq2db#5879](https://github.com/linq2db/linq2db/issues/5879); only `Contains` → `IN`) | no (indexer not translated; client evaluation blocked) |
+| Captured-collection lookup (`dict[column]`, `list[column]`) | yes | no (only `Contains` → `IN`) | no (indexer not translated; client evaluation blocked) |
 | Entity class optional (query without a mapped type) | yes | partial | no |
 | Navigation properties / associations / eager loading | partial (declarative O2M/M2O/O2O/M2M metadata, `JoinInto`, `LoadWith` eager loading — split or single-query, nested level 2+ with a graph-wide mode and per-level ordering/top-N — and declared-relationship implicit navigation; convention-over-FK inference is absent in linq2db too) | yes (`[Association]`, `LoadWith`) | yes |
 | Context configuration, logging and DI | yes | yes | yes |
@@ -94,7 +102,7 @@ provider list is not scored). The per-engine API breadth is on [Provider feature
 | In-memory provider (query-only, registered CLR datasets) | yes | partial | partial |
 | Connection lifecycle (`IConnectionManager`: supplied vs owned, reuse, disposal) | yes | yes | yes |
 | Extensibility (dialect, `[SqlFunction]`/`TvfEntityBuilder<T>` factories, interceptors, global query filters, raw SQL; plus **query components** — reusable structural operators added by third parties without friend access, keeping the plan cache and parameter binding) | yes (query components) | partial (`Sql.Ext`/`Sql.Function`/interceptors; no structural component contract) | partial (interceptors, global filters; no structural component contract) |
-| **Total** | 73 / 5 / 3 | 49 / 22 / 10 | 28 / 27 / 25 |
+| **Total** | 76 / 5 / 3 | 49 / 23 / 12 | 28 / 29 / 26 |
 
 ## Where Nextorm leads
 
@@ -107,10 +115,20 @@ Against the shared surface Nextorm matches or exceeds linq2db; on top of that it
   temporal tables, row locking, hints and raw SQL for a whole query.
 - Unmapped columns (`SqlFunctions.Column`), named join aliases (`Alias.<Name>`) and per-query source
   overrides — each folded into the plan key.
+
+- **Multi-tenancy and sharding without a second model.** For a key, a runtime mapping variant can
+  rename
+  the table, schema, columns, and parameter prefix. It isolates metadata, plans, and parameter
+  prefixes
+  by variant; configure it with `WithVariant(...)` on the builder or a resolver on the context.
+  Sharding
+  can then place the same entity type across servers. linq2db renames through a per-connection
+  `MappingSchema`; EF Core documents tenant-column/`HasQueryFilter` and model-per-tenant patterns.
+  Neither
+  provides a per-command variant or ships sharding.
 - `SelectWhereMax`/`SelectWhereMin` as a dedicated extreme-row operator, lowered to the native strategy on
   PostgreSQL and ClickHouse; linq2db composes window functions plus `OrderBy`/`Take`.
-- `[JsonColumn]` with Auto/Native/Text storage — a mapping linq2db still lacks
-  ([linq2db#1661](https://github.com/linq2db/linq2db/issues/1661)).
+- `[JsonColumn]` with Auto/Native/Text storage — a mapping linq2db does not provide.
 - A complete, explicit write surface: `INSERT`/`UPDATE`/`DELETE`/full `MERGE`, generated keys and returned
   rows, key upsert, bulk insert, `CREATE TABLE AS SELECT`/temporary tables, PostgreSQL data-modifying CTEs and
   transactions — all explicit commands, with no change tracking and no `SaveChanges`.
@@ -119,16 +137,21 @@ Against the shared surface Nextorm matches or exceeds linq2db; on top of that it
   navigation, with global query filters applied to children at every level.
 - An EF Core integration package (`nextorm.entityframeworkcore`) sharing the EF connection, model mapping and
   transaction.
-- **Zero-config NativeAOT migration.** Inside the verified surface (SQLite, .NET 11 / `linux-x64`) the
-  only consumer change is `PublishAot=true`: no compiled model, no precompilation step, no
-  analyzer/interceptor opt-in, no entity or query registration, no linker descriptors or roots. EF Core
-  requires a compiled model plus interceptor-based query precompilation and rejects dynamically
-  composed queries; Dapper requires `Dapper.AOT` with `[module: DapperAot]`, an `InterceptorsNamespaces`
-  opt-in and statically known SQL; linq2db does not support NativeAOT officially. On a 13 GB SQLite
-  reporting app nextorm published natively with no source changes (8.2 MB, 0.12 s, 30 MB RSS), while
-  EF Core needed 17.3 MB / 0.23 s / 42 MB after two code-generation workarounds. Coverage is partial
-  (SQLite only; [#370](https://github.com/AlexeyShirshov/nextorm/issues/370)); the advantage is the
-  migration contract. See the [NativeAOT guide](../infrastructure/05-nativeaot.md).
+- **Zero-config NativeAOT migration.** In the verified surface—all six providers on .NET 11 /
+  `linux-x64`—the only consumer change is `PublishAot=true`. No compiled model, precompilation step,
+  analyzer/interceptor opt-in, entity or query registration, linker descriptor, or root is needed.
+  EF Core requires a compiled model and interceptor-based query precompilation, and rejects
+  dynamically
+  composed queries. Dapper requires `Dapper.AOT`, `[module: DapperAot]`, an `InterceptorsNamespaces`
+  opt-in, and statically known SQL. linq2db does not officially support NativeAOT.
+
+  On a 13 GB SQLite reporting app, Nextorm published natively with no source changes (8.2 MB, 0.12
+  s,
+  30 MB RSS); EF Core needed 17.3 MB / 0.23 s / 42 MB after two code-generation workarounds.
+  NativeAOT supports representative query, write, and raw SQL scenarios across all six providers.
+  The EF Core bridge requires JIT.
+  The advantage is the migration contract, not full AOT feature parity. See the [NativeAOT
+  guide](../infrastructure/05-nativeaot.md).
 - Cross-provider row values, portable range-over-scalar-pairs (`[RangeColumns]`), index hints, configurable
   keyword casing, full-text search including the SQLite FTS3/4/5 query surface and the FTS5
   maintenance/control builder, and CLR `Regex` translation.
@@ -150,10 +173,13 @@ surface, which Nextorm matches or exceeds:
 - **DDL / schema management**: linq2db ships `CreateTable`/`DropTable` and a schema API; Nextorm mutates the
   schema only through `CREATE TABLE AS SELECT` — ad-hoc DDL goes through `ExecuteRaw` (out of scope).
 
-Correlation is uniform on the SQL providers (arbitrary nesting depth). The in-memory provider evaluates
-depth-one correlated scalar/aggregate/`EXISTS`/`IN` once per outer row and rejects only the deeper forms (an
-outer reference inside the inner projection or `ORDER BY`, a correlated `GROUP BY`/`HAVING`, and an async
-inner source).
+SQL providers support correlated subqueries at arbitrary nesting depth. The in-memory provider
+evaluates
+depth-one correlated scalar, aggregate, `EXISTS`, and `IN` forms once per outer row. It rejects only
+deeper
+forms: an outer reference in the inner projection or `ORDER BY`, correlated `GROUP BY` or `HAVING`,
+and an
+async inner source.
 
 ## Architecture differences
 
@@ -166,15 +192,19 @@ inner source).
 
 ## Summary
 
-For reading, reporting and explicit data modification over an existing schema, Nextorm is the stronger
-choice: it covers essentially the whole analytic query surface linq2db offers — the provider-only function
-families, the ClickHouse-specific constructs, cross-provider row values, table-valued functions and more —
-with a smaller allocation footprint, benchmark results at or above Dapper, EF Core and linq2db on the shipped
-scenarios, and more configurable SQL output (identifier quoting, naming conventions and keyword casing are
-opt-in and overridable per command). NativeAOT migration is zero-config — `PublishAot=true` and nothing
-else — while EF Core needs a compiled model plus precompilation and Dapper needs an opt-in AOT package.
-linq2db remains the better fit only when the same layer must also track
-changes or generate the data layer from a live schema — the deliberate boundaries listed above.
+For a workload centered on reading, reporting, or explicit writes over an existing schema, use the
+rows above to check the required constructs and target-provider limits; the totals alone do not
+determine fit. The matrix shows that Nextorm covers nearly all of linq2db's analytic query surface,
+including provider-specific function families, ClickHouse constructs, cross-provider row values, and
+table-valued functions. It also offers configurable SQL output: identifier quoting, naming
+conventions, and keyword casing are opt-in and can be overridden per command.
+
+The benchmark results show a smaller allocation footprint and results at or above Dapper,
+EF Core, and linq2db on the shipped SQLite scenarios; they do not predict every workload. Within the
+verified NativeAOT surface, Nextorm requires only `PublishAot=true`, while EF Core needs a compiled
+model and precompilation, and Dapper needs an opt-in AOT package. linq2db remains a better fit when
+the same layer must also track changes or generate the data layer from a live schema—deliberate
+boundaries listed above.
 
 ## See also
 

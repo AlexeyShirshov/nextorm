@@ -5,9 +5,8 @@ using System.Runtime.CompilerServices;
 namespace NextORM.Core;
 
 /// <summary>
-/// A strongly typed query command producing <typeparamref name="TResult"/> rows. It adds the
-/// terminal execution surface - materialization, scalar and aggregate terminals, and set operations -
-/// on top of the relational shape carried by <see cref="QueryCommand"/>.
+/// Represents a query that produces values of type <typeparamref name="TResult"/> and provides methods
+/// to prepare, execute, and compose that query.
 /// </summary>
 /// <typeparam name="TResult">The projected row, element or scalar type produced by the command.</typeparam>
 public sealed partial class QueryCommand<TResult> : QueryCommand
@@ -133,13 +132,11 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <returns>An async stream of the result rows.</returns>
     public IAsyncEnumerable<TResult> Pipeline(params object[] @params) => Pipeline(CancellationToken.None, @params);
     /// <summary>
-    /// Streams the result set asynchronously. The previous implementation ran the synchronous
-    /// <see cref="ToEnumerable"/> on a thread-pool thread and pushed every row through an
-    /// unbounded <c>Channel</c>: it blocked a pool thread for the whole result set, buffered the
-    /// entire result in memory when the consumer was slower, and observed cancellation only
-    /// between rows. Driving the async enumerator directly keeps the same semantics without the
-    /// extra thread and without the unbounded buffer.
+    /// Streams the query results asynchronously. The query is prepared when enumeration begins.
     /// </summary>
+    /// <param name="cancellationToken">A token observed while preparing and enumerating the results.</param>
+    /// <param name="params">The positional SQL parameter values, in placeholder order.</param>
+    /// <returns>An asynchronous stream of result rows.</returns>
     public async IAsyncEnumerable<TResult> Pipeline(
         [EnumeratorCancellation] CancellationToken cancellationToken,
         params object[] @params)
@@ -156,7 +153,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public IAsyncEnumerable<TResult> ToAsyncEnumerable(params object[] @params)
         => ToAsyncEnumerableCore(CancellationToken.None, @params);
     /// <summary>Returns the result set as an async stream, using the supplied cancellation token.</summary>
-    /// <param name="cancellationToken">A token observed while enumerating rows.</param>
+    /// <param name="cancellationToken">A token observed while preparing the query and enumerating rows.</param>
     /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
     /// <returns>An async stream of the result rows.</returns>
     public IAsyncEnumerable<TResult> ToAsyncEnumerable(CancellationToken cancellationToken, params object[] @params)
@@ -182,7 +179,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// without materializing a <typeparamref name="TResult"/> per row. The destination is owned by the
     /// caller and is never closed. Supported on database providers only.
     /// </summary>
-    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
+    /// <param name="destination">The caller-owned output stream; it remains open. If reading, serialization, writing, or cancellation fails, the original exception propagates. Already-written bytes remain; the writer does not roll them back or append a recovery tail. The writer does not call <c>Stream.Flush</c>.</param>
     /// <exception cref="NotSupportedException">The command is executed by the in-memory provider.</exception>
     public void WriteJson(Stream destination) => WriteJson(destination, new JsonStreamOptions());
 
@@ -191,7 +188,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <paramref name="options"/>, without materializing a <typeparamref name="TResult"/> per row. The
     /// destination is owned by the caller and is never closed. Supported on database providers only.
     /// </summary>
-    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
+    /// <param name="destination">The caller-owned output stream; it remains open. If reading, serialization, writing, or cancellation fails, the original exception propagates. Already-written bytes remain; the writer does not roll them back or append a recovery tail. The writer does not call <c>Stream.Flush</c>.</param>
     /// <param name="options">The JSON container and shaping options.</param>
     /// <exception cref="NotSupportedException">The command is executed by the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
     public void WriteJson(Stream destination, JsonStreamOptions options)
@@ -207,7 +204,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// JSON array, without materializing a <typeparamref name="TResult"/> per row. The destination is
     /// owned by the caller and is never closed. Supported on database providers only.
     /// </summary>
-    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
+    /// <param name="destination">The caller-owned output stream; it remains open. If reading, serialization, writing, or cancellation fails, the original exception propagates. Already-written bytes remain; the writer does not roll them back or append a recovery tail. The writer does not call <c>Stream.Flush</c>.</param>
     /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
     /// <returns>A task that completes when the whole document has been written.</returns>
     /// <exception cref="NotSupportedException">The command is executed by the in-memory provider.</exception>
@@ -219,7 +216,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// JSON using <paramref name="options"/>, without materializing a <typeparamref name="TResult"/> per
     /// row. The destination is owned by the caller and is never closed. Supported on database providers only.
     /// </summary>
-    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
+    /// <param name="destination">The caller-owned output stream; it remains open. If reading, serialization, writing, or cancellation fails, the original exception propagates. Already-written bytes remain; the writer does not roll them back or append a recovery tail. The writer does not call <c>Stream.Flush</c>.</param>
     /// <param name="options">The JSON container and shaping options.</param>
     /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
     /// <returns>A task that completes when the whole document has been written.</returns>
@@ -238,7 +235,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <paramref name="params"/>, without materializing a <typeparamref name="TResult"/> per row. The
     /// destination is owned by the caller and is never closed. Supported on database providers only.
     /// </summary>
-    /// <param name="stream">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
+    /// <param name="stream">The caller-owned output stream; it remains open. If reading, serialization, writing, or cancellation fails, the original exception propagates. Already-written bytes remain; the writer does not roll them back or append a recovery tail. The writer does not call <c>Stream.Flush</c>.</param>
     /// <param name="options">The JSON container and shaping options.</param>
     /// <param name="cancellationToken">A token observed while preparing, reading rows and writing to the stream.</param>
     /// <param name="params">
@@ -265,7 +262,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <paramref name="params"/>, without materializing a <typeparamref name="TResult"/> per row. The
     /// destination is owned by the caller and is never closed. Supported on database providers only.
     /// </summary>
-    /// <param name="stream">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
+    /// <param name="stream">The caller-owned output stream; it remains open. If reading, serialization, writing, or cancellation fails, the original exception propagates. Already-written bytes remain; the writer does not roll them back or append a recovery tail. The writer does not call <c>Stream.Flush</c>.</param>
     /// <param name="options">The JSON container and shaping options.</param>
     /// <param name="cancellationToken">A token observed while preparing, reading rows and writing to the stream.</param>
     /// <param name="params">
@@ -1242,7 +1239,12 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <returns>The JSON document, or <c>null</c> when the query produced no rows (SQL Server <c>FOR JSON</c> yields SQL NULL for an empty result set).</returns>
     public string? ForJson(ForJsonMode mode = ForJsonMode.Path, string? root = null, bool includeNullValues = false, params object[]? @params)
         => ExecuteDocument(WithForJson(mode, root, includeNullValues), @params);
-    /// <summary>Asynchronously executes the query and returns the whole result set as one JSON document (SQL Server <c>FOR JSON</c>).</summary>
+    /// <summary>
+    /// Asynchronously executes the query and returns the entire result set as one JSON document (SQL Server
+    /// <c>FOR JSON</c>). Projection aliases shape <see cref="ForJsonMode.Path"/> output; the table structure
+    /// shapes <see cref="ForJsonMode.Auto"/> output. The query's <typeparamref name="TResult"/> is not the
+    /// document type, and this terminal does not apply an implicit <c>TOP 1</c>.
+    /// </summary>
     /// <param name="mode">Whether the output is shaped by the projection aliases (<see cref="ForJsonMode.Path"/>) or the table structure (<see cref="ForJsonMode.Auto"/>).</param>
     /// <param name="root">An optional <c>ROOT('name')</c> wrapper around the document, or <c>null</c> for none.</param>
     /// <param name="includeNullValues">Whether null-valued properties are emitted (<c>INCLUDE_NULL_VALUES</c>).</param>
@@ -1264,7 +1266,10 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <returns>The XML document, or <c>null</c> when the query produced no rows.</returns>
     public string? ForXml(ForXmlMode mode = ForXmlMode.Path, string? elementName = null, string? root = null, bool elements = false, params object[]? @params)
         => ExecuteDocument(WithForXml(mode, elementName, root, elements), @params);
-    /// <summary>Asynchronously executes the query and returns the whole result set as one XML document (SQL Server <c>FOR XML</c>).</summary>
+    /// <summary>
+    /// Asynchronously executes the query and returns the entire result set as one XML document (SQL Server
+    /// <c>FOR XML</c>). This terminal does not apply an implicit <c>TOP 1</c>.
+    /// </summary>
     /// <param name="mode">The <c>FOR XML</c> shaping mode (<c>RAW</c>, <c>AUTO</c>, <c>EXPLICIT</c> or <c>PATH</c>).</param>
     /// <param name="elementName">The row element name for <c>RAW</c>/<c>PATH</c>, or <c>null</c> for the default.</param>
     /// <param name="root">An optional <c>ROOT('name')</c> wrapper around the document, or <c>null</c> for none.</param>
@@ -1402,14 +1407,12 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <param name="selector">Projection from <typeparamref name="TEntity"/> to <typeparamref name="TResult"/>; must not be <see langword="null"/>.</param>
     /// <returns>A new command carrying the set operation.</returns>
     /// <remarks>
-    /// This overload is syntactic sugar for <c>Union(_dataContext.From&lt;TEntity&gt;().Select(selector))</c>:
-    /// it fixes the element type of the right operand to <typeparamref name="TResult"/> (the left side's type).
-    /// A bare <c>Union(null)</c> is ambiguous between
-    /// <see cref="Union{T}(QueryCommand{T})"/> and this overload's
-    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> parameter; the caller resolves it with a typed
-    /// null — <c>(QueryCommand&lt;TResult&gt;)null!</c> selects the command overload, while
-    /// <c>(Expression&lt;Func&lt;TEntity, TResult&gt;&gt;)null!</c> selects this selector overload (which
-    /// then throws <see cref="ArgumentNullException"/>).
+    /// This overload builds the second operand from <typeparamref name="TEntity"/>, projects it with
+    /// <paramref name="selector"/>, and combines it with this command using <c>UNION</c>. If a
+    /// <see langword="null"/> literal is ambiguous, cast it to
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> to select this overload; it then throws
+    /// <see cref="ArgumentNullException"/>. Cast to <see cref="QueryCommand{TResult}"/> to select the
+    /// command overload.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="selector"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">This command is not bound to a data context.</exception>
@@ -1426,14 +1429,12 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <param name="selector">Projection from <typeparamref name="TEntity"/> to <typeparamref name="TResult"/>; must not be <see langword="null"/>.</param>
     /// <returns>A new command carrying the set operation.</returns>
     /// <remarks>
-    /// This overload is syntactic sugar for <c>UnionAll(_dataContext.From&lt;TEntity&gt;().Select(selector))</c>:
-    /// it fixes the element type of the right operand to <typeparamref name="TResult"/> (the left side's type).
-    /// A bare <c>UnionAll(null)</c> is ambiguous between
-    /// <see cref="UnionAll{T}(QueryCommand{T})"/> and this overload's
-    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> parameter; the caller resolves it with a typed
-    /// null — <c>(QueryCommand&lt;TResult&gt;)null!</c> selects the command overload, while
-    /// <c>(Expression&lt;Func&lt;TEntity, TResult&gt;&gt;)null!</c> selects this selector overload (which
-    /// then throws <see cref="ArgumentNullException"/>).
+    /// This overload builds the second operand from <typeparamref name="TEntity"/>, projects it with
+    /// <paramref name="selector"/>, and combines it with this command using <c>UNION ALL</c>. If a
+    /// <see langword="null"/> literal is ambiguous, cast it to
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> to select this overload; it then throws
+    /// <see cref="ArgumentNullException"/>. Cast to <see cref="QueryCommand{TResult}"/> to select the
+    /// command overload.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="selector"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">This command is not bound to a data context.</exception>
@@ -1450,14 +1451,12 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <param name="selector">Projection from <typeparamref name="TEntity"/> to <typeparamref name="TResult"/>; must not be <see langword="null"/>.</param>
     /// <returns>A new command carrying the set operation.</returns>
     /// <remarks>
-    /// This overload is syntactic sugar for <c>Intersect(_dataContext.From&lt;TEntity&gt;().Select(selector))</c>:
-    /// it fixes the element type of the right operand to <typeparamref name="TResult"/> (the left side's type).
-    /// A bare <c>Intersect(null)</c> is ambiguous between
-    /// <see cref="Intersect{T}(QueryCommand{T})"/> and this overload's
-    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> parameter; the caller resolves it with a typed
-    /// null — <c>(QueryCommand&lt;TResult&gt;)null!</c> selects the command overload, while
-    /// <c>(Expression&lt;Func&lt;TEntity, TResult&gt;&gt;)null!</c> selects this selector overload (which
-    /// then throws <see cref="ArgumentNullException"/>).
+    /// This overload builds the second operand from <typeparamref name="TEntity"/>, projects it with
+    /// <paramref name="selector"/>, and combines it with this command using <c>INTERSECT</c>. If a
+    /// <see langword="null"/> literal is ambiguous, cast it to
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> to select this overload; it then throws
+    /// <see cref="ArgumentNullException"/>. Cast to <see cref="QueryCommand{TResult}"/> to select the
+    /// command overload.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="selector"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">This command is not bound to a data context.</exception>
@@ -1474,14 +1473,12 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <param name="selector">Projection from <typeparamref name="TEntity"/> to <typeparamref name="TResult"/>; must not be <see langword="null"/>.</param>
     /// <returns>A new command carrying the set operation.</returns>
     /// <remarks>
-    /// This overload is syntactic sugar for <c>IntersectAll(_dataContext.From&lt;TEntity&gt;().Select(selector))</c>:
-    /// it fixes the element type of the right operand to <typeparamref name="TResult"/> (the left side's type).
-    /// A bare <c>IntersectAll(null)</c> is ambiguous between
-    /// <see cref="IntersectAll{T}(QueryCommand{T})"/> and this overload's
-    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> parameter; the caller resolves it with a typed
-    /// null — <c>(QueryCommand&lt;TResult&gt;)null!</c> selects the command overload, while
-    /// <c>(Expression&lt;Func&lt;TEntity, TResult&gt;&gt;)null!</c> selects this selector overload (which
-    /// then throws <see cref="ArgumentNullException"/>).
+    /// This overload builds the second operand from <typeparamref name="TEntity"/>, projects it with
+    /// <paramref name="selector"/>, and combines it with this command using <c>INTERSECT ALL</c>. If a
+    /// <see langword="null"/> literal is ambiguous, cast it to
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> to select this overload; it then throws
+    /// <see cref="ArgumentNullException"/>. Cast to <see cref="QueryCommand{TResult}"/> to select the
+    /// command overload.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="selector"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">This command is not bound to a data context.</exception>
@@ -1498,14 +1495,12 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <param name="selector">Projection from <typeparamref name="TEntity"/> to <typeparamref name="TResult"/>; must not be <see langword="null"/>.</param>
     /// <returns>A new command carrying the set operation.</returns>
     /// <remarks>
-    /// This overload is syntactic sugar for <c>Except(_dataContext.From&lt;TEntity&gt;().Select(selector))</c>:
-    /// it fixes the element type of the right operand to <typeparamref name="TResult"/> (the left side's type).
-    /// A bare <c>Except(null)</c> is ambiguous between
-    /// <see cref="Except{T}(QueryCommand{T})"/> and this overload's
-    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> parameter; the caller resolves it with a typed
-    /// null — <c>(QueryCommand&lt;TResult&gt;)null!</c> selects the command overload, while
-    /// <c>(Expression&lt;Func&lt;TEntity, TResult&gt;&gt;)null!</c> selects this selector overload (which
-    /// then throws <see cref="ArgumentNullException"/>).
+    /// This overload builds the second operand from <typeparamref name="TEntity"/>, projects it with
+    /// <paramref name="selector"/>, and combines it with this command using <c>EXCEPT</c>. If a
+    /// <see langword="null"/> literal is ambiguous, cast it to
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> to select this overload; it then throws
+    /// <see cref="ArgumentNullException"/>. Cast to <see cref="QueryCommand{TResult}"/> to select the
+    /// command overload.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="selector"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">This command is not bound to a data context.</exception>
@@ -1522,14 +1517,12 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <param name="selector">Projection from <typeparamref name="TEntity"/> to <typeparamref name="TResult"/>; must not be <see langword="null"/>.</param>
     /// <returns>A new command carrying the set operation.</returns>
     /// <remarks>
-    /// This overload is syntactic sugar for <c>ExceptAll(_dataContext.From&lt;TEntity&gt;().Select(selector))</c>:
-    /// it fixes the element type of the right operand to <typeparamref name="TResult"/> (the left side's type).
-    /// A bare <c>ExceptAll(null)</c> is ambiguous between
-    /// <see cref="ExceptAll{T}(QueryCommand{T})"/> and this overload's
-    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> parameter; the caller resolves it with a typed
-    /// null — <c>(QueryCommand&lt;TResult&gt;)null!</c> selects the command overload, while
-    /// <c>(Expression&lt;Func&lt;TEntity, TResult&gt;&gt;)null!</c> selects this selector overload (which
-    /// then throws <see cref="ArgumentNullException"/>).
+    /// This overload builds the second operand from <typeparamref name="TEntity"/>, projects it with
+    /// <paramref name="selector"/>, and combines it with this command using <c>EXCEPT ALL</c>. If a
+    /// <see langword="null"/> literal is ambiguous, cast it to
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> to select this overload; it then throws
+    /// <see cref="ArgumentNullException"/>. Cast to <see cref="QueryCommand{TResult}"/> to select the
+    /// command overload.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="selector"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">This command is not bound to a data context.</exception>

@@ -3,11 +3,9 @@ using System.Collections.Concurrent;
 namespace NextORM.Core;
 
 /// <summary>
-/// Central construction-time helper that resolves a keyword token (or a fragment that is pure
-/// keywords and separators) to the configured <see cref="KeywordCase"/>. Emitters must pass the
-/// exact lower-case token they would have emitted; identifiers, literals and function names are never
-/// routed through here, so the case never touches user data. Exposed so provider capability renderers
-/// (which live in their own assembly) can case the clauses they emit.
+/// Applies the configured <see cref="KeywordCase"/> to a SQL keyword token or a fragment made only of
+/// keywords and separators. Pass lower-case keyword text; do not pass identifiers, literals, or function
+/// names. Provider capability renderers can use this helper to apply the same casing to their clauses.
 /// </summary>
 public static class SqlKeywords
 {

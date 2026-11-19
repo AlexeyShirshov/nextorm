@@ -93,11 +93,6 @@ public interface INullSafeComparisonRenderer
 /// can express only part of the family (ClickHouse, SQLite) exposes the same object and answers
 /// <see cref="Supports"/> per name.
 /// </summary>
-/// <remarks>
-/// Unlike the stateless <see cref="IIifRenderer"/>/<see cref="ILimitByRenderer"/>, this object carries
-/// both the per-name predicate and the renderer, hence the plural capability-noun name rather than the
-/// <c>*Renderer</c> suffix.
-/// </remarks>
 public interface ISessionInfoFunctions
 {
     /// <summary>True when the session/information function <paramref name="name"/> can be rendered.</summary>
@@ -113,11 +108,6 @@ public interface ISessionInfoFunctions
 /// rendering; a provider with only one of the two (SQL Server, MariaDB) answers
 /// <see cref="Supports"/> per name.
 /// </summary>
-/// <remarks>
-/// Unlike the stateless <see cref="IIifRenderer"/>/<see cref="ILimitByRenderer"/>, this object carries
-/// both the per-name predicate and the renderer, hence the plural capability-noun name rather than the
-/// <c>*Renderer</c> suffix.
-/// </remarks>
 public interface IUuidGenerators
 {
     /// <summary>True when the UUID generator <paramref name="name"/> can be rendered.</summary>
@@ -750,11 +740,6 @@ public interface IIndexHintRenderer
 /// the family answers <see cref="Supports"/> per name, and a provider that can express none returns
 /// <see langword="null"/> from <see cref="ISqlDialect.ScalarFunctions"/>.
 /// </summary>
-/// <remarks>
-/// Unlike the stateless <see cref="IIifRenderer"/>/<see cref="ILimitByRenderer"/>, this object carries
-/// both the per-name predicate and the renderer, hence the plural capability-noun name rather than the
-/// <c>*Renderer</c> suffix.
-/// </remarks>
 public interface IScalarFunctions
 {
     /// <summary>True when the scalar function <paramref name="name"/> can be rendered.</summary>
@@ -789,11 +774,6 @@ public interface IScalarFunctions
 /// <see cref="Supports"/> per name, and a provider with none returns <see langword="null"/> from
 /// <see cref="ISqlDialect.MySqlFunctions"/>.
 /// </summary>
-/// <remarks>
-/// Unlike the stateless <see cref="IIifRenderer"/>/<see cref="ILimitByRenderer"/>, this object carries
-/// both the per-name predicate and the renderer, hence the plural capability-noun name rather than the
-/// <c>*Renderer</c> suffix.
-/// </remarks>
 public interface IMySqlFunctions
 {
     /// <summary>True when the MySQL/MariaDB function <paramref name="name"/> can be rendered.</summary>
@@ -910,23 +890,12 @@ public interface ITupleRenderer
 }
 
 /// <summary>
-/// A dialect's renderer for the SQLite-only SQL surface exposed through <see cref="SqlFunctions.Sqlite"/>
-/// (<see cref="SqliteFunctions"/>): the core scalars (<c>printf</c>/<c>format</c>, <c>hex</c>/<c>unhex</c>,
-/// <c>random</c>/<c>randomblob</c>, <c>quote</c>, <c>typeof</c>, <c>glob</c>, <c>unicode</c>/<c>char</c>,
-/// <c>soundex</c>, <c>octet_length</c>, <c>if</c>/<c>ifnull</c>), the JSON1 functions/operators/aggregates
-/// (<c>json_extract</c>, <c>-&gt;</c>/<c>-&gt;&gt;</c>, <c>json_set</c>, <c>json_group_array</c>, ...), the
-/// date functions (<c>timediff</c>, <c>unixepoch</c>, <c>julianday</c>), the math-extension functions
-/// (<c>acos</c>, <c>degrees</c>, <c>log2</c>, <c>mod</c>, <c>pi</c>, ...) and the full-text (FTS3/FTS4/FTS5)
-/// query surface (<c>Match</c>, <c>Rank</c>, <c>FTS5bm25</c>, <c>Highlight</c>, <c>FTS3Offsets</c>, ...).
-/// The predicate and the renderer
-/// live on one object, so a name the dialect reports as supported always has a rendering, and a provider
-/// that cannot express the surface returns <see langword="null"/> from
-/// <see cref="ISqlDialect.SqliteFunctions"/>.
+/// A dialect's renderer for the SQLite-specific functions exposed through
+/// <see cref="SqlFunctions.Sqlite"/> and <see cref="SqliteFunctions"/>, including scalar, JSON, date,
+/// math and full-text functions. The predicate and renderer share one object, so every function the
+/// dialect reports as supported has a rendering. A provider without this surface returns
+/// <see langword="null"/> from <see cref="ISqlDialect.SqliteFunctions"/>.
 /// </summary>
-/// <remarks>
-/// Unlike the stateless renderers, this object carries both the per-name predicate and the renderer,
-/// hence the plural capability-noun name rather than the <c>*Renderer</c> suffix.
-/// </remarks>
 public interface ISqliteFunctions
 {
     /// <summary>True when the SQLite function <paramref name="name"/> can be rendered.</summary>

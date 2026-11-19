@@ -1,15 +1,16 @@
 # Группировка и агрегаты
 
-> Группируйте строки с помощью [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), фильтруйте группы с помощью [`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) и вычисляйте `count`, `min`, `max`, `avg`, `sum`, `stdev`, `var` и их `_distinct`-варианты через ``
+> Группируйте строки с помощью [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), фильтруйте группы с помощью [`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) и вычисляйте `count`, `min`, `max`, `avg`, `sum`, `stdev`, `var` и их `_distinct`-варианты через [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql).
 
 **Предварительные требования:** [Запросы и проекции](../engine/index.md) · [Фильтрация (WHERE)](03-filtering-where.md) · [Сортировка и постраничный вывод](06-sorting-and-paging.md)
 
 ## Обзор
 
-`EntityBuilder<T>.GroupBy(...)` добавляет предложение `GROUP BY`, а `EntityBuilder<T>.Having(...)` добавляет
-предложение `HAVING`, которое фильтрует группы. Оба являются предложениями построителя, поэтому они
-комбинируются с [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})), [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)), [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)) и проекцией точно так же, как в любом другом
-запросе:
+Используйте `EntityBuilder<T>.GroupBy(...)`, чтобы сгруппировать строки по ключу. Добавьте
+`EntityBuilder<T>.Having(...)`, чтобы оставить только группы, удовлетворяющие условию на агрегат.
+Оба метода добавляют SQL-предложения к одному построителю, поэтому их можно сочетать с
+[`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})),
+[`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)), [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)) и проекцией:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -18,8 +19,23 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
-Агрегатные функции находятся в [`Sql`](xref:NextORM.Core.SqlFunctions.Sql) и имеют смысл только внутри проекции или предиката
-[`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})). Они называются ровно так:
+Запрос возвращает по одной строке на каждое различное значение `Int`. `count()` показывает, сколько
+исходных строк попало в каждую группу.
+
+Выберите форму запроса по нужному результату:
+
+- Для сводной строки на каждый ключ используйте [`GroupBy`](#groupby) и проекцию с агрегатом.
+- Чтобы отсеять группы после агрегирования, добавьте [`Having`](#having).
+- Для одного значения по всему источнику опустите `GroupBy`; см. раздел
+  [«Агрегаты без группировки»](#агрегаты-без-группировки).
+- Чтобы вернуть строку с максимальным или минимальным значением, а не сводку, см.
+  [«Выбор экстремальной строки»](#выбор-экстремальной-строки-selectwheremax--selectwheremin).
+- Агрегаты и синтаксис, доступные только у отдельных провайдеров, описаны в разделах
+  [«Логические, битовые, статистические и упорядоченные агрегаты»](#логические-битовые-статистические-и-упорядоченные-агрегаты)
+  и [«Различия между провайдерами»](#различия-между-провайдерами).
+
+Агрегатные функции доступны через [`Sql`](xref:NextORM.Core.SqlFunctions.Sql). Используйте их в проекции
+или предикате [`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})):
 
 | Функция | Результат | Функция | Результат |
 |---|---|---|---|
@@ -33,49 +49,20 @@ var rows = dataContext.From<IComplexEntity>()
 | `stdevp(x)` | совпадает с `x` | `varp_distinct(x)` | совпадает с `x` |
 | `var(x)` | совпадает с `x` | `varp(x)` | совпадает с `x` |
 
-При вызове без аргументов `count()` / `count_big()` считают строки (`count(*)`); при вызове с одним
-или несколькими выражениями они считают непустые (non-null) значения этих выражений. Остальные
-функции принимают аргумент-выражение. Суффикс `_distinct` добавляет `distinct` внутри круглых
-скобок.
+При вызове без аргументов `count()` / `count_big()` считают строки (`count(*)`). Если передать одно
+или несколько выражений, они считают только значения, отличные от `NULL`. Остальные функции принимают
+выражение как аргумент. Суффикс `_distinct` добавляет `distinct` внутрь круглых скобок.
 
-У распространённых агрегатов также есть удобные терминалы на `EntityBuilder<T>`: [`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0})), `Min(x)`,
-`Max(x)`, `Avg(x)`, `Sum(x)`, `Stdev(x)`, `Stdevp(x)`, `Var(x)` и `Varp(x)`, каждый с `...Async`-двойником
-и перегрузкой, принимающей позиционные параметры. У `count`, `count_big`, `count_distinct` и
-`count_big_distinct` нет терминала на сущности, и они используются через ``
+Распространённые агрегаты можно вызвать напрямую методами `EntityBuilder<T>`:
+[`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0})), `Min(x)`, `Max(x)`,
+`Avg(x)`, `Sum(x)`, `Stdev(x)`, `Stdevp(x)`, `Var(x)` и `Varp(x)`. Эти методы выполняют запрос и
+возвращают значение агрегата. Для каждого есть синхронная и `...Async`-перегрузки, а также перегрузка
+с позиционными параметрами. Используйте [`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0})) для подсчёта строк. Если агрегат нужно включить в проекцию или предикат `Having`, используйте [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql). Прямой метод есть не для каждого SQL-агрегата.
 
-## Типы результата и аргументы AVG
-
-`avg` не возвращает тип своего аргумента: целочисленный столбец даёт дробный результат, поэтому
-`avg` по `[1, 2]` — это `1.5`, а не целое значение, которое возвращали предыдущие версии (`2`; `1`
-в SQL Server, где нативный целочисленный `AVG` усекает). Результат nullable на каждом провайдере,
-поэтому пустой вход или вход из одних `NULL` даёт `null`, а не незащищённое чтение.
-
-| Вход | Результат `avg(x)` |
-|---|---|
-| `byte`, `sbyte`, `short`, `ushort`, `int`, `uint`, `long`, `ulong` и их nullable-формы | `double?` |
-| `float`, `float?` | `float?` |
-| `double`, `double?` | `double?` |
-| `decimal`, `decimal?` | `decimal?` |
-
-Политика аргумента задаётся провайдером. SQL Server вычисляет `AVG` по не-плавающему аргументу как
-целое, поэтому аргумент расширяется *внутри* агрегата; остальные диалекты сохраняют нативный
-аргумент. Политика одинакова для `avg`, `avg_distinct` и оконного `avg_over`:
-
-| Провайдер | Генерируемый аргумент |
-|---|---|
-| SQLite, PostgreSQL, MySQL, MariaDB, ClickHouse | `avg(id)` |
-| SQL Server | `avg(cast(id as float))` |
-
-Результат nullable: `Avg` возвращает `double?` (или `float?`/`decimal?` для соответствующих входов).
-Сохраняйте nullable-результат или разворачивайте его явно; целочисленная цель не компилируется:
-
-```csharp
-int average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // не компилируется
-var average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // double?
-var direct  = dataContext.From<ISimpleEntity>().Select(e => SqlFunctions.Sql.avg(e.Id)).First(); // double?
-```
-
-Позвольте перегрузке выбрать объявление по типу селектора, а не указывайте generic-аргументы явно.
+Если данные распределены по бакетам, `AcrossBuckets()` выполняет запрос по одному разу на каждый бакет и
+возвращает отдельный вектор результатов для каждого из них. `GroupBy` и агрегаты считаются **внутри**
+каждого бакета; между бакетами результаты не объединяются и не агрегируются повторно. См.
+[«Шардирование и горизонтальное партиционирование»](35-sharding-and-horizontal-partitioning.md).
 
 ## GroupBy
 
@@ -196,6 +183,40 @@ var top = dataContext.From<IComplexEntity>()
 убыванию ставит `NULL` первыми, SQLite — последними), поэтому в примере сортировки группа `NULL`
 исключена.
 
+## Типы результата и аргументы AVG
+
+`avg` не возвращает тип своего аргумента: для целочисленного столбца результат дробный, поэтому
+`avg` по `[1, 2]` даёт `1.5`. На всех провайдерах результат допускает `null`,
+поэтому пустой вход или вход, где все значения равны `NULL`, возвращает `null`.
+
+| Вход | Результат `avg(x)` |
+|---|---|
+| `byte`, `sbyte`, `short`, `ushort`, `int`, `uint`, `long`, `ulong` и их nullable-формы | `double?` |
+| `float`, `float?` | `float?` |
+| `double`, `double?` | `double?` |
+| `decimal`, `decimal?` | `decimal?` |
+
+Способ обработки аргумента зависит от провайдера. Для SQL Server nextorm преобразует аргумент без
+плавающей точки в `float` внутри `AVG`, чтобы результат сохранял дробную часть. Остальные диалекты
+передают исходный аргумент. Это правило действует для `avg`, `avg_distinct` и оконного `avg_over`:
+
+| Провайдер | Аргумент в SQL |
+|---|---|
+| SQLite, PostgreSQL, MySQL, MariaDB, ClickHouse | `avg(id)` |
+| SQL Server | `avg(cast(id as float))` |
+
+`Avg` возвращает nullable-результат `double?` (или `float?`/`decimal?` для соответствующих входов).
+Сохраняйте этот тип или явно преобразуйте значение после проверки на `null`; присваивание результата
+переменной типа `int` не компилируется:
+
+```csharp
+int average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // не компилируется
+var average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // double?
+var direct  = dataContext.From<ISimpleEntity>().Select(e => SqlFunctions.Sql.avg(e.Id)).First(); // double?
+```
+
+Позвольте перегрузке выбрать объявление по типу селектора, а не указывайте generic-аргументы явно.
+
 ## Группировка, выведенная из проекции: SelectGroup
 
 `SelectGroup` поставляется в пакете `NextORM.Extensions` (`using NextORM.Extensions;`). Он принимает ту же лямбду проекции, что и `Select`, но вместо явного `GroupBy` выводит
@@ -244,14 +265,14 @@ select nullableint as 'Int', sum(id) as 'Total'
   проекции, поэтому сгенерированный `GROUP BY` детерминирован.
 * **Константы и захваченные значения не являются ключами.** Литерал или захваченная локальная
   переменная не группирует и не сдвигает порядок ключей.
-* **Дубликаты схлопываются структурно.** Два структурно равных ключевых выражения дают один ключ.
+* **Одинаковые выражения группировки не дублируются.** Два структурно равных выражения дают один ключ.
 * **Целая скалярная функция остаётся одним ключом.** Ключом является
   `date_trunc('quarter', OrderDate)`, «сырой» `OrderDate` рядом не добавляется.
 * **Гранулярность подвыражений сохраняется.** `sum(Amount) + Adjustment` выводит `Adjustment`;
   `sum(Amount) + Price * Qty` выводит `Price * Qty`, а не `Price` и `Qty` по отдельности.
-* **Агрегатные вызовы непрозрачны.** Аргументы агрегата, его `DISTINCT`-вход и его `FILTER`-предикат
-  никогда не протекают в ключи группировки.
-* **Проекция сохраняется.** Исходная проекция рендерится как написана: ни один ключ не
+* **Агрегатные вызовы не влияют на ключи.** Аргументы агрегата, его `DISTINCT`-вход и его
+  `FILTER`-предикат не добавляются к ключам группировки.
+* **Проекция сохраняется.** SQL для исходной проекции генерируется без изменений: ни один ключ не
   переписывается, ни одно значение не сворачивается на клиенте, форма результата не меняется.
 
 Вырожденные проекции разрешаются без изобретения группировки:
@@ -349,10 +370,11 @@ select nullableint as 'Int', b as 'Boolean', count(*)
 
 ## WITH TOTALS
 
-ClickHouse добавляет `WITH TOTALS` ([`SupportsGroupByWithTotals`](xref:NextORM.Core.ISqlDialect.SupportsGroupByWithTotals)) через
-`.WithTotals()` после любой группировки: запрос возвращает строки групп плюс одну строку с итогами по
-всем группам. Сочетается с `ROLLUP`/`CUBE`, но не с `GROUPING SETS`. Официальный `ClickHouse.Driver` не
-отдаёт строку итогов, поэтому nextorm эмитит модификатор, но читаются только строки групп.
+В ClickHouse можно добавить `WITH TOTALS` ([`SupportsGroupByWithTotals`](xref:NextORM.Core.ISqlDialect.SupportsGroupByWithTotals)) вызовом
+`.WithTotals()` после группировки. Запрос возвращает строки групп и одну строку с общими итогами.
+Модификатор сочетается с `ROLLUP`/`CUBE`, но не с `GROUPING SETS`. Официальный `ClickHouse.Driver` не
+передаёт строку итогов через свой API, поэтому nextorm добавляет `WITH TOTALS` в SQL, но читает только
+строки групп.
 
 ## GROUPING SETS
 
@@ -399,8 +421,8 @@ select distinct on (somestring) id, somestring
 
 Ключом может быть анонимный тип — тогда ключ составляется из нескольких колонок; ведущие выражения
 `ORDER BY` должны ему соответствовать. [`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})) нельзя комбинировать с [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct), и реализует его
-только PostgreSQL — остальные провайдеры отклоняют его на этапе построения SQL. Полная поверхность —
-в разделе [SELECT DISTINCT](09-distinct.md#distinct-on-postgresql).
+только PostgreSQL — остальные провайдеры отклоняют его на этапе построения SQL. Подробнее см.
+раздел [SELECT DISTINCT](09-distinct.md#distinct-on-postgresql).
 
 ## Выбор экстремальной строки (`SelectWhereMax` / `SelectWhereMin`)
 
@@ -485,13 +507,12 @@ select t1.id, t1.label
 SQL: логический запрос понижается внутри общего конвейера, и форма зависит только от политики
 совпадений.
 
-[`One`](xref:NextORM.Core.ExtremeRowTies.One) понижается до производной таблицы с оконной функцией —
+[`One`](xref:NextORM.Core.ExtremeRowTies.One) строит производную таблицу с оконной функцией —
 `row_number()` над `(partition by <группа> order by <значение> [desc])` — с фильтром по `1`, а условие
-источника объединяется через `AND` с фильтром `is not null` по значению. На PostgreSQL и ClickHouse
-нативно подходящий запрос с `One` вместо этого рендерится нативно, автоматически, по провайдеру и
-форме запроса — см.
-[Нативные стратегии выбора экстремальной строки](../advanced/select-where-extrema-native.md), — а любой
-другой провайдер или форма сохраняет переносимое окно.
+источника объединяется через `AND` с фильтром `is not null` по значению. Для поддерживаемой формы
+запроса PostgreSQL и ClickHouse автоматически используют собственную стратегию `One` — см.
+[Нативные стратегии выбора экстремальной строки](../advanced/select-where-extrema-native.md). Для
+других провайдеров и форм остаётся переносимая версия с оконной функцией.
 
 [`All`](xref:NextORM.Core.ExtremeRowTies.All) понижается до **агрегатной** формы. Ранжирующее окно не
 используется никогда: в запросе с `All` нет ни `rank()`, ни `row_number()`, ни оконного
@@ -583,10 +604,11 @@ select sum(id)
 |-----|
 | 55 |
 
-`avg` возвращает дробный nullable-результат для любого числового входа (см.
-[типы результата и аргументы AVG](#типы-результата-и-аргументы-avg)), поэтому `[1, 2]` — это `1.5`
-на любом провайдере, включая SQL Server. У каждого агрегата есть терминал на сущности, который
-перенаправляет к той же функции: `Sum`, `Avg`, `Min` и `Max` эквивалентны `Select(...)` с последующим `First()`, а `Count()` —
+`avg` возвращает дробное nullable-значение для любого числового входа (см.
+[типы результата и аргументы AVG](#типы-результата-и-аргументы-avg)), поэтому `[1, 2]` даёт `1.5`
+на любом провайдере, включая SQL Server. Для распространённых агрегатов есть методы, которые сразу
+выполняют запрос и возвращают результат: `Sum`, `Avg`, `Min`, `Max` и `Count`. Вызовы `Sum`, `Avg`,
+`Min` и `Max` эквивалентны `Select(...)` с последующим `First()`, а `Count()` — вызову
 `Select(e => SqlFunctions.Sql.count()).First()`:
 
 ```csharp
@@ -597,8 +619,8 @@ var max   = await dataContext.From<ISimpleEntity>().MaxAsync(e => e.Id); // SqlF
 var count = dataContext.From<ISimpleEntity>().Count();                   // SqlFunctions.Sql.count
 ```
 
-У каждого терминала есть синхронная и `...Async`-перегрузка (плюс параметризованная); `Count()`
-подробнее описан в разделе [Подсчёт](#подсчёт) ниже.
+У каждого из этих методов есть синхронная, `...Async` и параметризованная перегрузки. Подробнее о
+`Count()` см. в разделе [Подсчёт](#подсчёт).
 
 ## Подсчёт
 
@@ -753,10 +775,10 @@ select varp(id)
 |------|
 | 8 |
 
-`stdev` — выборочное стандартное отклонение, `stdevp` — генеральное; `var`/`varp` — соответствующие
-дисперсии. У каждой есть `_distinct`-форма (`stdev_distinct`, `stdevp_distinct`, `var_distinct`,
-`varp_distinct`) и терминал на сущности ([`Stdev`](xref:NextORM.Core.EntityBuilderExtensions.Stdev``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`Stdevp`](xref:NextORM.Core.EntityBuilderExtensions.Stdevp``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`Var`](xref:NextORM.Core.EntityBuilderExtensions.Var``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`Varp`](xref:NextORM.Core.EntityBuilderExtensions.Varp``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}}))) с синхронной,
-`...Async` и параметризованной перегрузкой:
+`stdev` — выборочное стандартное отклонение, `stdevp` — для всей совокупности; `var`/`varp` вычисляют
+соответствующую дисперсию. У каждой функции есть `_distinct`-форма (`stdev_distinct`,
+`stdevp_distinct`, `var_distinct`, `varp_distinct`) и прямой метод на `EntityBuilder`:
+[`Stdev`](xref:NextORM.Core.EntityBuilderExtensions.Stdev``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`Stdevp`](xref:NextORM.Core.EntityBuilderExtensions.Stdevp``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`Var`](xref:NextORM.Core.EntityBuilderExtensions.Var``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})) и [`Varp`](xref:NextORM.Core.EntityBuilderExtensions.Varp``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})). У каждого метода есть синхронная, `...Async` и параметризованная перегрузки:
 
 ```csharp
 var sample = dataContext.From<ISimpleEntity>().Stdev(e => e.Id);
@@ -766,7 +788,8 @@ var sumAfter5 = dataContext.From<ISimpleEntity>()
     .Sum(e => e.Id, 5);
 ```
 
-Проецирование через `double` позволяет избежать потери точности при преобразовании целых чисел:
+Преобразование значения в `double` перед агрегированием предотвращает потерю точности при работе с
+целыми числами:
 
 ```csharp
 var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.varp((double)x.Id)).First();
@@ -774,9 +797,9 @@ var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.va
 
 ### Nullable-результаты и кардинальность
 
-Четыре семейства вариативности структурно nullable: `Stdev`, `Stdevp`, `Var` и `Varp`, а также
-восемь форм фасада `Sql.stdev*`/`Sql.var*` возвращают `T?`. Кардинальность считает вносящие вклад
-непустые значения после `DISTINCT`:
+Методы `Stdev`, `Stdevp`, `Var`, `Varp` и восемь форм фасада `Sql.stdev*`/`Sql.var*` возвращают `T?`,
+поскольку для некоторых входов результат не определён. Число значений, участвующих в вычислении, —
+это количество непустых значений после `DISTINCT`:
 
 | Вносящих вклад значений | `Stdev` / `Var` (выборочные) | `Stdevp` / `Varp` (генеральные) |
 |---|---|---|
@@ -788,9 +811,10 @@ var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.va
 результат по одной строке — `0.0`. `null` возвращается только для неопределённого результата и
 никогда не подменяется придуманным нулём.
 
-Результат — настоящий `Nullable<T>`: сохраняйте его (`double?`) либо разворачивайте явно.
-Присваивание терминала в non-nullable `int`/`double` не компилируется. `?? 0` уместен только там,
-где ноль действительно означает «нет разброса»: иначе он подставляет ноль для неопределённого случая.
+Результат имеет тип `Nullable<T>`: сохраняйте его, например как `double?`, или явно преобразуйте в
+обычный тип после проверки на `null`. Присваивание результата в non-nullable `int`/`double` не
+компилируется. Используйте `?? 0`, только если ноль действительно означает «нет разброса»: иначе
+оператор заменит нулём неопределённый результат.
 
 ## Логические, битовые, статистические и упорядоченные агрегаты
 
@@ -819,8 +843,7 @@ var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.va
 | Последовательности / воронка | `SqlFunctions.ClickHouse.window_funnel(window, ts, c1, c2)`, `sequence_match(pattern, ts, c1, c2)`, `retention(c1, c2)` | `toInt32(windowFunnel(window)(ts, c1, c2))`, `toInt32(sequenceMatch(pattern)(ts, c1, c2))`, `retention(c1, c2)` | [`SequenceAggregates`](xref:NextORM.Core.ISqlDialect.SequenceAggregates) | ClickHouse |
 | Упорядоченные | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `median(() => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, `percentile_cont(0.5) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) (`mode`), [`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles) (квантили, `median`) | PostgreSQL |
 
-MariaDB **не** поддерживает `any_agg`: в 10.4–12.x нет `ANY_VALUE` (возможность SQL-2023 `T626` всё ещё
-ожидается, ориентир — 13.2), поэтому [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) равно `false`, а вызов отклоняется через `NotSupportedException`.
+Провайдер MariaDB **не** поддерживает `any_agg`: в MariaDB 10.4–12.x нет `ANY_VALUE`, поэтому [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) равно `false`, а вызов отклоняется через `NotSupportedException`.
 
 ```csharp
 var stats = dataContext.From<IComplexEntity>()
@@ -952,10 +975,10 @@ select nullableint, toInt32(countIf((id > 10))) as `Big`, sumIf(id, (b = true)) 
 
 `string_agg`/`array_agg` тоже принимают фильтр; `string_agg` доступен в PostgreSQL, SQL Server
 2017+ и ClickHouse (как `arrayStringConcat(groupArray(x), delimiter)`), а `array_agg` — только в
-PostgreSQL (в SQL Server нет типа-массива). Оба результата — колонки-массивы, материализуемые row
-reader'ом как CLR `T[]`. В ClickHouse дополнительно доступны нативные возвращающие массивы агрегаты
-`group_array`/`group_uniq_array` (`groupArray`/`groupUniqArray`). Полная
-поверхность — в разделе [Скалярные функции](../scalar-functions/05-aggregates.md#фильтр-агрегатов-filter).
+PostgreSQL (в SQL Server нет типа-массива). Оба результата — колонки-массивы, которые материализуются
+как CLR-массивы `T[]`. В ClickHouse дополнительно доступны нативные возвращающие массивы агрегаты
+`group_array`/`group_uniq_array` (`groupArray`/`groupUniqArray`). Подробности — в разделе
+[Скалярные функции](../scalar-functions/05-aggregates.md#фильтр-агрегатов-filter).
 
 ## Различия между провайдерами
 

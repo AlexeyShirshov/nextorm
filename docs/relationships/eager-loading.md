@@ -1,14 +1,52 @@
 # Eager loading child collections (`LoadWith`)
 
-> `LoadWith` fills a parent-side collection and stitches the children onto the already materialized parents in memory. Split-query is the default — one extra child query per key chunk, two round trips for at most 1000 parents, never N+1 — and passing `EagerLoadMode.SingleQuery` (or configuring the context-wide default) fetches the parents and every declared collection in one denormalized round trip instead. The strategy is explicit: split, single-query, a conservative `Auto`, or a context default; `Correlated` stays reserved and rejected, while a child query's own `Take`/`Skip` is applied per parent (see [Per-parent paging in eager loading](eager-loading-per-parent-paging.md)). A child query may itself declare `LoadWith`, so a finite graph nests to any depth (level 2 and deeper) and runs in a single, graph-wide mode.
+> Use `LoadWith` when you want each returned order to include its items. It loads the child rows and fills
+> the collection on each parent; it does not rely on lazy loading.
 
 **Prerequisites:** [Quickstart](../getting-started/02-quickstart.md) · [Joins](../guide/04-joins.md) · [Correlated queries](../guide/07-subqueries.md)
 
+To load each matching order with its items, use the parent and child keys:
+
+```csharp
+var orders = ctx.From<Order>()
+    .Where(o => o.CustomerId == customerId)
+    .LoadWith(o => o.Items, c => c.From<OrderItem>(), o => o.Id, i => i.OrderId)
+    .OrderBy(o => o.Id)
+    .ToList();
+```
+
+This uses the default split strategy. The query reads the matching orders, then `LoadWith` fetches their
+items in batches and adds each item to the order whose `Id` matches `OrderItem.OrderId`. The number of
+child queries depends on the parent-key set, not on the number of orders.
+
+## Choose a loading strategy
+
+Use the following guide to choose how nextorm fetches the parent and child rows:
+
+| Strategy | Choose it when | What it does |
+|---|---|---|
+| `SplitQuery` (default) | You want to avoid a large denormalized join or need child-query shapes supported only by split loading. | Reads parents once, then issues batched child queries for groups of keys (up to 1000 keys and 2000 key parameters per group). |
+| `SingleQuery` | One database round trip matters more than the size of the joined result, and the child query fits the single-query limits below. | Fetches parents and declared collections together through `LEFT JOIN`s. |
+| `Auto` | You want the conservative automatic choice. | Uses `SplitQuery` for ordinary loads; it does not estimate cost or retry with another strategy. |
+| Context default | You want one default for loads that do not specify a mode. | Sets the fallback strategy for that context only; a query-level mode takes precedence. |
+
+`Correlated` is reserved and rejected. A child query's `Take`/`Skip` applies separately to each parent
+(see [Per-parent paging in eager loading](eager-loading-per-parent-paging.md)). A child query can declare
+another `LoadWith`, so you can load a finite nested graph; one strategy applies to the whole graph.
+
 ## Overview
 
-nextorm does not infer relationships, so a graph is not loaded from a mapper convention. `LoadWith` declares one edge of eager loading either with explicit key selectors — a parent collection member, a factory that builds the child query, and the two key selectors that pair children with parents — or, when the relationship is already declared, from that declared metadata (see [Declared-metadata form](#declared-metadata-form)). A relationship is never guessed from a naming convention. The child query is an ordinary `EntityBuilder<TChild>` and can carry its own `LoadWith`, so the declarations form a finite graph, level 2 and deeper included. The association lives on the query, not in the entity metadata; for the declared-metadata, single-round-trip alternative see [`JoinInto`](relationships.md).
+nextorm never infers a relationship from a naming convention. Declare each `LoadWith` edge either with
+explicit key selectors—the parent collection, a child-query factory, and the parent and child keys—or
+through relationship metadata that is already declared (see [Declared-metadata form](#declared-metadata-form)).
+The child query is an ordinary `EntityBuilder<TChild>` and can declare another `LoadWith`, forming a
+finite graph of any depth. The association belongs to the query, not the entity metadata; for the
+declared-metadata, single-round-trip alternative, see [`JoinInto`](relationships.md).
 
-This is the nextorm equivalent of linq2db `LoadWith` and EF Core `Include`. Split-query is the default; the opt-in `EagerLoadMode.SingleQuery` mode issues one denormalized round trip instead, and a nested graph is supported in both modes where the provider can express it (see [Nested graphs](#nested-graphs-level-2-and-deeper)).
+This is the nextorm equivalent of linq2db `LoadWith` and EF Core `Include`. Split-query is the default.
+The opt-in `EagerLoadMode.SingleQuery` mode fetches the parent and child rows in one denormalized round
+trip. Nested graphs work in both modes where the provider can express them (see
+[Nested graphs](#nested-graphs-level-2-and-deeper)).
 
 ## Signature
 
@@ -29,14 +67,6 @@ public EntityBuilder<TEntity> LoadWith<TChild, TKey>(
 - `TKey` must be a non-nullable type (`where TKey : notnull`), for example `int` or `string`. A null key value observed at runtime is skipped and never matches.
 
 `LoadWith` returns a **copy** of the builder carrying the declaration, so the original builder is unchanged and several loads can be chained:
-
-```csharp
-var orders = ctx.From<Order>()
-    .Where(o => o.CustomerId == customerId)
-    .LoadWith(o => o.Items, c => c.From<OrderItem>(), o => o.Id, i => i.OrderId)
-    .OrderBy(o => o.Id)
-    .ToList();
-```
 
 Like every builder modifier, `LoadWith` needs the generic key type to be known at the call site; when a selector is implicitly convertible, spell the key type out or make both selector bodies produce the same type.
 
@@ -109,7 +139,7 @@ Each of these is rejected with [`NotSupportedException`](xref:System.NotSupporte
 
 ## Mode selection
 
-The `mode` argument selects how the declared collections are loaded, using the public [`EagerLoadMode`](xref:NextORM.Core.EagerLoadMode) enum. The numeric values are fixed and migration-compatible: `Default=0`, `SplitQuery=1` and `SingleQuery=2` keep their historical meaning for callers that persist or compare the enum, and `Correlated=3`/`Auto=4` are appended:
+The `mode` argument selects how the declared collections are loaded, using the public [`EagerLoadMode`](xref:NextORM.Core.EagerLoadMode) enum. The table lists the enum values and their behavior:
 
 | Member | Value | Meaning |
 |---|---|---|
@@ -131,7 +161,7 @@ The mode is resolved when `LoadWith` runs; the load specification is otherwise u
 
 ### Context-wide default
 
-[`DataContextBuilder.UseEagerLoadMode(EagerLoadMode)`](xref:NextORM.Core.DataContextBuilder.UseEagerLoadMode(NextORM.Core.EagerLoadMode)) configures a context-wide default for `LoadWith` collections whose query declares no explicit mode. It defaults to `EagerLoadMode.SplitQuery`, so an unconfigured context keeps the historical behavior:
+[`DataContextBuilder.UseEagerLoadMode(EagerLoadMode)`](xref:NextORM.Core.DataContextBuilder.UseEagerLoadMode(NextORM.Core.EagerLoadMode)) configures a context-wide default for `LoadWith` collections whose query declares no explicit mode. It defaults to `EagerLoadMode.SplitQuery`, which works as follows:
 
 ```csharp
 var builder = new DataContextBuilder()
@@ -165,7 +195,7 @@ The effective strategy is `query override ?? context default`: an explicit `Load
 
 ### `Correlated` and per-parent paging
 
-`EagerLoadMode.Correlated` has no implemented execution path in this release. It is recognized and rejected with [`NotSupportedException`](xref:System.NotSupportedException) **during preparation — before any SQL is generated and before a plan entry is inserted**, so a rejected query neither runs the parent statement nor poisons the plan cache. The enum value is reserved for the correlated work tracked separately. The rejection is terminal-agnostic: it also holds on the **non-list** terminals below, which evaluate the parent only. Such a terminal first validates the `LoadWith` set, so an explicit `Correlated` is rejected before its parent command is built instead of being silently dropped; the non-list terminal still does not materialize the collection.
+`EagerLoadMode.Correlated` has no implemented execution path in this release. It is recognized and rejected with [`NotSupportedException`](xref:System.NotSupportedException) **during preparation — before any SQL is generated and before a plan entry is inserted**, so a rejected query neither runs the parent statement nor poisons the plan cache. The rejection is terminal-agnostic: it also holds on the **non-list** terminals below, which evaluate the parent only. Such a terminal first validates the `LoadWith` set, so an explicit `Correlated` is rejected before its parent command is built instead of being silently dropped; the non-list terminal still does not materialize the collection.
 
 A child query's own `Limit`/`Offset`/`Page` is **not** rejected: it is applied independently to each parent through a partitioned `row_number()` child source in both `SplitQuery` and `SingleQuery`, with child filtering and ordering before paging, root bounds kept independent and empty parents preserved. `Auto` honors the paged load through its split dispatch, and a paged load is never reinterpreted as a global child limit or an unrestricted load. Per-parent top-N is a `LoadWith` capability: `JoinInto` rejects it before execution, and the in-memory provider rejects a paged eager child fail-closed (it has no SQL window) while unpaged eager loading is unchanged. See [Per-parent paging in eager loading](eager-loading-per-parent-paging.md).
 
@@ -250,7 +280,7 @@ var roots = ctx.From<Root>()
     .ToList();
 ```
 
-In the default split mode the declaration produces one statement per level: the parent statement, then one level-1 child statement driven by the root keys, then one level-2 statement driven by the distinct `Mid` keys just materialized (each level is chunked at 1000 keys independently):
+In the default split mode, the parent query runs once. At each child level, nextorm runs one child query for every chunk of up to 1000 keys, using the distinct keys materialized at the preceding level. Each level chunks its keys independently:
 
 ```sql
 -- parent statement
@@ -305,7 +335,7 @@ Every unexpressible nested graph is rejected before any SQL is generated and bef
 - **projection-arity overflow**: flattening the graph into a single denormalized command for more than seven child collections (the [`Projection<T1..T8>`](relationships.md#one-round-trip) arity cap) throws `NotSupportedException`; declare a shallower graph or use split mode;
 - **nested mode conflict**: a child requesting an explicit mode different from the graph-wide mode throws `NotSupportedException` (`... mixes modes ...`);
 - **cycles**: a declaration whose ancestor-composite identity repeats — a self-referential entity, or a child factory that recursively returns itself — throws `NotSupportedException` deterministically: a finite acyclic graph is required, not a depth limit.
-- **in-memory paged eager child**: the existing #211 fail-closed rejection (no SQL window) is unchanged; unpaged nested loading works there.
+- **in-memory paged eager child**: the in-memory provider supports unpaged nested loading but rejects per-parent paging.
 - **declared-metadata form on the in-memory provider**: the metadata-driven `LoadWith` overloads are SQL-only and are rejected while the parent command is constructed — before any command, SQL or plan-cache entry, and without touching the context's cache flag; the explicit-key form keeps its in-memory support described above.
 
 ## Assignment rule

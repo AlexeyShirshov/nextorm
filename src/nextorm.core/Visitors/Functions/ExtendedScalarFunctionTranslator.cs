@@ -137,6 +137,94 @@ internal static class ExtendedScalarFunctionTranslator
     {
         var name = node.Method.Name;
 
+        if (node.Method.DeclaringType == typeof(SqlFunctions)
+            && name is nameof(SqlFunctions.VectorDistance) or nameof(SqlFunctions.VectorSearchDistance))
+        {
+            var isSearchDistance = name == nameof(SqlFunctions.VectorSearchDistance);
+            if (!visitor.Dialect.SupportsVectorSearch)
+            {
+                var unsupportedReason = visitor.Dialect.SqlServerFunctions?.GetUnsupportedReason("vector_distance");
+                throw new NotSupportedException(
+                    unsupportedReason
+                    ?? $"Vector distance and nearest-neighbor search are not supported by the {visitor.Dialect.GetType().Name} provider.");
+            }
+
+            var metricExpression = TypeFacts.UnwrapConvert(node.Arguments[2]);
+            if (metricExpression is not ConstantExpression { Value: VectorDistanceMetric metric })
+                throw new NotSupportedException(
+                    "SqlFunctions.VectorDistance requires a constant VectorDistanceMetric so the provider can select the matching operator.");
+
+            var exactSearch = false;
+            var exactPostgresSearch = false;
+            if (isSearchDistance)
+            {
+                var modeExpression = TypeFacts.UnwrapConvert(node.Arguments[3]);
+                if (modeExpression is not ConstantExpression { Value: VectorSearchMode mode })
+                    throw new NotSupportedException(
+                        "VectorSearch requires a constant VectorSearchMode so the provider can preserve the requested search semantics.");
+
+                exactSearch = mode == VectorSearchMode.Exact;
+                exactPostgresSearch = exactSearch && visitor.Dialect.SupportsExtendedScalarFunctions;
+            }
+
+            if (visitor.Dialect.SqlServerFunctions is { } sqlServerFunctions)
+            {
+                var sqlServerMetric = metric switch
+                {
+                    VectorDistanceMetric.Cosine => "cosine",
+                    VectorDistanceMetric.DotProduct => "dot",
+                    VectorDistanceMetric.Euclidean => "euclidean",
+                    _ => throw new NotSupportedException($"The vector distance metric '{metric}' is not supported by SQL Server.")
+                };
+
+                if (visitor.IsParamMode)
+                {
+                    visitor.Visit(node.Arguments[0]);
+                    visitor.Visit(node.Arguments[1]);
+                }
+                else
+                {
+                    visitor.NeedAliasForColumn = true;
+                    visitor.Builder!.Append(sqlServerFunctions.Render(
+                        "vector_distance",
+                        [
+                            $"'{sqlServerMetric}'",
+                            visitor.VisitToString(node.Arguments[0]),
+                            visitor.VisitToString(node.Arguments[1])
+                        ]));
+                }
+
+                return true;
+            }
+
+            if (exactSearch && !visitor.Dialect.SupportsExtendedScalarFunctions)
+                throw new NotSupportedException(
+                    "Exact vector search requires PostgreSQL pgvector distance functions or SQL Server VECTOR_DISTANCE.");
+
+            if (exactPostgresSearch)
+            {
+                var functionName = metric switch
+                {
+                    VectorDistanceMetric.Cosine => "cosine_distance",
+                    VectorDistanceMetric.Euclidean => "l2_distance",
+                    VectorDistanceMetric.DotProduct => "negative_inner_product",
+                    _ => throw new ArgumentOutOfRangeException(nameof(metric), metric, "The vector distance metric is not supported.")
+                };
+                EmitVectorFunction(visitor, functionName, [node.Arguments[0], node.Arguments[1]]);
+                return true;
+            }
+
+            var sqlOperator = metric switch
+            {
+                VectorDistanceMetric.Cosine => "<=>",
+                VectorDistanceMetric.Euclidean => "<->",
+                VectorDistanceMetric.DotProduct => "<#>",
+                _ => throw new ArgumentOutOfRangeException(nameof(metric), metric, "The vector distance metric is not supported.")
+            };
+            EmitVectorOperator(visitor, sqlOperator, node.Arguments[0], node.Arguments[1]);
+            return true;
+        }
+
         if (name is nameof(PostgresFunctions.l2_distance) or nameof(PostgresFunctions.cosine_distance)
             or nameof(PostgresFunctions.negative_inner_product) or nameof(PostgresFunctions.l1_distance)
             or nameof(PostgresFunctions.hamming_distance) or nameof(PostgresFunctions.jaccard_distance)

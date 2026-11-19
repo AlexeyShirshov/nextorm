@@ -1,8 +1,43 @@
 # Соединения
 
-> Объединяйте строки из двух или более сущностей, производных запросов или необработанных таблиц с помощью [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})), [`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})), [`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})), [`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})), [`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})), [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) и [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})).
+Соединение объединяет строки таблиц. Например, можно связать заказ с клиентом, сопоставив их
+идентификаторы клиента. Сначала рассмотрим этот пример, затем внешние соединения, подзапросы и
+специфичные для провайдеров формы.
 
-**Предварительные требования:** [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Запросы и проекции](../engine/index.md) · [Фильтрация (WHERE)](03-filtering-where.md)
+**Перед началом:** пройдите [быстрый старт](../getting-started/02-quickstart.md), где определены
+сущности `IOrder` и `ICustomer`, а также используемые ниже тестовые таблицы.
+
+## Соедините заказы и клиентов
+
+В таблице заказов хранится идентификатор клиента. Сопоставьте его с идентификатором клиента и
+выберите нужные поля с обеих сторон:
+
+```csharp
+var rows = await dataContext.From<IOrder>()
+    .Join(dataContext.From<ICustomer>(),
+        (order, customer) => order.CustomerId == customer.Id)
+    .OrderBy(pair => pair.Item1.Id)
+    .Select(pair => new
+    {
+        OrderId = pair.Item1.Id,
+        CustomerName = pair.Item2.Name,
+    })
+    .ToListAsync();
+```
+
+Запрос возвращает:
+
+```text
+OrderId | CustomerName
+1 | Amina
+2 | Ravi
+3 | Amina
+```
+
+`From<IOrder>()` — левая сторона, а `ICustomer` — правая. В условии соединения `order` обозначает
+левую сторону, а `customer` — правую. После соединения `pair.Item1` содержит заказ, а `pair.Item2` —
+клиента. Это внутреннее соединение: заказ без совпадающего клиента не попадёт в результат. Чтобы
+сохранить все заказы, используйте [`LeftJoin`](#внешние-соединения).
 
 ## Обзор
 
@@ -21,31 +56,14 @@
   читаются через индексатор [`TableAlias`](xref:NextORM.Core.TableAlias) (`t["id"]`).
 * сопоставленную сущность, названную типом, без передачи построителя источника — см. [Соединения без явного источника (по типу)](#соединения-без-явного-источника-по-типу);
 
-**Коллекция на родителя — это не соединение.** Член проекции, называющий объявленную коллекционную навигацию, —
-`Select(p => new { p.Id, p.Comments })` или её адаптер `AsEntityBuilder<T>() … ToList()` — возвращает коллекцию
-каждого родителя без `JOIN`: граф загружается маршрутом жадной загрузки, а коллекция проецируется в памяти,
-поэтому в инструкции не появляется дополнительных колонок списка выборки, а строки родителей не размножаются.
-См. [Слоты коллекционной проекции](../relationships/collection-projection.md).
-
-Прежде чем перейти к примерам, важно понять две вещи:
-
-1. **У арности соединений есть граница плоской цепочки в восемь таблиц.** Первое соединение
-   возвращает [`JoinedEntityBuilder<T1, T2>`](xref:NextORM.Core.JoinedEntityBuilder`2), следующее — [`JoinedEntityBuilder<T1, T2, T3>`](xref:NextORM.Core.JoinedEntityBuilder`3) и так далее вплоть до
-   `JoinedEntityBuilder<T1..T8>`. За этой точкой `JoinedEntityBuilder` не *объявляет* дальнейших методов
-   [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})), а `Projection<T1..T8>` не реализует
-   [`IExtendableProjection`](xref:NextORM.Core.IExtendableProjection), поэтому плоская типизированная цепочка там останавливается.
-   Это граница области, **не** отказ на компиляции: `JoinedEntityBuilder<T1..T8>` всё равно наследует
-   члены generic-базы `EntityBuilder<Projection<T1..T8>>`, поэтому дальнейший join без источника
-   (и с явным источником) компилируется, рассматривая накопленную восьмитабличную проекцию как `Item1`.
-   Назовите проекцию через
-   [`As`](xref:NextORM.Core.EntityBuilder`1.As``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) (см. [Именование промежуточной проекции](#именование-промежуточной-проекции-as)), чтобы сохранить форму чистой.
-2. **Накопленная проекция адресуется как `p.Item1`, `p.Item2`, … `p.Item8`.** После первого соединения
-   условие получает эту проекцию вместо обычной сущности, поэтому цепочка соединений ссылается на
-   уже соединённые таблицы через `p.tN`.
-
 Сгенерированный SQL ссылается на каждую таблицу по позиционному псевдониму: `t1` для базовой
 таблицы и `t2`, `t3`, … для присоединённых таблиц, в порядке их добавления. Псевдонимы экранируются
 в зависимости от провайдера (`'t1'` в SQLite, `[t1]` в SQL Server, `"t1"` в PostgreSQL).
+
+В справочных примерах ниже используется отдельная тестовая модель `ISimpleEntity` и
+`IComplexEntity`, а не сущности `IOrder` и `ICustomer` из быстрого старта. Таблицы результатов
+показывают данные интеграционных тестов. О сопоставлении собственных сущностей см. раздел
+[Сущности и метаданные](../getting-started/03-entities-and-metadata.md).
 
 ## Внутреннее соединение
 
@@ -62,7 +80,8 @@ select t1.id, t2.requiredstring
  join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
 ```
 
-Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
+Таблицы с результатами ниже показывают строки примеров на тестовых данных интеграционных тестов
+(`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Вывод:
 
@@ -106,8 +125,9 @@ select t1.id, t2.requiredstring
  where t2.requiredstring = '34mfs'
 ```
 
-Фильтр до соединения вдавливается в левый источник как производная таблица (`select id from simple_entity
-where (id > 2)`). Именно поэтому расположение заметно на внешнем соединении: перед [`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) он остаётся на
+Фильтр применяется к левой таблице до соединения: NextORM помещает запрос к этой таблице во
+вложенную таблицу (`select id from simple_entity where (id > 2)`). Поэтому положение фильтра важно
+для внешнего соединения: перед [`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) он остаётся на
 левом источнике, и все строки присоединённой таблицы сохраняются,
 
 ```csharp
@@ -508,7 +528,7 @@ var sql = dataContext.From<ISimpleEntity>()
 ### Границы
 
 Форма по типу выше охватывает четыре оператора с predicate. Кроме того, `CrossJoin`, `CrossApply` и
-`OuterApply` теперь тоже имеют форму без источника — и **по типу**
+`OuterApply` также имеют форму без источника — и **по типу**
 (`CrossJoin<TJoinEntity>()`, `CrossApply<TJoinEntity>()`, `OuterApply<TJoinEntity>(Action<JoinOptions>? options = null)`),
 и **по имени таблицы** (`CrossJoin/CrossApply/OuterApply(string table, Action<JoinOptions>? options = null)`),
 при этом правая сторона становится `TJoinEntity` или `TableAlias` соответственно. Те же строковые
@@ -1035,12 +1055,26 @@ var sql = dataContext.From<ISimpleEntity>()
                        E = p.Item5.Id, F = p.Item6.Id, G = p.Item7.Id, H = p.Item8.Id });
 ```
 
+У плоской типизированной цепочки есть граница области в восемь источников. Первое соединение
+возвращает `JoinedEntityBuilder<T1, T2>`, а каждое следующее добавляет источник вплоть до
+`JoinedEntityBuilder<T1..T8>`. При восьми источниках `Projection<T1..T8>` не реализует
+`IExtendableProjection`, поэтому объявленная плоская цепочка останавливается. Это граница области, а
+не ошибка компиляции: построитель для восьми источников наследует члены
+`EntityBuilder<Projection<T1..T8>>`, поэтому его соединения с явным источником и без него по-прежнему
+компилируются. Следующее соединение оборачивает накопленную проекцию в `Item1`. Чтобы сохранить
+читаемость длинного запроса, назовите промежуточную проекцию с помощью
+[`As`](xref:NextORM.Core.EntityBuilder`1.As``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})).
+
+После первого соединения `Item1` — исходный источник, `Item2` — первый присоединённый источник, а
+каждый следующий `ItemN` соответствует источнику, добавленному на этой позиции. Условие очередного
+соединения получает накопленную проекцию и новый источник.
+
 Прямые перегрузки [`Cte<T>`](xref:NextORM.Core.Cte`1) доступны и на каждом продолжении: каждый
 [`JoinedEntityBuilder<T1..Tn>`](xref:NextORM.Core.JoinedEntityBuilder`2) (арности приёмника 2–7) принимает типизированный CTE вместо
 источника `EntityBuilder<T>` для всех семи операторов, поэтому CTE можно присоединить на любом шаге.
 Плоская типизированная цепочка при этом по-прежнему останавливается на восьми слотах — на арности
 восемь не *объявлено* дальнейшего случая соединения — и `Cte<T>` не меняет эту границу области;
-унаследованные соединения generic-базы остаются доступными (см. [Обзор](#обзор)).
+унаследованные соединения generic-базы остаются доступными.
 
 ## Именование промежуточной проекции: `As`
 
@@ -1172,6 +1206,22 @@ select t1.id
 остальные провайдеры и контекст in-memory отклоняют их через `NotSupportedException`. Полный каталог —
 в разделе [Специфичный для провайдеров SQL](provider-specific-sql/overview.md).
 
+## Коллекционная навигация — не соединение
+
+Проекция может вернуть объявленную коллекционную навигацию, например
+`Select(order => new { order.Id, order.Lines })`, не добавляя SQL `JOIN`. NextORM загружает граф
+сущностей через жадную загрузку и строит коллекцию в памяти. В список выборки не добавляются
+колонки, а строки родителя не дублируются. Поддерживаемые формы коллекций и поведение загрузки
+описаны в разделе [Слоты коллекционной проекции](../relationships/collection-projection.md).
+
+## Маршрутизированные соединения
+
+Маршрутизированный запрос выполняется на одном хосте. Все маршрутизированные источники соединения
+должны относиться к одной топологии; источники без правила маршрутизации следуют той же топологии,
+а шардированный источник несёт вариант своего бакета. См.
+[Маршрутизация данных по топологиям](34-routing-data-to-topologies.md) и
+[Шардирование и горизонтальное партиционирование](35-sharding-and-horizontal-partitioning.md).
+
 ## Различия между провайдерами
 
 | Провайдер | Позиционные SQL-псевдонимы таблиц | Псевдоним производной таблицы | Внешние соединения | APPLY / LATERAL |
@@ -1190,6 +1240,11 @@ select t1.id
 выбрасывают `NotSupportedException` в провайдере in-memory, как и остальные неподдерживаемые типы
 соединений. Соединения через `JoinedEntityBuilder<T1..T8>` разрешаются на этапе построения запроса у каждого
 провайдера.
+
+## Что дальше
+
+Продолжите с разделов [Группировка и агрегаты](05-grouping-and-aggregates.md) или
+[Сортировка и постраничный вывод](06-sorting-and-paging.md).
 
 ## См. также
 

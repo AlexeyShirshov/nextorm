@@ -18,10 +18,7 @@ public partial class QueryCommand
     {
         CopyTo(dst, copyAll: true);
 
-        // These two are project state rather than plan state, so CopyTo does not carry them; a wrapper
-        // that inherits a prepared flag without them would compile the wrong row shape (a scalar command
-        // would try to construct the scalar type from its columns).
-        dst.OneColumn = OneColumn;
+        // This execution flag is not part of the plan state transferred by CopyTo.
         dst.IgnoreColumns = IgnoreColumns;
     }
 
@@ -36,6 +33,9 @@ public partial class QueryCommand
     protected virtual void CopyTo(QueryCommand dst, bool copyAll)
     {
         dst._selectList = _selectList;
+        // A raw recipe can restore this projection and then miss the normalized cache. The new
+        // mapper must still read a scalar directly rather than treating it as a constructed row.
+        dst.OneColumn = OneColumn;
         // Prepared-only columns travel as one payload block: an unprepared source must not make the
         // clone allocate a payload for state it does not have (issue #319).
         if (_preparedState is { } prepared)
@@ -73,6 +73,7 @@ public partial class QueryCommand
         dst._srcType = _srcType;
         dst._dontCache = _dontCache;
         dst._filterScope = _filterScope;
+        dst.MappingVariant = MappingVariant;
         dst.ColumnsPlanHash = ColumnsPlanHash;
         dst.JoinPlanHash = JoinPlanHash;
         dst.WherePlanHash = WherePlanHash;
@@ -264,7 +265,6 @@ public partial class QueryCommand
         clone._referencedQueries = null;
         clone.OuterRegistry = null;
         clone.ReferencedQueriesPlanHash = 0;
-        clone.OneColumn = OneColumn;
         return clone;
     }
 

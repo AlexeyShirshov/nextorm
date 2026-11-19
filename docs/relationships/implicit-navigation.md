@@ -1,11 +1,10 @@
 # Implicit navigation queries
 
-> A **declared** relationship turns a navigation member into a query construct: a reference member can be
-> used as a scalar chain or a presence check, and a collection member exposes exactly four direct
-> terminals (`Any`, `Count`, `LongCount` and the `Count` property). nextorm expands the navigation on the
-> server as a correlated subquery or a `LEFT JOIN`; it never reads the CLR object graph and never loads a
-> collection lazily. `Count`/`Count()` materialise as a checked `int` (a 64-bit count narrowed only at
-> materialisation), while `LongCount()` stays 64-bit end to end.
+> Declare a relationship before using its navigation in a query. A reference supports scalar chains and
+> presence checks; a collection supports exactly four direct terminals (`Any`, `Count`, `LongCount` and
+> the `Count` property). nextorm translates these expressions into correlated subqueries or `LEFT JOIN`s.
+> It does not read the CLR object graph or load collections lazily. `Count`/`Count()` materialize as a
+> checked `int` (the 64-bit count narrows only at materialization); `LongCount()` stays 64-bit end to end.
 
 **Prerequisites:** [Relationships and single-query loading (`JoinInto`)](relationships.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Joins](../guide/04-joins.md)
 
@@ -16,22 +15,24 @@ A navigation query is available only when the relationship is **declared** in th
 attribute. Conventions over foreign-key names are **not** used and a member that is not part of a declared
 relationship is never treated as a navigation.
 
-With the relationship declared, two navigation shapes are supported:
+### Choose a navigation shape
 
-* a **reference** navigation (`c.Parent`) — scalar member chains, presence checks and whole-reference
-  projection;
-* a **collection** navigation (`p.Children`) — the four direct terminals below, plus the
-  `AsEntityBuilder<T>` adapter.
+With the relationship declared, choose the navigation shape that matches the expression:
+
+| Navigation | Supported expressions | Use it to |
+|---|---|---|
+| **Reference** (`c.Parent`) | Scalar member chains, presence checks and whole-reference projection. | Read a related scalar, test whether the row exists, or project the related entity. |
+| **Collection** (`p.Children`) | The four direct terminals below and the `AsEntityBuilder<T>` adapter. | Read collection cardinality or use the supported collection adapter forms. |
 
 Everything is metadata-driven: on the in-memory provider the registered datasets and relationship
 metadata are authoritative, so the result matches the SQL providers even when the CLR object graph is
 empty or inconsistent.
 
-A navigation query computes a scalar/cardinality or projects one declared reference or collection — it
-never materializes a nested object graph. To fill a nested collection graph (level 2 and deeper), use
-`LoadWith` with a child query that declares its own `LoadWith` (see
-[Nested graphs](eager-loading.md#nested-graphs-level-2-and-deeper)); to return the per-parent collections
-*inside a projected result*, use a [collection-valued projection slot](collection-projection.md).
+A navigation query computes a scalar or cardinality, or projects one declared reference or collection. It
+does not materialize a nested object graph. To populate a collection graph at level 2 or deeper, declare
+another `LoadWith` on the child query (see [Nested graphs](eager-loading.md#nested-graphs-level-2-and-deeper)).
+To return each parent's collection *inside the projected result*, use a
+[collection-valued projection slot](collection-projection.md).
 
 ## Reference navigation
 
@@ -173,6 +174,12 @@ All three reference forms work in this position:
 * a **scalar projection** by the correlated subquery (`.Select(c => p.Group!.Code)`) — a scalar
   reference value, **not** whole-object eager loading.
 
+The terminal that enters the body does not matter, and the body does not have to read the outer entity
+itself: a nested query whose **only** outer link is the navigation alias — for example
+`ctx.From<Child>().Where(c => c.GroupCode == p.Group!.Code).Any()` in a predicate, or the same shape
+behind `FirstOrDefault()` in a projection — registers the joined alias as an outer reference exactly as
+a direct `p.Id` read does.
+
 The same reference path used by two correlated predicates of one command reuses one joined alias (one
 `LEFT JOIN`, both correlated bodies reading it). Null semantics follow the outer `LEFT JOIN`: a dangling
 foreign key produces a `NULL` joined key, so the correlated comparison is unknown and the row does not
@@ -191,8 +198,8 @@ correlated `EXISTS`/scalar subquery on every SQL provider:
 | PostgreSQL | yes | SQL shape + shared live |
 | SQL Server | yes | SQL shape + shared live |
 | MySQL | yes | SQL shape + shared live |
-| MariaDB | yes | SQL shape; live deferred (trigger: dedicated live harness or MySQL divergence) |
-| ClickHouse | yes | SQL shape (no `APPLY`); live deferred (trigger: correlated-`EXISTS` live fixture or shape change) |
+| MariaDB | yes | SQL shape only |
+| ClickHouse | yes | SQL shape only (no `APPLY`) |
 
 [ClickHouse's collection-through-reference limitation](#collection-navigation) is unchanged: the
 reference hop itself is supported, and a *collection* reached through a reference stays rejected. The
@@ -341,14 +348,13 @@ client-side evaluation:
 * **Navigation in grouping/paging modifier keys** — `GROUP BY`, `DISTINCT ON`, `LIMIT BY` and
   extreme-row keys do not evaluate navigation (use explicit joins there).
 * **Temp-table / table-valued (TVP) navigation** — navigation over a temp-table/TVP source is
-  **deferred**: a lazy temp-table read source (`ctx.From(tempTableSource)`) is an untyped `TableAlias`
-  with no navigation surface, so a navigation member cannot be read over it. The trigger is a navigation
-  source combined with a temp-table/TVP path. Navigation declared **before** the temp-table boundary is
-  still expanded into the materialising `CREATE TEMPORARY TABLE ... AS SELECT`; build a navigation over
+  not supported: a lazy temp-table read source (`ctx.From(tempTableSource)`) is an untyped `TableAlias`
+  with no navigation surface, so a navigation member cannot be read over it. Navigation declared **before** the temp-table boundary is
+  expanded into the materialising `CREATE TEMPORARY TABLE ... AS SELECT`; build a navigation over
   the temp-table rows from an explicit join or from the mapped source instead.
 * **Adapter LINQ composition outside a projection slot** — chaining query operators after
   `AsEntityBuilder<T>` is not a query construct: as a navigation query the adapter recognises only the direct
-  terminals. The one composition that *is* delivered is the
+  terminals. The exception is the
   [collection-valued projection slot](collection-projection.md), where the adapter continues into a per-parent
   `Where`/`OrderBy`/`ThenBy`/`Limit`/`Select` pipeline terminated by `ToList()`/`ToArray()`.
 * **Bare reference-adapter projection** — projecting the reference marker itself

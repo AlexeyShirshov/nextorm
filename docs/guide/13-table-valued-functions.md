@@ -7,8 +7,9 @@
 
 ## Overview
 
-A table-valued function (TVF) source is an ordinary static factory method that returns a
-[`TvfEntityBuilder<T>`](xref:NextORM.Core.TvfEntityBuilder`1) descriptor:
+To query a table-valued function (TVF), declare a static factory that returns a
+[`TvfEntityBuilder<T>`](xref:NextORM.Core.TvfEntityBuilder`1). Pass the factory call to `From` as a
+lambda: the descriptor supplies SQL metadata, while the lambda preserves the call and its arguments.
 
 ```csharp
 public static TvfEntityBuilder<ITvfRow> AllRows() => new("all_rows");
@@ -16,9 +17,9 @@ public static TvfEntityBuilder<ITvfRow> ById(long id) => new("rows_by_id");
 public static TvfEntityBuilder<ITvfRow> Between(long lo, long hi) => new("rows_between", "app");
 ```
 
-The scalar parameters of the factory declare only the **argument positions** of the SQL call; the name,
-schema, clauses, verbatim indices and result schema live in the descriptor. The source is always
-supplied as an **expression**, so the call node — and with it the arguments — reaches the SQL builder:
+The factory's scalar parameters declare only the **positions** of the SQL arguments. The descriptor holds
+the function name, schema, clauses, verbatim argument indices, and result schema. Pass the source as an
+**expression** so the SQL builder can inspect the factory call and preserve its arguments:
 
 ```csharp
 var values = dataContext
@@ -53,8 +54,9 @@ Output:
 
 ## Declaring a runtime factory
 
-The descriptor has three constructors: `TvfEntityBuilder(string name)`, `TvfEntityBuilder(string name,
-string? schema)` and the full metadata constructor:
+For a function with no schema or extra clauses, use `TvfEntityBuilder(string name)`. Add the schema with
+`TvfEntityBuilder(string name, string? schema)`, or use the full constructor when the function needs
+additional metadata:
 
 ```csharp
 public TvfEntityBuilder(
@@ -206,13 +208,13 @@ later query on the same context.
 
 ## Querying a function
 
-`ctx.From(() => ...)` is the only entry point: the lambda carries the factory call, and the descriptor
-returned by a direct call (`ctx.From(Tvf.ById(5))`) has lost that call — see
-[Unbound chains and captured descriptors](#unbound-chains-and-captured-descriptors).
+Pass the factory call directly to `ctx.From(() => ...)`. This lambda retains the call and its arguments;
+`ctx.From(Tvf.ById(5))` receives only the descriptor, which no longer carries the call. See
+[Unbound chains and captured descriptors](#unbound-chains-and-captured-descriptors) for related cases.
 
-An ordinary builder chain composes inside the lambda and reaches the same statement. Any public
-builder-returning operation with preserved lambda or constant arguments is re-applied in its original
-order; the factory call is never mistaken for the outermost operation:
+You can compose a normal builder chain inside the lambda. nextorm reapplies supported builder-returning
+operations in their original order when their lambda or constant arguments are preserved; it does not
+mistake the factory call for the outermost operation:
 
 ```csharp
 var rows = dataContext
@@ -277,7 +279,11 @@ a derived-query builder keeps binding to the existing instance overloads unchang
 
 ## Applying a function
 
-[`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) and [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) accept a correlated lambda whose body is the runtime factory call. The outer parameter is never evaluated in CLR: its member reads become SQL column references, and the call is applied once per left-hand row.
+Use [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) or
+[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))
+when the function depends on the current left-hand row. Pass a correlated lambda whose body calls the
+runtime factory. nextorm does not evaluate the outer parameter in CLR: its member reads become SQL
+column references, and the function is applied once per left-hand row.
 
 ```csharp
 var rows = dataContext

@@ -1,111 +1,20 @@
-﻿# NativeAOT (partial support)
+# NativeAOT
 
-> Publish applications with `PublishAot=true` on .NET 11 for `linux-x64`.
-> Support is **partial and experimental**: a measured subset of the engine runs natively, and the
-> rest is tracked in [#370](https://github.com/AlexeyShirshov/nextorm/issues/370).
+> For .NET 11 applications targeting `linux-x64` or `win-x64`, enable native publishing with
+> `<PublishAot>true</PublishAot>`. You don't need a compiled model, separate query generation, or
+> hand-written code.
 
-**Prerequisites:** [Connections](01-connections.md) · [Value converters and JSON columns](03-value-converters.md).
+**Read first:** [Connections](01-connections.md) · [Value converters and JSON columns](03-value-converters.md).
 
-## What is verified
+## Enabling it
 
-A published native binary runs against a real database and is compared with the JIT oracle
-row by row. Two harnesses do this: the SQLite runner (`tests/nextorm.aot.runner`, driven by
-`AotNativeRunTests`) and the provider probes under `examples/` plus the self-provisioning
-`tests/nextorm.aot.sqlprobe` for MySQL and MariaDB. The harness is **fail-closed**: a native
-scenario that fails, or whose row count/digest differs from its JIT control, fails the test.
+Before publishing, install the NativeAOT prerequisites on the build host:
 
-| Area | Status |
-|---|---|
-| Target | `net11.0`, `linux-x64` |
-| Providers | SQLite, PostgreSQL, SQL Server, MySQL, MariaDB, ClickHouse (the measured surface differs per provider, see below) |
-| Query surface | typed and anonymous projections, filters, ordering, paging, aggregates, `GROUP BY`/`HAVING`, joins, CTEs, window functions (where the provider supports them), SQLite JSON functions, ClickHouse arrays, `SelectGroup`/`SelectGroupHaving`, `SelectWhereMin`/`SelectWhereMax`, prepared-command reuse |
-| Parity | every scenario is also executed under JIT; the harness fails on any status or value divergence |
+- **Linux x64:** `clang`, `zlib1g-dev`, and a native toolchain.
+- **Windows x64:** Visual Studio or Visual Studio Build Tools with the **Desktop development with C++**
+  workload, including the MSVC x64 toolchain and Windows SDK. Publish on Windows for `win-x64`.
 
-Measured native results (JIT values are equal in every case):
-
-| Provider | Instrument | Native result |
-|---|---|---|
-| SQLite | `tests/nextorm.aot.runner`, 12 scenarios + 4 component slices | **12/12** |
-| PostgreSQL | `examples/nextorm.aotexamples.postgres.aviasales`, 10 queries | **10/10** |
-| SQL Server | `examples/nextorm.aotexamples.mssql.adventureworks`, 11 queries | **11/11** |
-| MySQL | `tests/nextorm.aot.sqlprobe --provider mysql`, 7 shapes | **7/7** |
-| MariaDB | `tests/nextorm.aot.sqlprobe --provider mariadb`, 7 shapes | **7/7** |
-| ClickHouse | `examples/nextorm.aotexamples.clickhouse.analytics`, 9 queries | **9/9** |
-
-The output is a self-contained native executable. The packages do **not** carry an
-`IsAotCompatible` marker yet, and this page is not a zero-configuration guarantee.
-
-## What is not verified
-
-- **Correlated subqueries are not native-ready.** A correlated `Any`/`Count`/projection over a
-  captured context prepares correctly under JIT but fails in a native image (a preparation-time
-  coercion and a trimmed projection-method lookup). This is a recorded defect for the Stream A
-  work, not a supported shape.
-- A **tuple-typed ClickHouse result column** whose element types fall outside the driver's fixed
-  registration sample fails closed with a clear `NotSupportedException` at preparation; project the
-  tuple elements as separate columns or read the tuple as text instead.
-- EF Core bridge (`nextorm.entityframeworkcore`), `System.Text.Json` converters through a generated
-  `JsonTypeInfo<T>` (serialization remains reflection-based, so a consumer still needs the usual
-  `JsonSerializerContext` setup), bulk insert, raw SQL row mapping and DML builders are not part of
-  the measured native surface.
-- Trimming beyond the provider defaults.
-
-### Provider probes
-
-The probes under `examples/` run the nextorm arm of each comparison example without linq2db,
-Testcontainers or BenchmarkDotNet, so the process can be published natively and compared with a JIT
-run by row counts and row digests. The MySQL/MariaDB probe provisions its own tiny schema and seed,
-so it needs no dataset. Measured 2026-11-13, `linux-x64`:
-
-| Probe | Native binary | Result |
-|---|---|---|
-| `nextorm.aotexamples.postgres.aviasales` | 18 MB | **10/10** queries, digests equal to JIT |
-| `nextorm.aotexamples.mssql.adventureworks` | 28 MB | **11/11** |
-| `nextorm.aotexamples.clickhouse.analytics` | 16 MB | **9/9** |
-| `tests/nextorm.aot.sqlprobe` (MySQL / MariaDB) | — | **7/7** each |
-
-The three failure classes that the probes originally reported — `decimal` operators removed by
-trimming, `System.Tuple` construction discovered through reflection, and runtime expression-tree
-compilation — are fixed and are no longer observed in any probe.
-
-## Residual diagnostics
-
-The canonical publish of the native runner reports **205 unique AOT/trim diagnostics** (211 raw;
-measured 2026-11-13). They are neither suppressed nor rooted:
-
-| Code | Count | Nature |
-|---|---|---|
-| `IL3050` | 111 | runtime code generation — `Expression.Lambda`, `Type.MakeGenericType`, `MethodInfo.MakeGenericMethod`, `Expression.NewArrayInit`, `System.Text.Json` |
-| `IL2026` | 29 | `RequiresUnreferencedCode` APIs |
-| `IL2070` | 28 | reflection over a runtime-typed `Type` |
-| `IL2075` | 16 | member access on a runtime-typed value |
-| `IL2060` | 15 | statically unanalyzable generic instantiation |
-| `IL2090` | 5 | generic parameter with `DynamicallyAccessedMembers` requirements |
-| `IL2072` | 3 | `DynamicallyAccessedMembers` requirement not satisfied |
-| `IL2055` | 2 | `MakeGenericType` over a runtime type |
-| `IL2111` | 1 | reflection over a type with annotations |
-| `IL2067` | 1 | parameter annotated with `DynamicallyAccessedMembers` |
-
-The remaining work is architectural: the query pipeline carries result and projection types as a
-runtime `Type` (`QueryCommand.ResultType`, `ProjectionEntityItem.EntityType`), and correlated
-subqueries dispatch through reflection over a runtime-closed builder. Annotations alone cannot
-remove these rows; the compile-time pipeline and the per-provider native matrix are the scope of
-[#370](https://github.com/AlexeyShirshov/nextorm/issues/370).
-
-## Real-world check
-
-`oc-report` — a reporting utility over a 13 GB SQLite database — runs natively with no source
-changes beyond `PublishAot=true`. Publishing and the run happened on one machine (warm page cache,
-median of three runs, 3-day window):
-
-| Implementation | AOT publish | Native binary | Run | Peak RSS |
-|---|---|---|---|---|
-| nextorm, typed queries | only `PublishAot=true` | 8.2 MB | 0.12 s | 30 MB |
-
-The reference app is
-[`examples/nextorm.examples.oc-report`](https://github.com/AlexeyShirshov/nextorm/tree/main/examples/nextorm.examples.oc-report).
-
-## Trying it
+Add these properties to your project file:
 
 ```xml
 <PropertyGroup>
@@ -114,16 +23,149 @@ The reference app is
 </PropertyGroup>
 ```
 
+Then publish the application:
+
 ```bash
 dotnet publish -c Release
 ```
 
-The standard NativeAOT prerequisites apply (`clang`, `zlib1g-dev`, a RID-specific native
-toolchain). Use one of the verified providers and stay inside the measured query surface above. A
-query outside it may fail at runtime; that is expected at this stage.
+For Windows, set `RuntimeIdentifier` to `win-x64`, or override the RID when publishing:
+
+```powershell
+dotnet publish -c Release -r win-x64
+```
+
+Run the resulting `.exe` from the publish directory. SQLite needs no database server or containers;
+server providers require a live database, which may be local, remote, or container-hosted.
+
+Entity mappings are compiled as well: the package ships a source generator that describes every
+`[SqlTable]`/`[Table]` entity declared in your assembly — table, columns, keys, precision, collation,
+durations, range pairs, query filters, value/JSON converters and relationship navigations, across the
+type's base classes — so building a mapping reads that description instead of reflecting over the
+entity's members. A type outside that coverage keeps the
+reflective path, so nothing has to be registered or opted in.
+
+## What is supported
+
+Providers: **SQLite, PostgreSQL, SQL Server, MySQL, MariaDB, ClickHouse**.
+
+The supported query surface includes:
+
+- **Queries and results:** typed and anonymous projections, whole-entity materialization, filters,
+  ordering, paging, aggregates, `GROUP BY`/`HAVING`, joins, CTEs, provider-supported window functions,
+  prepared-command reuse, and correlated subqueries.
+- **Provider-specific features:** SQLite JSON functions and ClickHouse arrays.
+- **Mappings and relationships:** value converters, JSON columns (see [JSON columns](#json-columns)),
+  and eager loading of a declared `[Relationship]` collection through the split loader (`LoadWith`) or
+  one query (`LoadWith(..., EagerLoadMode.SingleQuery)` and `JoinInto`), including tested scalar and
+  composite-key many-to-many shapes.
+- **Writes and raw SQL:** insert, update, and delete builders; bulk insert; and raw-SQL row mapping
+  (`ExecuteRaw`, with scalar or mapped-entity results).
+- **Streaming:** `WriteCsv`, `WriteJson`, and the asynchronous row sequence (`ToAsyncEnumerable`).
+
+The repository contains native-versus-JIT regression checks for representative SQLite scenarios and
+cross-provider query shapes. The server-provider checks use a published native binary against each
+provider's live database; they include single-query eager-loading graphs with one SQL command and
+compare their results with a genuine JIT run. This coverage is representative, not exhaustive or an
+automatic compatibility guarantee for every query combination. Test your own query set against the
+native build before shipping.
+
+### Windows verification
+
+On 2026-11-18, the repository's `nextorm.aot.runner` was published and executed on Windows x64 with
+.NET SDK 11.0.100 (`win-x64`). All **40 SQLite scenarios** passed and matched their JIT controls
+against the same seeded database. They cover projections, aggregates, correlated subqueries, joins,
+CTEs, window functions, converters, relationships, streaming, raw SQL, DML, and bulk insert.
+
+This verifies the current source checkout, not a separate run against the published NuGet packages.
+Server providers were not exercised on Windows in this run; their Linux coverage must not be read
+as Windows verification. Publication succeeded with trim/AOT analysis warnings, not warning-free.
+
+To reproduce from the repository root on Windows:
+
+```powershell
+dotnet publish tests/nextorm.aot.runner -c Release -r win-x64
+dotnet build tests/nextorm.integration.tests -c Debug
+$env:DOTNET_SYSTEM_GLOBALIZATION_INVARIANT = "1"
+$env:NEXTORM_AOT_EVIDENCE = "1"
+$env:NEXTORM_AOT_EVIDENCE_DIR = Join-Path $env:TEMP ("nextorm-aot-" + [guid]::NewGuid())
+dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class NextORM.Integration.Tests.AotNativeRunTests -noColor
+```
+
+Use a dedicated PowerShell session: the environment variables apply to subsequent child processes.
+The native runner uses invariant globalization, so the JIT control must use it too; otherwise decimal
+formatting can differ (`1.5` versus `1,5`) even when the numeric results agree. The evidence directory
+contains `native-run.log` and `oracle.md`. No containers are needed for this check.
+
+## JSON columns
+
+The mapping side of a JSON column is native-ready: the converter is created by generated code, so
+there is no run-time generic instantiation. The JSON document itself is `System.Text.Json`'s, and a
+trimmed application has to give it the contract metadata it cannot build by reflection. Declare a
+source-generated context that lists every stored model type — the compile-time entity description finds
+that context and serializes through its options, so nothing is set up at run time:
+
+```csharp
+[JsonSerializable(typeof(Address))]
+internal sealed partial class AppJsonContext : JsonSerializerContext;
+```
+
+A column that declares its own serializer options
+(`b.Property(x => x.Address).JsonColumn(o => o.Options = ...)`) keeps them; the context supplies the
+contract metadata, not the settings. On the regular JIT runtime no context is required: a model no
+context declares is serialized with the default options.
+
+## Limitations
+
+- The EF Core bridge (`nextorm.entityframeworkcore`) requires the JIT runtime.
+- ClickHouse tuple result columns whose element type is not registered by the driver are not
+  materialized by the native build. Select individual `tupleElement(...)` columns or retrieve the
+  tuple as text and parse it on the client.
+- A query outside the surface above can fail on first execution. Run your own query set against the
+  native build before shipping: the analyzers do not see through the dynamic query pipeline, so the
+  native run is the check.
+
+## Performance
+
+Publishing natively removes the JIT and the cold start; on short-lived processes that is the whole
+win. A start-up plus one small query drops from almost a second to tens of milliseconds, and the 13 GB
+`oc-report` run below finishes in tenths of a second instead of one to two seconds.
+
+For supported projections, Nextorm uses a build-time generated materializer that reads rows without
+interpreting expressions. If no matching materializer is available for a projection, NativeAOT
+interprets the expression instead. The cost depends on the projection and row count. For example,
+in a separate benchmark of a prepared query returning 500 rows and three columns, the generated
+materializer reduced mean time from 544 to 364 µs and allocations from 246 to 39.4 KB. Both results
+are from NativeAOT.
+
+For example, these projections need no attribute or registration:
+
+```csharp
+// no attribute, no registration: covered automatically
+public sealed record OrderSummary(int Id, string? Customer, decimal Total);
+
+var summaries = context.From<Order>()
+    .Select(order => new OrderSummary(order.Id, order.Customer, order.Total))
+    .ToList();
+
+var rows = context.From<Order>().Select(order => new { order.Id, order.Customer }).ToList();
+```
+
+Streaming terminals are not affected by that cost: `WriteCsv` and `WriteJson` do not materialize rows
+and write scalar columns with compiled code on a native build as well.
+
+For large queries that return wide rows, compare JIT and NativeAOT using your projection and data volume.
+
+## Real-world check
+
+`oc-report` — a reporting utility over a 13 GB SQLite database — publishes natively with no source
+change beyond `PublishAot=true`: an 8.2 MB binary, a 0.12 s run and a 30 MB peak.
+
+The reference app is
+[`examples/nextorm.examples.oc-report`](https://github.com/AlexeyShirshov/nextorm/tree/main/examples/nextorm.examples.oc-report).
 
 ## Reporting a failure
 
-Open an issue with the smallest failing query, the target RID, the .NET SDK version and the publish
-diagnostics. A native reproducer is worth more than a JIT one: a failure caused by trimming appears
-only after publishing.
+Open an issue with the smallest failing query, the target RID, the .NET SDK version and the
+`dotnet publish` output. A native reproducer is worth more than a JIT one: some failures appear only
+after publishing.

@@ -77,7 +77,10 @@ internal static class InMemoryRowMaterializer
                     else
                     {
                         var param = Expression.Parameter(typeof(TEntity));
-                        lambda = Expression.Lambda<Func<TEntity, TResult>>(EnsureType(rewritten, typeof(TResult)), param);
+                        // A metadata-built column is a bare member over its own free entity parameter: bind
+                        // that parameter to the lambda's before wrapping it.
+                        var bound = new ReplaceParameterExpressionVisitor(param).Visit(rewritten)!;
+                        lambda = Expression.Lambda<Func<TEntity, TResult>>(EnsureType(bound, typeof(TResult)), param);
                     }
                 }
                 else

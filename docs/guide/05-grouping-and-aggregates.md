@@ -1,14 +1,15 @@
 # Grouping and aggregates
 
-> Group rows with [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), filter groups with [`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})), and compute `count`, `min`, `max`, `avg`, `sum`, `stdev`, `var` and their `_distinct` variants through ``
+> Group rows with [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), filter groups with [`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})), and compute `count`, `min`, `max`, `avg`, `sum`, `stdev`, `var` and their `_distinct` variants through [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql).
 
 **Prerequisites:** [Querying and projections](../engine/index.md) · [Filtering (WHERE)](03-filtering-where.md) · [Sorting and paging](06-sorting-and-paging.md)
 
 ## Overview
 
-`EntityBuilder<T>.GroupBy(...)` attaches a `GROUP BY` clause and `EntityBuilder<T>.Having(...)` attaches a `HAVING`
-clause that filters the groups. Both are clauses on the builder, so they are combined with [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})),
-[`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)), [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)) and the projection exactly like any other query:
+Use `EntityBuilder<T>.GroupBy(...)` to group rows by a key. Use `EntityBuilder<T>.Having(...)` to keep
+only groups that match an aggregate condition. Both methods add SQL clauses to the same builder, so you
+can combine them with [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})),
+[`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)), [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)), and a projection:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -17,8 +18,23 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
-The aggregate functions live on [`Sql`](xref:NextORM.Core.SqlFunctions.Sql) and are only meaningful inside a projection or a [`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}}))
-predicate. They are named exactly as follows:
+This query returns one row for each distinct `Int` value. `count()` gives the number of source rows in
+each group.
+
+Choose the query shape that matches your result:
+
+- For one summary row per key, use [`GroupBy`](#groupby) and project the aggregate.
+- To remove groups after aggregation, add [`Having`](#having).
+- For one aggregate value over the whole source, omit `GroupBy`; see
+  [Aggregates without grouping](#aggregates-without-grouping).
+- To return the row with the greatest or smallest value, rather than a summary, see
+  [Keeping the extreme row](#keeping-the-extreme-row-selectwheremax--selectwheremin).
+- For provider-specific aggregates and syntax, see
+  [Boolean, bitwise, statistical and ordered-set aggregates](#boolean-bitwise-statistical-and-ordered-set-aggregates)
+  and [Provider differences](#provider-differences).
+
+Aggregate functions are available through [`Sql`](xref:NextORM.Core.SqlFunctions.Sql). Use them in a
+projection or a [`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) predicate:
 
 | Function | Result | Function | Result |
 |---|---|---|---|
@@ -36,45 +52,16 @@ Called with no arguments, `count()` / `count_big()` count rows (`count(*)`); cal
 expressions they count non-null values of those expressions. The other functions take an expression
 argument. The `_distinct` suffix adds `distinct` inside the parentheses.
 
-The common aggregates also have convenience terminals on `EntityBuilder<T>`: [`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0})), `Min(x)`, `Max(x)`,
-`Avg(x)`, `Sum(x)`, `Stdev(x)`, `Stdevp(x)`, `Var(x)` and `Varp(x)`, each with an `...Async` twin and
-an overload that accepts positional parameters. `count`, `count_big`, `count_distinct` and
-`count_big_distinct` have no entity terminal and are used through ``
+The common aggregates also have direct result-returning methods on `EntityBuilder<T>`:
+[`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0})), `Min(x)`, `Max(x)`,
+`Avg(x)`, `Sum(x)`, `Stdev(x)`, `Stdevp(x)`, `Var(x)`, and `Varp(x)`. These methods execute the query
+and return an aggregate value. Each has a synchronous and an `...Async` overload, as well as an overload
+that accepts positional parameters. Use [`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0})) to count rows. Use [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) when you need an aggregate expression in a projection or `Having` predicate. Direct methods cover only a subset of SQL aggregates.
 
-## AVG result types and argument policy
-
-`avg` does not return its input type: an integral column produces a fractional result, so `avg` over
-`[1, 2]` is `1.5` instead of the integral value earlier versions returned (`2`; `1` on SQL Server,
-where native integer `AVG` truncates). The result is nullable on every provider, so an empty or
-all-`NULL` input yields `null` rather than an unguarded read.
-
-| Input | `avg(x)` result |
-|---|---|
-| `byte`, `sbyte`, `short`, `ushort`, `int`, `uint`, `long`, `ulong` and their nullable forms | `double?` |
-| `float`, `float?` | `float?` |
-| `double`, `double?` | `double?` |
-| `decimal`, `decimal?` | `decimal?` |
-
-The argument policy is per provider. SQL Server evaluates `AVG` over a non-floating argument as an
-integer, so the argument is widened *inside* the aggregate; the other dialects keep the native
-argument. The policy applies to `avg`, `avg_distinct` and the windowed `avg_over` alike:
-
-| Provider | Rendered argument |
-|---|---|
-| SQLite, PostgreSQL, MySQL, MariaDB, ClickHouse | `avg(id)` |
-| SQL Server | `avg(cast(id as float))` |
-
-The result is nullable: `Avg` returns `double?` (or `float?`/`decimal?` for those inputs). Keep the
-nullable result or unwrap it explicitly; an integral target does not compile:
-
-```csharp
-int average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // does not compile
-var average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // double?
-var direct  = dataContext.From<ISimpleEntity>().Select(e => SqlFunctions.Sql.avg(e.Id)).First(); // double?
-```
-
-Let overload resolution pick the declaration from the selector type rather than naming the generic
-arguments explicitly.
+For sharded queries, `AcrossBuckets()` runs the query once per bucket and returns a separate result vector
+for each bucket. `GroupBy` and the aggregates above are computed **inside** each bucket; the results are
+not merged or re-aggregated across buckets. See
+[Sharding and horizontal partitioning](35-sharding-and-horizontal-partitioning.md#fan-out-over-buckets).
 
 ## GroupBy
 
@@ -192,6 +179,41 @@ Output:
 
 Note that `NULL` ordering differs between providers (PostgreSQL sorts `NULL`s first on a descending
 sort, SQLite last), which is why the sort example excludes the `NULL` group.
+
+## AVG result types and argument policy
+
+`avg` does not return its input type: an integral column produces a fractional result, so `avg` over
+`[1, 2]` is `1.5` instead of the integral value earlier versions returned (`2`; `1` on SQL Server,
+where native integer `AVG` truncates). The result is nullable on every provider, so an empty or
+all-`NULL` input yields `null` rather than an unguarded read.
+
+| Input | `avg(x)` result |
+|---|---|
+| `byte`, `sbyte`, `short`, `ushort`, `int`, `uint`, `long`, `ulong` and their nullable forms | `double?` |
+| `float`, `float?` | `float?` |
+| `double`, `double?` | `double?` |
+| `decimal`, `decimal?` | `decimal?` |
+
+The argument policy is per provider. SQL Server evaluates `AVG` over a non-floating argument as an
+integer, so the argument is widened *inside* the aggregate; the other dialects keep the native
+argument. The policy applies to `avg`, `avg_distinct` and the windowed `avg_over` alike:
+
+| Provider | Rendered argument |
+|---|---|
+| SQLite, PostgreSQL, MySQL, MariaDB, ClickHouse | `avg(id)` |
+| SQL Server | `avg(cast(id as float))` |
+
+The result is nullable: `Avg` returns `double?` (or `float?`/`decimal?` for those inputs). Keep the
+nullable result or unwrap it explicitly; an integral target does not compile:
+
+```csharp
+int average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // does not compile
+var average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // double?
+var direct  = dataContext.From<ISimpleEntity>().Select(e => SqlFunctions.Sql.avg(e.Id)).First(); // double?
+```
+
+Let overload resolution pick the declaration from the selector type rather than naming the generic
+arguments explicitly.
 
 ## Grouping inferred from the projection: SelectGroup
 
@@ -346,11 +368,11 @@ provider supports neither modifier and throws `NotSupportedException`.
 
 ## WITH TOTALS
 
-ClickHouse adds `WITH TOTALS` ([`SupportsGroupByWithTotals`](xref:NextORM.Core.ISqlDialect.SupportsGroupByWithTotals)) through
-`.WithTotals()` after any grouping: the query returns the group rows plus one row with the totals over
-all groups. It can be combined with `ROLLUP`/`CUBE` but not with `GROUPING SETS`. The official
-`ClickHouse.Driver` does not surface the totals row, so nextorm emits the modifier but only the group
-rows are read back.
+In ClickHouse, call `.WithTotals()` after grouping to add `WITH TOTALS`
+([`SupportsGroupByWithTotals`](xref:NextORM.Core.ISqlDialect.SupportsGroupByWithTotals)). The query returns the group rows plus a
+row with totals across all groups. You can combine this option with `ROLLUP` or `CUBE`, but not with
+`GROUPING SETS`. The official `ClickHouse.Driver` doesn't return the totals row through its API, so
+nextorm adds the modifier to the SQL but reads back only the group rows.
 
 ## GROUPING SETS
 
@@ -578,9 +600,9 @@ Output:
 
 `avg` returns a fractional nullable result for every numeric input (see
 [AVG result types and argument policy](#avg-result-types-and-argument-policy)), so `[1, 2]` is `1.5`
-on every provider, SQL Server included. Every aggregate also has an entity terminal that forwards to
-the same function:
-`Sum`, `Avg`, `Min` and `Max` are equivalent to `Select(...)` followed by `First()`, and `Count()` to
+on every provider, including SQL Server. The common aggregates also have methods on `EntityBuilder<T>`
+that execute the query and return the result. `Sum`, `Avg`, `Min`, and `Max` are equivalent to
+`Select(...)` followed by `First()`. `Count()` is equivalent to
 `Select(e => SqlFunctions.Sql.count()).First()`:
 
 ```csharp
@@ -591,8 +613,8 @@ var max   = await dataContext.From<ISimpleEntity>().MaxAsync(e => e.Id); // SqlF
 var count = dataContext.From<ISimpleEntity>().Count();                   // SqlFunctions.Sql.count
 ```
 
-Each terminal has a synchronous and an `...Async` overload (plus a parameterised one); `Count()` is
-covered in more detail in the [Counting](#counting) section below.
+Each method has a synchronous and an `...Async` overload, plus an overload that accepts positional
+parameters. See [Counting](#counting) for more about `Count()`.
 
 ## Counting
 
@@ -746,10 +768,10 @@ Output:
 |------|
 | 8 |
 
-`stdev` is the sample standard deviation, `stdevp` the population one; `var`/`varp` are the matching
-variances. Each has a `_distinct` form (`stdev_distinct`, `stdevp_distinct`, `var_distinct`,
-`varp_distinct`) and an entity terminal ([`Stdev`](xref:NextORM.Core.EntityBuilderExtensions.Stdev``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`Stdevp`](xref:NextORM.Core.EntityBuilderExtensions.Stdevp``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`Var`](xref:NextORM.Core.EntityBuilderExtensions.Var``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`Varp`](xref:NextORM.Core.EntityBuilderExtensions.Varp``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}}))) with a synchronous,
-`...Async` and parameterised overload:
+`stdev` is the sample standard deviation, `stdevp` is the population standard deviation, and `var`/`varp`
+are the corresponding variances. Each function has a `_distinct` form (`stdev_distinct`,
+`stdevp_distinct`, `var_distinct`, `varp_distinct`) and a direct method on `EntityBuilder<T>`:
+[`Stdev`](xref:NextORM.Core.EntityBuilderExtensions.Stdev``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`Stdevp`](xref:NextORM.Core.EntityBuilderExtensions.Stdevp``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`Var`](xref:NextORM.Core.EntityBuilderExtensions.Var``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), and [`Varp`](xref:NextORM.Core.EntityBuilderExtensions.Varp``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})). Each method has synchronous, `...Async`, and parameterized overloads:
 
 ```csharp
 var sample = dataContext.From<ISimpleEntity>().Stdev(e => e.Id);
@@ -759,7 +781,7 @@ var sumAfter5 = dataContext.From<ISimpleEntity>()
     .Sum(e => e.Id, 5);
 ```
 
-Projecting through `double` avoids the lossy integer conversion:
+Cast the input to `double` before aggregation to avoid losing fractional precision:
 
 ```csharp
 var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.varp((double)x.Id)).First();
@@ -767,9 +789,8 @@ var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.va
 
 ### Nullable results and cardinality
 
-The four variability families are structurally nullable: `Stdev`, `Stdevp`, `Var` and `Varp`, and
-the eight `Sql.stdev*`/`Sql.var*` facade forms, return `T?`. Cardinality counts the contributing
-non-null values after `DISTINCT`:
+`Stdev`, `Stdevp`, `Var`, `Varp`, and the eight `Sql.stdev*`/`Sql.var*` facade forms return `T?`.
+The number of contributing values is the count of non-null values after `DISTINCT`:
 
 | Contributing values | `Stdev` / `Var` (sample) | `Stdevp` / `Varp` (population) |
 |---|---|---|
@@ -777,17 +798,17 @@ non-null values after `DISTINCT`:
 | 1 | `null` | `0.0` |
 | 2 or more | the established formula | the established formula |
 
-A defined zero stays zero: two or more identical values fold to `0.0`, and a one-row population
+A defined zero stays zero: two or more identical values return `0.0`, and a one-row population
 result is `0.0`. Only an undefined result is `null` — it is never replaced by an invented zero.
 
-The result is a real `Nullable<T>`: keep it (`double?`) or unwrap it explicitly. Assigning the
-terminal to a non-nullable `int`/`double` does not compile. Use `?? 0` only where zero genuinely
-means "no spread": it substitutes a zero for the undefined case.
+The result has the C# nullable type `Nullable<T>`; keep it as `double?` or convert it explicitly after
+checking for `null`. Assigning the result to a non-nullable `int` or `double` does not compile. Use
+`?? 0` only when zero genuinely means "no spread"; otherwise, it replaces an undefined result with zero.
 
 ## Boolean, bitwise, statistical and ordered-set aggregates
 
 Beyond `count`/`min`/`max`/`sum`/`avg`/`stdev`/`var`, [`Sql`](xref:NextORM.Core.SqlFunctions.Sql) exposes several aggregate families,
-with the provider-only ones on [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) (boolean, bitwise, regression and ordered-set) and
+with provider-specific functions on [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) (boolean, bitwise, regression, and ordered-set) and
 [`ClickHouse`](xref:NextORM.Core.SqlFunctions.ClickHouse) (`arg_min`/`arg_max`, the distinct-count
 `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12`, the parameterised quantile family
 `quantile`/`quantile_exact`/`quantile_timing`/`quantiles`/`median`, the most-frequent `top_k`/`top_k_weighted`,
@@ -811,8 +832,7 @@ its own dialect capability; PostgreSQL and ClickHouse opt into different subsets
 | Sequence / funnel | `SqlFunctions.ClickHouse.window_funnel(window, ts, c1, c2)` , `sequence_match(pattern, ts, c1, c2)`, `retention(c1, c2)` | `toInt32(windowFunnel(window)(ts, c1, c2))`, `toInt32(sequenceMatch(pattern)(ts, c1, c2))`, `retention(c1, c2)` | [`SequenceAggregates`](xref:NextORM.Core.ISqlDialect.SequenceAggregates) | ClickHouse |
 | Ordered-set | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `median(() => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, `percentile_cont(0.5) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) (`mode`), [`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles) (percentiles, `median`) | PostgreSQL |
 
-MariaDB does **not** support `any_agg`: it has no `ANY_VALUE` in 10.4–12.x (the SQL-2023 `T626` feature
-is still pending, targeted for 13.2), so [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) is `false` and the call is rejected with `NotSupportedException`.
+The MariaDB provider does **not** support `any_agg`: MariaDB 10.4–12.x has no `ANY_VALUE`, so [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) is `false` and the call is rejected with `NotSupportedException`.
 
 ```csharp
 var stats = dataContext.From<IComplexEntity>()

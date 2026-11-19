@@ -528,6 +528,12 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsExtendedScalarFunctions { get; }
     /// <summary>
+    /// True when the provider can translate the unified vector-distance expression and nearest-neighbor
+    /// query surface. Defaults to <c>false</c>; providers must opt in rather than emit a different metric
+    /// or approximate-search form. The default preserves source compatibility for existing dialects.
+    /// </summary>
+    bool SupportsVectorSearch => false;
+    /// <summary>
     /// True when the provider can set the seed of its session random generator as a separate side
     /// effect (<see cref="PostgresFunctions.setseed(double?)"/>). The safe default is <c>false</c>;
     /// only PostgreSQL has a standalone <c>setseed</c> (MySQL/MariaDB and SQL Server combine seeding
@@ -1327,9 +1333,8 @@ public interface ISqlDialect
     string MakeDatePart(string part, string value);
     /// <summary>
     /// True when the provider accepts <paramref name="part"/> as an <c>extract</c>/<c>date_part</c>
-    /// date part. The ANSI parts are accepted by default; a dialect adds the parts it can express
-    /// natively (<c>quarter</c>, <c>week</c>, <c>dow</c>, <c>isodow</c>, <c>epoch</c>) by overriding
-    /// this together with <see cref="MakeDatePart(string, string)"/>.
+    /// date part. Keep this predicate consistent with the parts that
+    /// <see cref="MakeDatePart(string, string)"/> can render.
     /// </summary>
     bool SupportsDatePart(string part);
     /// <summary>Renders the current local or UTC date/time.</summary>
@@ -1708,6 +1713,24 @@ public interface ISqlDialect
     /// <param name="keywordCase">The letter case in which the emitted SQL keywords are written.</param>
     /// <returns><c>true</c> when <paramref name="topStmt"/> carries the limit; otherwise <c>false</c>.</returns>
     bool MakeTop(int limit, bool withTies, out string? topStmt, KeywordCase keywordCase = KeywordCase.Lower);
+
+    /// <summary>
+    /// Renders SQL Server's approximate vector-search TOP modifier from an already-rendered, parameterized
+    /// limit expression. The default refuses so existing external dialect implementations remain source
+    /// compatible and cannot silently substitute ordinary paging.
+    /// </summary>
+    /// <param name="limitSql">The SQL expression that supplies the positive row limit.</param>
+    /// <param name="keywordCase">The letter case in which the emitted SQL keywords are written.</param>
+    /// <returns>The complete inline <c>TOP (@k) WITH APPROXIMATE</c> fragment.</returns>
+    /// <exception cref="NotSupportedException">The dialect cannot express approximate vector search.</exception>
+    string MakeApproximateTop(string limitSql, KeywordCase keywordCase = KeywordCase.Lower)
+        => throw new NotSupportedException("Approximate vector-search TOP is not supported by this SQL dialect.");
+
+    /// <summary>
+    /// Optional named argument emitted inside an approximate vector-search table function with the
+    /// rendered top-k value. A dialect that uses a different grammar returns <see langword="null"/>.
+    /// </summary>
+    string? ApproximateVectorSearchTopNArgumentName => null;
 
     /// <summary>
     /// The provider's renderer for row locking; <c>null</c> means the provider cannot express it.
@@ -2131,9 +2154,9 @@ public interface ISqlDialect
         => MakeReturning(columns, keywordCase);
 
     /// <summary>
-    /// Whether the dialect can execute a <c>DELETE</c> and report the affected-row count. Declared as a
-    /// default interface method returning <c>true</c>; the native statement is rendered by
-    /// <see cref="MakeDeleteHead"/> (ClickHouse renders its <c>ALTER TABLE ... DELETE</c> mutation).
+    /// Whether the provider has a synchronous, single-statement <c>DELETE</c> form the core can render.
+    /// Defaults to <see langword="true"/>; the dialect supplies the form through
+    /// <see cref="MakeDeleteHead"/> (ClickHouse uses its <c>ALTER TABLE ... DELETE</c> mutation).
     /// </summary>
     bool SupportsDelete => true;
 
@@ -2220,11 +2243,10 @@ public interface ISqlDialect
     bool DeleteJoinRequiresUsing => false;
 
     /// <summary>
-    /// Whether the dialect can execute an <c>UPDATE</c> and report the affected-row count. Declared as a
-    /// default interface method returning <c>true</c>; ClickHouse keeps it <c>true</c> but renders its
-    /// <c>ALTER TABLE ... UPDATE</c> mutation, which waits for the mutation
-    /// (<c>SETTINGS mutations_sync = 1</c>) yet reports no affected-row count. The native head is rendered
-    /// by <see cref="MakeUpdateHead"/>.
+    /// Whether the provider has a synchronous, single-statement <c>UPDATE</c> form the core can render.
+    /// Defaults to <see langword="true"/>; the dialect supplies the form through
+    /// <see cref="MakeUpdateHead"/>. ClickHouse uses its <c>ALTER TABLE ... UPDATE</c> mutation, which
+    /// waits for completion (<c>SETTINGS mutations_sync = 1</c>) but does not report an affected-row count.
     /// </summary>
     bool SupportsUpdate => true;
 

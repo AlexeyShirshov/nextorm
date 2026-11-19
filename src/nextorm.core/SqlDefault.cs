@@ -1,13 +1,12 @@
 namespace NextORM.Core;
 
 /// <summary>
-/// Marker passed to <see cref="InsertBuilder{TEntity}.Value{TValue}(System.Linq.Expressions.Expression{System.Func{TEntity, TValue}}, SqlDefault)"/>
-/// or used as a mapped member in a <c>Values(source, mapping)</c> projection to write the column's
-/// database <c>DEFAULT</c> instead of a value.
+/// Marks a column to use the database's <c>DEFAULT</c> value in an insert. Pass it to
+/// <see cref="InsertBuilder{TEntity}.Value{TValue}(System.Linq.Expressions.Expression{System.Func{TEntity, TValue}}, SqlDefault)"/>
+/// or use it for a mapped member in a <c>Values(source, mapping)</c> projection.
 /// <para>
-/// A provider whose dialect cannot render the <c>DEFAULT</c> keyword in a <c>VALUES</c> list (SQLite)
-/// rejects it with <see cref="NotSupportedException"/>; omit the column instead, which yields the same
-/// default.
+/// SQLite cannot render <c>DEFAULT</c> in a <c>VALUES</c> list and rejects this marker. Omit the column
+/// instead to use the same database default.
 /// </para>
 /// </summary>
 public readonly struct SqlDefault

@@ -1,8 +1,18 @@
 # Data modification (DELETE)
 
-> nextorm removes rows with the same explicit-command model as `INSERT`: [`CreateDeleteBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateDeleteBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) builds a parameterised `DELETE FROM <table> [WHERE ...]`, the context extension [`Delete<TEntity>(entity)`](xref:NextORM.Core.DataContextExtensions.Delete``1(NextORM.Core.IDataContext,``0)) deletes by the entity's declared key, and a joined query can end in a multi-table delete. There is no change tracking and no `SaveChanges`: every terminal issues exactly one command.
+> Use [`CreateDeleteBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateDeleteBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) to delete rows that match a predicate or explicitly delete every row. It builds a parameterized `DELETE FROM <table> [WHERE ...]`. Use [`Delete<TEntity>(entity)`](xref:NextORM.Core.DataContextExtensions.Delete``1(NextORM.Core.IDataContext,``0)) to delete by the entity's declared key. You can also delete rows selected by a join.
 
 **Prerequisites:** [Data modification (INSERT)](17-insert-statement.md) · [Filtering (WHERE)](03-filtering-where.md) · [Joins](04-joins.md) · [Provider overview](../connecting-providers/overview.md)
+
+## Choose a delete operation
+
+- To delete rows that match a condition, use [Deleting rows by predicate](#deleting-rows-by-predicate).
+- To delete every row, mark the operation explicitly with [`All()`](#deleting-every-row).
+- To delete one entity by its key, use [Deleting by key](#deleting-by-key).
+- To return the removed rows, see [Returning the removed rows](#returning-the-removed-rows).
+- To delete rows selected by a join or clear a table, see [Delete based on a join](#delete-based-on-a-join) or [Truncating a table](#truncating-a-table).
+
+Each terminal issues one command. nextorm does not track changes and does not provide `SaveChanges`.
 
 ## Deleting rows by predicate
 
@@ -24,14 +34,19 @@ delete from simple_entity where id = 1
 delete from simple_entity where (age > 10)
 ```
 
-`Where` accepts the same predicate expressions as a query (`From<T>().Where(...)`), and repeating it combines the predicates with `and`. `CreateDeleteBuilder<T>().ToSql()` renders the statement without opening a connection.
+`Where` accepts the same predicate expressions as a query (`From<T>().Where(...)`). Repeated calls
+combine the predicates with `and`.
+
+To inspect the generated statement without opening a connection, call
+`CreateDeleteBuilder<T>().ToSql()`.
 
 * Values captured in the predicate become parameters (`x => x.Id == id` renders `id = @id`); inline literals are emitted verbatim, exactly as in a query `WHERE`.
 * `Delete()`/`DeleteAsync()` return the affected-row count (`0` when nothing matched). ClickHouse reports no count (its mutation returns none).
 
 ## Deleting every row
 
-Deleting every row requires the explicit `All()` marker, so an unfiltered full-table delete cannot be written by accident. Combining `Where` and `All` throws `InvalidOperationException`:
+To delete every row, add the explicit `All()` marker. This makes a full-table delete deliberate.
+Combining `Where` and `All` throws `InvalidOperationException`:
 
 ```csharp
 ctx.CreateDeleteBuilder<ISimpleEntity>().All().Delete();   // delete from simple_entity
@@ -39,7 +54,8 @@ ctx.CreateDeleteBuilder<ISimpleEntity>().All().Delete();   // delete from simple
 
 ## Deleting by key
 
-The key form deletes exactly the row identified by the entity's declared key (`[Key]`/`.Key()`), rendering the key equality as a parameter:
+To delete an entity by key, pass it to the context's `Delete` extension. The operation uses the
+entity's declared key (`[Key]`/`.Key()`) and binds the key equality as a parameter:
 
 ```csharp
 ctx.Delete(new SimpleEntity { Id = 1 });          // delete from simple_entity where id = @p0
@@ -51,19 +67,36 @@ await ctx.DeleteAsync(new SimpleEntity { Id = 1 });
 delete from simple_entity where id = @p0
 ```
 
+## Sharded entities
+
+A sharded delete must name the bucket: the statement takes its scope from an equality on the shard key in
+the predicate, or from the entity in the key form. A predicate without that equality — and a full-table
+`All()` delete — throws before SQL instead of naming the default table:
+
+```csharp
+ctx.CreateDeleteBuilder<Order>().Where(x => x.Tenant == tenant).Delete();   // routed by the predicate
+ctx.Delete(new Order { Id = 1 });                                          // routed by the instance
+ctx.CreateDeleteBuilder<Order>().All().ToSql();                            // throws: no bucket to name
+```
+
+The bucket table, its shard and the placement rules are described in
+[Sharding and horizontal partitioning](35-sharding-and-horizontal-partitioning.md).
+
 ## Global query filters
 
-A [global query filter](../advanced/query-filters.md) declared for the deleted entity is `and`-ed into the
-statement's `WHERE`:
+A [global query filter](../advanced/query-filters.md) declared for the deleted entity is combined with
+the statement's `WHERE` condition:
 
 * predicate form — `delete from ... where <predicate> and <filter>`;
 * key form — `delete from ... where <pk> = @p and <filter>`, so `ctx.Delete(entity)` removes nothing when
   the filter excludes that key.
 
-`All()` is an explicit full-table delete and is **never** filtered. A joined delete filters the target (the
-first table) and every joined source. [`DeleteBuilder<TEntity>`](xref:NextORM.Core.DeleteBuilder`1) exposes
-the four `IgnoreFilters` overloads (all, by entity type, by filter key, key-and-type intersection); the call
-is stateful and repeated calls accumulate:
+`All()` explicitly deletes every row and is **never** filtered. A joined delete filters the target (the
+first table) and every joined source.
+
+[`DeleteBuilder<TEntity>`](xref:NextORM.Core.DeleteBuilder`1) provides four `IgnoreFilters` overloads:
+ignore all filters, filters for an entity type, a filter key, or the intersection of a key and type. The
+call changes builder state, and repeated calls accumulate:
 
 ```csharp
 ctx.CreateDeleteBuilder<Document>()
@@ -87,7 +120,8 @@ See [UPDATE and DELETE (DML)](../advanced/query-filters.md#update-and-delete-dml
 
 ## Returning the removed rows
 
-`Returning()` / `Returning(projection)` materialise the removed rows through the provider's `RETURNING`/`OUTPUT` form, read through `Single()`/`ToList()`:
+To read the rows that the command removes, use `Returning()` or `Returning(projection)`. The provider
+uses its native `RETURNING`/`OUTPUT` form; read the result with `Single()` or `ToList()`:
 
 ```csharp
 var removed = ctx.CreateDeleteBuilder<ISimpleEntity>()
@@ -119,7 +153,8 @@ To capture the removed rows for a later statement of the same batch instead of r
 
 ## Truncating a table
 
-`CreateTruncateBuilder<TEntity>()` renders the provider's native `TRUNCATE TABLE`, resetting a table faster than `CreateDeleteBuilder<T>().All()`:
+To clear a table, use `CreateTruncateBuilder<TEntity>()`. It renders the provider's native
+`TRUNCATE TABLE`, which resets the table faster than `CreateDeleteBuilder<T>().All()`:
 
 ```csharp
 var cleared = ctx.CreateTruncateBuilder<ISimpleEntity>().Execute();   // truncate table simple_entity
@@ -129,7 +164,9 @@ SQL Server, PostgreSQL, MySQL, MariaDB and ClickHouse have `TRUNCATE TABLE`; SQL
 
 ## Delete based on a join
 
-A joined query can end in `Delete()`/`DeleteAsync()`: the first table of the chain is the delete target, and the rows removed are those matching the join condition and any `Where`. Only INNER joins are supported.
+Use `Delete()` or `DeleteAsync()` at the end of a joined query to delete matching rows. The first table
+in the chain is the target. The delete matches the join condition and any `Where` predicates. Only INNER
+joins are supported.
 
 ```csharp
 var removed = await ctx.From<ISimpleEntity>()
@@ -152,7 +189,20 @@ delete from simple_entity as "t1" using complex_entity as "t2" where cast(t1.id 
 
 * The target is the first table (`Item1`); only `Join` (INNER) is accepted. `LeftJoin`/`RightJoin`/`FullJoin`/`CrossJoin` and the `APPLY` joins throw `NotSupportedException`, because they change which rows are deleted.
 * The terminals are extension methods on the joined builder for arities 2–8; `Delete()`/`DeleteAsync()` return the affected-row count. `ToSql()` renders the statement without opening a connection and throws on an in-memory context.
-* `CreateDeleteJoinBuilder()` starts the row-returning multi-table delete; its `Returning()`/`Returning(projection)` terminals are available on PostgreSQL only (`DELETE ... USING ... RETURNING`), on INNER joins and for arities 2–8. `Returning()` — equivalent to `Returning(p => p)` — returns the whole joined projection (`Projection<T1, ...>`): every returnable mapped property of every item slot, in source order. `Item1` is the delete target and every repeated CLR type stays distinct by slot, so a self-join of one entity keeps its `Item1`/`Item2` values apart. A delete returns the removed-row values. `Returning(p => new { p.Item1.Id, p.Item2.Name })` returns an explicit projection instead, read through `Single()`/`ToList()`; returned columns get deterministic per-slot aliases, and explicit projections are unchanged. No `Returning()` call adds a `RETURNING` list implicitly. It works both as a normal terminal and as a data-modifying CTE body through `With(name, delete)`. A returned item whose mapped property is a multi-column `Range<T>` is rejected, and a required member with no counterpart in the joined source shape is rejected naming the slot and member. See [Common table expressions](10-cte.md).
+* `CreateDeleteJoinBuilder()` starts the row-returning multi-table delete. Its `Returning()` and
+  `Returning(projection)` terminals are available only on PostgreSQL (`DELETE ... USING ... RETURNING`),
+  for INNER joins, and for arities 2–8.
+  * `Returning()` is equivalent to `Returning(p => p)` and returns the whole joined projection
+    (`Projection<T1, ...>`): every returnable mapped property from every item slot, in source order.
+    `Item1` is the delete target. If the same CLR type appears more than once, each slot remains
+    distinct, so a self-join keeps its `Item1` and `Item2` values separate.
+  * `Returning(p => new { p.Item1.Id, p.Item2.Name })` returns the explicit projection; read it with
+    `Single()` or `ToList()`. Returned columns receive deterministic aliases per slot, and explicit
+    projections remain unchanged. `Returning()` does not add a `RETURNING` list implicitly.
+  * The returned-row form works as a normal terminal and as a data-modifying CTE body through
+    `With(name, delete)`. See [Common table expressions](10-cte.md).
+  * nextorm rejects a returned item whose mapped property is a multi-column `Range<T>`. It also rejects
+    a required member with no matching member in the joined source shape and names the slot and member.
 * A joined side may be a CTE, whose declaration is hoisted before the `DELETE` (PostgreSQL `with c as (…) delete from <t> as "t1" using c as "t2" where …`); the target stays the first physical table and the CTE may sit on any join position. See [Common table expressions](10-cte.md).
 
 ```csharp

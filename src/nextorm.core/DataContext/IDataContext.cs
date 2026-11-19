@@ -1,19 +1,17 @@
 namespace NextORM.Core;
 
 /// <summary>
-/// Composite facade over the individual context roles, kept as the convenient entry point for
-/// consumers. The roles are separate interfaces so that providers and collaborators can depend
-/// on the smallest surface they actually need:
+/// Runs queries and exposes the context services used to prepare, execute, and materialize them.
+/// The interface combines smaller roles so consumers can use one entry point:
 /// <list type="bullet">
-/// <item><see cref="IQueryExecutor"/> — terminal operators;</item>
-/// <item><see cref="IQueryMaterializer"/> — planning + row reading;</item>
-/// <item><see cref="IQueryCache"/> — plan cache;</item>
-/// <item><see cref="IContextEnvironment"/> — loggers, mapping mode, property bag;</item>
-/// <item><see cref="IRawCommandExecutor"/> — raw parameterised commands.</item>
+/// <item><see cref="IQueryExecutor"/> — query execution;</item>
+/// <item><see cref="IQueryMaterializer"/> — query preparation and row materialization;</item>
+/// <item><see cref="IQueryCache"/> — prepared-query caching;</item>
+/// <item><see cref="IContextEnvironment"/> — logging and mapping settings;</item>
+/// <item><see cref="IRawCommandExecutor"/> — parameterized raw commands.</item>
 /// </list>
-/// Connection management is deliberately <b>not</b> part of this composite
-/// (see <see cref="IConnectionManager"/>): the in-memory provider must not be forced to
-/// implement a no-op connection lifecycle.
+/// Connection management is separate (see <see cref="IConnectionManager"/>), because an in-memory
+/// context has no connection to manage.
 /// </summary>
 public interface IDataContext :
     IQueryExecutor,
@@ -25,13 +23,12 @@ public interface IDataContext :
     IDisposable
 {
     /// <summary>
-    /// Prepares <paramref name="queryCommand"/> with an explicit command-reuse policy, optionally creating
-    /// the row enumerator and storing the plan in the cache.
+    /// Prepares <paramref name="queryCommand"/> for execution using the selected command-reuse policy.
     /// </summary>
     /// <typeparam name="TResult">The projected result type.</typeparam>
     /// <param name="queryCommand">The command to prepare.</param>
-    /// <param name="createEnumerator">When <see langword="true"/>, creates the row enumerator as part of preparation.</param>
-    /// <param name="storeInCache">When <see langword="true"/>, the resulting plan may be stored in the plan cache.</param>
+    /// <param name="createEnumerator"><see langword="true"/> to create the row enumerator during preparation; otherwise, defer it until execution.</param>
+    /// <param name="storeInCache"><see langword="true"/> to allow the prepared plan to be stored in the plan cache; otherwise, do not cache it.</param>
     /// <param name="cache">The policy that selects connection-scoped command reuse or a command per execution.</param>
     /// <param name="cancellationToken">Token used to cancel preparation.</param>
     /// <returns>The prepared command, ready to execute.</returns>

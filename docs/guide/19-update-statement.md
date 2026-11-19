@@ -1,11 +1,12 @@
 # Data modification (UPDATE)
 
-> nextorm changes rows with the same explicit-command model as `INSERT` and `DELETE`:
+> Use `UPDATE` when you want to choose which columns and rows to change. The
 > [`CreateUpdateBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateUpdateBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
-> builds a parameterised `UPDATE <table> SET ... [WHERE ...]`, and the context extension
+> form sets columns with `Set` and can filter rows with `Where`; the context
+> extension
 > [`Update<TEntity>(entity)`](xref:NextORM.Core.DataContextExtensions.Update``1(NextORM.Core.IDataContext,``0))
-> updates by the entity's declared key. There is no change tracking and no `SaveChanges`: every terminal
-> issues exactly one command.
+> updates the row identified by the entity's declared key. nextorm does not
+> track changes or provide `SaveChanges`: each terminal issues one command.
 
 **Prerequisites:** [Data modification (INSERT)](17-insert-statement.md) · [Data modification (DELETE)](18-delete-statement.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Provider overview](../connecting-providers/overview.md)
 
@@ -14,6 +15,9 @@
 [`CreateUpdateBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateUpdateBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
 returns a [`UpdateBuilder<TEntity>`](xref:NextORM.Core.UpdateBuilder`1). Add one `Set` per written column, then
 `Where`, and finish with `Update()`/`UpdateAsync()` to get the affected-row count:
+
+Add `Where` when you intend to update only matching rows. Omitting it updates every row allowed by the
+entity's global query filters, if any; use that form only when a table-wide update is intended.
 
 ```csharp
 var updated = ctx.CreateUpdateBuilder<ISimpleEntity>()
@@ -114,6 +118,19 @@ await ctx.UpdateAsync(new SimpleEntity { Id = 1, Name = "renamed" });
 ```
 
 The entity type must declare a key; otherwise the call throws `InvalidOperationException`.
+
+## Sharded entities
+
+A sharded update takes its scope from an equality on the shard key in the predicate, or from the entity in
+the key form; an update without either throws before SQL rather than writing the default table:
+
+```csharp
+ctx.CreateUpdateBuilder<Order>().Set(x => x.Total, 10m).Where(x => x.Tenant == tenant).Update();
+ctx.Update(new Order { Id = 1, Total = 10m });   // routed by the instance
+```
+
+The bucket table, its shard and the placement rules are described in
+[Sharding and horizontal partitioning](35-sharding-and-horizontal-partitioning.md).
 
 ## Returning the updated rows
 

@@ -1,25 +1,27 @@
 # Обзор провайдеров
 
-> Провайдер предоставляет диалект (правила SQL-текста) и подкласс [`DataContext`](xref:NextORM.Core.DataContext) (создание соединения + параметров); выберите тот, который соответствует базе данных, которую вы уже используете.
+> Выберите пакет провайдера для своей базы данных. В каждом пакете есть правила SQL и подкласс [`DataContext`](xref:NextORM.Core.DataContext), который создаёт соединения и параметры.
 
-**Предварительные требования:** [Quickstart](../getting-started/02-quickstart.md) · [Dependency injection](../getting-started/04-dependency-injection.md)
+**Предварительные требования:** [Быстрый старт](../getting-started/02-quickstart.md) · [Внедрение зависимостей](../getting-started/04-dependency-injection.md)
 
 ## Обзор
 
-nextorm состоит из нейтрального к провайдеру ядра (`nextorm`, пространство имён `nextorm.core`) и одного пакета на
-базу данных: `nextorm.sqlite`, `nextorm.sqlserver`, `nextorm.postgres`, `nextorm.mysql`, `nextorm.mariadb`
-и `nextorm.clickhouse`. Провайдер in-memory встроен
-в пакет ядра. Провайдер вносит две вещи:
+В NextORM есть независимое от провайдера ядро и отдельный пакет для каждой SQL-базы:
+`nextorm.sqlite`, `nextorm.sqlserver`, `nextorm.postgres`, `nextorm.mysql`, `nextorm.mariadb` и
+`nextorm.clickhouse`. Провайдер для работы в памяти входит в пакет ядра.
 
-1. **диалект** — объект без состояния, который отрисовывает всё, что различается между базами данных (плейсхолдеры
-   параметров, разбиение на страницы, квотирование, имена функций, флаги возможностей); и
+Каждый SQL-провайдер предоставляет две части:
+
+1. **диалект** — объект без состояния, который формирует различающийся для баз данных SQL: маркеры
+   параметров, постраничную выборку, заключение имён в кавычки, имена функций и проверку возможностей; и
 2. **контекст** — подкласс [`DataContext`](xref:NextORM.Core.DataContext), который знает, как создавать соединение и параметры, и
    предоставляет диалект через своё свойство `Dialect`.
 
-Генерация SQL полностью управляется [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) (`src/nextorm.core/DataContext/Dialect/ISqlDialect.cs`),
-поэтому построитель SQL и посетители выражений никогда не содержат имён провайдеров. Семантика запросов (проекция,
-фильтрация, соединения, группировка, операции над множествами, CTE, оконные функции, поддержка scalar/UDF/TVF) является общей;
-различается только отрисовка.
+Ядро строит SQL через [`ISqlDialect`](xref:NextORM.Core.ISqlDialect). Поведение запросов — проекции,
+фильтры, соединения, группировки, операции над множествами, общие табличные выражения (CTE) и оконные
+функции — одинаково для SQL-провайдеров. Диалект определяет, как каждую операцию записать в SQL.
+Специфичные для провайдера скалярные функции, пользовательские функции (UDF) и табличные функции
+(TVF) перечислены в матрице поддержки.
 
 ## Выбор провайдера
 
@@ -33,23 +35,47 @@ nextorm состоит из нейтрального к провайдеру я�
 | Вы уже используете ClickHouse | `nextorm.clickhouse` |
 | Модульные тесты, которые не должны обращаться к базе данных, тесты кэша планов, тесты формы запросов | [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) (ядро) |
 
-Используйте один и тот же код запросов со всеми провайдерами; перечисленные ниже различия провайдеров — единственное, что
-меняется.
+Выберите пакет по первой таблице. Матрица ниже поможет проверить, как нужная возможность реализована
+у каждого провайдера. SQL-провайдеры используют общий API запросов, но это не означает, что все
+возможности поддерживаются каждой базой данных.
+
+## Регистрация провайдера
+
+Каждый пакет провайдера добавляет методы расширения `UseXxx` для [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder).
+Контекст также можно создать публичным конструктором, передав строку подключения или существующий
+`DbConnection`:
+
+```csharp
+using NextORM.Core;
+using NextORM.Sqlite;      // или nextorm.sqlserver / nextorm.postgres
+
+var builder = new DataContextBuilder().UseSqlite("app.db");   // перегрузка для конкретного провайдера
+using var ctx = builder.CreateDataContext();                   // возвращает IDataContext
+```
+
+Для регистрации через внедрение зависимостей используйте:
+
+```csharp
+services.AddNextOrmContext(builder => builder.UseSqlite("app.db"));
+```
+
+См. [Внедрение зависимостей](../getting-started/04-dependency-injection.md): там описаны регистрации
+с ключом и универсальные регистрации.
 
 ## Матрица поддержки
 
 | Возможность | SQLite | SQL Server | PostgreSQL | MySQL | MariaDB | ClickHouse | In-memory |
 |---|---|---|---|---|---|---|---|
 | Пакет | `nextorm.sqlite` | `nextorm.sqlserver` | `nextorm.postgres` | `nextorm.mysql` | `nextorm.mariadb` | `nextorm.clickhouse` | встроен в `nextorm` |
-| Плейсхолдер параметра | `$name` | `@name` | `@name` | `@name` | `@name` | `@name` | не применимо |
+| Маркер параметра | `$name` | `@name` | `@name` | `@name` | `@name` | `@name` | не применимо |
 | Табличные параметры (`ProcedureParameter.Table<T>`) | JSON-документ `json_each` | нативно `SqlDbType.Structured` + `TypeName` | типизированный массив / документ `jsonb` | JSON-документ `JSON_TABLE` | JSON-документ `JSON_TABLE` | связанный `Array(T)`/`Array(Tuple(...))` + `arrayJoin` | бросает `NotSupportedException` |
 | Транзакции (`ITransactionManager`) | поддерживается | поддерживается | поддерживается | поддерживается | поддерживается | бросает `NotSupportedException` | не применимо (нет соединения) |
 | Savepoints (создание / откат к / освобождение) | поддерживается | поддерживается (release — no-op) | поддерживается | поддерживается | поддерживается | бросает `NotSupportedException` | не применимо (нет соединения) |
 | `INSERT ... VALUES` | поддерживается | поддерживается | поддерживается | поддерживается | поддерживается | поддерживается (малые батчи) | бросает `NotSupportedException` |
-| Массовая вставка (`CreateBulkInsertBuilder`) | портируемый `INSERT ... VALUES` (нативного пути нет) | нативный `SqlBulkCopy` | нативный бинарный `COPY` | нативный `MySqlBulkCopy` (`LOAD DATA LOCAL INFILE`) | нативный `MySqlBulkCopy` (`LOAD DATA LOCAL INFILE`) | нативный `InsertBinaryAsync` | бросает `NotSupportedException` |
-| Режимы массовой вставки (`BulkInsertMode` `Auto`/`Native`/`Portable`) | только портируемый; `Native` отклоняется | все три | все три | все три | все три | все три | не применимо |
-| Bulk-copy флаги (`CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers`) | `CheckConstraints=false` через scoped-прагму вне транзакции; `KeepNulls=false` только для default-equivalent формы; остальные отклоняются | `SqlBulkCopyOptions` (только нативный путь) | `KeepNulls=false` только для default-equivalent формы; остальные отклоняются | `KeepNulls=false` только для default-equivalent формы; остальные отклоняются | `CheckConstraints=false` через scoped-контроль сессии; `KeepNulls=false` только для default-equivalent формы; остальные отклоняются | `KeepNulls=false` только для default-equivalent формы; остальные отклоняются | бросает `NotSupportedException` |
-| Key upsert (`CreateMergeBuilder`) | `ON CONFLICT ... DO UPDATE` | `MERGE ... USING (VALUES ...)` | `ON CONFLICT ... DO UPDATE` | `ON DUPLICATE KEY UPDATE` | `ON DUPLICATE KEY UPDATE` | бросает `NotSupportedException` | применяется в контексте (upsert) |
+| Массовая вставка (`CreateBulkInsertBuilder`) | переносимый `INSERT ... VALUES` (встроенного пути нет) | встроенный `SqlBulkCopy` | встроенный бинарный `COPY` | встроенный `MySqlBulkCopy` (`LOAD DATA LOCAL INFILE`) | встроенный `MySqlBulkCopy` (`LOAD DATA LOCAL INFILE`) | встроенный `InsertBinaryAsync` | бросает `NotSupportedException` |
+| Режимы массовой вставки (`BulkInsertMode` `Auto`/`Native`/`Portable`) | только переносимый путь; `Native` отклоняется | все три | все три | все три | все три | все три | не применимо |
+| Флаги массового копирования (`CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers`) | `CheckConstraints=false` через временную прагму вне транзакции; `KeepNulls=false` только для формы, эквивалентной значениям по умолчанию; остальные флаги отклоняются | `SqlBulkCopyOptions` (только встроенный путь) | `KeepNulls=false` только для формы, эквивалентной значениям по умолчанию; остальные флаги отклоняются | `KeepNulls=false` только для формы, эквивалентной значениям по умолчанию; остальные флаги отклоняются | `CheckConstraints=false` через временное управление сеансом; `KeepNulls=false` только для формы, эквивалентной значениям по умолчанию; остальные флаги отклоняются | `KeepNulls=false` только для формы, эквивалентной значениям по умолчанию; остальные флаги отклоняются | бросает `NotSupportedException` |
+| Вставка или обновление по ключу (`CreateMergeBuilder`) | `ON CONFLICT ... DO UPDATE` | `MERGE ... USING (VALUES ...)` | `ON CONFLICT ... DO UPDATE` | `ON DUPLICATE KEY UPDATE` | `ON DUPLICATE KEY UPDATE` | бросает `NotSupportedException` | выполняется в контексте |
 | Полный `MERGE` (`WhenMatched`/`WhenNotMatched`, ветки) | бросает `NotSupportedException` | `MERGE ... WHEN MATCHED THEN ...` | `MERGE ... WHEN MATCHED THEN ...` (15+) | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` |
 | Условие совпадения merge (`On`/`WhenMatched(condition)`) | бросает `NotSupportedException` | `ON <condition>` / `WHEN ... AND <condition>` | `ON <condition>` / `WHEN ... AND <condition>` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` |
 | Выражения-присваивания merge (`ThenUpdate(assignments)`/`ThenInsert(assignments)`) | key upsert: роли target + source, нативный `excluded.<col>` | полный/key `MERGE`: target + source; `excluded` отклоняется (нет proposed-строки) | полный `MERGE` и `ON CONFLICT`: target + source, нативный `excluded.<col>` | key upsert: target + source, нативный `VALUES(<col>)`; batch/query-источник с чтением роли source отклоняется | как MySQL, с отдельным живым покрытием | бросает `NotSupportedException` | бросает `NotSupportedException` |
@@ -61,18 +87,18 @@ nextorm состоит из нейтрального к провайдеру я�
 | `DELETE ... RETURNING` (`Returning`) | `RETURNING` | `OUTPUT deleted.<col>` | `RETURNING` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` |
 | `TRUNCATE` (`CreateTruncateBuilder`) | бросает `NotSupportedException` | поддерживается | поддерживается | поддерживается | поддерживается | поддерживается | бросает `NotSupportedException` |
 | Потоковое чтение LOB (`ToStream`/`ToTextReader`) | поддерживается (одна колонка `byte[]`/`string`; источник должен раскрывать `rowid`) | поддерживается (одна колонка `byte[]`/`string`) | поддерживается (одна колонка `byte[]`/`string`) | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` | поддерживается (одна колонка `byte[]`/`string`; возвращает принадлежащий вызывающему `MemoryStream`/`StringReader`) |
-| Многоколоночный reader (`ToDataReader`/`ToDataReaderAsync`) | поддерживается (буферизованный, без локатора; LOB не чанками) | поддерживается | поддерживается | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` |
+| Объект чтения нескольких колонок (`ToDataReader`/`ToDataReaderAsync`) | поддерживается (буферизованный, без локатора; LOB читается не частями) | поддерживается | поддерживается | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` |
 | Материализация запроса (`ToTempTable`/`ToTable`) | `CREATE [TEMPORARY] TABLE ... AS SELECT` | `SELECT ... INTO` (`ToTable`; уровня сессии через `#name`) | `CREATE [TEMPORARY] TABLE ... AS SELECT` | `CREATE [TEMPORARY] TABLE ... AS SELECT` | `CREATE [TEMPORARY] TABLE ... AS SELECT` | `CREATE TABLE ... ENGINE = MergeTree ... AS SELECT` (`ToTable`) | бросает `NotSupportedException` |
 | Батч (`Batch`) | `;`-склеенная команда | `;`-склеенная команда (не `SqlBatch`) | `NpgsqlBatch` | `MySqlBatch` | `MySqlBatch` | бросает `NotSupportedException` | бросает `NotSupportedException` |
 | `DELETE ... USING`/join (`From<T>().Join(...).Delete()`, INNER) | бросает `NotSupportedException` | `DELETE <a> FROM ... JOIN ...` | `DELETE FROM ... USING ...` | `DELETE <a> FROM ... JOIN ...` | `DELETE <a> FROM ... JOIN ...` | бросает `NotSupportedException` | бросает `NotSupportedException` |
-| Сгенерированный ключ (`ReturningIdentity`/`ReturningKey`) | `RETURNING` | `OUTPUT inserted.<col>` | `RETURNING` | фолбэк `LAST_INSERT_ID()` | фолбэк `LAST_INSERT_ID()` | бросает `NotSupportedException` | бросает `NotSupportedException` |
+| Сгенерированный ключ (`ReturningIdentity`/`ReturningKey`) | `RETURNING` | `OUTPUT inserted.<col>` | `RETURNING` | запасной вариант `LAST_INSERT_ID()` | запасной вариант `LAST_INSERT_ID()` | бросает `NotSupportedException` | бросает `NotSupportedException` |
 | Identity-функция (`ReturningIdentity<TKey>()`) | `last_insert_rowid()` | `SCOPE_IDENTITY()` | `lastval()` | `LAST_INSERT_ID()` | `LAST_INSERT_ID()` | бросает `NotSupportedException` | бросает `NotSupportedException` |
 | Возврат вставленных строк (`Returning`) | `RETURNING` | `OUTPUT inserted.<cols>` | `RETURNING` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` |
 | Только limit | `limit n` | `top(n)` | `limit n` | `limit n` | `limit n` | `limit n` | take в процессе |
 | Limit + offset | `limit n offset m` | `offset m rows fetch next n rows only` | `limit n offset m` | `limit n offset m` | `limit n offset m` | `limit n offset m` | skip/take в процессе |
 | Только offset | `limit -1 offset m` | `offset m rows` | `offset m` | `limit 18446744073709551615 offset m` | `limit 18446744073709551615 offset m` | `limit 18446744073709551615 offset m` | skip в процессе |
 | Разбиение на страницы без `ORDER BY` | допускается | внедряет `order by (select null as anyorder)` | допускается | допускается | допускается | допускается | допускается |
-| Явное размещение NULL (`NullsPosition`) | нативные `NULLS FIRST`/`NULLS LAST` | портируемая эмуляция `CASE` | нативное | портируемая эмуляция `CASE` | портируемая эмуляция `CASE` | нативное | соблюдается в процессе |
+| Явное размещение NULL (`NullsPosition`) | нативные `NULLS FIRST`/`NULLS LAST` | переносимая эмуляция через `CASE` | нативное | переносимая эмуляция через `CASE` | переносимая эмуляция через `CASE` | нативное | соблюдается в процессе |
 | `INTERSECT ALL` / `EXCEPT ALL` (`*ALL`) | бросает `NotSupportedException` | бросает `NotSupportedException` | поддерживается | бросает `NotSupportedException` | поддерживается | поддерживается | не применимо |
 | Ключевое слово рекурсивного CTE | `with recursive` | `with` (плюс `option (maxrecursion n)`) | `with recursive` | `with recursive` | `with recursive` | `with` (рекурсивные CTE не поддерживаются) | не применимо |
 | Именованные окна / `GROUPS` / `EXCLUDE` | именованное окно + `GROUPS` + `EXCLUDE` | бросает (нет `WINDOW`-клаузы) | именованное окно + `GROUPS` + `EXCLUDE` | только именованное окно | только именованное окно | именованное окно + `GROUPS` | не применимо |
@@ -87,7 +113,7 @@ nextorm состоит из нейтрального к провайдеру я�
 | `string_agg` | `group_concat(x, delimiter)` | поддерживается (2017+) | поддерживается | `group_concat(x separator delimiter)` | `group_concat(x separator delimiter)` | `arrayStringConcat(groupArray(...), ...)` | бросает |
 | Полнотекст `contains` / `freetext` (кросс-провайдерные) | бросает | `contains` / `freetext` | `to_tsvector(...) @@ ...tsquery(...)` | `match(...) against(...)` | `match(...) against(...)` | бросает | бросает |
 | Полнотекстовое ранжирование / score | бросает | `containstable` / `freetexttable` (`RANK`, табличная функция) | `ts_rank` / `ts_rank_cd` | бросает | бросает | бросает | бросает |
-| Полнотекстовый поиск только в SQLite (FTS3/FTS4/FTS5) | поверхность запросов `SqlFunctions.Sqlite` (`Match`, FTS5 `FTS5bm25`/`Highlight`/`Snippet`/`Rank`, помощники FTS3/4, табличный `MatchTable` FTS5; FTS3/4 `Rank` требует зарегистрированной на соединении UDF `rank`) | бросает | бросает | бросает | бросает | бросает | бросает |
+| Полнотекстовый поиск только в SQLite (FTS3/FTS4/FTS5) | функции запросов `SqlFunctions.Sqlite` (`Match`, FTS5 `FTS5bm25`/`Highlight`/`Snippet`/`Rank`, помощники FTS3/4, табличный `MatchTable` FTS5; для FTS3/4 `Rank` нужна зарегистрированная на соединении UDF `rank`) | бросает | бросает | бросает | бросает | бросает | бросает |
 | Регулярные выражения (`Regex.IsMatch` / `Regex.Replace`, константный шаблон) | `s regexp ...` / `regexp_replace(...)` (регистрируемые) | `regexp_like(...)` / `regexp_replace(...)` (2025+) | `s ~ ...` / `regexp_replace(...)` | `regexp_like(...)` / `regexp_replace(...)` | `s regexp ...` / `regexp_replace(...)` | `match(...)` / `replaceRegexpAll(...)` | нативно `System.Text.RegularExpressions` |
 | Битовые / статистические / `-If` агрегаты | бросает | бросает | поддерживается | бросает | бросает | `groupBit*`, `corr`/`covarPop`, `countIf`/… | бросает |
 | `multi_if` (многоветвевный) | бросает | бросает | бросает | бросает | бросает | `multiIf(c1, v1, …, else)` | не применимо |
@@ -109,45 +135,45 @@ nextorm состоит из нейтрального к провайдеру я�
 | Строгость соединений (`ANY`/`ALL`/`ASOF`, `SEMI`/`ANTI`/`PASTE`) / `GLOBAL` | бросает | бросает | бросает | бросает | бросает | `WithStrictness(...)` / `Global()` | бросает |
 | Словари (`dictGet`) | бросает | бросает | бросает | бросает | бросает | `dict_get`/`dict_get_or_default`/`dict_has`/… (нужен настроенный dictionary) | бросает |
 | Провайдерные табличные функции (`FROM`-источник) | `json_each`/`json_tree` | `string_split`/`openjson`/`containstable`/`freetexttable` | `generate_series`/`unnest`/`regexp_matches`/`jsonb_to_recordset` | бросает | бросает | `numbers`/`zeros`/`generateRandom`/`values` (`url`/`s3`/`file`/`remote`/`cluster` объявлены заранее, распределённое исполнение вне области) | источник TVF не поддерживается |
-| Фильтрующие агрегаты (`FILTER (WHERE …)` / `-If`) | ANSI `count(*) filter (where …)` | бросает | ANSI `filter (where …)` (9.4+; гейт по версии) | бросает | бросает | комбинатор `-If` (`countIf`/`sumIf`/…) | бросает |
+| Фильтрующие агрегаты (`FILTER (WHERE …)` / `-If`) | ANSI `count(*) filter (where …)` | бросает | ANSI `filter (where …)` (9.4+; доступность зависит от версии) | бросает | бросает | комбинатор `-If` (`countIf`/`sumIf`/…) | бросает |
 | Ordered-set / boolean / regression агрегаты | бросает | оконная форма `percentile_cont(f) within group (order by x) over (…)` (2012+) | `percentile_cont`/`percentile_disc`/`mode`, `bool_and`/`bool_or`/`every`, `regr_*` | бросает | оконная `percentile_cont` (10.3+) | `quantile*`/`median` (своё семейство); нет `bool_and`/`regr_*` | бросает |
-| Медиана (нативная композиция) | бросает `NotSupportedException` (`SqlFunctions.Sqlite.median`) | `SqlFunctions.SqlServer.median(v).Over(…)` → `percentile_cont(0.5) within group (order by v) over (…)`, аналитическая: одна строка на входную строку, окно только с `partition by` | `SqlFunctions.Postgres.median(() => v)` → `percentile_cont(0.5) within group (order by v)`, агрегат: одна строка на группу; выражение сортировки должно быть с плавающей точкой | бросает `NotSupportedException` (`SqlFunctions.MySql.median`; сообщение называет MySQL) | `SqlFunctions.MySql.median(v).Over(…)` → `percentile_cont(0.5) within group (order by v) over (…)`, аналитическая: одна строка на входную строку, окно только с `partition by` | `SqlFunctions.ClickHouse.median(v)` → `toFloat64(median(v))`, агрегат: одна строка на группу (нативная форма T286b) | бросает `NotSupportedException` |
+| Медиана (нативная композиция) | бросает `NotSupportedException` (`SqlFunctions.Sqlite.median`) | `SqlFunctions.SqlServer.median(v).Over(…)` → `percentile_cont(0.5) within group (order by v) over (…)`, аналитическая: одна строка на входную строку, окно только с `partition by` | `SqlFunctions.Postgres.median(() => v)` → `percentile_cont(0.5) within group (order by v)`, агрегат: одна строка на группу; выражение сортировки должно быть с плавающей точкой | бросает `NotSupportedException` (`SqlFunctions.MySql.median`; сообщение называет MySQL) | `SqlFunctions.MySql.median(v).Over(…)` → `percentile_cont(0.5) within group (order by v) over (…)`, аналитическая: одна строка на входную строку, окно только с `partition by` | `SqlFunctions.ClickHouse.median(v)` → `toFloat64(median(v))`, агрегат: одна строка на группу | бросает `NotSupportedException` |
 | Общий `percentile(fraction, value)` | бросает `NotSupportedException` (`SqlFunctions.Sqlite.percentile`) | бросает `NotSupportedException` (`SqlFunctions.SqlServer.percentile`) | бросает `NotSupportedException` (`SqlFunctions.Postgres.percentile`) | бросает `NotSupportedException` (`SqlFunctions.MySql.percentile`, называет MySQL) | бросает `NotSupportedException` (`SqlFunctions.MySql.percentile`, называет MariaDB) | бросает `NotSupportedException` (`SqlFunctions.ClickHouse.percentile`) | бросает `NotSupportedException` |
 | Настройки и последовательности PostgreSQL | бросает | бросает | `current_setting`/`set_config`, `nextval`/`setval`/`currval`/`lastval` | бросает | последовательности через `SqlFunctions.MySql` (`next_value_for`/`nextval`/`setval`/`lastval`) | бросает | бросает |
 | Провайдерная библиотека скалярных функций (`SqlFunctions.<Provider>`) | `SqlFunctions.Sqlite` (core-скаляры, JSON1, дата, математика, запросы FTS3/4/5) | `SqlFunctions.SqlServer` (T-SQL-библиотека, XML-методы, JSON-как-текст, `string_split`/`openjson`) | `SqlFunctions.Postgres` (массивы, JSON/JSONB, ranges, семейства агрегатов, full-text `ts_*`, настройки/последовательности, `regexp_*`) | `SqlFunctions.MySql` (строки/дата/хэши/inet/JSON) | наследует `SqlFunctions.MySql` + добавки MariaDB (`nvl`, `add_months`, `to_char`, `xxh3`, последовательности, …); `months_between`/`to_date`/`to_number`, `xxh3`/`xxh32` и генераторы UUID зависят от версии (12.2.1 / 12.3 / 12.2.1; 13.1; 11.7) и отклоняются контекстом без версии | `SqlFunctions.ClickHouse` (quantile/uniq/topK/sequence-агрегаты, массивы, map, хэши, словари, табличные функции) | нет (`SqlFunctions.Sql` вычисляет in-process) |
-| Row values / кортежи (`(a, b)`, доступ к элементу, сравнение строк) | плоский конструктор `(a, b)` как прямой операнд предиката `==`/`!=` (`.ItemN` inline сворачивается; проекция/сортировка/группировка/аргументы функций и серверный `.ItemN` бросают `NotSupportedException`) | бросает `NotSupportedException` | `ROW(a, b)`, `(row).fN`, `ROW(...) = ROW(...)`; одна сырая колонка `ROW(...)` (арность 1..7) материализуется в `System.Tuple<...>` через `ExecuteRaw(...).Read<T>()` по обычной строке подключения, а зарегистрированный вызывающим именованный composite — в именованный тип, когда вызывающий предоставляет настроенный `NpgsqlDataSource` ([#194](https://github.com/AlexeyShirshov/nextorm/issues/194)); `ValueTuple`, арность ≥8, вложенный/пустой `ROW`, несколько/смешанные колонки-записи, незарегистрированный composite и composite, объявленный как `System.Tuple`, бросают `NotSupportedException` | плоский конструктор `(a, b)` как прямой операнд предиката `==`/`!=` (`.ItemN` inline сворачивается; серверный `.ItemN` бросает) | как в MySQL | `tuple(a, b)`, `tupleElement`, сравнение | бросает `NotSupportedException` |
-| Tuple `IN`/`Contains` по списку значений (арность 1..7) | `(a, b) IN (VALUES (@p0, @p1), ...)` | бросает `NotSupportedException` для **любой** формы кортежа (вкл. null-коллекцию/элемент, арность ≥8, вложенные) — `SQL Server does not support tuple IN/Contains translation.` | `ROW(a, b) IN (ROW(@p0, @p1), ...)` | `(a, b) IN ((@p0, @p1), ...)` | как в MySQL | `tuple(a, b) IN (tuple(@p0, @p1), ...)`; `global_in` рендерит `GLOBAL IN` | вычисляет in-process по строкам in-memory (`Enumerable.Contains`; отказа нет) |
+| Row values / кортежи (`(a, b)`, доступ к элементу, сравнение строк) | плоский конструктор `(a, b)` как прямой операнд предиката `==`/`!=` (`.ItemN` inline сворачивается; проекция/сортировка/группировка/аргументы функций и серверный `.ItemN` бросают `NotSupportedException`) | бросает `NotSupportedException` | `ROW(a, b)`, `(row).fN`, `ROW(...) = ROW(...)`; одна сырая колонка `ROW(...)` (арность 1..7) материализуется в `System.Tuple<...>` через `ExecuteRaw(...).Read<T>()` по обычной строке подключения, а зарегистрированный вызывающим именованный composite — в именованный тип, когда вызывающий предоставляет настроенный `NpgsqlDataSource`; `ValueTuple`, арность ≥8, вложенный/пустой `ROW`, несколько/смешанные колонки-записи, незарегистрированный composite и composite, объявленный как `System.Tuple`, бросают `NotSupportedException` | плоский конструктор `(a, b)` как прямой операнд предиката `==`/`!=` (`.ItemN` inline сворачивается; серверный `.ItemN` бросает) | как в MySQL | `tuple(a, b)`, `tupleElement`, сравнение | бросает `NotSupportedException` |
+| Tuple `IN`/`Contains` по списку значений (арность 1..7) | `(a, b) IN (VALUES (@p0, @p1), ...)` | бросает `NotSupportedException` для **любой** формы кортежа (включая null-коллекцию/элемент, арность ≥8 и вложенные кортежи) — `SQL Server does not support tuple IN/Contains translation.` | `ROW(a, b) IN (ROW(@p0, @p1), ...)` | `(a, b) IN ((@p0, @p1), ...)` | как в MySQL | `tuple(a, b) IN (tuple(@p0, @p1), ...)`; `global_in` формирует SQL `GLOBAL IN` | вычисляет в памяти по строкам таблицы (`Enumerable.Contains`; не отклоняет запрос) |
 
-Явное размещение NULL ([`NullsPosition`](xref:NextORM.Core.NullsPosition)) — **нативное** в SQLite,
+Явное размещение NULL ([`NullsPosition`](xref:NextORM.Core.NullsPosition)) поддерживается напрямую в SQLite,
 PostgreSQL и ClickHouse (`NULLS FIRST`/`NULLS LAST`) и **портируемая эмуляция `CASE`** в SQL Server, MySQL
-и MariaDB (`CASE WHEN k IS NULL THEN … END ASC, k`); размещение не зависит от направления, а эмулирующие
-провайдеры падают fail-closed на формах `DISTINCT`/`DISTINCT ON`, которые не могут нести повторённый ключ
+и MariaDB (`CASE WHEN k IS NULL THEN … END ASC, k`); размещение не зависит от направления. SQL Server,
+MySQL и MariaDB отклоняют формы `DISTINCT`/`DISTINCT ON`, которые не позволяют повторить ключ
 (см. [Сортировка и постраничная выборка](../guide/06-sorting-and-paging.md#упорядочивание-null-и-размещение)).
 
 ## Различия провайдеров: решения по унификации
 
-Там, где провайдеры различаются, nextorm либо **унифицирует** поверхность в коде, либо **гейтит**
-возможность (неподдерживающий провайдер бросает `NotSupportedException`), либо **документирует**
-различие и оставляет его провайдерным. Решение по каждому известному расхождению:
+Там, где провайдеры различаются, nextorm либо **унифицирует** поведение, либо отклоняет
+неподдерживаемую возможность с `NotSupportedException`, либо **документирует** различие и сохраняет
+поведение конкретного провайдера. Решение по каждому известному расхождению:
 
-| Различие | Решение | Обоснование / хук |
+| Различие | Решение | Обоснование / средство проверки |
 |---|---|---|
-| Принимаемые поля `date_add`/`date_diff`/`date_trunc` | **Оставить провайдерным, гейт по полю** | `SupportsDateAddField`/`SupportsDateDiffField`/`SupportsDateTruncField` отклоняют неподдерживаемое поле; единый нормализованный набор молча менял бы результат (SQLite сворачивает `millisecond`/`quarter`, в SQL Server нет `decade`/`century`/`millennium`). |
-| `FULL JOIN` в MySQL/MariaDB | **Гейт без полифилла** | `SupportsFullJoin => false`; переписывание в `LEFT JOIN … UNION … RIGHT JOIN` меняет форму строк/дедупликацию и может испортить план, поэтому неявно не эмитится. |
-| `CUBE`/`GROUPING SETS` в MySQL/MariaDB (и весь `ROLLUP`/`CUBE`/`GROUPING SETS` в in-memory) | **Гейт без полифилла** | `SupportsCube`/`SupportsGroupingSets`; эмуляция через `UNION ALL` множит сканы и меняет семантику (`GROUPING()`), поэтому оставлена сырому SQL. |
-| NULL-семантика `GREATEST`/`LEAST` | **Документированное различие** | PostgreSQL/SQL Server 2022+/ClickHouse игнорируют NULL-аргументы; MySQL/MariaDB и SQLite возвращают NULL, если любой аргумент NULL. Доступность гейтится `SupportsGreatestLeast`; поведение с NULL не переписывается. |
-| Кросс-провайдерные скалярные функции (`left`/`rpad`/`concat_ws`/`translate`/`ascii`/…) | **Унифицированы, с гейтом по имени** | [`IScalarFunctions`](xref:NextORM.Core.IScalarFunctions) рендерит нативную форму каждого провайдера (SQLite `substr`/`unicode`, SQL Server паддинги через `REPLICATE`, ClickHouse `*UTF8`); имя, которое провайдер не может выразить, отклоняется. NULL-семантика `concat_ws` и отрицательный `n` у `left`/`right` — документированные различия, а не переписывание. |
+| Принимаемые поля `date_add`/`date_diff`/`date_trunc` | **Проверять поддержку поля у провайдера** | `SupportsDateAddField`/`SupportsDateDiffField`/`SupportsDateTruncField` отклоняют неподдерживаемое поле; единый нормализованный набор молча менял бы результат (SQLite сворачивает `millisecond`/`quarter`, в SQL Server нет `decade`/`century`/`millennium`). |
+| `FULL JOIN` в MySQL/MariaDB | **Отклонять без эмуляции** | `SupportsFullJoin => false`; переписывание в `LEFT JOIN … UNION … RIGHT JOIN` меняет форму строк и правила устранения дублей, а также может ухудшить план. Поэтому nextorm не выполняет такое преобразование автоматически. |
+| `CUBE`/`GROUPING SETS` в MySQL/MariaDB (и весь `ROLLUP`/`CUBE`/`GROUPING SETS` в in-memory) | **Отклонять без эмуляции** | `SupportsCube`/`SupportsGroupingSets`; эмуляция через `UNION ALL` умножает сканирования и меняет семантику (`GROUPING()`), поэтому для таких запросов используйте сырой SQL. |
+| NULL-семантика `GREATEST`/`LEAST` | **Документированное различие** | PostgreSQL/SQL Server 2022+/ClickHouse игнорируют аргументы `NULL`; MySQL/MariaDB и SQLite возвращают `NULL`, если хотя бы один аргумент равен `NULL`. Доступность определяется `SupportsGreatestLeast`; поведение с `NULL` не переписывается. |
+| Кросс-провайдерные скалярные функции (`left`/`rpad`/`concat_ws`/`translate`/`ascii`/…) | **Унифицировать, проверяя имя функции** | [`IScalarFunctions`](xref:NextORM.Core.IScalarFunctions) формирует SQL в нативной для каждого провайдера форме (SQLite `substr`/`unicode`, заполнение строк в SQL Server через `REPLICATE`, ClickHouse `*UTF8`); провайдер отклоняет имя, для которого у него нет SQL-аналога. Семантика `NULL` у `concat_ws` и отрицательный `n` у `left`/`right` остаются документированными различиями. |
 | Шаблоны форматирования дат/чисел (`to_char`, `FORMAT`, `strftime`, `formatDateTime`) | **Закрыто — не унифицируемо** | Языки шаблонов несовместимы, поэтому форматирование остаётся провайдерными UDF `[SqlFunction]`; единого портируемого аргумента `template` нет. |
-| `FOR JSON` / `FOR XML` | **Гейт (SQL Server)** | `SupportsForJson`/`SupportsForXml`. |
-| Хинты уровня инструкции | **Унифицировано** | SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB встроенный `/*+ ... */`; SQLite/ClickHouse без синтаксиса и остаются под гейтом (см. [Хинты запросов](../guide/15-query-hints.md)). |
+| `FOR JSON` / `FOR XML` | **Только SQL Server** | `SupportsForJson`/`SupportsForXml`. |
+| Хинты уровня инструкции | **Унифицировано** | SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB встроенный `/*+ ... */`; SQLite/ClickHouse не имеют такого синтаксиса и отклоняют эти хинты (см. [Хинты запросов](../guide/15-query-hints.md)). |
 | Метки запроса (`WithTag`) | **Унифицировано** | Портируемый блочный комментарий `/* tag */` сразу после `SELECT` на всех SQL-провайдерах; нативные SQL Server `OPTION (LABEL)` и ClickHouse `log_comment` не используются, in-memory принимает вызов как no-op (см. [Метки запроса](../guide/15-query-hints.md)). |
 | Блокирующие табличные хинты vs index hints | **Оставить провайдерным** | У `WITH (NOLOCK)` нет аналога среди index hints MySQL/MariaDB/SQLite (`USE INDEX`/`INDEXED BY` меняют план, а не блокировки), поэтому подключён только SQL Server (`SupportsTableHints`). |
-| Хинты join / подзапроса / области видимости | **Две формы** | SQL Server рендерит join-хинт внутри join (`INNER LOOP JOIN`), а хинт области — как `WITH (...)` на каждой таблице; PostgreSQL/MySQL/MariaDB сворачивают все три во встроенный `/*+ ... */`; SQLite/ClickHouse/in-memory их отклоняют (см. [Хинты запросов](../guide/15-query-hints.md)). |
-| Режимы ожидания блокировки строк (`NOWAIT`/`SKIP LOCKED`) | **Унифицировано** | [`ILockRenderer.Render`](xref:NextORM.Core.ILockRenderer.Render(NextORM.Core.LockMode,NextORM.Core.LockWaitMode,NextORM.Core.KeywordCase)) рендерит родную форму каждого способного провайдера: PostgreSQL/MySQL/MariaDB дописывают `NOWAIT`/`SKIP LOCKED` (MySQL переключает разделяемую блокировку на `FOR SHARE`), SQL Server добавляет `NOWAIT`/`READPAST` в блокирующий табличный хинт (`READPAST` приближает `SKIP LOCKED`); SQLite/ClickHouse/in-memory отклоняют любую блокировку строк. |
+| Хинты join / подзапроса / области видимости | **Две формы** | SQL Server помещает хинт соединения в `INNER LOOP JOIN`, а хинт области — в `WITH (...)` для каждой таблицы; PostgreSQL/MySQL/MariaDB объединяют все три в `/*+ ... */`; SQLite/ClickHouse/in-memory их отклоняют (см. [Хинты запросов](../guide/15-query-hints.md)). |
+| Режимы ожидания блокировки строк (`NOWAIT`/`SKIP LOCKED`) | **Унифицировано** | [`ILockRenderer.Render`](xref:NextORM.Core.ILockRenderer.Render(NextORM.Core.LockMode,NextORM.Core.LockWaitMode,NextORM.Core.KeywordCase)) формирует нативный SQL для каждого поддерживающего провайдера: PostgreSQL/MySQL/MariaDB добавляют `NOWAIT`/`SKIP LOCKED` (MySQL переключает разделяемую блокировку на `FOR SHARE`), SQL Server добавляет `NOWAIT`/`READPAST` к табличному хинту (`READPAST` приближает `SKIP LOCKED`); SQLite/ClickHouse/in-memory отклоняют блокировку строк. |
 | Сырой SQL как композируемый источник `FROM` | **Унифицировано** | `FromSql` + `SupportsRawSqlSource` у всех SQL-провайдеров (см. [Сырой SQL](../guide/14-raw-sql.md)). |
-| Уровни переопределения источника на запрос | **Гейтится по уровню** | `MakeQualifiedTableName` плюс `SupportsCrossDatabase`/`SupportsLinkedServer`: провайдер, не умеющий уровень, отклоняет `WithDatabase`/`WithServer` через `NotSupportedException`, а не молча теряет квалификатор. Schema/имя таблицы и сырой `WithTableExpression` — универсальные уровни у SQL-провайдеров. |
-| `INTERSECT ALL`/`EXCEPT ALL` | **Гейт** | PostgreSQL и MariaDB поддерживают; SQL Server/SQLite/MySQL отклоняют через `SupportsIntersectExceptAll`. |
-| Синтаксис, зависящий от версии сервера (`FILTER` в PostgreSQL; `UPDATE ... RETURNING` и нативные функции после 11.4 в MariaDB) | **Гейт по явно настроенной версии** | Провайдер несёт серверную `Version` (`SupportsUpdateReturning` отражает гейт MariaDB). PostgreSQL включает ANSI `FILTER` с 9.4+ и сохраняет прежнее поведение при незаданной версии (предполагается ≥9.4); MariaDB включает `UPDATE ... RETURNING` только при явной версии 13.0+, а каждую функцию после 11.4 — только при её собственном минимуме. Живого определения версии сервера нет. PostgreSQL дополнительно фиксирует одну версию на конкретный тип контекста на всё время жизни процесса; MariaDB такой защиты не накладывает (каждый контекст несёт собственный диалект и предикат возможностей). |
+| Уровни переопределения источника на запрос | **Поддержка зависит от уровня** | `MakeQualifiedTableName` и `SupportsCrossDatabase`/`SupportsLinkedServer` определяют доступность: провайдер, не поддерживающий нужный уровень, отклоняет `WithDatabase`/`WithServer` через `NotSupportedException`, а не молча удаляет квалификатор. Схема/имя таблицы и сырой `WithTableExpression` доступны на всех SQL-провайдерах. |
+| `INTERSECT ALL`/`EXCEPT ALL` | **Отклонять неподдерживаемые операции** | PostgreSQL и MariaDB поддерживают эти варианты; SQL Server/SQLite/MySQL отклоняют их через `SupportsIntersectExceptAll`. |
+| Синтаксис, зависящий от версии сервера (`FILTER` в PostgreSQL; `UPDATE ... RETURNING` и нативные функции после 11.4 в MariaDB) | **Проверять по явно настроенной версии** | Провайдер хранит серверную `Version`; `SupportsUpdateReturning` сообщает, доступен ли синтаксис в MariaDB. PostgreSQL включает ANSI `FILTER` с версии 9.4 и сохраняет прежнее поведение, если версия не задана (предполагается ≥9.4). MariaDB включает `UPDATE ... RETURNING` только при явно заданной версии 13.0+, а каждую функцию после 11.4 — при достижении её минимальной версии. NextORM не определяет версию работающего сервера автоматически. PostgreSQL дополнительно фиксирует одну версию для конкретного типа контекста на всё время жизни процесса; MariaDB этого ограничения не накладывает, поскольку каждый контекст несёт собственный диалект и набор возможностей. |
 
 Строки таблицы [ограничений](../advanced/limitations.md) описывают итоговое поведение в рантайме.
 
@@ -160,18 +186,17 @@ PostgreSQL и ClickHouse (`NULLS FIRST`/`NULLS LAST`) и **портируема�
 `stddev_samp`/`stddev_pop`/`var_samp`/`var_pop`, `stddevSamp`/`stddevPop`/`varSamp`/`varPop`). Статус
 проверки каждого провайдера указан на его собственной странице.
 
-### Гейты по версии сервера
+### Проверка версии сервера
 
-Возможности зависят от версии сервера и гейтятся **явно настроенной версией** — nextorm
-никогда не опрашивает живой сервер. Передайте версию сервера при создании контекста (у контекста
-провайдера есть перегрузка конструктора с параметром `Version`); если её не задать, сохраняется
-историческое поведение: PostgreSQL предполагает версию 9.4 или новее и эмитит `FILTER (WHERE ...)`, а
+Доступность таких возможностей определяется **явно заданной версией** — nextorm никогда не опрашивает
+работающий сервер. Передайте версию при создании контекста (у контекста
+провайдера есть перегрузка конструктора с параметром `Version`); если её не задать, PostgreSQL предполагает версию 9.4 или новее и добавляет `FILTER (WHERE ...)`, а
 MariaDB оставляет `UPDATE ... RETURNING` и нативные функции после 11.4 отключёнными. Фильтрующие
 агрегаты PostgreSQL требуют 9.4+ и бросают `NotSupportedException` ниже; `UPDATE ... RETURNING` в MariaDB
 требует явной версии 13.0+, а `months_between`/`to_number` (12.2.1), `to_date` (12.3) и генераторы UUID
 (11.7) — каждый своего минимума.
-PostgreSQL накладывает одну неизменяемую версию сервера на **конкретный тип контекста** на всё время
-жизни процесса, потому что кэшируемый SQL `SELECT` зависит от гейта `FILTER`: второй контекст
+PostgreSQL закрепляет одну неизменяемую версию сервера за **конкретным типом контекста** на всё время
+жизни процесса, поскольку закэшированный SQL `SELECT` зависит от наличия `FILTER`: второй контекст
 PostgreSQL того же конкретного типа, запрашивающий другую версию, бросает `InvalidOperationException`,
 поэтому для каждой версии PostgreSQL следует объявить отдельный подкласс контекста. MariaDB **не
 накладывает такой защиты**: каждый контекст несёт собственный диалект и предикат возможностей, поэтому
@@ -210,28 +235,6 @@ public class SqliteDataContext : DataContext
 `CreateParam`) и отображение столбцов (`MapColumnExpression`): они находятся на контексте, потому что это
 отдельная ось от SQL-текста.
 
-## Регистрация провайдера
-
-Каждый пакет провайдера добавляет методы расширения `UseXxx` на [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder), и у каждого контекста также есть
-публичный конструктор, принимающий строку подключения или существующий `DbConnection`:
-
-```csharp
-using NextORM.Core;
-using NextORM.Sqlite;      // or nextorm.sqlserver / nextorm.postgres
-
-var builder = new DataContextBuilder().UseSqlite("app.db");   // provider-specific overload
-using var ctx = builder.CreateDataContext();                   // returns IDataContext
-```
-
-С внедрением зависимостей:
-
-```csharp
-services.AddNextOrmContext(builder => builder.UseSqlite("app.db"));
-```
-
-См. [Dependency injection](../getting-started/04-dependency-injection.md) для регистраций с ключом и универсальных
-регистраций.
-
 ## См. также
 
 - [SQLite](sqlite.md)
@@ -241,7 +244,7 @@ services.AddNextOrmContext(builder => builder.UseSqlite("app.db"));
 - [MariaDB](mariadb.md)
 - [ClickHouse](clickhouse.md)
 - [In-memory](in-memory.md)
-- [Limitations and out-of-scope features](../advanced/limitations.md)
+- [Ограничения и неподдерживаемые возможности](../advanced/limitations.md)
 
 ---
 

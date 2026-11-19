@@ -10,11 +10,8 @@ namespace NextORM.Core;
 /// Static entry point for SQL constructs that are written directly inside query expressions.
 /// </summary>
 /// <remarks>
-/// Renamed from <c>NORM</c> (all-caps abbreviation). The nested function surfaces were renamed too:
-/// <c>NORM_SQL</c> → <see cref="CommonFunctions"/>, <c>PG</c>/<c>MS</c>/<c>CLK</c> →
-/// <see cref="PostgresFunctions"/>/<see cref="SqlServerFunctions"/>/<see cref="ClickHouseFunctions"/>.
-/// Method names intentionally mirror SQL tokens (<c>count_big</c>, <c>@in</c>, ...), which the .NET
-/// guidelines would not; see <c>docs/specs/design/API-NAMING-REVIEW.md</c> finding P1-10.
+/// Use <see cref="Sql"/> for cross-provider functions and the provider-specific properties for
+/// functions that require a matching dialect capability.
 /// </remarks>
 public static partial class SqlFunctions
 {
@@ -43,22 +40,9 @@ public static partial class SqlFunctions
     public static SqlServerFunctions SqlServer { get; } = new();
 
     /// <summary>
-    /// Surface of the ClickHouse-only functions (the <c>argMin</c>/<c>argMax</c>, <c>uniq*</c>,
-    /// parameterised <c>quantile*</c>/<c>median</c> and the <c>anyLast</c> aggregate, the
-    /// string-JSON <c>JSONExtract*</c>/<c>visitParamExtract*</c> family plus the JSONPath
-    /// <c>json_value</c>/<c>json_query</c>/<c>json_exists</c> scalars, the dictionary functions, the
-    /// <c>-If</c> combinator, the distributed <c>global_in</c> predicate and the <c>numbers</c>/<c>numbers_mt</c>
-    /// and <c>zeros</c>/<c>zeros_mt</c> table functions (plus <c>generateRandom</c> and the server/cluster
-    /// table functions <c>url</c>/<c>s3</c>/<c>file</c>/<c>remote</c>/<c>remoteSecure</c>/<c>cluster</c>/<c>clusterAllReplicas</c>), the date conversion/part surface
-    /// (<c>toDate</c>/<c>toDateTime</c>/<c>toDate32</c>, <c>toYear</c>/..., <c>toStartOf*</c>,
-    /// <c>toMonday</c>, <c>toYYYYMM</c>/<c>toYYYYMMDD</c>, <c>toUnixTimestamp</c>), as well as the array functions over array
-    /// columns (<c>arrayJoin</c>, <c>length</c>, <c>has</c>, <c>indexOf</c>, <c>hasAny</c>/<c>hasAll</c>,
-    /// <c>startsWith</c>/<c>endsWith</c>/<c>hasSubstr</c>,
-    /// <c>arrayStringConcat</c>, <c>splitByChar</c>, <c>arraySort</c>, <c>arrayReverse</c>,
-    /// <c>arrayDistinct</c>). Every member is
-    /// gated by a capability flag
-    /// (<see cref="ISqlDialect.SupportsArgMinMax"/>, <see cref="ISqlDialect.AggregateFilterStyle"/>, …);
-    /// other providers reject it with a clear message.
+    /// ClickHouse-specific SQL functions. See <see cref="ClickHouseFunctions"/> for the supported
+    /// function families. Each member is gated by its dialect capability; other providers reject
+    /// unsupported calls.
     /// </summary>
     public static ClickHouseFunctions ClickHouse { get; } = new();
 
@@ -990,11 +974,6 @@ public static partial class SqlFunctions
     /// providers evaluate the members through the expression translator; the in-memory provider
     /// rewrites the small subset that has a native CLR equivalent.
     /// </summary>
-    /// <remarks>
-    /// Renamed from <c>NORM_SQL</c>. The <see cref="System.Reflection.MethodInfo"/> fields and
-    /// <c>SQLExpression</c> are implementation details and are now <c>internal</c>.
-    /// See <c>docs/specs/design/API-NAMING-REVIEW.md</c> finding P1-10.
-    /// </remarks>
     public class CommonFunctions
         // Common (cross-provider) surface.
     {
@@ -1525,7 +1504,7 @@ public static partial class SqlFunctions
 
         /// <summary>
         /// <c>date_part(part, value)</c>: the numeric <paramref name="part"/> of a date/time.
-        /// Currently supports <c>epoch</c> (the number of seconds since 1970-01-01 00:00:00). Providers
+        /// Supports only <c>epoch</c> (the number of seconds since 1970-01-01 00:00:00). Providers
         /// whose native timestamp type carries sub-second precision include the fraction; ClickHouse's
         /// <c>DateTime</c> is second-precision, so there the value is a whole number of seconds. The
         /// part must be a constant string. Use <see cref="extract"/> for the

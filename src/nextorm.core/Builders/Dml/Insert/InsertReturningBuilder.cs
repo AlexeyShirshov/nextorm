@@ -12,9 +12,9 @@ namespace NextORM.Core;
 /// <see cref="InsertBuilder{TEntity}.ReturningKey{TKey}()"/>.
 /// <para>
 /// The returned rows are materialised with the same projection pipeline as a query: the entity form
-/// returns <typeparamref name="TEntity"/>, the projection form returns the projected shape. The
-/// builder is single-use, like the <see cref="InsertBuilder{TEntity}"/> it is created from, and every
-/// terminal reads the result through <see cref="Single"/> or <see cref="ToList"/>.
+/// returns <typeparamref name="TEntity"/>, the projection form returns the projected shape. Each terminal
+/// executes the insert again; the builder retains the insert state. Use <see cref="Single"/> or
+/// <see cref="ToList"/> to read the result synchronously, or their asynchronous counterparts.
 /// </para>
 /// </summary>
 /// <typeparam name="TEntity">The mapped entity type inserted.</typeparam>

@@ -1,4 +1,4 @@
-﻿using NextORM.Core;
+using NextORM.Core;
 using NextORM.Sqlite;
 
 namespace NextORM.Integration.Tests;
@@ -96,6 +96,40 @@ public sealed class SqliteTestProvider : ITestProvider
         }
     }
 
+    internal static IsolatedSqliteDatabase CreateIsolatedDatabase()
+    {
+        var databasePath = Path.Combine(
+            Path.GetTempPath(),
+            $"nextorm.integration.aot.{Environment.ProcessId}.{Guid.NewGuid():N}.db");
+        using var context = new SqliteDataContext(
+            string.Format(ConnectionString, databasePath),
+            new DataContextBuilder());
+        using var connection = context.GetConnection();
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = SeedSql;
+        command.ExecuteNonQuery();
+
+        return new IsolatedSqliteDatabase(databasePath);
+    }
+
+    internal sealed class IsolatedSqliteDatabase(string databasePath) : IDisposable
+    {
+        public string DatabasePath { get; } = databasePath;
+
+        public void Dispose()
+        {
+            using var connection = new Microsoft.Data.Sqlite.SqliteConnection(string.Format(ConnectionString, DatabasePath));
+            Microsoft.Data.Sqlite.SqliteConnection.ClearPool(connection);
+            foreach (var suffix in new[] { "", "-journal", "-wal", "-shm" })
+            {
+                var path = DatabasePath + suffix;
+                if (File.Exists(path))
+                    File.Delete(path);
+            }
+        }
+    }
+
     private const string SeedSql =
         """
         create table simple_entity (id integer primary key);
@@ -154,6 +188,14 @@ public sealed class SqliteTestProvider : ITestProvider
         insert into lob_entity (id, data, body) values
             (1, unhex(replace(hex(zeroblob(8388608)), '00', 'AB')),
                 replace(hex(zeroblob(8388608)), '00', 'x'));
+
+        -- D370 (#370): value and JSON converter fixtures. `amount` holds the converter's text form
+        -- ("v=<value>"), so a mapping that skipped the converter reads a different number; `payload` is the
+        -- JSON document of the model the entity projects.
+        create table aot_converter_entity (id integer primary key, amount text not null, payload text null);
+        insert into aot_converter_entity (id, amount, payload) values
+            (1, 'v=12.5', '{"name":"seed","value":7}'),
+            (2, 'v=-3', null);
 
         create table insert_entity (id integer primary key autoincrement, name text, age int);
 

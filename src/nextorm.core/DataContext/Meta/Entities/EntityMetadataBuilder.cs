@@ -16,6 +16,15 @@ public class EntityMetadataBuilder<T>
     private readonly List<(string? Key, LambdaExpression? Lambda, Delegate? Func)> _filters = new();
     private readonly List<RelationshipDeclaration> _relationships = new();
     private string? _tableName;
+    private string? _schema;
+
+    /// <summary>Sets the schema/owner for the mapped table.</summary>
+    public EntityMetadataBuilder<T> Schema(string schema)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(schema);
+        _schema = schema;
+        return this;
+    }
 
     /// <summary>
     /// Builds the metadata from the mappings declared on this builder, auto-deriving the table name
@@ -86,7 +95,7 @@ public class EntityMetadataBuilder<T>
         if (dynamicColumnsStore is not null)
             ValidateDynamicColumnsStore(typeof(T), dynamicColumnsStore.PropertyInfo);
 
-        return new EntityMetadata(tableName, properties, isTableNameAuto, dynamicColumnsStore, filters, relationships);
+        return new EntityMetadata(tableName, properties, isTableNameAuto, dynamicColumnsStore, filters, relationships, _schema);
     }
 
     private IReadOnlyList<IQueryFilterMetadata> BuildFilters(bool includeFluent)
