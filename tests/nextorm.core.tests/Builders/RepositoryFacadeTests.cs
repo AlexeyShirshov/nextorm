@@ -49,7 +49,7 @@ public sealed class RepositoryFacadeTests
         zero.Should().Throw<InvalidOperationException>().WithMessage("*explicit zero limit*");
     }
 
-    private sealed class ApplicationContext(IDataContext provider) : DbContext(provider)
+    private sealed class ApplicationContext(IDataContext provider) : RepositoryContext(provider)
     {
         public IRepository<Row> Rows => Repository<Row>();
     }

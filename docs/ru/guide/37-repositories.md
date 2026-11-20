@@ -1,30 +1,75 @@
 # Репозитории и контекст приложения
 
-Используйте контекст приложения `DbContext`, чтобы предоставить именованные
-репозитории, например `app.Orders`. В этом руководстве вы зарегистрируете контекст
-и выполните запрос и изменение через репозиторий. В NextORM `IRepository<T>` —
-типизированный источник для построителей запросов и изменений, а не доменный
-репозиторий, скрывающий хранение данных, и не контекст Entity Framework Core
-с отслеживанием изменений и `SaveChanges`.
+В этом руководстве вы настроите контекст приложения, чтобы использовать
+одни и те же именованные репозитории и запросы в нескольких сервисах.
+
+## Зачем нужен `RepositoryContext`?
+
+Код приложения может работать с `IDataContext` провайдера напрямую.
+Свой класс на базе `RepositoryContext` пригодится, когда нескольким сервисам
+нужны одни и те же точки входа и запросы. Например, внедрите `AppRepositoryContext`, чтобы
+каждый сервис мог начать с `app.Orders` или вызвать `app.QueryUnpaidOrders()`,
+не повторяя условие «заказ не оплачен».
+
+NextORM предоставляет базовый класс `NextORM.Core.Repositories.RepositoryContext`,
+а `AppRepositoryContext` пишете вы. Базовый класс хранит переданный
+`IDataContext` и предоставляет защищённый метод `Repository<T>()`, который
+создаёт и переиспользует репозиторий для типа сущности. Запросы по-прежнему
+выполняет провайдер. Этот слой не создаёт отдельного соединения или транзакции.
+
+`IRepository<Order>` — точка входа для одного типа сущностей. Контекст
+приложения объединяет такие точки входа (`Orders`, `Customers`) и хранит
+методы с общими запросами. Для каждой сущности не нужно писать отдельный
+класс репозитория. Если вам достаточно `dataContext.From<Order>()`,
+используйте его напрямую: и свой контекст на базе `RepositoryContext`, и
+репозитории необязательны.
+
+## Именованный доступ к сущности
+
+Оба вызова считают заказы, используя один и тот же контекст базы данных,
+маппинг и фильтры. Здесь и в следующих примерах используйте токен отмены,
+полученный от вызывающего кода:
+
+```csharp
+var countFromContext = await dataContext.From<Order>()
+    .CountAsync(cancellationToken);
+var countFromRepository = await app.Orders.CountAsync(cancellationToken);
+```
+
+Здесь `dataContext` — тот же экземпляр, что и `app.DataContext`. Свойство
+`app.Orders` имеет тип `IRepository<Order>`: это не таблица и не список уже
+загруженных заказов. Обращение к свойству не читает строки. В этом примере
+запрос выполняет `CountAsync()`.
+
+Доменный репозиторий может предоставлять прикладную операцию, например
+`FindUnpaidOrders`, и скрывать, как устроен запрос к базе. `IRepository<T>`
+в NextORM не определяет такие операции: запрос и его условия по-прежнему
+задаёт вызывающий код. Репозиторий также не отслеживает изменения сущностей
+и не сохраняет их через `SaveChanges`.
 
 **Перед началом:** Сопоставьте `Order` и `Customer` с таблицами базы данных с
-уникальными значениями `Id`. В примерах также используются `Order.CustomerId`
-и `Order.IsArchived`. См. [«Сущности и метаданные»](../getting-started/03-entities-and-metadata.md)
+уникальными значениями `Id`. В примерах также используются `Order.CustomerId`,
+`Order.IsArchived` и `Order.IsPaid`. См. [«Сущности и метаданные»](../getting-started/03-entities-and-metadata.md)
 и [«Внедрение зависимостей»](../getting-started/04-dependency-injection.md).
 
 ## Настройте контекст приложения
 
-1. Унаследуйте контекст приложения от `NextORM.Core.Repositories.DbContext`
-   и объявите свойство для каждой сущности:
+1. Унаследуйте контекст приложения от `RepositoryContext`.
+   Объявите свойства для сущностей и вынесите повторно используемые запросы
+   в методы, такие как `QueryUnpaidOrders()`:
 
    ```csharp
    using NextORM.Core;
    using NextORM.Core.Repositories;
 
-   public sealed class AppDbContext(IDataContext provider) : DbContext(provider)
+   public sealed class AppRepositoryContext(IDataContext provider)
+       : RepositoryContext(provider)
    {
        public IRepository<Order> Orders => Repository<Order>();
        public IRepository<Customer> Customers => Repository<Customer>();
+
+       public EntityBuilder<Order> QueryUnpaidOrders() =>
+           Orders.Where(order => !order.IsPaid);
    }
    ```
 
@@ -32,12 +77,13 @@
    зарегистрируйте контекст приложения в той же коллекции сервисов:
 
    ```csharp
-   services.AddScoped<AppDbContext>();
+   services.AddScoped<AppRepositoryContext>();
    ```
 
-3. Внедрите `AppDbContext` в сервис, который разрешается в этой области
-   видимости. Чтобы проверить настройку, вызовите `app.Orders.Count()`: метод
-   вернёт число заказов, доступных с учётом фильтров провайдера.
+3. Внедрите `AppRepositoryContext` в сервис, который разрешается в этой области
+   видимости. Чтобы проверить настройку, дождитесь результата
+   `app.Orders.CountAsync(cancellationToken)`: метод возвращает число заказов,
+   доступных с учётом фильтров провайдера.
 
 Контекст приложения заимствует провайдер: он не выполняет команды сам и не
 освобождает провайдер. Через `app.DataContext` доступен тот же экземпляр
@@ -51,13 +97,80 @@
 ```csharp
 var activeOrders = await app.Orders.Where(o => !o.IsArchived)
     .ToListAsync(cancellationToken);
-var archivedCount = app.Orders.Where(o => o.IsArchived).Count();
+var archivedCount = await app.Orders.Where(o => o.IsArchived)
+    .CountAsync(cancellationToken);
 ```
 
 Контекст кеширует один репозиторий на тип сущности, а не его построители.
 Вызовите `Query()`, чтобы получить новый построитель, или начните запрос с
 метода расширения, например `Where`. Для `Repository<T>(configure)` действует
 то же правило первой регистрации маппинга на процесс, что и для `From<T>(configure)`.
+
+## Переиспользуйте и дополняйте запросы из своего контекста
+
+Вынесите условие в метод контекста, если оно нужно в нескольких местах, но
+каждое из них дополняет запрос по-своему. `QueryUnpaidOrders()` возвращает новый
+`EntityBuilder<Order>` с условием «заказ не оплачен». Метод не выполняет SQL и
+не загружает заказы. Например, добавьте фильтр по покупателю, чтобы получить
+его неоплаченные заказы, или вызовите тот же метод, чтобы посчитать все
+неоплаченные заказы:
+
+```csharp
+var orders = await app.QueryUnpaidOrders()
+    .Where(order => order.CustomerId == customerId)
+    .ToListAsync(cancellationToken);
+
+var unpaidCount = await app.QueryUnpaidOrders().CountAsync(cancellationToken);
+```
+
+`customerId` — идентификатор покупателя, чьи заказы нужно получить. Запрос
+списка учитывает оба условия. Подсчёт выполняет отдельный запрос без фильтра
+по покупателю. Выполняйте оба запроса в области видимости, которой
+принадлежит контекст провайдера.
+
+Возвращайте `EntityBuilder<Order>`, если вызывающему коду нужно дополнить
+запрос до выполнения. Чтобы скрыть API доступа к данным, выполните запрос
+внутри метода и верните данные, а не построитель.
+
+## Переиспользуйте подготовленный запрос между экземплярами контекста
+
+Если один и тот же запрос выполняется с разными значениями параметров,
+подготовьте его один раз и сохраните в статическом поле. Добавьте эти члены
+в `AppRepositoryContext` и подключите `System.Collections.Generic`, `System.Threading`
+и `System.Threading.Tasks`:
+
+```csharp
+private static IPreparedQueryCommand<Order>? _unpaidByCustomerPrepared;
+private static object? _prepareLock;
+
+public Task<List<Order>> FindUnpaidByCustomer(
+    int customerId, CancellationToken cancellationToken)
+{
+    var prepared = LazyInitializer.EnsureInitialized(
+        ref _unpaidByCustomerPrepared,
+        ref _prepareLock,
+        () => QueryUnpaidOrders()
+            .Where(o => o.CustomerId == SqlFunctions.Parameter<int>(0))
+            .Prepare(cancellationToken: cancellationToken));
+
+    return prepared.ToListAsync(this.DataContext, cancellationToken, customerId);
+}
+```
+
+При первом вызове `LazyInitializer` подготавливает запрос под блокировкой.
+Следующие вызовы, в том числе из других областей видимости DI, переиспользуют
+запрос и передают `customerId` как параметр `0`. В статическом поле нет ни
+результатов, ни контекста. `this.DataContext` — свойство, унаследованное от
+`RepositoryContext`. Оно возвращает тот экземпляр `IDataContext`, который конструктор
+контекста приложения получил в параметре `provider`. В `ToListAsync`
+передавайте провайдер, а не сам `AppRepositoryContext`. Метод передаёт токен отмены
+при первичной подготовке и при каждом выполнении.
+
+Используйте общее поле только для экземпляров с одним провайдером, одинаковым
+маппингом и одинаковой формой запроса. Если арендаторы используют разные схемы
+или таблицы, подготовьте отдельный запрос для каждого маппинга. На одном
+соединении выполняйте один и тот же подготовленный запрос последовательно.
+Подробнее см. [«Кэш планов и повторное использование»](../engine/03-plan-cache-and-reuse.md).
 
 ## Используйте репозиторий в `From` или `Join`
 

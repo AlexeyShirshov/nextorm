@@ -1,8 +1,8 @@
 # Transactions
 
 > Use a transaction when several commands must share one commit or rollback. A
-> nextorm context can start its own transaction or enlist in one owned by EF
-> Core, Dapper, or raw ADO.NET. The context binds its commands to the active
+> nextorm context can start its own transaction or enlist in an existing
+> ADO.NET transaction. The context binds its commands to the active
 > transaction but does not track changes or provide `SaveChanges`. The
 > in-memory context has no connection and does not implement the transaction
 > role; ClickHouse has no transaction support.
@@ -33,7 +33,7 @@ await tx.CommitAsync();
 
 ## Enlisting an existing transaction
 
-To run nextorm queries inside a transaction owned by EF Core, Dapper or raw ADO.NET, enlist it with `UseTransaction`. The context only binds it and never commits, rolls back or disposes it:
+To run nextorm queries inside an externally owned `DbTransaction`, enlist it with `UseTransaction`. The context only binds it and never commits, rolls back or disposes it:
 
 ```csharp
 using var db = new MyDbContext(options);                       // EF Core
@@ -105,8 +105,8 @@ await repository.ReserveAsync(order, cancellationToken);
 await payment.ChargeAsync(order, cancellationToken);
 ```
 
-`UseTransaction(externalTx)` is the hook for sharing an *externally owned* transaction (EF Core, Dapper,
-raw ADO.NET) — it binds the context to that transaction, it is not a way to nest.
+`UseTransaction(externalTx)` binds the context to an *externally owned* transaction.
+It doesn't create a nested transaction.
 
 **Savepoints.** A savepoint lets an inner step undo only its own work while the outer transaction stays
 open. The role exposes the three ADO.NET operations, each with an `Async` twin:

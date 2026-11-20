@@ -100,7 +100,7 @@ Already have a working project? Use the documentation catalog below to open a to
 
 ### Comparisons
 
-- [Nextorm vs Dapper, linq2db and EF Core](comparisons/index.md)
+- [Comparisons](comparisons/index.md)
 
 ### Advanced
 

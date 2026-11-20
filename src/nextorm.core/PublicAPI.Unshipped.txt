@@ -409,18 +409,18 @@ NextORM.Core.EntityRelationshipDescriptor.PrincipalKeys.get -> System.Collection
 NextORM.Core.EntityRelationshipDescriptor.PrincipalKeys.init -> void
 NextORM.Core.EntityRelationshipDescriptor.RelatedType.get -> System.Type!
 NextORM.Core.EntityRelationshipDescriptor.RelatedType.init -> void
-NextORM.Core.Repositories.DbContext
-NextORM.Core.Repositories.DbContext.DataContext.get -> NextORM.Core.IDataContext!
-NextORM.Core.Repositories.DbContext.DbContext(NextORM.Core.IDataContext! dataContext) -> void
-NextORM.Core.Repositories.DbContext.Repository<TEntity>() -> NextORM.Core.IRepository<TEntity>!
-NextORM.Core.Repositories.DbContext.Repository<TEntity>(System.Action<NextORM.Core.EntityMetadataBuilder<TEntity>!>! configure) -> NextORM.Core.IRepository<TEntity>!
+NextORM.Core.Repositories.RepositoryContext
+NextORM.Core.Repositories.RepositoryContext.DataContext.get -> NextORM.Core.IDataContext!
+NextORM.Core.Repositories.RepositoryContext.Repository<TEntity>() -> NextORM.Core.IRepository<TEntity>!
+NextORM.Core.Repositories.RepositoryContext.Repository<TEntity>(System.Action<NextORM.Core.EntityMetadataBuilder<TEntity>!>! configure) -> NextORM.Core.IRepository<TEntity>!
+NextORM.Core.Repositories.RepositoryContext.RepositoryContext(NextORM.Core.IDataContext! dataContext) -> void
 NextORM.Core.IRepository<TEntity>
 NextORM.Core.IRepository<TEntity>.DataContext.get -> NextORM.Core.IDataContext!
 NextORM.Core.IRepository<TEntity>.Query() -> NextORM.Core.EntityBuilder<TEntity>!
 NextORM.Core.RepositoryExtensions
 static NextORM.Core.RepositoryExtensions.Count<TEntity>(this NextORM.Core.IRepository<TEntity>! repository) -> int
 static NextORM.Core.RepositoryExtensions.CountAsync<TEntity>(this NextORM.Core.IRepository<TEntity>! repository, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
-static NextORM.Core.RepositoryExtensions.From<TEntity>(this NextORM.Core.Repositories.DbContext! context, NextORM.Core.IRepository<TEntity>! repository) -> NextORM.Core.EntityBuilder<TEntity>!
+static NextORM.Core.RepositoryExtensions.From<TEntity>(this NextORM.Core.Repositories.RepositoryContext! context, NextORM.Core.IRepository<TEntity>! repository) -> NextORM.Core.EntityBuilder<TEntity>!
 static NextORM.Core.RepositoryExtensions.From<TEntity>(this NextORM.Core.IDataContext! context, NextORM.Core.IRepository<TEntity>! repository) -> NextORM.Core.EntityBuilder<TEntity>!
 static NextORM.Core.RepositoryExtensions.Join<TEntity, TJoinEntity>(this NextORM.Core.EntityBuilder<TEntity>! builder, NextORM.Core.IRepository<TJoinEntity>! source, System.Linq.Expressions.Expression<System.Func<TEntity, TJoinEntity, bool>!>! predicate) -> NextORM.Core.JoinedEntityBuilder<TEntity, TJoinEntity>!
 static NextORM.Core.RepositoryExtensions.Join<TEntity, TJoinEntity>(this NextORM.Core.IRepository<TEntity>! repository, NextORM.Core.IRepository<TJoinEntity>! source, System.Linq.Expressions.Expression<System.Func<TEntity, TJoinEntity, bool>!>! predicate) -> NextORM.Core.JoinedEntityBuilder<TEntity, TJoinEntity>!

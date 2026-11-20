@@ -1,12 +1,12 @@
 namespace NextORM.Core.Repositories;
 
 /// <summary>Provides typed repositories over a borrowed data context.</summary>
-public abstract class DbContext
+public abstract class RepositoryContext
 {
     private readonly Dictionary<Type, object> _repositories = [];
 
     /// <summary>Initializes the facade without taking ownership of the provider.</summary>
-    protected DbContext(IDataContext dataContext)
+    protected RepositoryContext(IDataContext dataContext)
     {
         ArgumentNullException.ThrowIfNull(dataContext);
         DataContext = dataContext;

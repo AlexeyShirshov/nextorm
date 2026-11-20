@@ -132,7 +132,7 @@ public sealed class BoundedDeleteSqliteTests
         commands.Sql[2].Should().Contain("from (");
     }
 
-    private sealed class DeleteContext(IDataContext provider) : DbContext(provider)
+    private sealed class DeleteContext(IDataContext provider) : RepositoryContext(provider)
     {
         public IRepository<FilteredDeleteRow> Rows =>
             Repository<FilteredDeleteRow>(builder => builder.HasQueryFilter(row => !row.Hidden));

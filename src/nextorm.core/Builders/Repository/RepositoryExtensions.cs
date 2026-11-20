@@ -14,7 +14,7 @@ public static class RepositoryExtensions
     }
 
     /// <summary>Starts a query against the repository's mapped table.</summary>
-    public static EntityBuilder<TEntity> From<TEntity>(this DbContext context, IRepository<TEntity> repository) =>
+    public static EntityBuilder<TEntity> From<TEntity>(this RepositoryContext context, IRepository<TEntity> repository) =>
         context.DataContext.From(repository);
 
     /// <summary>Starts a query with the specified predicate.</summary>

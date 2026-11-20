@@ -43,7 +43,7 @@ The child query is an ordinary `EntityBuilder<TChild>` and can declare another `
 finite graph of any depth. The association belongs to the query, not the entity metadata; for the
 declared-metadata, single-round-trip alternative, see [`JoinInto`](relationships.md).
 
-This is the nextorm equivalent of linq2db `LoadWith` and EF Core `Include`. Split-query is the default.
+Split-query is the default.
 The opt-in `EagerLoadMode.SingleQuery` mode fetches the parent and child rows in one denormalized round
 trip. Nested graphs work in both modes where the provider can express them (see
 [Nested graphs](#nested-graphs-level-2-and-deeper)).
