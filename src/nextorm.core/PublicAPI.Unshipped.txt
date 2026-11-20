@@ -366,7 +366,9 @@ NextORM.Core.EntityPropertyDescriptor.IsKey.init -> void
 NextORM.Core.EntityPropertyDescriptor.Property.get -> System.Reflection.PropertyInfo!
 NextORM.Core.EntityPropertyDescriptor.Property.init -> void
 NextORM.Core.GeneratedEntityMetadata
+NextORM.Core.GeneratedInterfaceEntity
 static NextORM.Core.GeneratedEntityMetadata.Register(System.Type! entityType, System.Func<NextORM.Core.IEntityMetadata!>! factory) -> bool
+static NextORM.Core.GeneratedInterfaceEntity.Register<TEntity>(System.Type! implementationType, System.Func<System.Reflection.PropertyInfo![]!>! members) -> void
 NextORM.Core.EntityPropertyDescriptor.Collation.get -> string?
 NextORM.Core.EntityPropertyDescriptor.Collation.init -> void
 NextORM.Core.EntityPropertyDescriptor.DecimalPrecision.get -> int?

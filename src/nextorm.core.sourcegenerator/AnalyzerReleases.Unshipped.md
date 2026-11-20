@@ -14,3 +14,4 @@ NORMGEN006 | NextORM.JoinAlias | Error | Assembly name cannot be normalized to a
 NORMGEN007 | NextORM.JoinAlias | Error | Join alias extension signature collision
 NORMGEN008 | NextORM.JoinAlias | Error | WithAlias applied to a non-root source
 NORMGEN009 | NextORM.JoinAlias | Error | Join alias over an anonymous projection type
+NORMGEN010 | NextORM.InterfaceEntity | Error | Unsupported interface entity shape

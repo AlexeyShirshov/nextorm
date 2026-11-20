@@ -777,10 +777,14 @@ internal static class MemberTranslator
                         && TryTranslateDerivedProjectionMember(visitor, node, hasTableAliasForColumn))
                         return node;
 
+                    // A property inherited by a projected interface belongs to the mapping of the
+                    // slot's declared entity, not to a separately registered base interface.
+                    var mappedEntityType = lambdaParameter.Type!.IsAssignableTo(typeof(IProjection))
+                        ? (node.Expression!.Type.IsInterface ? node.Expression.Type : null)
+                        : lambdaParameter.Type;
                     var colName = ResolveRangeColumnsMember(visitor, node.Member)
                         ?? node.Member.GetPropertyColumnName(
-                            visitor.Options.NamingConvention,
-                            lambdaParameter.Type!.IsAssignableTo(typeof(IProjection)) ? null : lambdaParameter.Type);
+                            visitor.Options.NamingConvention, mappedEntityType);
                     if (!string.IsNullOrEmpty(colName))
                     {
                         if (TryTranslateDerivedProjectionMember(visitor, node, hasTableAliasForColumn))

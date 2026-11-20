@@ -190,18 +190,18 @@ public sealed class SqliteStep4SourceRendererTests : ProviderTestSuite
     }
 
     /// <summary>
-    /// The table-valued row shape is an interface, so a whole-row projection has no constructor to
-    /// materialize: the planner refuses it before SQL with its own preparation marker.
+    /// A whole-row projection materializes the declared interface from the table-valued source.
     /// </summary>
     [Fact]
-    public void TableFunction_WholeRowProjection_ShouldBeRefusedByThePlanner()
+    public void TableFunction_WholeRowProjection_ShouldMaterializeTheInterface()
     {
-        var act = () => Context.From(() => JsonEach("[7]"))
+        var rows = Context.From(() => JsonEach("[7]"))
             .Select(r => r)
             .ToList();
 
-        act.Should().Throw<QueryPreparationException>()
-            .WithMessage("*Cannot get ctor*IS4JsonEachRow*");
+        var row = rows.Should().ContainSingle().Which;
+        row.Key.Should().Be(0);
+        row.Value.Should().Be(7);
     }
 
     private static TvfEntityBuilder<IS4JsonEachRow> JsonEach(string json) => new("json_each");

@@ -307,18 +307,22 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
-    public void Insert_ReturningWholeEntity_OnInterface_ShouldThrow()
+    public void Insert_ReturningWholeEntity_OnInterface_ShouldMaterializeValues()
     {
         Assert.SkipUnless(Provider.SupportsInsertReturning, "This provider cannot return inserted rows.");
 
         var ctx = _sut.DataProvider;
 
-        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
-            .Value(x => x.Name, InsertMarker())
+        var marker = InsertMarker();
+        var returned = ctx.CreateInsertBuilder<IInsertEntity>()
+            .Value(x => x.Name, marker)
+            .Value(x => x.Age, 42)
             .Returning()
             .Single();
 
-        act.Should().Throw<NotSupportedException>();
+        returned.Id.Should().BeGreaterThan(0);
+        returned.Name.Should().Be(marker);
+        returned.Age.Should().Be(42);
     }
 
     [Fact]

@@ -314,6 +314,18 @@ internal static class RowMaterializerBuilder
         Func<SelectExpression, int, DynamicColumns, Expression>? mapDynamicColumns,
         bool allowImplicitStructMemberInit = false)
     {
+        if (resultType.IsInterface)
+        {
+            var shape = GeneratedInterfaceEntity.Find(resultType)
+                ?? throw new QueryPreparationException(
+                    $"No generated implementation was registered for interface entity '{resultType}'. Use a concrete interface type argument in a compilation that consumes the Nextorm source generator.");
+            var construction = Expression.New(shape.Constructor);
+            var body = ignoreColumns
+                ? (Expression)construction
+                : BuildMemberInit(resultType, construction, selectList, mapColumn, mapDynamicColumns, shape);
+            return Expression.Convert(body, resultType);
+        }
+
         var ctorInfo = ConstructorInfoResolver.GetLongestPublicConstructor(resultType);
         if (ctorInfo is null)
         {
@@ -442,7 +454,8 @@ internal static class RowMaterializerBuilder
         NewExpression construction,
         SelectExpression[] selectList,
         Func<SelectExpression, Expression> mapColumn,
-        Func<SelectExpression, int, DynamicColumns, Expression>? mapDynamicColumns = null)
+        Func<SelectExpression, int, DynamicColumns, Expression>? mapDynamicColumns = null,
+        InterfaceEntityShape? interfaceShape = null)
     {
         var bindings = new List<MemberBinding>(selectList.Length);
         DynamicColumns? dynamicColumns = null;
@@ -474,7 +487,7 @@ internal static class RowMaterializerBuilder
 
             if (column.IsDynamicColumnsStore)
             {
-                var storeProperty = column.BoundMember
+                var storeProperty = interfaceShape?.Bind(column, resultType) ?? column.BoundMember
                     ?? throw new QueryPreparationException(
                         $"The dynamic-columns store {column.PropertyName} of {resultType.Name} is projected without member metadata.");
                 bindings.Add(Expression.Bind(storeProperty, mapDynamicColumns!(column, starStart, dynamicColumns!)));
@@ -485,7 +498,7 @@ internal static class RowMaterializerBuilder
             if (column.RangeColumnRole == RangeColumnRole.Upper)
                 continue;
 
-            var propInfo = column.BoundMember
+            var propInfo = interfaceShape?.Bind(column, resultType) ?? column.BoundMember
                 ?? throw new QueryPreparationException(
                     $"Cannot bind projection item {column.PropertyName} of {resultType.Name}: the column carries no member metadata.");
 

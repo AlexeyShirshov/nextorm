@@ -2378,14 +2378,15 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
                 $"{GetType().Name} cannot return written rows: the provider has no RETURNING or OUTPUT form for a Returning() request.");
     }
 
-    // An interface/abstract TResult cannot be materialized as a whole (no constructor). Reject it with a
-    // clear message at execution time rather than letting RowMaterializerBuilder surface an opaque
-    // QueryPreparationException; SQL generation (ToSql) stays provider- and provider-shape-agnostic.
+    // Refuse an unconstructible result before executing the mutation. An interface with a generated
+    // implementation can use the same row mapper as a concrete result.
     private static void EnsureReturningMaterializable<TResult>(bool oneColumn)
     {
         var resultType = typeof(TResult);
 
-        if (!oneColumn && (resultType.IsInterface || resultType.IsAbstract))
+        if (!oneColumn && (resultType.IsInterface
+                ? GeneratedInterfaceEntity.Find(resultType) is null
+                : resultType.IsAbstract))
             throw new NotSupportedException(
                 $"Cannot materialize the returned rows into {resultType.Name}: it is an interface or abstract. Project the mapped columns instead, e.g. Returning(x => new {{ x.Id, x.Name }}).");
     }
