@@ -191,7 +191,10 @@ delete from simple_entity where id = 1 returning id, name, age
 | SQL Server | `DELETE ... OUTPUT deleted.<col> ...` |
 | MySQL, MariaDB, ClickHouse, in-memory | `NotSupportedException` |
 
-`Returning()` returns the whole mapped entity (a concrete `TEntity`); `Returning(x => ...)` returns the projected shape (a single member, an anonymous type or a member-init). `Single()` throws when the delete removed no row or more than one.
+`Returning()` returns the whole mapped entity, which can be a class or a
+[generated interface entity](../getting-started/03-entities-and-metadata.md#query-an-interface-entity).
+`Returning(x => ...)` returns the projected shape (a single member, an anonymous type or a
+member-init). `Single()` throws when the delete removed no row or more than one.
 
 To capture the removed rows for a later statement of the same batch instead of returning them to the client, register a batch-scoped capture — the `deleted.*` columns **are** the captured rows — and compose a query over it with `FromOutput<TResult>`/`FromOutputTable`: see [Batch-scoped capture](17-insert-statement.md#batch-scoped-capture-batchbuilderoutputintotablevariable). SQL Server only.
 

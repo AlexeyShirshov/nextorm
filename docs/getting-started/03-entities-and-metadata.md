@@ -62,7 +62,8 @@ select id
   type name is used, so `SimpleEntity` maps to `SimpleEntity`. Attribute lookup walks the type and then
   its interfaces; an attribute on an interface wins when both are present.
 * **Column name** - taken from `[Column]` when present, otherwise the property name is used verbatim.
-  Only properties with a **setter** (`CanWrite`) are mapped; get-only properties are skipped.
+  Convention-based class mapping skips get-only properties. For a generated interface entity,
+  NextORM also maps get-only properties.
 * **`[Key]` and `[DatabaseGenerated]`** - `KeyAttribute` marks the primary key and
   `DatabaseGeneratedAttribute` marks a database-generated column (`DatabaseGeneratedOption.Identity`
   or `.Computed`). Queries ignore both, but the insert builder reads them: identity/computed columns
@@ -104,8 +105,8 @@ the type's shape (and caches it) the first time the type is used.
 * **Table name** - the CLR type name, verbatim. `Product` maps to `Product`; an interface keeps its
   prefix, so `IProduct` maps to `IProduct` (not `products`).
 * **Column name** - the property name, verbatim - no snake_case, no case folding. `Id` maps to `Id`.
-* **Writable properties only** - a property is mapped when it has a setter, including a non-public one;
-  a get-only property (`{ get; }`) is skipped.
+* **Class properties** - a property is mapped when it has a setter, including a non-public one.
+  For interface properties, see [Query an interface entity](#query-an-interface-entity).
 * The auto-built names are emitted as-is, so they must match the catalog exactly; enable
   [Quoted identifiers](#quoted-identifiers) to have the provider quote them, or apply a
   [naming convention](#naming-conventions) to translate them.
@@ -129,30 +130,48 @@ select Id, Name
  from Product
 ```
 
-A bare interface works as a query source as long as the projection produces a scalar, an anonymous
-type, a tuple or a DTO - an interface has no constructor, so it cannot be materialised as a whole row:
+## Query an interface entity
+
+Use an interface as the entity type when you want a typed result without writing an implementation
+class. NextORM's source generator creates the implementation at compile time. You don't need to
+register it or add any attributes to enable generation.
+
+To read the `id` column from the `simple_entity` table, declare this interface at namespace scope:
 
 ```csharp
-public interface IProduct
+using System.ComponentModel.DataAnnotations.Schema;
+using NextORM.Core;
+
+[SqlTable("simple_entity")]
+public interface ISimpleRow
 {
-    int Id { get; set; }
-    string? Name { get; set; }
+    [Column("id")]
+    int Id { get; }
 }
-
-var names = await dataContext.From<IProduct>()
-    .Where(p => p.Id > 1)
-    .Select(p => p.Name)
-    .ToListAsync();
 ```
 
-```sql
-select Name
- from IProduct
- where (Id > 1)
+With your configured `dataContext`, read the rows as `ISimpleRow` objects:
+
+```csharp
+var rows = dataContext.From<ISimpleRow>()
+    .OrderBy(row => row.Id)
+    .ToList();
 ```
 
-Because the auto-built table name keeps the interface's `I` prefix, an interface-backed entity is
-normally given an explicit mapping - see [Attributes](#attributes) or [Fluent registration](#fluent-registration).
+Each returned object implements `ISimpleRow`, and its get-only `Id` contains the value from `id`.
+The attributes in this example set the SQL names. Without them, the default names are `ISimpleRow`
+and `Id`, subject to any naming convention you configure.
+
+Use a `public` or otherwise accessible interface. For example, an `internal` interface in a
+referenced assembly must be visible to the consuming assembly through `InternalsVisibleTo`.
+Use public instance properties with `get`, `get; set;`, or `get; init;`. NextORM reads mapping
+attributes on inherited properties. Methods, events, indexers, interface-valued properties, and
+same-name inherited properties with conflicting types aren't supported.
+
+Reference the concrete interface type as a generic argument in code the generator compiles, as in
+`From<ISimpleRow>()`. The generator can't discover a type supplied only at runtime.
+To read just one column, use a projection such as `Select(row => row.Id)`. To read back an
+inserted interface entity, see [Return the inserted rows](../guide/17-insert-statement.md#returning-the-inserted-rows).
 
 ## Naming conventions
 

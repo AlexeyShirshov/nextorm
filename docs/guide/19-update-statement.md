@@ -151,10 +151,11 @@ var one = ctx.CreateUpdateBuilder<ISimpleEntity>()
     .Single();
 ```
 
-`Returning()` returns the whole mapped entity (a concrete `TEntity`); `Returning(x => ...)` returns the
-projected shape (a single member, an anonymous type or a member-init). `Single()` throws when the update
-touched no row or more than one. `Returning` is only available on the predicate form: the key form
-(`Update(entity)`) does not expose it.
+`Returning()` returns the whole mapped entity, which can be a class or a
+[generated interface entity](../getting-started/03-entities-and-metadata.md#query-an-interface-entity).
+`Returning(x => ...)` returns the projected shape (a single member, an anonymous type or a
+member-init). `Single()` throws when the update touched no row or more than one. `Returning` is
+only available on the predicate form: the key form (`Update(entity)`) does not expose it.
 
 To capture the updated rows for a later statement of the same batch instead of returning them to the
 client, register a batch-scoped capture — the `inserted.*` columns **are** the captured rows — and

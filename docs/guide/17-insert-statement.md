@@ -525,10 +525,9 @@ var rows = ctx.CreateInsertBuilder<Order>()
 input order of a multi-row insert (SQLite documents the output order as arbitrary). Treat
 `ToList()` as an unordered set and do not rely on `rows[i]` matching input `i`.
 
-**Whole entity versus interface.** `Returning()` needs a concrete `TEntity` to materialise. For an
-interface-mapped entity either project the columns (`Returning(x => new { x.Id, x.Name })`) or use the
-class that implements the interface; `Returning()` on the interface itself throws a
-`NotSupportedException` at execution.
+**Interface entities.** On a provider that supports returning inserted rows, `Returning()` can
+return the whole row as a [generated interface entity](../getting-started/03-entities-and-metadata.md#query-an-interface-entity).
+If you only need selected columns, use a projection such as `Returning(x => new { x.Id, x.Name })`.
 
 ## Writing the modified rows into a table (`OUTPUT INTO`)
 

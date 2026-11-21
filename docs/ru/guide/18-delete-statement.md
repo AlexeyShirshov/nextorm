@@ -192,7 +192,10 @@ delete from simple_entity where id = 1 returning id, name, age
 | SQL Server | `DELETE ... OUTPUT deleted.<col> ...` |
 | MySQL, MariaDB, ClickHouse, in-memory | `NotSupportedException` |
 
-`Returning()` возвращает всю сущность (конкретный `TEntity`); `Returning(x => ...)` — проекцию (одно поле, анонимный тип или member-init). `Single()` бросает исключение, если удалено ноль строк или больше одной.
+`Returning()` возвращает всю сущность: класс или
+[интерфейсную сущность со сгенерированной реализацией](../getting-started/03-entities-and-metadata.md#запросите-интерфейсную-сущность).
+`Returning(x => ...)` возвращает проекцию (одно поле, анонимный тип или инициализатор свойств).
+`Single()` бросает исключение, если не удалено ни одной строки или удалено больше одной.
 
 Чтобы захватить удалённые строки для следующей инструкции того же батча вместо возврата клиенту, зарегистрируйте захват в рамках батча — колонки `deleted.*` **и есть** захваченные строки — и постройте поверх него запрос через `FromOutput<TResult>`/`FromOutputTable`: см. [Захват в рамках батча](17-insert-statement.md#захват-в-рамках-батча-batchbuilderoutputintotablevariable). Только SQL Server.
 

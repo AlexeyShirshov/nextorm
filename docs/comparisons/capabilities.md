@@ -158,6 +158,27 @@ Against the shared surface Nextorm matches or exceeds linq2db; on top of that it
 - Two reuse paths (implicit plan cache and explicit `Prepare()`), query parametrisation and a low-allocation
   design benchmarked at or above Dapper, EF Core and linq2db on the shipped scenarios.
 
+## Interface entities without an implementation class
+
+In Nextorm, declare a flat interface and use it as the entity type in `From<T>()`. The source
+generator creates the implementation at compile time, so you don't write or register a class.
+You can also use the interface as the whole-row result of `Returning()` where the provider
+supports that operation. The SQLite NativeAOT test verifies that an interface query returns the
+same IDs as an equivalent class query; it doesn't establish NativeAOT support for every
+provider or query shape. See [Query an interface entity](../getting-started/03-entities-and-metadata.md#query-an-interface-entity).
+
+The distinction is when and what the library generates, not whether you can use an interface:
+
+| Library | How it handles interface results |
+|---|---|
+| linq2db | The [documented interface query](https://github.com/linq2db/linq2db/wiki/Linq-To-DB-6) starts from a concrete mapped entity and accesses members through its interface. This pattern doesn't generate an implementation from the interface alone. |
+| EF Core | The [model rejects interfaces as entity types](https://github.com/dotnet/efcore/blob/main/src/Shared/SharedTypeExtensions.cs#L42-L51). [NativeAOT query precompilation](https://learn.microsoft.com/en-us/ef/core/performance/nativeaot-and-precompiled-queries) generates query and materialization code, not an entity class for an interface. |
+| Dapper.Contrib | [`Get<T>()` and `GetAll<T>()`](https://github.com/DapperLib/Dapper.Contrib/blob/main/src/Dapper.Contrib/SqlMapperExtensions.cs#L185-L260) can read rows into an interface without a user-defined class. The library [creates the implementing proxy at runtime using `Reflection.Emit`](https://github.com/DapperLib/Dapper.Contrib/blob/main/src/Dapper.Contrib/SqlMapperExtensions.cs#L553-L598). |
+| Dapper.AOT | Generates the row mapper at compile time. The [result type needs a usable constructor or factory](https://github.com/DapperLib/DapperAOT/blob/main/docs/rules/DAP050.md); the mapper doesn't generate an implementation from an interface alone. |
+| NHibernate | [Interface proxies rely on mapped classes](https://nhibernate.info/doc/nhibernate-reference/persistent-classes.html#persistent-classes-poco-sealed). [Dynamic models](https://nhibernate.info/doc/nhibernate-reference/persistent-classes.html#persistent-classes-dynamicmodels) can omit the class, but use a dictionary or `dynamic` rather than a typed interface. |
+
+This comparison is based on documentation and source code, not cross-library execution tests.
+
 ## Deliberate boundaries: what Nextorm leaves to linq2db
 
 These are conscious scope decisions in Nextorm's focused, no-change-tracking model — not gaps on the query
