@@ -196,7 +196,7 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17; item 5
     `HasManyThrough`/`[Relationship]`) still declare a single key column. Public declaration, the SQL
     navigations over such a relationship and metadata-driven `LoadWith` remain open in #251.
 6. **ClickHouse `-State`/`-Merge` combinators and `runningAccumulate` need an `AggregateFunction(...)` state type — blocked by the driver.**
-    `ClickHouse.Driver` 1.4.0 throws `AggregateFunctionException` from `FrameworkType`/`Read`/`Write`,
+     The pinned `ClickHouse.Driver` 1.5.0 still throws `AggregateFunctionException` from `FrameworkType`/`Read`/`Write`,
     so the state cannot be materialised or passed as a CLR value; `uniqMerge(uniqState(x))` is illegal
     (`ILLEGAL_AGGREGATION`) and `runningAccumulate` is deprecated in 25.8. Documented in
     [Limitations](../../advanced/limitations.md).
@@ -212,7 +212,7 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17; item 5
     table functions and PostgreSQL `json_populate_record(set)`, both recorded in
     [Limitations](../../advanced/limitations.md).
     Shipped: [Dynamic result schema](../../guide/13-table-valued-functions.md#dynamic-result-schema).
-59. **SQL Server composable DML `OUTPUT` (issue [#266](https://github.com/AlexeyShirshov/nextorm/issues/266)) — batch capture shipped, other forms open.**
+ 59. **SQL Server composable DML `OUTPUT` (issue [#266](https://github.com/AlexeyShirshov/nextorm/issues/266)) — batch capture shipped; follow-ups in `1.0.12`.**
     PostgreSQL can read a mutation's returned rows as an ordinary queryable source
     (`With("ins", insert.Returning(...)).From("ins")`, a data-modifying CTE). T-SQL cannot put `OUTPUT`
     inside a CTE, so on SQL Server the rows are consumed by the mutation itself (`Returning`,
@@ -223,9 +223,20 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17; item 5
     refusals outside the owning batch (see
     [Writing into a table variable](../../guide/17-insert-statement.md#batch-scoped-capture-batchbuilderoutputintotablevariable)
     and [Capturing the merged rows](../../guide/21-merge-statement.md#capturing-the-merged-rows-batch-only)).
-    **Still absent:** a fluent MERGE `OutputInto`/`OutputIntoThenOutput`, real-table capture-source
-    helpers, join-mutation capture, and any capture outside SQL Server —
-    todo: [`todo_output_into.md`](todo_output_into.md).
+
+     The `1.0.12` milestone tracks four follow-ups outside the scope of #266:
+
+     - **Fluent MERGE capture ([#407](https://github.com/AlexeyShirshov/nextorm/issues/407)):**
+       support capture outside a batch. The current fluent projection cannot express the leading
+       `$action` column.
+     - **Real-table capture source ([#406](https://github.com/AlexeyShirshov/nextorm/issues/406)):**
+       compose a read from the table written by `OutputInto(target)` in the same round trip.
+       For a separate read, use `From(tableName)` or `TableAlias`.
+     - **Join-mutation capture ([#405](https://github.com/AlexeyShirshov/nextorm/issues/405)):**
+       capture rows from a multi-table update or delete. These mutations are not batch steps yet.
+     - **Capture on other providers ([#408](https://github.com/AlexeyShirshov/nextorm/issues/408)):**
+       verify native equivalents, not a commitment to a portable API. PostgreSQL already offers a
+       data-modifying CTE as a separate route.
 56. **`ORDER BY ... NULLS FIRST/LAST` (issue [#287](https://github.com/AlexeyShirshov/nextorm/issues/287)).**
     There is no null-placement overload, so NULLs sort the way the provider sorts them — and the default
     differs: PostgreSQL is `NULLS LAST` ascending / `FIRST` descending, SQL Server/MySQL/MariaDB/SQLite
@@ -438,7 +449,7 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17; item 5
     is query-only (only the key upsert), and change tracking/`SaveChanges` and navigation properties stay out
     of scope by design.
     Shipped: [Data modification (INSERT)](../../guide/17-insert-statement.md), [Upsert (key merge)](../../guide/21-merge-statement.md#upsert-key-merge), [Full MERGE](../../guide/21-merge-statement.md#full-merge), [Delete](../../guide/18-delete-statement.md), [Update](../../guide/19-update-statement.md).
-    Phases 1 and 3 of `todo_output_into.md` also shipped: SQL Server
+     [#15](https://github.com/AlexeyShirshov/nextorm/issues/15) also shipped SQL Server
     `OUTPUT ... INTO` (`Returning(...).OutputInto(target)` writes the modified rows into an existing table;
     `OutputIntoThenOutput(target)` also returns them) and key-upsert `Returning()`
     (`ON CONFLICT ... RETURNING` on PostgreSQL/SQLite, `MERGE ... OUTPUT` on SQL Server; MySQL/MariaDB
@@ -446,12 +457,11 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17; item 5
     `INSERT`/`UPDATE`/`DELETE`/`MERGE` plus `FromOutput<TResult>`/`FromOutputTable` read-back in the same
     batch (one round trip; MERGE leads with `$action`; see
     [Writing into a table variable](../../guide/17-insert-statement.md#batch-scoped-capture-batchbuilderoutputintotablevariable)).
-    The remaining `OUTPUT` forms — fluent MERGE `OutputInto`, real-table capture sources and
-    join-mutation capture — are listed in [`todo_output_into.md`](todo_output_into.md). Phase 2 (several result sets from one command) is now **implemented** (2026-09-26) by phase 4
-    of `todo_stored_procedures.md` (#70, including #25): the batch surface
+     Several result sets from one command shipped with [#70](https://github.com/AlexeyShirshov/nextorm/issues/70)
+     (including #25): the batch surface
     exposes `BatchBuilder.AddQuery<TResult>` + `Execute`/`ExecuteAsync` → `BatchResult.Read<TResult>()`,
     carrying several result sets in a single round trip (gated by `ISqlDialect.SupportsBatch`).
-    The same phase 0 also unblocked **table-valued parameters** (`ProcedureParameter.Table<T>`, issue
+     The same work also unblocked **table-valued parameters** (`ProcedureParameter.Table<T>`, issue
     #73 — closed 2026-09-26): SQL Server binds natively, PostgreSQL/MySQL/MariaDB/SQLite emulate
     with a typed array/JSON document, ClickHouse with a bound `Array(T)`/`Array(Tuple(...))` expanded by
     `arrayJoin(@p)`, and the in-memory provider rejects; decimal precision/scale is read from

@@ -2,9 +2,12 @@
 > Tracking issue: [#62](https://github.com/AlexeyShirshov/nextorm/issues/62).
 
 > Рабочий план (design RFC). Источник: `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4 п.6.
-> **Статус: заблокировано драйвером `ClickHouse.Driver` 1.4.0** (проверено 22.09.2026).
+> **Статус: #62 открыт, чтение и передача состояния через CLR заблокированы.**
+> Проверка исходников закреплённого `ClickHouse.Driver` 1.5.0 (2026-11-21):
+> [`AggregateFunctionType`](https://github.com/ClickHouse/clickhouse-cs/blob/95e38785b5cd238724895edd3785411e6308bf18/ClickHouse.Driver/Types/AggregateFunctionType.cs)
+> по-прежнему бросает `AggregateFunctionException` из `FrameworkType`, `Read` и `Write`.
 
-## Блокер (проверено 22.09.2026)
+## Исходная проверка (2026-09-22, драйвер 1.4.0)
 
 - **Драйвер не может читать/писать `AggregateFunction(...)`.** `ClickHouse.Driver`
   1.4.0 (`Types/AggregateFunctionType.cs`) бросает `AggregateFunctionException` из `FrameworkType`,
@@ -12,9 +15,9 @@
   AggregateFunction(&lt;function&gt;). Use &lt;function&gt;Merge() function to query this value».
   Значит, материализация состояния в CLR (`byte[]` или отдельный тип) и передача состояния из CLR
   невозможны на этой версии драйвера — а это и есть цель пункта («чтение/передача»).
-- **`uniqMerge(uniqState(x))` невыразим в одном запросе** — ClickHouse отклоняет вложенный агрегат
-  (`ILLEGAL_AGGREGATION`). Состояние обязано пройти через серверный подзапрос/таблицу-состояние, т.е.
-  пересечь CLR-границу, что упирается в первый блокер.
+- **ClickHouse отклоняет прямое вложение `uniqMerge(uniqState(x))`** (`ILLEGAL_AGGREGATION`).
+  `-Merge` может читать состояние из серверного подзапроса или таблицы без передачи в CLR.
+  Ограничение драйвера касается только вывода состояния в CLR и передачи его обратно.
 - **`runningAccumulate` объявлен устаревшим в ClickHouse 25.8** (`DEPRECATED_FUNCTION`; без
   `allow_deprecated_error_prone_window_functions=1` — ошибка). ClickHouse рекомендует оконные функции.
 - `SimpleAggregateFunction(...)` драйвер читает/пишет как underlying-тип (`SimpleAggregateFunctionType`
@@ -22,7 +25,7 @@
   (`It must be AggregateFunction(...)`), т.е. для `-Merge` он не подходит.
 
 Вывод зафиксирован в `docs/advanced/limitations.md` (+RU). Разблокировка — новая версия драйвера,
-умеющая читать `AggregateFunction` (тогда вернуться к дизайну ниже).
+умеющая читать и передавать `AggregateFunction` через CLR (тогда вернуться к дизайну ниже).
 
 ## Пункт и цель (исходно)
 
