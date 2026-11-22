@@ -1,4 +1,5 @@
 import contextlib
+import fcntl
 import hashlib
 import importlib.util
 import io
@@ -145,6 +146,7 @@ class IntegrationRunnerReceiptTests(unittest.TestCase):
                 args.append("--build")
             with (
                 patch.object(runner, "probe_systemd", return_value=True),
+                patch.object(runner, "DEFAULT_LOG_DIR", pathlib.Path(temporary_directory) / "shared-lock"),
                 patch.object(runner, "preflight"),
                 patch.object(runner, "find_running_suite", return_value=[]),
                 patch.object(runner, "candidate_identity", return_value={"git_head": "abc123"}),
@@ -247,6 +249,22 @@ class IntegrationRunnerReceiptTests(unittest.TestCase):
                 )
 
         self.assertEqual(2, result)
+
+    def test_custom_log_directory_does_not_bypass_shared_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            shared = root / "shared"
+            shared.mkdir()
+            with (
+                (shared / "run.lock").open("a") as held,
+                patch.object(runner, "DEFAULT_LOG_DIR", shared),
+                patch.object(runner, "probe_systemd", return_value=True),
+                patch.object(runner, "preflight") as preflight,
+            ):
+                fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                with self.assertRaisesRegex(SystemExit, "another integration run holds"):
+                    runner.main(["--class", "Example.Tests", "--log-dir", str(root / "logs")])
+            preflight.assert_not_called()
 
     def test_external_endpoint_is_not_reported_as_torn_down(self) -> None:
         secret = "Server=127.0.0.1;Password=do-not-log"

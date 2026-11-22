@@ -803,13 +803,14 @@ def main(argv: list[str]) -> int:
 
     log_dir: pathlib.Path = args.log_dir
     log_dir.mkdir(parents=True, exist_ok=True)
-    lock_path = log_dir / "run.lock"
-    lock_file = lock_path.open("w")
+    lock_path = DEFAULT_LOG_DIR / "run.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_file = lock_path.open("a")
     try:
         fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         lock_file.close()
-        raise SystemExit(f"another capped run holds {lock_path}; wait for it or remove the file")
+        raise SystemExit(f"another integration run holds {lock_path}; verify its outcome before retrying")
 
     def finish(exit_code: int) -> int:
         lock_file.close()
