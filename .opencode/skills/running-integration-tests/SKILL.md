@@ -1,136 +1,53 @@
 ---
 name: running-integration-tests
-description: Run nextorm's xunit v3 integration tests (tests/nextorm.integration.tests) against PostgreSQL, SQL Server, MySQL, ClickHouse and SQLite via Testcontainers. Use when running, filtering or debugging integration tests, or when Testcontainers/Podman/Docker connection fails — DOCKER_HOST, podman socket, container startup, providers failing without DOCKER_HOST.
+description: Run nextorm's xUnit v3 live database integration tests. Use for local wslc runs, provider selection, endpoint or Testcontainers/Podman troubleshooting, and native test ID reconciliation.
 ---
 
-# Running nextorm integration tests
+# Run nextorm integration tests
 
-## MANDATORY — read this before claiming any result
+## Choose the runtime
 
-- Never run `tests/nextorm.integration.tests` **without** `DOCKER_HOST` and then call it a pass. The suite is **fail-closed**: PostgreSQL/SQL Server/MySQL/ClickHouse tests **fail** when their container is unavailable — they no longer skip. The only opt-out is `NEXTORM_SKIP_PROVIDERS=<name,...>` (see "Skip policy"), and a run with opt-outs is not evidence for those providers.
-- If `ls -l /mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock` fails, do **not** stop at "cannot run": start the machine with `"/mnt/c/Program Files/RedHat/Podman/podman.exe" machine start`, wait a few seconds and re-check the socket (see Troubleshooting), then run with `DOCKER_HOST`.
-- Run the container suite whenever a change can affect SQL generation, providers or the query engine — not only when explicitly asked. Loading this skill is the first step, before running the tests.
+- **Local Windows/WSL default: `wslc`.** Run one engine and version at a time against an owned disposable container. SQLite runs in-process.
+- **Podman/Testcontainers: only when explicitly requested.** Don't switch automatically, start Podman to diagnose a `wslc` failure, or stop a shared engine without authorization.
+- **CI is unchanged.** Locally, cover the required scope with sequential groups. Don't use `--full`, a bare full-suite invocation, or overlapping test hosts or database containers. Run the affected live integration tests for changes to SQL generation, providers, or the query engine.
 
-## Environment: Podman runs on Windows, WSL talks to it over a socket
+## Run serially
 
-- Podman is a **Windows Podman Desktop WSL2 machine** named `podman-machine-default`. It is **not installed in WSL**: `podman` is not on the WSL `PATH`, so `podman machine list` fails with `command not found`.
-- The Docker-compatible API is exposed into WSL as a unix socket:
-  `unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock`
-  (general form `/mnt/wsl/podman-sockets/<machine-name>/podman-user.sock`; a `podman-root.sock` sits next to it).
-- Testcontainers discovers it purely through `DOCKER_HOST`; nothing else is normally required. Verified against Podman server 5.8.6 / Docker API 1.44.
-- To inspect the host from WSL, use the Windows binary:
-  `"/mnt/c/Program Files/RedHat/Podman/podman.exe" machine list` (also `ps`, `images`, `logs`).
+1. **Build once.** Freeze the test assembly and xUnit discovery configuration, then use the existing build for every group (`--no-build` if using `dotnet run`). Exclude `Category=Diagnostic` unless the request includes those tests. For acceptance, enumerate theories during discovery and use the same configuration for execution.
+2. **Select by actual provider usage.** Inspect fixture and test paths, including per-row theory parameters, before using a class or method filter. Verify that its discovered roster is exactly the intended group. Keep mixed-provider and unresolved cases in the roster; don't run them until you can prove they stop and release each engine before starting another. Don't edit tests merely to make a filter work.
+3. **Acquire the runner's exclusive lock before provisioning.** Verify no integration test host or conflicting database workload is active. Hold the lock through teardown. For `wslc`, follow the next section to provision and validate the endpoint.
+4. **Use the project runner's standard cgroup caps and bounded timeout.** Follow [`tools/integration/run-integration-capped.py`](../../../tools/integration/run-integration-capped.py) for runner settings (`MemoryHigh=3G`, `MemoryMax=4G`, `MemorySwapMax=1G`). For a custom exact-ID launcher, apply and verify the same caps and an explicit timeout; the wrapper can fall back to uncapped execution and its per-class timeout is opt-in. Don't use an uncapped fallback. Don't gate on Windows free RAM, impose separate ad hoc database memory caps, or require swap to be disabled. Preserve resource settings that belong to the provider's test fixture.
+5. **Reconcile the group and verify teardown.** Capture native events and exit status. Stop and remove only the owned `wslc` container and its disposable resources, then verify removal by ID, including on failure. Start the next engine only after verifying teardown. Keep failures in the evidence; retry only the affected cases after a targeted probe verifies a material correction.
 
-## Run
+## Use `wslc` with private provider endpoints
 
-Always run from the repo root and set `DOCKER_HOST` first.
+1. Read the selected fixture under `tests/nextorm.integration.tests/Providers/` for the required image/version, initialization, and server settings. Check the `wslc` image store before pulling; with authorization to download, pull only missing suite-required images, one at a time. Podman has a separate image store. No Ryuk is needed for manually owned endpoints.
+2. Publish on an available loopback port (`127.0.0.1:HOST_PORT:CONTAINER_PORT`); verify the actual listener is loopback-only and reachable from Ubuntu. If `inspect` omits port bindings, check the Windows listener and confirm ownership with a unique response from an owned probe. Don't trust a bridge IP that answers after the container is removed. For a port conflict, check active listeners and reserved ranges and select another port; don't assume Podman owns it.
+3. Verify readiness, version, and fixture settings using an authenticated query **from Ubuntu**, with the same provider driver and connection options as the runner. An internal `sqlcmd` alone won't catch SQL Server pre-login failures on the Ubuntu route. Don't log credentials or expose the database on LAN interfaces.
+4. Pass the connection string only to the selected test process. Where the fixture honors the override, it uses that endpoint instead of launching Testcontainers:
 
-> **On a memory-tight host the canonical run MUST go through the capped wrapper.** A bare full-suite
-> run holds the Podman WSL2 VM next to the Ubuntu distro, the OpenCode server is killed together with
-> the VM, and the run dies mid-way or turns red on connection errors:
->
-> ```bash
-> python3 tools/integration/run-integration-capped.py --full
-> ```
->
-> It runs exactly the command below under the cgroup cap and `setsid`, then checks the skip budget
-> against the produced log. Use the bare command only when `--full` is unavailable.
+   | Provider | Connection override |
+   |---|---|
+   | PostgreSQL | `NEXTORM_POSTGRES_CONNECTION` |
+   | SQL Server | `NEXTORM_SQLSERVER_CONNECTION` |
+   | MySQL | `NEXTORM_MYSQL_CONNECTION` |
+   | MariaDB | `NEXTORM_MARIADB_CONNECTION` |
+   | ClickHouse | `NEXTORM_CLICKHOUSE_CONNECTION` |
 
-Whole suite (starts PostgreSQL, SQL Server, MySQL and ClickHouse containers lazily). The canonical
-run excludes the opt-in diagnostic harnesses (`Category=Diagnostic`), so the skip set matches the
-pinned budget:
+   `DOCKER_HOST` isn't required for a verified external endpoint. Don't assume that every direct container fixture honors the override. If a selected case can't run on the chosen route, record it as outstanding rather than switching runtimes or counting it as skipped.
 
-```bash
-DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
-  dotnet run --project tests/nextorm.integration.tests -c Debug -- \
-  -noColor -notrait "Category=Diagnostic" > /tmp/opencode/integration.log 2>&1
+## Reconcile acceptance by native xUnit ID
 
-python3 tools/integration/check-integration-skip-budget.py --log /tmp/opencode/integration.log
-```
+- Save the expected non-diagnostic roster and native xUnit events for each group. Match case IDs and, for any cases that expand at execution, account for all expected result IDs. Every expected result must have exactly one terminal outcome: passed, failed, or skipped. Report missing, unexpected, duplicated, failed, and not-run results separately. A missing result is not a skip.
+- Require complete coverage, no failures, and exact skip counts **by reason** against [`skip-budget.json`](../../../tests/nextorm.integration.tests/skip-budget.json). Use the repository's skip-budget checker for compatible logs; for native events compare their reasons directly to the pinned map. Don't concatenate summaries or infer acceptance from totals alone. `NEXTORM_SKIP_PROVIDERS` is a local opt-out, not acceptance evidence.
+- Record build and configuration, fixture version, exact selected IDs, results, and teardown. Use one frozen build for acceptance. If the build changes, keep evidence separate until reuse is explicitly justified and accepted. Matching discovery establishes the same roster, not equivalent execution.
 
-Single provider (much faster — only that provider's container starts; the first run initializes the database, later runs reuse the stopped container and start in a second or two):
+## Use Podman only on explicit request
+
+Use the Windows `podman.exe` and the rootless socket at `unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock`. If the socket is missing on this route, check `podman.exe machine list`; start only the required `podman-machine-default` machine if stopped. Verify the socket with Docker API `/_ping`.
 
 ```bash
-DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
-  dotnet run --project tests/nextorm.integration.tests -c Debug -- \
-  -class nextorm.integration.tests.PostgresIntegrationTests -noColor
+python3 tools/integration/run-integration-capped.py --providers postgres --timeout 600
 ```
 
-Test classes accepted by `-class`:
-`SqliteIntegrationTests`, `SqliteSpecificTests`, `PostgresIntegrationTests`, `PostgresSpecificTests`, `SqlServerIntegrationTests`, `SqlServerSpecificTests`, `MySqlIntegrationTests`, `MySqlSpecificTests`, `ClickHouseIntegrationTests`.
-(SQLite needs no container.)
-
-Equivalent with `dotnet test` (VSTest filter):
-
-```bash
-DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
-  dotnet test tests/nextorm.integration.tests -c Debug \
-  --filter "FullyQualifiedName~PostgresIntegrationTests"
-```
-
-## Cost discipline — build once, serialise, don't repeat filters
-
-- **Build once, then run with `--no-build`.** `dotnet run --project tests/X` (and plain `dotnet test`) rebuild the project on every invocation — a re-run costs a full MSBuild pass and re-reads the whole project graph. Build the solution once, then add `--no-build`:
-
-  ```bash
-  dotnet build nextorm.slnx -c Debug
-  DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
-    dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- \
-    -class nextorm.integration.tests.PostgresIntegrationTests -noColor
-  ```
-
-- **Run provider suites one at a time, never in parallel.** Four concurrent test projects (plus build + editors) saturate 8 vCPU and push disk reads to ~1.9 GiB/s for minutes. Serialise them — `tools/integration/run-integration-capped.py` (below) does this and also caps the run's memory.
-- **A solution-wide `dotnet test` needs `--max-parallel-test-modules 1`.** `nextorm.integration.tests` and `nextorm.extensions.integration.tests` both resolve the *same* reused containers (same `reuse-id` label) and both seed the same tables, so when their modules overlap they collide with `Table '...' already exists` / `Unable to connect to any of the specified MySQL hosts`, and the first module to finish stops the containers under the second. `dotnet test nextorm.slnx --no-build --filter-not-trait Category=Diagnostic --max-parallel-test-modules 1` runs all 16 modules one after another (~4.5 min of test time) and is green; this is what CI does. Per-project runs (`dotnet test tests/nextorm.integration.tests`) are unaffected.
-- **Never re-run the same filter.** Each distinct `--dotnet-test-pipe /tmp/<id>` is a real execution; re-issuing `--filter FullyQualifiedName~Csv` (or the same `-class`) is wasted work — run it once. For a provider subset use a single `--filter "FullyQualifiedName~Csv&FullyQualifiedName~<Provider>IntegrationTests"` instead of repeating.
-- **Scope the run to the change.** For a core/CSV-streaming change the relevant targets are `nextorm.integration.tests --filter FullyQualifiedName~Csv` and `nextorm.core.tests`; the per-provider SQL-generation suites (`tests/nextorm.*.tests`) need no database and need not all run for such a change. Reserve a full sweep for final validation, once.
-- Repeated `[.NET TP Worker]` / `[RequestBuilder]` children under a `dotnet run`/`dotnet test` mean you are rebuilding — switch to `--no-build`.
-
-### Capped per-provider runs — the safe default on a memory-tight host
-
-The Podman machine is a **second WSL2 distro** and inherits the *global* `.wslconfig` memory limit (its own `Resources.Memory` is ignored by the WSL provider). On a 16 GB host a full sweep therefore holds two ~12 GB VMs next to Windows: the run spills into the Windows pagefile, WSL interop stalls (`UtilAcceptVsock ... abnormally long accept` in `dmesg`) and the OpenCode server is killed together with the VM. `tools/integration/run-integration-capped.py` runs one class at a time inside a cgroup:
-
-```bash
-python3 tools/integration/run-integration-capped.py --providers postgres
-python3 tools/integration/run-integration-capped.py             # all providers, sqlite -> clickhouse
-python3 tools/integration/run-integration-capped.py --dry-run    # print the commands only
-```
-
-- `systemd-run --user --scope` caps memory (`MemoryHigh=3G` / `MemoryMax=4G` / `MemorySwapMax=1G`); CPU (`cpu.max`) and the BFQ weight (`io.bfq.weight`) are written into the scope by a shim, because systemd 249 ignores `CPUQuota=`/`IOWeight=` on transient *user* scopes. It needs `systemd=true` and `/run/user/<uid>/bus`, and falls back to plain execution with a warning.
-- `ionice -c 2 -n 7` on the child as well: BFQ is the active scheduler and honours per-process I/O priority.
-- `setsid --wait`, so a run survives an OpenCode server restart instead of dying with the parent shell.
-- one `-class` per process, so the previous provider's container is stopped by the `DatabaseContainers` fixture before the next one starts.
-- refuses to start while another suite is already running (it scans `/proc` for the test host), because both would share the reused containers.
-
-Per-class runs are local iteration, not evidence: the pinned skip budget still needs the canonical full-suite command above.
-
-## Behaviour and gotchas
-
-- **Fail-closed availability.** `ProviderTestSuite` asserts `Provider.IsAvailable` in its constructor: an unavailable provider fails every test of that suite with the container error. It is never silently skipped. Intentional local reductions require `NEXTORM_SKIP_PROVIDERS` (below).
-
-## Skip policy — capability matrix, opt-out and budget
-
-- **Capability skips are pinned.** `Assert.SkipUnless(Provider.SupportsX, ...)` in `CommonTestSuite` is legitimate only for the reviewed matrix in `Providers/ITestProvider.cs`. `CrossProvider/ProviderCapabilityContractTests` pins every flag per provider, so a flag that flips by accident is a red test instead of a disappearing fact you never notice.
-- **Explicit opt-out.** `NEXTORM_SKIP_PROVIDERS=postgres,sqlserver,mysql,clickhouse` (case-insensitive, comma/semicolon separated) is the only way to skip an unavailable provider. Use it for SQLite-only local runs, never for evidence.
-- **Diagnostic harnesses.** `LobCapabilityProbeTests`, `LobPerfHarnessTests` and `SqliteWarmAggregateAllocationTests` carry `[Trait("Category", "Diagnostic")]` and are opt-in via `NEXTORM_LOB_PROBE` / `NEXTORM_LOB_PERF` / `D243_ATTRIBUTION_REPORT`. Exclude them with `-notrait "Category=Diagnostic"`.
-- **The ClickHouse retry harness is gone (removed 2026-10-29).** `ClickHouseRetryScenarioTests`, `ClickHouseRetryReporter`, `FaultProxy` and the `tests/Shared/ClickHouseRetry/**` helpers no longer exist, and the ClickHouse reads that were enrolled in the harness call the provider directly. There is therefore no `NEXTORM_CLICKHOUSE_PROBE` switch and no retry summary line in the output; the other diagnostic harnesses in the bullet above are unaffected.
-- **Skip budget.** `tests/nextorm.integration.tests/skip-budget.json` pins the capability skips by reason. After a full run, check it with
-  `python3 tools/integration/check-integration-skip-budget.py --log <log>`; the gate fails on any new or vanished skip. Intentional changes require updating the pinned matrix first, then `--update`. Diagnostic skips are ignored by the script, so the gate works with or without `-notrait`.
-- Containers start lazily per provider; each is built with `WithReuse(true)` + a `reuse-id` label, so at the end of the run it is **stopped but kept** and the next run starts the same container (skipping PostgreSQL/SQL Server/MySQL/ClickHouse initialization — the heavy disk I/O that can stall WSL). The `DatabaseContainers` assembly fixture performs the stop.
-- To force a clean database, delete the reused containers. `podman.exe` defaults to the **rootful** connection and will not list them; use the rootless connection (the one the socket exposes): `"/mnt/c/Program Files/RedHat/Podman/podman.exe" --connection podman-machine-default ps -a --filter label=reuse-id`, then `... rm -f <id>`. Changing a builder configuration (image, env, port bindings) changes the reuse hash and creates a **new** container, leaving the previous one behind — purge from time to time.
-- Reuse does **not** leak rows between runs: every provider's `EnsureSeeded` runs `drop table if exists …` before `create table`. Do not rely on a dirty container in a test.
-- **`TESTCONTAINERS_RYUK_DISABLED=true` is not needed** — Ryuk starts fine against this Podman. Add it only as a fallback if the run fails while starting Ryuk. Reused containers are not registered with Ryuk (reuse disables it for them) — by design they survive a killed run.
-- Pre-pulled images: `postgres:17-alpine`, `mcr.microsoft.com/mssql/server:2025-latest`, `mysql:8.4`, `testcontainers/ryuk`.
-  **ClickHouse is not pre-pulled** (`clickhouse/clickhouse-server:25.8-alpine`); the first ClickHouse run pulls it (needs network). Pre-pull with:
-  `"/mnt/c/Program Files/RedHat/Podman/podman.exe" pull docker.io/clickhouse/clickhouse-server:25.8-alpine`.
-- Point a provider at an existing server instead of a container with `NEXTORM_POSTGRES_CONNECTION`, `NEXTORM_SQLSERVER_CONNECTION`, `NEXTORM_MYSQL_CONNECTION`, `NEXTORM_CLICKHOUSE_CONNECTION` (see `tests/nextorm.integration.tests/Providers/*Container.cs`). When set, no container is started for that provider.
-- Provider SQL-generation tests (`tests/nextorm.*.tests`) never need a database; only `nextorm.integration.tests` does.
-
-## Troubleshooting
-
-- `podman: command not found` in WSL → expected. Use the socket and/or `podman.exe`; do not try to install Podman inside WSL.
-- Testcontainers hangs or fails to connect → confirm the machine is running (`podman.exe machine list`, expect `Currently running`) and the socket exists: `ls -l /mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock`. Start the machine with `"/mnt/c/Program Files/RedHat/Podman/podman.exe" machine start` (Podman Desktop may be closed).
-- Sanity-check the socket without Testcontainers:
-  `curl -s --unix-socket /mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock http://d/v1.40/_ping` → `OK`.
-- **`container state improper` on SQL Server.** SQL Server ignores SIGTERM, so the stop path SIGKILLs it (exit 137) and Podman can leave the reused container unstartable: the next run fails closed within ~6 s with the whole class red. Remove that container and rerun — Testcontainers recreates it:
-  `"/mnt/c/Program Files/RedHat/Podman/podman.exe" --connection podman-machine-default rm -f <id>`
-  (the capped wrapper prints the exact command from the failure log). Exit 137 on a *normal* stop is the SIGKILL, not an OOM kill — do not read it as memory pressure.
+Choose one provider per invocation and verify the selected scope and standard caps. The wrapper configures `DOCKER_HOST` for this route. The `DatabaseContainers` fixture stops reused containers but leaves them available for the next run; verify they have stopped before proceeding. If SQL Server reports `container state improper`, inspect the owned container and obtain authorization before removing anything not owned by the run. Exit 137 after an intentional stop doesn't by itself prove OOM.
