@@ -24,9 +24,9 @@ run on **2026-11-18**. Category A and Tier-1 keep the dates of their own runs. I
 | [Wide data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md) | **8.030 ms** | 8.799 ms | 9.140 ms | 9.611 ms |
 | [Where](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md) | **1.038 ms** | 1.526 ms | 1.526 ms | 3.347 ms |
 | [Simulate work](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md) | **8.425 ms** | 24.088 ms | 358.743 ms | 113.061 ms |
-| [Any](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md) | **728.6 μs** | 921.6 μs | 968.5 μs | 1,950.4 μs |
-| [FirstOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFirst-report-github.md) | **74.11 μs** | 94.52 μs | 150.02 μs | 200.65 μs |
-| [SingleOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSingle-report-github.md) | **72.72 μs** | 90.03 μs | 150.76 μs | 186.52 μs |
+| [Any](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md) | **940.9 μs** | 1,453.0 μs | 1,598.0 μs | 3,745.4 μs |
+| [FirstOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFirst-report-github.md) | **95.27 μs** | 141.48 μs | 383.95 μs | 373.45 μs |
+| [SingleOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSingle-report-github.md) | **95.42 μs** | 143.43 μs | 372.28 μs | 375.85 μs |
 <!-- benchmarks:e2e:end -->
 
 ### Allocations
@@ -40,9 +40,9 @@ Allocations for the same fastest method per library (BenchmarkDotNet `Allocated`
 | Wide data fetch | 2.21 MB | 2.59 MB | **2.14 MB** | 4.28 MB |
 | Where | **117.42 KB** | 179.23 KB | 252.75 KB | 745.41 KB |
 | Simulate work | **6.21 MB** | 8.86 MB | 107.98 MB | 13.57 MB |
-| Any | **84.38 KB** | 138.29 KB | 232.81 KB | 763.28 KB |
-| FirstOrDefault | **8.55 KB** | 16.12 KB | 159.77 KB | 76.02 KB |
-| SingleOrDefault | **8.28 KB** | 16.04 KB | 159.77 KB | 76.02 KB |
+| Any | **84.38 KB** | 138.29 KB | 232.82 KB | 763.30 KB |
+| FirstOrDefault | **8.56 KB** | 16.12 KB | 159.77 KB | 76.03 KB |
+| SingleOrDefault | **8.28 KB** | 16.04 KB | 159.77 KB | 76.03 KB |
 <!-- benchmarks:allocations:end -->
 
 ## Feature-level comparison (fair)
@@ -70,18 +70,18 @@ As of **2026-11-18**.
 
 | Feature | Nextorm (prepared) | Dapper | linq2db (compiled) | EF Core (compiled) |
 |---|---|---|---|---|
-| CASE WHEN | **7.48 μs / 664 B** | 9.49 μs / 1.34 KB | 9.76 μs / 1.59 KB | 19.71 μs / 7.46 KB |
-| CTE | **7.79 μs / 752 B** | 12.33 μs / 1.56 KB | 12.39 μs / 1.77 KB | — |
-| SELECT DISTINCT | **8.32 μs / 664 B** | 10.24 μs / 1.44 KB | 10.58 μs / 1.59 KB | 20.71 μs / 7.23 KB |
-| EXCEPT | **8.80 μs / 680 B** | 11.71 μs / 1.43 KB | 12.65 μs / 1.67 KB | 23.45 μs / 8.38 KB |
-| IN-list | **9.09 μs / 1.55 KB** | 10.77 μs / 1.26 KB | 16.12 μs / 13.63 KB | 24.12 μs / 14.34 KB |
-| INTERSECT | **7.94 μs / 665 B** | 10.45 μs / 1.28 KB | 11.71 μs / 1.62 KB | 21.08 μs / 7.50 KB |
-| 4-table join | **10.01 μs / 1.03 KB** | 16.03 μs / 2.02 KB | 14.64 μs / 2.06 KB | 25.06 μs / 8.05 KB |
-| LEFT JOIN | **9.98 μs / 1.16 KB** | 13.03 μs / 2.21 KB | 13.02 μs / 2.31 KB | 22.16 μs / 9.48 KB |
-| Recursive CTE | **9.08 μs / 672 B** | 13.44 μs / 1.52 KB | 13.98 μs / 1.77 KB | — |
-| String functions | **7.13 μs / 656 B** | 9.23 μs / 1.27 KB | 9.27 μs / 1.63 KB | 18.23 μs / 7.05 KB |
-| UDF | **7.22 μs / 688 B** | 9.34 μs / 1.27 KB | 9.55 μs / 1.63 KB | 18.57 μs / 7.05 KB |
-| Window functions | **10.23 μs / 793 B** | 14.65 μs / 1.54 KB | 14.60 μs / 1.73 KB | — |
+| CASE WHEN | **9.75 μs / 664 B** | 14.93 μs / 1.34 KB | 15.84 μs / 1.59 KB | 38.16 μs / 7.46 KB |
+| CTE | **10.34 μs / 752 B** | 22.86 μs / 1.56 KB | 23.62 μs / 1.77 KB | — |
+| SELECT DISTINCT | **11.63 μs / 665 B** | 18.61 μs / 1.44 KB | 19.07 μs / 1.59 KB | 43.82 μs / 7.23 KB |
+| EXCEPT | **11.74 μs / 680 B** | 18.86 μs / 1.43 KB | 22.70 μs / 1.67 KB | 47.81 μs / 8.38 KB |
+| IN-list | **13.18 μs / 1.55 KB** | 19.24 μs / 1.26 KB | 47.55 μs / 13.63 KB | 68.44 μs / 14.34 KB |
+| INTERSECT | **10.74 μs / 665 B** | 17.91 μs / 1.28 KB | 22.02 μs / 1.62 KB | 45.36 μs / 7.50 KB |
+| 4-table join | **14.32 μs / 1.03 KB** | 28.97 μs / 2.02 KB | 27.10 μs / 2.06 KB | 51.99 μs / 8.05 KB |
+| LEFT JOIN | **13.66 μs / 1.16 KB** | 21.84 μs / 2.21 KB | 22.55 μs / 2.31 KB | 47.31 μs / 9.48 KB |
+| Recursive CTE | **13.05 μs / 672 B** | 26.56 μs / 1.52 KB | 28.95 μs / 1.77 KB | — |
+| String functions | **9.49 μs / 656 B** | 15.12 μs / 1.27 KB | 16.24 μs / 1.63 KB | 38.10 μs / 7.05 KB |
+| UDF | **9.68 μs / 688 B** | 14.96 μs / 1.27 KB | 16.03 μs / 1.63 KB | 38.02 μs / 7.05 KB |
+| Window functions | **15.52 μs / 793 B** | 33.42 μs / 1.54 KB | 35.30 μs / 1.74 KB | — |
 <!-- benchmarks:category-a:end -->
 
 Nextorm prepared is the fastest on **every** feature and has the smallest allocation on 11 of 12 — IN-list is
@@ -93,18 +93,18 @@ with the runner, so treat deltas below ~20 % as noise.
 <!-- benchmarks:category-b:start -->
 | Feature | Nextorm (cached) | Dapper | linq2db | EF Core |
 |---|---|---|---|---|
-| CASE WHEN | **8.82 μs / 2.06 KB** | 9.65 μs / 1.34 KB | 11.59 μs / 3.77 KB | 21.98 μs / 11.46 KB |
-| CTE | 14.28 μs / 9.26 KB | **12.34 μs / 1.56 KB** | 19.76 μs / 9.31 KB | — |
-| SELECT DISTINCT | **9.69 μs / 3.03 KB** | 10.30 μs / 1.44 KB | 12.23 μs / 3.88 KB | 22.80 μs / 11.70 KB |
-| EXCEPT | **10.72 μs / 4.30 KB** | 11.22 μs / 1.43 KB | 15.59 μs / 5.01 KB | 26.55 μs / 14.92 KB |
-| IN-list | 13.43 μs / 7.04 KB | **10.39 μs / 1.26 KB** | 18.55 μs / 17.28 KB | 29.03 μs / 22.20 KB |
-| INTERSECT | **10.07 μs / 4.28 KB** | 10.36 μs / 1.28 KB | 14.61 μs / 4.96 KB | 25.82 μs / 13.99 KB |
-| 4-table join | 16.44 μs / 10.05 KB | **15.73 μs / 2.02 KB** | 24.59 μs / 14.06 KB | 40.00 μs / 23.94 KB |
-| LEFT JOIN | 13.27 μs / 5.64 KB | **12.63 μs / 2.21 KB** | 22.28 μs / 8.94 KB | 31.47 μs / 19.88 KB |
-| Recursive CTE | 14.49 μs / 10.09 KB | **13.30 μs / 1.52 KB** | 19.94 μs / 8.45 KB | — |
-| String functions | **8.58 μs / 2.81 KB** | 8.72 μs / 1.27 KB | 12.23 μs / 4.89 KB | 21.87 μs / 12.74 KB |
-| UDF | **9.03 μs / 2.90 KB** | 9.09 μs / 1.27 KB | 15.92 μs / 6.63 KB | 23.31 μs / 12.74 KB |
-| Window functions | **13.91 μs / 4.19 KB** | 14.43 μs / 1.54 KB | 18.98 μs / 5.79 KB | — |
+| CASE WHEN | **12.38 μs / 2.06 KB** | 14.50 μs / 1.34 KB | 25.42 μs / 3.77 KB | 61.48 μs / 11.46 KB |
+| CTE | 33.87 μs / 9.43 KB | **22.40 μs / 1.56 KB** | 60.93 μs / 9.13 KB | — |
+| SELECT DISTINCT | **16.29 μs / 3.03 KB** | 18.34 μs / 1.44 KB | 31.43 μs / 3.88 KB | 68.65 μs / 11.70 KB |
+| EXCEPT | **17.99 μs / 4.19 KB** | 18.38 μs / 1.43 KB | 42.45 μs / 5.01 KB | 81.33 μs / 14.73 KB |
+| IN-list | 37.36 μs / 7.04 KB | **19.37 μs / 1.26 KB** | 75.43 μs / 17.40 KB | 119.74 μs / 22.21 KB |
+| INTERSECT | 17.22 μs / 4.17 KB | **16.97 μs / 1.28 KB** | 39.53 μs / 4.96 KB | 78.08 μs / 13.81 KB |
+| 4-table join | 37.71 μs / 10.09 KB | **27.97 μs / 2.02 KB** | 70.96 μs / 14.06 KB | 125.13 μs / 24.09 KB |
+| LEFT JOIN | 26.45 μs / 5.67 KB | **21.38 μs / 2.21 KB** | 74.92 μs / 8.94 KB | 105.01 μs / 19.99 KB |
+| Recursive CTE | 36.76 μs / 10.14 KB | **27.02 μs / 1.52 KB** | 68.99 μs / 8.31 KB | — |
+| String functions | **13.83 μs / 2.81 KB** | 14.62 μs / 1.27 KB | 33.38 μs / 4.86 KB | 72.49 μs / 12.74 KB |
+| UDF | **14.50 μs / 2.90 KB** | 14.62 μs / 1.27 KB | 51.78 μs / 6.75 KB | 70.51 μs / 12.74 KB |
+| Window functions | **31.54 μs / 4.19 KB** | 32.57 μs / 1.54 KB | 68.91 μs / 5.79 KB | — |
 <!-- benchmarks:category-b:end -->
 
 In the warm path Nextorm beats Dapper on `CASE WHEN` and `SELECT DISTINCT`, and is level on
