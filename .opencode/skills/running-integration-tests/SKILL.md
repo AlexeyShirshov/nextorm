@@ -1,46 +1,43 @@
 ---
 name: running-integration-tests
-description: Run nextorm's xUnit v3 live database integration tests. Use for local wslc runs, provider selection, endpoint or Testcontainers/Podman troubleshooting, and native test ID reconciliation.
+description: Run nextorm's xUnit v3 live database integration tests through the capped runner. Use for bounded provider selection, Podman/Testcontainers troubleshooting, and native test ID reconciliation; the current runner does not support manually provisioned wslc endpoints.
 ---
 
 # Run nextorm integration tests
 
 ## Choose the runtime
 
-- **Local Windows/WSL default: `wslc`.** Run one engine and version at a time against an owned disposable container. SQLite runs in-process.
+- **`wslc` manual endpoints are currently unsupported by the capped runner.** See the wslc section before provisioning anything. SQLite runs in-process.
 - **Podman/Testcontainers: only when explicitly requested.** Don't switch automatically, start Podman to diagnose a `wslc` failure, or stop a shared engine without authorization.
-- **CI is unchanged.** Locally, cover the required scope with sequential groups. Don't use `--full`, a bare full-suite invocation, or overlapping test hosts or database containers. Run the affected live integration tests for changes to SQL generation, providers, or the query engine.
+- **CI is unchanged.** Use bounded affected provider groups for local regression checks. Don't use `--full`, a bare full-suite invocation, or overlapping test hosts or database containers in this workflow. A separately declared integration/release gate remains complete and unchanged; run it only through its owning acceptance process when the existing scope requires it.
 
 ## Run serially
 
-1. **Build once.** Freeze the test assembly and xUnit discovery configuration, then use the existing build for every group (`--no-build` if using `dotnet run`). Exclude `Category=Diagnostic` unless the request includes those tests. For acceptance, enumerate theories during discovery and use the same configuration for execution.
-2. **Select by actual provider usage.** Inspect fixture and test paths, including per-row theory parameters, before using a class or method filter. Verify that its discovered roster is exactly the intended group. Keep mixed-provider and unresolved cases in the roster; don't run them until you can prove they stop and release each engine before starting another. Don't edit tests merely to make a filter work.
-3. **Acquire the runner's exclusive lock before provisioning.** Verify no integration test host or conflicting database workload is active. Hold the lock through teardown. For `wslc`, follow the next section to provision and validate the endpoint.
-4. **Use the project runner's standard cgroup caps and bounded timeout.** Follow [`tools/integration/run-integration-capped.py`](../../../tools/integration/run-integration-capped.py) for runner settings (`MemoryHigh=3G`, `MemoryMax=4G`, `MemorySwapMax=1G`). For a custom exact-ID launcher, apply and verify the same caps and an explicit timeout; the wrapper can fall back to uncapped execution and its per-class timeout is opt-in. Don't use an uncapped fallback. Don't gate on Windows free RAM, impose separate ad hoc database memory caps, or require swap to be disabled. Preserve resource settings that belong to the provider's test fixture.
-5. **Reconcile the group and verify teardown.** Capture native events and exit status. Stop and remove only the owned `wslc` container and its disposable resources, then verify removal by ID, including on failure. Start the next engine only after verifying teardown. Keep failures in the evidence; retry only the affected cases after a targeted probe verifies a material correction.
+1. **Build the affected test project once.** Freeze the test assembly and xUnit discovery configuration, then reuse that build for each group (`--no-build` when using `dotnet run`). Exclude `Category=Diagnostic` unless the declared scope includes those tests.
+2. **Select affected paths.** Inspect fixture and test usage, including per-row theory parameters, before choosing a class or method filter. Verify that the discovered roster matches the intended group. Keep mixed-provider and unresolved cases visible; don't run them until their engine lifecycle is known. Don't edit tests merely to make a filter work.
+3. **Acquire the runner's exclusive lock before provisioning.** For the supported Podman/Testcontainers route, the runner acquires its lock before tests provision containers. Don't acquire its `run.lock` in a parent shell: the lock is non-reentrant. Verify no other integration host or conflicting workload is active.
+4. **Use the project runner and receipt.** Follow [`tools/integration/run-integration-capped.py`](../../../tools/integration/run-integration-capped.py) for standard cgroup settings (`MemoryHigh=3G`, `MemoryMax=4G`, `MemorySwapMax=1G`). It refuses an implicit uncapped run if systemd caps are unavailable. `--no-caps` is not an acceptance route. The default per-class timeout is opt-in; set a bounded timeout. Don't gate on Windows free RAM, add separate database memory caps, or require swap to be disabled. Preserve provider-fixture resource settings. Optional `--build` uses the same cgroup wrapper and settings.
+5. **Record the first run.** The runner appends start and completion events to `integration-receipt.jsonl` in its log directory (or the path passed with `--receipt`). The receipt records Git worktree identity, selected scope, exact argument array, exit code, log path, and known ownership/cleanup state. It separately fingerprints the test assembly when exactly one configured output is found; otherwise it marks the binary identity unverified. A Git identity does not prove which prebuilt binary ran. Review the receipt with the full log; don't put endpoint values or credentials in a receipt.
+6. **Reconcile results and cleanup.** Capture native xUnit events and exit status. Remove only a disposable endpoint owned by this run, then verify removal by ID, including on failure. For an external or shared endpoint, record cleanup as external or unverified; don't claim teardown. The receipt does not claim fixture cleanup it did not verify. Keep failures in evidence; retry only affected cases after a targeted probe confirms a material correction.
 
-## Use `wslc` with private provider endpoints
+## wslc endpoint route is blocked
 
-1. Read the selected fixture under `tests/nextorm.integration.tests/Providers/` for the required image/version, initialization, and server settings. Check the `wslc` image store before pulling; with authorization to download, pull only missing suite-required images, one at a time. Podman has a separate image store. No Ryuk is needed for manually owned endpoints.
-2. Publish on an available loopback port (`127.0.0.1:HOST_PORT:CONTAINER_PORT`); verify the actual listener is loopback-only and reachable from Ubuntu. If `inspect` omits port bindings, check the Windows listener and confirm ownership with a unique response from an owned probe. Don't trust a bridge IP that answers after the container is removed. For a port conflict, check active listeners and reserved ranges and select another port; don't assume Podman owns it.
-3. Verify readiness, version, and fixture settings using an authenticated query **from Ubuntu**, with the same provider driver and connection options as the runner. An internal `sqlcmd` alone won't catch SQL Server pre-login failures on the Ubuntu route. Don't log credentials or expose the database on LAN interfaces.
-4. Pass the connection string only to the selected test process. Where the fixture honors the override, it uses that endpoint instead of launching Testcontainers:
+`run-integration-capped.py` pins `DOCKER_HOST` to the Podman socket, checks that socket in preflight, and acquires its lock only when the runner starts. It cannot hold the lease across manual `wslc` provisioning. A connection override does not change those facts or validate teardown.
 
-   | Provider | Connection override |
-   |---|---|
-   | PostgreSQL | `NEXTORM_POSTGRES_CONNECTION` |
-   | SQL Server | `NEXTORM_SQLSERVER_CONNECTION` |
-   | MySQL | `NEXTORM_MYSQL_CONNECTION` |
-   | MariaDB | `NEXTORM_MARIADB_CONNECTION` |
-   | ClickHouse | `NEXTORM_CLICKHOUSE_CONNECTION` |
+Until a lease-aware runner supports this lifecycle, don't provision a `wslc` endpoint for a run through this wrapper, pass an external override as a workaround, inherit or bypass `run.lock`, or switch to Podman automatically. If an affected live integration is required, report the missing safe route as a blocker; use Podman only after explicit authorization.
 
-   `DOCKER_HOST` isn't required for a verified external endpoint. Don't assume that every direct container fixture honors the override. If a selected case can't run on the chosen route, record it as outstanding rather than switching runtimes or counting it as skipped.
+## Reconcile the selected group by native xUnit ID
 
-## Reconcile acceptance by native xUnit ID
+- Save the expected roster and native xUnit events for each selected group. Match case IDs and, for cases that expand at execution, account for every expected result ID. Every expected result must have exactly one terminal outcome: passed, failed, or skipped. Report missing, unexpected, duplicated, failed, and not-run results separately. A missing result is not a skip.
+- Require all selected cases to finish with no failures. Compare skip reasons with [`skip-budget.json`](../../../tests/nextorm.integration.tests/skip-budget.json) only when the existing declared scope includes canonical full-suite acceptance; use the repository checker on its compatible full-suite log. Don't concatenate summaries or infer acceptance from totals alone. `NEXTORM_SKIP_PROVIDERS` is a local opt-out, not evidence for an affected provider.
+- Record build/configuration, fixture version, exact selected IDs, result receipt and logs, plus cleanup status. Keep evidence separate if the build changes unless reuse is justified by equivalent inputs. Matching discovery establishes the same roster, not equivalent execution.
 
-- Save the expected non-diagnostic roster and native xUnit events for each group. Match case IDs and, for any cases that expand at execution, account for all expected result IDs. Every expected result must have exactly one terminal outcome: passed, failed, or skipped. Report missing, unexpected, duplicated, failed, and not-run results separately. A missing result is not a skip.
-- Require complete coverage, no failures, and exact skip counts **by reason** against [`skip-budget.json`](../../../tests/nextorm.integration.tests/skip-budget.json). Use the repository's skip-budget checker for compatible logs; for native events compare their reasons directly to the pinned map. Don't concatenate summaries or infer acceptance from totals alone. `NEXTORM_SKIP_PROVIDERS` is a local opt-out, not acceptance evidence.
-- Record build and configuration, fixture version, exact selected IDs, results, and teardown. Use one frozen build for acceptance. If the build changes, keep evidence separate until reuse is explicitly justified and accepted. Matching discovery establishes the same roster, not equivalent execution.
+## Keep full acceptance separate
+
+The local integration workflow does not authorize `--full`. When an existing acceptance or release
+scope requires the canonical full suite, its owning process must run the complete integration,
+skip-budget and applicable coverage gates with their existing commands and thresholds. Do not replace
+that gate with bounded local groups, and do not run it for a narrow scope that does not declare it.
 
 ## Use Podman only on explicit request
 
