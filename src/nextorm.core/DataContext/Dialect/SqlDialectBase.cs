@@ -11,6 +11,8 @@ namespace NextORM.Core;
 /// </summary>
 public abstract class SqlDialectBase : ISqlDialect
 {
+    internal virtual bool SupportsWindowNullTreatment => false;
+
     /// <inheritdoc/>
     public virtual string ConcatStringOperator => "+";
     /// <inheritdoc/>

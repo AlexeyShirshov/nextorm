@@ -349,6 +349,24 @@ select id, row_number() over w as 'rn', sum(id) over w as 'total'
 MariaDB, ClickHouse и SQLite ([`SupportsNamedWindows`](xref:NextORM.Core.ISqlDialect.SupportsNamedWindows));
 в SQL Server нет `WINDOW`-клаузы, поэтому запрос отклоняется через `NotSupportedException`.
 
+## Обработка NULL в оконных функциях PostgreSQL 19
+
+Вызывайте `IgnoreNulls()` или `RespectNulls()` перед `Over(...)` для `lag`,
+`lead`, `first_value`, `last_value` или `nth_value`. `IgnoreNulls()` пропускает
+значения NULL, а `RespectNulls()` учитывает их. Без модификатора SQL и поведение
+сервера не меняются.
+
+```csharp
+var inline = e.Select(x =>
+    SqlFunctions.Sql.lag(x.Int).IgnoreNulls().Over(SqlFunctions.Sql.asc(() => x.Id)));
+var named = e.Window("w", orderBy: [e.Asc(x => x.Id)]).Select(x =>
+    SqlFunctions.Sql.lag(x.Int).RespectNulls().Over("w"));
+```
+
+Укажите версию сервера при настройке `PostgresDataContext`, например
+`new Version(19, 0)` для PostgreSQL 19.0. Явные модификаторы отклоняются для
+старых версий PostgreSQL, без указанной версии и у других провайдеров.
+
 ## Различия между провайдерами
 
 Оконные функции соответствуют ANSI, и каждый SQL-провайдер, поддерживаемый nextorm, поддерживает

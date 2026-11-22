@@ -16,6 +16,18 @@ namespace NextORM.Core;
 public sealed class WindowFunction<T>
 {
     /// <summary>
+    /// Requests <c>IGNORE NULLS</c> for <c>lag</c>, <c>lead</c>, <c>first_value</c>,
+    /// <c>last_value</c> or <c>nth_value</c> on PostgreSQL 19 or later. Call before <c>Over</c>.
+    /// </summary>
+    public WindowFunction<T> IgnoreNulls() => this;
+
+    /// <summary>
+    /// Requests explicit <c>RESPECT NULLS</c> for <c>lag</c>, <c>lead</c>, <c>first_value</c>,
+    /// <c>last_value</c> or <c>nth_value</c> on PostgreSQL 19 or later. Call before <c>Over</c>.
+    /// </summary>
+    public WindowFunction<T> RespectNulls() => this;
+
+    /// <summary>
     /// Completes the window function with an optional partition expression, ascending order expression,
     /// and frame. Calling <c>Over()</c> renders an empty specification (<c>OVER ()</c>).
     /// <para>

@@ -19,6 +19,8 @@ public class PostgresDialect : SqlDialectBase
 {
     internal override bool SupportsBoundedDelete => true;
 
+    internal override bool SupportsWindowNullTreatment => _version is { Major: >= 19 };
+
     // The first PostgreSQL release with the ANSI aggregate FILTER clause (SQL:2003 T612, 9.4).
     private static readonly Version AggregatesFilterMinVersion = new(9, 4);
 
