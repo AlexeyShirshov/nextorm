@@ -41,6 +41,10 @@ description: "nextorm overlay for the global `pdca-dotnet` cycle: project implem
   measurability действительно неясен, base допускает один bounded choice probe; unusable method
   при CHECK пере-выбирается, а недостающее evidence дособирается. Только критерий, который нельзя
   измерить доступными средствами, использует существующий PLAN → ACT outcome.
+- DO передаёт идентифицированный implemented candidate на CHECK, даже если declared proof ещё не
+  получен. В handoff отдельно указывай implementation status и статус каждого declared criterion;
+  для `unverified` перечисляй точный недостающий run/result/artifact. Отсутствие proof не превращает
+  реализованный candidate в incomplete implementation и не отправляет выбор метода в PLAN.
 - Design/audit отчёт — candidate evidence от DO, не самосертификация. Каждый CHECK оценивает его
   применимость, полноту и findings; правила и конкретный формат приведены ниже.
 
@@ -168,6 +172,12 @@ evidence: target regression test, затронутыми unit tests, bounded pro
 считай `unverified`, затем запрашивай bounded re-gather по базовым правилам, без автоматического
 расширения критериев.
 
+- Получив implemented candidate, CHECK сверяет proof отдельно от implementation status. Для каждого
+  declared criterion укажи требуемый/полученный evidence и точный gap; не трактуй недостающий proof
+  как доказательство незавершённой реализации.
+- Mandatory criterion со статусом `unverified` или `unmet` запрещает PASS. Если proof отсутствует,
+  сохрани candidate для CHECK и маршрутизируй bounded re-gather по существующему контракту; не
+  проси PLAN выбрать method/oracle.
 - Для bug fix проверь red до фикса и green после него. Проверяй именно logs и exit codes, а не только
   summary автора.
 - Live integration evidence остаётся обязательным для SQL generation, provider и query-engine

@@ -89,6 +89,7 @@
 - The campaign status `#### Defect history` carries the key and a link to that spec; it does not duplicate the full analysis.
 - Product defects are not process defects: they go to a GitHub issue in the current milestone (duplicate search first).
 - Skills are not edited inside a running cycle (the source-of-truth rule above); a process rule reaches `nextorm-pdca` only through the normal skills workflow after the spec exists.
+- **PDCA proof handoff:** keep implementation status separate from proof status. Send an identified implemented candidate to CHECK with every declared criterion and exact evidence gap; a mandatory `unverified`/`unmet` criterion blocks PASS. DO/CHECK select verification methods—don't ask PLAN to choose one. See `.opencode/skills/nextorm-pdca/SKILL.md` → PLAN/DO/CHECK.
 - Specs are internal: no links to them from public docs.
 
 ## Brainstorming & GitHub tracking
