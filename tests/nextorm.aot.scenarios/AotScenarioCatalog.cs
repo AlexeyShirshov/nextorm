@@ -31,6 +31,7 @@ public static partial class AotScenarioCatalog
         new("terminal-first-entity", TerminalFirstEntity),
         new("terminal-single-scalar", TerminalSingleScalar),
         new("terminal-single-entity", TerminalSingleEntity),
+        new("interface-entity-materialization", InterfaceEntityMaterialization),
         new("window-function", WindowFunction),
         new("value-converters", ValueConverters),
         new("relationship-load-with", RelationshipLoadWith),

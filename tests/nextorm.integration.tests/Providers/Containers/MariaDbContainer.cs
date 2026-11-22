@@ -65,6 +65,20 @@ public static class MariaDbContainer
         }
     }
 
+    internal static IContainer CreateOwned() => CreateBuilder().WithReuse(false).Build();
+
+    internal static string GetConnectionString(IContainer container) =>
+        $"Server={container.Hostname};Port={container.GetMappedPublicPort(ContainerPort)};Database=nextorm;User ID=nextorm;Password=nextorm";
+
+    private static ContainerBuilder CreateBuilder() =>
+        new ContainerBuilder(DefaultImage)
+            .WithEnvironment("MARIADB_DATABASE", "nextorm")
+            .WithEnvironment("MARIADB_USER", "nextorm")
+            .WithEnvironment("MARIADB_PASSWORD", "nextorm")
+            .WithEnvironment("MARIADB_ROOT_PASSWORD", "nextorm")
+            .WithPortBinding(ContainerPort, true)
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilCommandIsCompleted("healthcheck.sh", "--connect", "--innodb_initialized"));
+
     private static void Resolve()
     {
         if (_resolved)
@@ -84,13 +98,7 @@ public static class MariaDbContainer
                     return;
                 }
 
-                var container = new ContainerBuilder(DefaultImage)
-                    .WithEnvironment("MARIADB_DATABASE", "nextorm")
-                    .WithEnvironment("MARIADB_USER", "nextorm")
-                    .WithEnvironment("MARIADB_PASSWORD", "nextorm")
-                    .WithEnvironment("MARIADB_ROOT_PASSWORD", "nextorm")
-                    .WithPortBinding(ContainerPort, true)
-                    .WithWaitStrategy(Wait.ForUnixContainer().UntilCommandIsCompleted("healthcheck.sh", "--connect", "--innodb_initialized"))
+                var container = CreateBuilder()
                     .WithReuse(true)
                     .WithLabel(ReuseLabel, "nextorm-mariadb")
                     .Build();
@@ -98,8 +106,7 @@ public static class MariaDbContainer
                 container.StartAsync().GetAwaiter().GetResult();
 
                 _container = container;
-                _connectionString =
-                    $"Server={container.Hostname};Port={container.GetMappedPublicPort(ContainerPort)};Database=nextorm;User ID=nextorm;Password=nextorm";
+                _connectionString = GetConnectionString(container);
             }
             catch (Exception exception)
             {

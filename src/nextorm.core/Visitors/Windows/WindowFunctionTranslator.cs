@@ -35,6 +35,33 @@ internal static class WindowFunctionTranslator
         if (node.Object is not MethodCallExpression functionCall)
             return false;
 
+        string? nullTreatment = null;
+        if (functionCall.Method.DeclaringType == declaringType)
+        {
+            nullTreatment = functionCall.Method.Name switch
+            {
+                nameof(WindowFunction<int>.IgnoreNulls) => ") ignore nulls",
+                nameof(WindowFunction<int>.RespectNulls) => ") respect nulls",
+                _ => null
+            };
+            if (nullTreatment is not null)
+            {
+                if (node.Method.Name != nameof(WindowFunction<int>.Over)
+                    || functionCall.Object is not MethodCallExpression original
+                    || original.Method.DeclaringType != typeof(CommonFunctions)
+                    || original.Method.Name is not ("lag" or "lead" or "first_value" or "last_value" or "nth_value"))
+                {
+                    throw new NotSupportedException(
+                        "Specify one null treatment before OVER on lag, lead, first_value, last_value or nth_value.");
+                }
+
+                if (visitor.Dialect is not SqlDialectBase { SupportsWindowNullTreatment: true })
+                    throw new NotSupportedException("Explicit window null treatment requires PostgreSQL 19 or later with a configured server version.");
+
+                functionCall = original;
+            }
+        }
+
         // The residual percentile members live on a provider surface rather than on CommonFunctions and
         // are analytic-only: the median is the native composition percentile_cont(0.5), and the generic
         // percentile is refused. The refusal must fire before any fraction inspection, and it names the
@@ -262,7 +289,10 @@ internal static class WindowFunctionTranslator
             }
 
             overStart = visitor.Builder!.Length;
-            visitor.Builder!.Append(named ? visitor.Kw(") over ") : visitor.Kw(") over ("));
+            if (nullTreatment is null)
+                visitor.Builder!.Append(named ? visitor.Kw(") over ") : visitor.Kw(") over ("));
+            else
+                visitor.Builder!.Append(visitor.Kw(nullTreatment)).Append(named ? visitor.Kw(" over ") : visitor.Kw(" over ("));
         }
 
         if (named)

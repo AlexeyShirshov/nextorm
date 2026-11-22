@@ -3289,9 +3289,9 @@ nextorm.integration.tests.DialectCapabilityContractTests` — **2/2 passed**. `r
 По отчёту
 исполнителя: unit core/sqlite/sqlserver/postgres/mysql/mariadb/clickhouse — 0 failed; integration 1005 /
 0 failed / 30 skipped; coverage 85.2 % line / 74 % branch. `rg --files -g 'PublicAPI*.txt'` — пусто;
-трекинг/заморозка — [`todo_public_api_freeze.md`](../roadmap/todo_public_api_freeze.md), issue [#53](https://github.com/AlexeyShirshov/nextorm/issues/53) (см.
+трекинг/заморозка — [запись о заморозке API](../status/D53-public-api-freeze-1.md), issue [#53](https://github.com/AlexeyShirshov/nextorm/issues/53) (см.
 `API-NAMING-REVIEW.md`, «Фаза 3»). Публичная сторона: удаление 41 пары — source+binary-breaking для
-внешних реализаторов `ISqlDialect`/`SqlDialectBase` (alpha допускает; фиксация — [`todo_public_api_freeze.md`](../roadmap/todo_public_api_freeze.md)).
+внешних реализаторов `ISqlDialect`/`SqlDialectBase` (alpha допускает; фиксация — [запись о заморозке API](../status/D53-public-api-freeze-1.md)).
 
 ## 🔎 Точечный аудит — закрытие source-скоупа в `DefaultColumnsProvider` (21.09.2026)
 

@@ -332,6 +332,8 @@ internal sealed class ProbeDbDataReader(DbDataReader inner) : DbDataReader
 
     internal Exception? DisposeFailure { get; set; }
 
+    internal Func<int, CancellationToken, Task>? BeforeReadAsync { get; init; }
+
     public override object this[int ordinal] => inner[ordinal];
     public override object this[string name] => inner[name];
     public override int Depth => inner.Depth;
@@ -351,6 +353,8 @@ internal sealed class ProbeDbDataReader(DbDataReader inner) : DbDataReader
     {
         var attempt = Interlocked.Increment(ref _readCount);
         ThrowIfInjected(attempt);
+        if (BeforeReadAsync is { } beforeReadAsync)
+            await beforeReadAsync(attempt, cancellationToken).ConfigureAwait(false);
         return await inner.ReadAsync(cancellationToken).ConfigureAwait(false);
     }
 

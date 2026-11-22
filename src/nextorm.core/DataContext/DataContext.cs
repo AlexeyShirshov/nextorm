@@ -2307,6 +2307,27 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, null, [], KeywordCase, provider, renderKind, lowering, captureInto, EntityMetadataProvider);
 
         var parameters = new List<Parameter>();
+        if (command.BoundedKeys is not null)
+        {
+            if (Dialect is not SqlDialectBase { SupportsBoundedDelete: true })
+                throw new NotSupportedException($"{GetType().Name} does not support bounded DELETE.");
+
+            if (renderKind != MutationRenderKind.AdHoc || captureInto is not null)
+                throw new NotSupportedException("Bounded DELETE is supported only as a standalone mutation.");
+
+            string RenderKeys(string projection)
+            {
+                var source = _planner.RenderSource(command.Condition, provider, parameters,
+                    parameterNamePrefix: parameterNamePrefix, keyProjection: projection);
+                if (source.WithSql is not null || source.MaxRecursionStmt is not null)
+                    throw new NotSupportedException("Bounded DELETE cannot use a common table expression.");
+                return source.Sql;
+            }
+
+            return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, null,
+                parameters, KeywordCase, provider, renderKind, lowering, captureInto, EntityMetadataProvider, RenderKeys);
+        }
+
         var (whereSql, _) = _planner.RenderPredicate(command.Condition, provider, parameters, parameterNamePrefix, lowering);
         return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, whereSql, parameters, KeywordCase, provider, renderKind, lowering, captureInto, EntityMetadataProvider);
     }
@@ -2357,14 +2378,15 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
                 $"{GetType().Name} cannot return written rows: the provider has no RETURNING or OUTPUT form for a Returning() request.");
     }
 
-    // An interface/abstract TResult cannot be materialized as a whole (no constructor). Reject it with a
-    // clear message at execution time rather than letting RowMaterializerBuilder surface an opaque
-    // QueryPreparationException; SQL generation (ToSql) stays provider- and provider-shape-agnostic.
+    // Refuse an unconstructible result before executing the mutation. An interface with a generated
+    // implementation can use the same row mapper as a concrete result.
     private static void EnsureReturningMaterializable<TResult>(bool oneColumn)
     {
         var resultType = typeof(TResult);
 
-        if (!oneColumn && (resultType.IsInterface || resultType.IsAbstract))
+        if (!oneColumn && (resultType.IsInterface
+                ? GeneratedInterfaceEntity.Find(resultType) is null
+                : resultType.IsAbstract))
             throw new NotSupportedException(
                 $"Cannot materialize the returned rows into {resultType.Name}: it is an interface or abstract. Project the mapped columns instead, e.g. Returning(x => new {{ x.Id, x.Name }}).");
     }

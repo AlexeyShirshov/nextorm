@@ -41,7 +41,17 @@ public static class GeneratedEntityMetadata
     }
 
     internal static bool TryGet(Type entityType, out Func<IEntityMetadata> factory)
-        => Factories.TryGetValue(entityType, out factory!);
+    {
+        // A generated interface shape knows about get-only and inherited declarations that the
+        // older generated metadata path did not flatten. Other types keep the existing fast path.
+        if (entityType.IsInterface && GeneratedInterfaceEntity.FindMetadata(entityType) is { } interfaceFactory)
+        {
+            factory = interfaceFactory;
+            return true;
+        }
+
+        return Factories.TryGetValue(entityType, out factory!);
+    }
 }
 
 /// <summary>

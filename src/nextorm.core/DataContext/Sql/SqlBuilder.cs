@@ -33,6 +33,12 @@ internal readonly struct SqlBuilder
     public ILogger? Logger => _ctx.Logger;
 
     public string? MakeSelect(QueryCommand cmd, string? selectInto = null)
+        => MakeSelectCore(cmd, selectInto, null);
+
+    internal string? MakeKeySelection(QueryCommand cmd, string keyProjection)
+        => MakeSelectCore(cmd, null, keyProjection);
+
+    private string? MakeSelectCore(QueryCommand cmd, string? selectInto, string? keyProjection)
     {
         if (cmd.Components is { Count: > 0 } components)
         {
@@ -681,7 +687,13 @@ internal readonly struct SqlBuilder
                 else if (cmd.IsDistinct || IsConstantProjection(cmd) || cmd.EffectiveRequireDistinct)
                     selectBuilder.Append(Kw("distinct "));
             }
-            if (cmd.IgnoreColumns || selectList is null)
+            if (keyProjection is not null)
+            {
+                if (!string.IsNullOrEmpty(topStmt))
+                    selectBuilder!.Append(topStmt).Append(' ');
+                selectBuilder!.Append(keyProjection).Append(", ");
+            }
+            else if (cmd.IgnoreColumns || selectList is null)
             {
                 if (!_ctx.ParamMode) selectBuilder!.Append("*, ");
             }

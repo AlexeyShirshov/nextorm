@@ -35,6 +35,9 @@ internal static class RowMaterializerBuilder
     /// Providers that do not read from a data record (in-memory) pass <see langword="null"/> to skip
     /// the test.
     /// </param>
+    /// <param name="allowImplicitStructMemberInit">
+    /// Enables type-based construction for ordinary SQL projections with public struct property setters.
+    /// </param>
     public static Expression Build(
         Type resultType,
         ParameterExpression param,
@@ -42,7 +45,8 @@ internal static class RowMaterializerBuilder
         bool ignoreColumns,
         Func<SelectExpression, Expression> mapColumn,
         Func<SelectExpression, int, DynamicColumns, Expression>? mapDynamicColumns = null,
-        Func<SelectExpression, Expression>? isNull = null)
+        Func<SelectExpression, Expression>? isNull = null,
+        bool allowImplicitStructMemberInit = false)
     {
         // A projection that contains entity-typed items (the preparer expanded each into its mapped
         // scalar columns and tagged them) is materialized by rebuilding each item as an entity and
@@ -63,7 +67,7 @@ internal static class RowMaterializerBuilder
             }
         }
 
-        return BuildCore(resultType, param, selectList, ignoreColumns, mapColumn, mapDynamicColumns);
+        return BuildCore(resultType, param, selectList, ignoreColumns, mapColumn, mapDynamicColumns, allowImplicitStructMemberInit);
     }
 
     /// <summary>
@@ -307,10 +311,35 @@ internal static class RowMaterializerBuilder
         SelectExpression[] selectList,
         bool ignoreColumns,
         Func<SelectExpression, Expression> mapColumn,
-        Func<SelectExpression, int, DynamicColumns, Expression>? mapDynamicColumns)
+        Func<SelectExpression, int, DynamicColumns, Expression>? mapDynamicColumns,
+        bool allowImplicitStructMemberInit = false)
     {
-        var ctorInfo = ConstructorInfoResolver.GetLongestPublicConstructor(resultType)
-            ?? throw new QueryPreparationException($"Cannot get ctor from {resultType}");
+        if (resultType.IsInterface)
+        {
+            var shape = GeneratedInterfaceEntity.Find(resultType)
+                ?? throw new QueryPreparationException(
+                    $"No generated implementation was registered for interface entity '{resultType}'. Use a concrete interface type argument in a compilation that consumes the Nextorm source generator.");
+            var construction = Expression.New(shape.Constructor);
+            var body = ignoreColumns
+                ? (Expression)construction
+                : BuildMemberInit(resultType, construction, selectList, mapColumn, mapDynamicColumns, shape);
+            return Expression.Convert(body, resultType);
+        }
+
+        var ctorInfo = ConstructorInfoResolver.GetLongestPublicConstructor(resultType);
+        if (ctorInfo is null)
+        {
+            // An implicit struct constructor has no ConstructorInfo. Only opt-in SQL
+            // projections with actual writable property bindings can use type-based creation.
+            if (allowImplicitStructMemberInit && !ignoreColumns && resultType.IsValueType
+                && IsOrdinaryPropertyProjection(resultType, selectList))
+            {
+                return BuildMemberInit(resultType, Expression.New(resultType), selectList, mapColumn);
+            }
+
+            throw new QueryPreparationException($"Cannot get ctor from {resultType}");
+        }
+
         var ctorParams = ctorInfo.GetParameters();
 
         if (ignoreColumns)
@@ -333,7 +362,7 @@ internal static class RowMaterializerBuilder
 
             var parameterlessCtor = ConstructorInfoResolver.GetParameterlessConstructor(resultType)
                 ?? throw new QueryPreparationException($"The entity {resultType.Name} declares a dynamic-columns store but has no parameterless constructor; map it to a parameterless constructor.");
-            return BuildMemberInit(resultType, parameterlessCtor, selectList, mapColumn, mapDynamicColumns);
+            return BuildMemberInit(resultType, Expression.New(parameterlessCtor), selectList, mapColumn, mapDynamicColumns);
         }
 
         var hasRangePairs = false;
@@ -358,7 +387,22 @@ internal static class RowMaterializerBuilder
         if (hasRangePairs && ctorParams.Length > 0)
             return BuildRangePairConstructor(resultType, ctorInfo, ctorParams, selectList, mapColumn);
 
-        return BuildMemberInit(resultType, ctorInfo, selectList, mapColumn);
+        return BuildMemberInit(resultType, Expression.New(ctorInfo), selectList, mapColumn);
+    }
+
+    private static bool IsOrdinaryPropertyProjection(Type resultType, SelectExpression[] selectList)
+    {
+        foreach (var column in selectList)
+        {
+            if (column.IsDynamicColumnsStore || column.RangeColumnRole != RangeColumnRole.None
+                || column.BoundMember is not PropertyInfo { SetMethod: { IsPublic: true, IsStatic: false } } property
+                || property.DeclaringType != resultType)
+            {
+                return false;
+            }
+        }
+
+        return selectList.Length > 0;
     }
 
     // A range pair expands into two columns but materializes as a single Range<T> value, so the
@@ -399,7 +443,7 @@ internal static class RowMaterializerBuilder
 
         var parameterlessCtor = ConstructorInfoResolver.GetParameterlessConstructor(resultType);
         if (parameterlessCtor is not null)
-            return BuildMemberInit(resultType, parameterlessCtor, selectList, mapColumn);
+            return BuildMemberInit(resultType, Expression.New(parameterlessCtor), selectList, mapColumn);
 
         throw new QueryPreparationException(
             $"The entity {resultType.Name} has {ctorParams.Length} constructor parameter(s), but the projection materializes {argumentCount} value(s) after expanding the range-column pairs; map the entity to a parameterless constructor or to a constructor whose parameters match the selected columns.");
@@ -407,10 +451,11 @@ internal static class RowMaterializerBuilder
 
     private static Expression BuildMemberInit(
         Type resultType,
-        ConstructorInfo ctorInfo,
+        NewExpression construction,
         SelectExpression[] selectList,
         Func<SelectExpression, Expression> mapColumn,
-        Func<SelectExpression, int, DynamicColumns, Expression>? mapDynamicColumns = null)
+        Func<SelectExpression, int, DynamicColumns, Expression>? mapDynamicColumns = null,
+        InterfaceEntityShape? interfaceShape = null)
     {
         var bindings = new List<MemberBinding>(selectList.Length);
         DynamicColumns? dynamicColumns = null;
@@ -442,7 +487,7 @@ internal static class RowMaterializerBuilder
 
             if (column.IsDynamicColumnsStore)
             {
-                var storeProperty = column.BoundMember
+                var storeProperty = interfaceShape?.Bind(column, resultType) ?? column.BoundMember
                     ?? throw new QueryPreparationException(
                         $"The dynamic-columns store {column.PropertyName} of {resultType.Name} is projected without member metadata.");
                 bindings.Add(Expression.Bind(storeProperty, mapDynamicColumns!(column, starStart, dynamicColumns!)));
@@ -453,7 +498,7 @@ internal static class RowMaterializerBuilder
             if (column.RangeColumnRole == RangeColumnRole.Upper)
                 continue;
 
-            var propInfo = column.BoundMember
+            var propInfo = interfaceShape?.Bind(column, resultType) ?? column.BoundMember
                 ?? throw new QueryPreparationException(
                     $"Cannot bind projection item {column.PropertyName} of {resultType.Name}: the column carries no member metadata.");
 
@@ -467,7 +512,7 @@ internal static class RowMaterializerBuilder
             bindings.Add(Expression.Bind(propInfo, mapColumn(column)));
         }
 
-        return Expression.MemberInit(Expression.New(ctorInfo), bindings);
+        return Expression.MemberInit(construction, bindings);
     }
 
     private static SelectExpression FindUpper(SelectExpression[] selectList, int lowerIndex, PropertyInfo? owner)

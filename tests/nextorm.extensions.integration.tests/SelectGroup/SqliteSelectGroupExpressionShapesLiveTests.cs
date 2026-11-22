@@ -123,4 +123,31 @@ public sealed class SqliteSelectGroupExpressionShapesLiveTests : ProviderTestSui
         (categoryA.First, categoryA.Prefix, categoryA.FirstAgain, categoryA.Rows)
             .Should().Be(("a", "a", "a", 4));
     }
+
+    [Fact]
+    public void SelectGroup_AggregateInsideNegation_ShouldInferTheHiddenGroupingKey()
+    {
+        var rows = Extrema.OrderBy(x => x.Id % 2)
+            .SelectGroup(x => new { Value = -(SqlFunctions.Sql.count(x.Id) + x.Id % 2) })
+            .ToList();
+
+        rows.Select(row => row.Value).Should().Equal(-5, -7);
+    }
+
+    [Fact]
+    public void SelectGroupHaving_AggregatesInConditionalArms_ShouldKeepTheInferredGroups()
+    {
+        var rows = Extrema.OrderBy(x => x.Id % 2 == 1)
+            .SelectGroupHaving(
+                x => new
+                {
+                    Value = x.Id % 2 == 1
+                        ? SqlFunctions.Sql.count(x.Score)
+                        : SqlFunctions.Sql.count(x.Id) + 10
+                },
+                result => result.Value < 10)
+            .ToList();
+
+        rows.Should().ContainSingle().Which.Value.Should().Be(3);
+    }
 }

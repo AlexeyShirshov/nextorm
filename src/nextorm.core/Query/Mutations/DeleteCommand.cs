@@ -40,6 +40,8 @@ internal sealed class DeleteCommand : MutationCommand
     /// <summary>The mapped schema/owner, or <see langword="null"/> for an unqualified table.</summary>
     internal string? Schema { get; }
 
+    internal IPropertyMetadata[]? BoundedKeys { get; init; }
+
     /// <summary>The resolved mapping variant for this target.</summary>
 
     /// <summary>The predicate command whose prepared condition forms the <c>WHERE</c>, or <see langword="null"/>.</summary>

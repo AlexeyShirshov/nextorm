@@ -20,6 +20,43 @@ public sealed class DeleteBuilder<TEntity>
     private EntityBuilder<TEntity>? _filter;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
     private bool _all;
+    private int? _limit;
+
+    /// <summary>Orders the rows considered for a bounded delete.</summary>
+    public DeleteBuilder<TEntity> OrderBy(Expression<Func<TEntity, object?>> key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        _filter = FilterForOrdering().OrderBy(key);
+        return this;
+    }
+
+    /// <summary>Orders the rows considered for a bounded delete in descending order.</summary>
+    public DeleteBuilder<TEntity> OrderByDescending(Expression<Func<TEntity, object?>> key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        _filter = FilterForOrdering().OrderByDescending(key);
+        return this;
+    }
+
+    /// <summary>Sets the maximum number of rows eligible for deletion.</summary>
+    public DeleteBuilder<TEntity> Limit(int limit)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
+        _limit = limit;
+        return this;
+    }
+
+    private bool _ordered;
+    private bool _hasPredicate;
+
+    private EntityBuilder<TEntity> FilterForOrdering()
+    {
+        if (_all)
+            throw new InvalidOperationException("Ordering cannot be combined with All().");
+
+        _ordered = true;
+        return _filter ?? _dataContext.From<TEntity>().WithVariant(_mappingVariant);
+    }
 
     internal DeleteBuilder(IDataContext dataContext, IEntityMetadata metadata, MappingVariant mappingVariant = default, IEntityMetadata? targetMetadata = null)
     {
@@ -48,6 +85,7 @@ public sealed class DeleteBuilder<TEntity>
             throw new InvalidOperationException("Where(...) cannot be combined with All(); a delete is either filtered or full-table.");
 
         _filter = (_filter ?? _dataContext.From<TEntity>().WithVariant(_mappingVariant)).Where(predicate);
+        _hasPredicate = true;
         return this;
     }
 
@@ -210,8 +248,16 @@ public sealed class DeleteBuilder<TEntity>
 
     private DeleteCommand BuildCommand()
     {
-        if (_filter is null && !_all)
+        if (!_hasPredicate && !_all)
             throw new InvalidOperationException("A delete needs a predicate; call Where(...) or All() to delete every row.");
+        if (_ordered && _limit is null)
+            throw new InvalidOperationException("DELETE ordering requires a positive limit.");
+        if (_limit is int limit)
+        {
+            if (_all)
+                throw new NotSupportedException("A bounded DELETE requires Where rather than All().");
+            return BuildQueryCommand(ApplyFilterScope(_filter!).Limit(limit));
+        }
 
         // The predicate reuses the SELECT pipeline: the command's prepared condition (user predicate
         // plus the injected target filter) is rendered as a standalone WHERE by the planner. All()
@@ -219,6 +265,35 @@ public sealed class DeleteBuilder<TEntity>
         var condition = _filter is null ? null : ApplyFilterScope(_filter).ToCommand();
 
         return CreateCommand(condition, null);
+    }
+
+    internal int DeleteQuery(EntityBuilder<TEntity> filter) => Execute(BuildQueryCommand(filter));
+
+    internal Task<int> DeleteQueryAsync(EntityBuilder<TEntity> filter, CancellationToken cancellationToken) =>
+        ExecuteAsync(BuildQueryCommand(filter), cancellationToken);
+
+    private DeleteCommand BuildQueryCommand(EntityBuilder<TEntity> filter)
+    {
+        var condition = filter.ToCommand();
+        if (filter.Paging.Limit == 0)
+            return CreateCommand(condition, null);
+
+        var metadata = condition.MappingVariant != MappingVariant.Default && _dataContext is DataContext scoped
+            ? scoped.EntityMetadataProvider.GetMetadata(typeof(TEntity), condition.MappingVariant)
+            : _metadata;
+        var keys = metadata.Properties.Where(static property => property.IsKey).ToArray();
+        if (keys.Length == 0)
+            throw new InvalidOperationException("A bounded DELETE requires a declared unique non-null key.");
+
+        var nullability = new NullabilityInfoContext();
+        foreach (var key in keys)
+        {
+            if (Nullable.GetUnderlyingType(key.PropertyInfo.PropertyType) is not null ||
+                !key.PropertyInfo.PropertyType.IsValueType && nullability.Create(key.PropertyInfo).ReadState != NullabilityState.NotNull)
+                throw new InvalidOperationException("A bounded DELETE requires a declared unique non-null key.");
+        }
+
+        return CreateCommand(condition, null, boundedKeys: keys);
     }
 
     internal DeleteCommand BuildKeyCommand(TEntity entity)
@@ -253,6 +328,8 @@ public sealed class DeleteBuilder<TEntity>
     /// <returns>The delete command carrying the returned columns.</returns>
     internal DeleteCommand BuildReturningCommand(IReadOnlyList<IPropertyMetadata> returningColumns, OutputIntoClause? outputInto = null)
     {
+        if (_limit is not null || _ordered)
+            throw new NotSupportedException("Bounded DELETE cannot be combined with Returning or OutputInto.");
         if (_filter is null && !_all)
             throw new InvalidOperationException("A delete needs a predicate; call Where(...) or All() to delete every row.");
 
@@ -265,6 +342,8 @@ public sealed class DeleteBuilder<TEntity>
     /// <returns>The delete command carrying the output-into target.</returns>
     internal DeleteCommand BuildOutputIntoCommand(OutputIntoClause outputInto)
     {
+        if (_limit is not null || _ordered)
+            throw new NotSupportedException("Bounded DELETE cannot be combined with OutputInto.");
         if (_filter is null && !_all)
             throw new InvalidOperationException("A delete needs a predicate; call Where(...) or All() to delete every row.");
 
@@ -272,7 +351,7 @@ public sealed class DeleteBuilder<TEntity>
         return CreateCommand(condition, null, null, outputInto);
     }
 
-    private DeleteCommand CreateCommand(QueryCommand? condition, IReadOnlyList<KeyValue>? keys, IReadOnlyList<IPropertyMetadata>? returningColumns = null, OutputIntoClause? outputInto = null)
+    private DeleteCommand CreateCommand(QueryCommand? condition, IReadOnlyList<KeyValue>? keys, IReadOnlyList<IPropertyMetadata>? returningColumns = null, OutputIntoClause? outputInto = null, IPropertyMetadata[]? boundedKeys = null)
     {
         // The condition command resolves the shard scope from the predicate when the builder carries no
         // explicit scope; the DELETE target has to follow it, because the renderer reads the command's
@@ -284,7 +363,10 @@ public sealed class DeleteBuilder<TEntity>
         EnsureShardScopeResolved(scope);
 
         return new(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, condition, keys, returningColumns, outputInto,
-            scope == MappingVariant.Default ? null : _targetMetadata.Schema, scope);
+            scope == MappingVariant.Default && boundedKeys is null ? null : _targetMetadata.Schema, scope)
+        {
+            BoundedKeys = boundedKeys,
+        };
     }
 
     /// <summary>

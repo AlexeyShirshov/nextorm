@@ -133,6 +133,13 @@ internal static class ClickHouseContainer
         }
     }
 
+    internal static Testcontainers.ClickHouse.ClickHouseContainer CreateOwned() =>
+        new ClickHouseBuilder(DefaultImage)
+            .WithEnvironment("TZ", "UTC")
+            .WithResourceEnvelope()
+            .WithReuse(false)
+            .Build();
+
     private static void Resolve()
     {
         if (_resolved)

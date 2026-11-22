@@ -1013,6 +1013,74 @@ public sealed class T305SqliteBulkInsertTests : ProviderTestSuite
         enforced.Should().Throw<DbException>("enforcement is back on after the scoped write");
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CheckConstraintsFalse_WhenForeignKeysAreAlreadyOff_ShouldKeepThemOff(bool useAsync)
+    {
+        T305Sql.Recreate(Context, "t305_bulk_fk_parent", "create table t305_bulk_fk_parent (id integer primary key)");
+        T305Sql.Recreate(Context, "t305_bulk_fk",
+            "create table t305_bulk_fk (id integer primary key, parent_id integer not null references t305_bulk_fk_parent(id))");
+        var initial = T305Sql.Scalar<int>(Context, "pragma foreign_keys");
+        T305Sql.Execute(Context, "pragma foreign_keys = 0");
+
+        try
+        {
+            var insert = Context.CreateBulkInsertBuilder<T305BulkForeignKey>(o => o.CheckConstraints(false))
+                .Values([new T305BulkForeignKey { Id = 1, ParentId = 999 }]);
+            var written = useAsync
+                ? await insert.BulkInsertAsync(TestContext.Current.CancellationToken)
+                : insert.BulkInsert();
+
+            written.Should().Be(1);
+            T305Sql.Scalar<int>(Context, "select parent_id from t305_bulk_fk where id = 1").Should().Be(999);
+            T305Sql.Scalar<int>(Context, "pragma foreign_keys").Should().Be(0);
+        }
+        finally
+        {
+            T305Sql.Execute(Context, initial == 0 ? "pragma foreign_keys = 0" : "pragma foreign_keys = 1");
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CheckConstraintsFalse_WhenWriteFails_ShouldRestoreForeignKeyEnforcement(bool useAsync)
+    {
+        T305Sql.Recreate(Context, "t305_bulk_fk_parent", "create table t305_bulk_fk_parent (id integer primary key)");
+        T305Sql.Recreate(Context, "t305_bulk_fk",
+            "create table t305_bulk_fk (id integer primary key, parent_id integer not null "
+            + "check (parent_id > 0) references t305_bulk_fk_parent(id))");
+        var initial = T305Sql.Scalar<int>(Context, "pragma foreign_keys");
+        T305Sql.Execute(Context, "pragma foreign_keys = 1");
+
+        try
+        {
+            var invalid = Context.CreateBulkInsertBuilder<T305BulkForeignKey>(o => o.CheckConstraints(false))
+                .Values([new T305BulkForeignKey { Id = 1, ParentId = -1 }]);
+            Func<Task> write = async () =>
+            {
+                if (useAsync)
+                    await invalid.BulkInsertAsync(TestContext.Current.CancellationToken);
+                else
+                    invalid.BulkInsert();
+            };
+
+            await write.Should().ThrowAsync<DbException>().WithMessage("*CHECK constraint failed*");
+            T305Sql.Scalar<int>(Context, "select count(*) from t305_bulk_fk").Should().Be(0);
+            T305Sql.Scalar<int>(Context, "pragma foreign_keys").Should().Be(1);
+
+            var orphan = () => Context.CreateBulkInsertBuilder<T305BulkForeignKey>()
+                .Values([new T305BulkForeignKey { Id = 2, ParentId = 999 }])
+                .BulkInsert();
+            orphan.Should().Throw<DbException>().WithMessage("*FOREIGN KEY constraint failed*");
+        }
+        finally
+        {
+            T305Sql.Execute(Context, initial == 0 ? "pragma foreign_keys = 0" : "pragma foreign_keys = 1");
+        }
+    }
+
     [Fact]
     public void CheckConstraintsFalse_InsideAnActiveTransaction_ShouldBeRefusedBeforeTheSource()
     {

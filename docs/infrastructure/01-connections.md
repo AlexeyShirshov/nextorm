@@ -121,7 +121,7 @@ bool same = ReferenceEquals(((IConnectionManager)ctx).GetConnection(), ctx.GetCo
 A transaction is a separate role too, so a context without a connection (the in-memory one) does not
 implement it. [`DataContext`](xref:NextORM.Core.DataContext) implements
 [`ITransactionManager`](xref:NextORM.Core.ITransactionManager): start a transaction with
-`BeginTransaction*`, or enlist in one owned by EF Core, Dapper or raw ADO.NET with `UseTransaction`.
+`BeginTransaction*`, or enlist in an existing ADO.NET transaction with `UseTransaction`.
 Savepoints (`CreateSavepoint*`/`RollbackToSavepoint*`/`ReleaseSavepoint*`) run on the active transaction or
 on one enlisted with `UseTransaction`, and never change its ownership.
 SQLite, PostgreSQL, SQL Server and MySQL/MariaDB support it; ClickHouse rejects it and the in-memory

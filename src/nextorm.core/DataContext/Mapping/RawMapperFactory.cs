@@ -30,9 +30,9 @@ namespace NextORM.Core;
 /// reader column name binds its first occurrence and is ignored afterwards.
 /// </summary>
 /// <remarks>
-/// An entity result type must be a <b>concrete class with a public parameterless constructor</b>: mapping
-/// binds by column name through member-init, and a constructor with parameters would bind the projected
-/// columns positionally (<c>EnsureNameMappable</c> rejects it).
+/// An entity result type needs a parameterless construction path: a concrete class with a public
+/// parameterless constructor, or an interface with a generated implementation. Mapping binds by column
+/// name through member-init; a parameterized constructor would bind the columns positionally instead.
 /// <para>
 /// The per-type raw select-list cache (<c>RawSelectListCache</c>) and the mapper key
 /// (<see cref="RowMapperFactory.GetOrBuildRaw{TResult}"/>, keyed by provider type, result type, column
@@ -487,6 +487,9 @@ internal static class RawMapperFactory
     /// </summary>
     private static void EnsureNameMappable(Type resultType)
     {
+        if (resultType.IsInterface && GeneratedInterfaceEntity.Find(resultType) is not null)
+            return;
+
         var ctor = resultType.GetConstructors()
             .OrderByDescending(c => c.GetParameters().Length)
             .FirstOrDefault();

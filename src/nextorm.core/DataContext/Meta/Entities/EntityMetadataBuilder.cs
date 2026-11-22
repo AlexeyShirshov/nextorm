@@ -260,7 +260,7 @@ public class EntityMetadataBuilder<T>
     private static IPropertyMetadata? FindAttributeStore(List<IPropertyMetadata> properties)
     {
         var entityType = typeof(T);
-        var props = entityType.GetProperties(BindingFlags.FlattenHierarchy | BindingFlags.Public | BindingFlags.Instance);
+        var props = GetEntityProperties(entityType);
         PropertyInfo? storeProperty = null;
         foreach (var prop in props)
         {
@@ -306,7 +306,8 @@ public class EntityMetadataBuilder<T>
 
         var entityType = typeof(T);
 
-        var props = entityType.GetProperties(BindingFlags.FlattenHierarchy | BindingFlags.Public | BindingFlags.Instance).ToArray();
+        var interfaceShape = entityType.IsInterface ? GeneratedInterfaceEntity.Find(entityType) : null;
+        var props = interfaceShape?.Members ?? GetEntityProperties(entityType);
         for (var (idx, cnt) = (0, props.Length); idx < cnt; idx++)
         {
             var prop = props[idx];
@@ -332,7 +333,7 @@ public class EntityMetadataBuilder<T>
                 continue;
             }
 
-            if (!prop.CanWrite)
+            if (!prop.CanWrite && interfaceShape is null)
                 continue;
 
             var colAttr = prop.GetCustomAttribute<ColumnAttribute>(true) ?? intProp?.GetCustomAttribute<ColumnAttribute>(true);
@@ -396,6 +397,10 @@ public class EntityMetadataBuilder<T>
 
         return propsMeta;
     }
+
+    private static PropertyInfo[] GetEntityProperties(Type entityType)
+        => (entityType.IsInterface ? GeneratedInterfaceEntity.Find(entityType)?.Members : null)
+           ?? entityType.GetProperties(BindingFlags.FlattenHierarchy | BindingFlags.Public | BindingFlags.Instance);
 
     private static PropertyInfo? FindInterfaceProperty(Type entityType, PropertyInfo prop)
     {

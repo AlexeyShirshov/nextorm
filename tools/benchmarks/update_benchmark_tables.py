@@ -25,6 +25,7 @@ Usage::
     python3 tools/benchmarks/update_benchmark_tables.py --check --date 2026-10-17
     python3 tools/benchmarks/update_benchmark_tables.py \\
         --record-run-date SqliteBenchmarkIteration=2026-10-17 \\
+        --run-version 1.0.10.2 \\
         --run-evidence "local benchmark run evidence"
 
 Fail-closed rules (a table is never generated from a partial run):
@@ -214,16 +215,16 @@ E2E_ROWS = (
 
 # Basic query features shared by the two fair-comparison suites: (BDN category suffix, label EN,
 # label RU) in table order. Both derived tuples below come from this one list so the readme
-# (Category A) and the article (Category B) can never drift apart.
+# (Category A) and the article (Category B) can never drift apart. Use plain text for every label.
 FEATURE_CATEGORIES = (
-    ("CaseWhen", "`CASE WHEN`", "`CASE WHEN`"),
+    ("CaseWhen", "CASE WHEN", "CASE WHEN"),
     ("Cte", "CTE", "CTE"),
-    ("Distinct", "`SELECT DISTINCT`", "`SELECT DISTINCT`"),
-    ("Except", "`EXCEPT`", "`EXCEPT`"),
+    ("Distinct", "SELECT DISTINCT", "SELECT DISTINCT"),
+    ("Except", "EXCEPT", "EXCEPT"),
     ("InList", "IN-list", "IN-list"),
-    ("Intersect", "`INTERSECT`", "`INTERSECT`"),
+    ("Intersect", "INTERSECT", "INTERSECT"),
     ("Join4", "4-table join", "Join по 4 таблицам"),
-    ("LeftJoin", "`LEFT JOIN`", "`LEFT JOIN`"),
+    ("LeftJoin", "LEFT JOIN", "LEFT JOIN"),
     ("RecursiveCte", "Recursive CTE", "Рекурсивный CTE"),
     ("StringFunctions", "String functions", "Строковые функции"),
     ("Udf", "UDF", "UDF"),
@@ -802,6 +803,15 @@ def _parse_run_date(value: str, label: str) -> str:
     return value
 
 
+def _parse_run_version(value: str, label: str) -> str:
+    if not isinstance(value, str) or not re.fullmatch(
+        r"(?:[0-9]+(?:\.[0-9]+){2,3}(?:[-+][0-9A-Za-z]+(?:[.+-][0-9A-Za-z]+)*)?|[0-9a-f]{7,40})",
+        value,
+    ):
+        raise TableError(f"{label}: expected a release version or Git source revision, got {value!r}")
+    return value
+
+
 def _validate_suite_run_date_record(
     results_dir: Path,
     class_name: str,
@@ -809,13 +819,14 @@ def _validate_suite_run_date_record(
     *,
     verify_hashes: bool = True,
 ) -> None:
-    required = {"asOfDate", "sourceEvidence", "reportsSha256"}
+    required = {"asOfDate", "sourceVersion", "sourceEvidence", "reportsSha256"}
     if not isinstance(record, dict) or set(record) != required:
         raise TableError(
-            f"{class_name}: expected asOfDate, sourceEvidence, and reportsSha256 in "
+            f"{class_name}: expected asOfDate, sourceVersion, sourceEvidence, and reportsSha256 in "
             f"{SUITE_RUN_DATE_METADATA}"
         )
     _parse_run_date(record["asOfDate"], f"{class_name}.asOfDate")
+    _parse_run_version(record["sourceVersion"], f"{class_name}.sourceVersion")
     if not isinstance(record["sourceEvidence"], str) or not record["sourceEvidence"].strip():
         raise TableError(f"{class_name}: missing source evidence in {SUITE_RUN_DATE_METADATA}")
 
@@ -853,12 +864,12 @@ def _read_suite_run_date_metadata(
     suites = metadata.get("suites") if isinstance(metadata, dict) else None
     if (
         not isinstance(metadata, dict)
-        or metadata.get("schemaVersion") != 1
+        or metadata.get("schemaVersion") != 2
         or metadata.get("dateBasis") != "UTC suite-start date"
         or not isinstance(suites, dict)
     ):
         raise TableError(
-            f"{path.name}: expected schemaVersion 1, UTC suite-start date, and suites object"
+            f"{path.name}: expected schemaVersion 2, UTC suite-start date, and suites object"
         )
     unexpected = sorted(set(suites) - set(SUITE_RUN_DATE_CLASSES))
     missing = sorted(set(SUITE_RUN_DATE_CLASSES) - set(suites))
@@ -880,11 +891,13 @@ def _record_suite_run_dates(
     results_dir: Path,
     run_dates: dict[str, str],
     source_evidence: str,
+    source_version: str,
 ) -> None:
     if not run_dates:
         raise TableError("no suite run dates were provided")
     if not isinstance(source_evidence, str) or not source_evidence.strip():
         raise TableError("run evidence must be a non-empty path or URL")
+    _parse_run_version(source_version, "--run-version")
     unexpected = sorted(set(run_dates) - set(SUITE_RUN_DATE_CLASSES))
     if unexpected:
         raise TableError(f"unknown benchmark suite classes in run dates: {unexpected}")
@@ -900,7 +913,7 @@ def _record_suite_run_dates(
         )
     else:
         metadata = {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "dateBasis": "UTC suite-start date",
             "suites": {},
         }
@@ -910,6 +923,7 @@ def _record_suite_run_dates(
         csv_path, md_path = report_paths(results_dir, class_name)
         suites[class_name] = {
             "asOfDate": run_date,
+            "sourceVersion": source_version,
             "sourceEvidence": source_evidence,
             "reportsSha256": {
                 report_path.name: _report_sha256(report_path)
@@ -935,18 +949,23 @@ def build_conditions(target: Target, results_dir: Path, date: str) -> str:
             f"{conditions['physical']} физических ядер)"
         )
     if target.name == "readme":
+        suites = _read_suite_run_date_metadata(results_dir)["suites"]
+        e2e_versions = dict.fromkeys(suites[row.class_name]["sourceVersion"] for row in E2E_ROWS)
+        e2e_labels = ", ".join(f"**{version}**" for version in e2e_versions)
+        category_a_version = suites[CATEGORY_A_CLASS]["sourceVersion"]
         text = (
             "Benchmark conditions: provider SQLite (`Microsoft.Data.Sqlite`); async queries; each cell is "
             "the fastest method for that ORM in the linked report. Machine: "
             f"{machine}, .NET {conditions['runtime']}, BenchmarkDotNet {conditions['bdn']} "
-            f"(`{conditions['job']}` + `{conditions['toolchain']}`). As of **{date}**. Each method name "
+            f"(`{conditions['job']}` + `{conditions['toolchain']}`). End-to-end suites run on {e2e_labels}. "
+            "Each method name "
             "links to its BenchmarkDotNet report, and the **Code** column links to the benchmark source in "
             "this repository — the exact code behind the row. The last twelve rows "
             "are the basic-feature scenarios (Category A in the [comparison article]"
             "(https://alexeyshirshov.github.io/nextorm/comparisons/benchmarks.html)): Nextorm through "
             "`Prepare()` against the compiled form of EF Core and linq2db and raw Dapper, ten queries per "
             "iteration, so each cell there is the per-query mean. Those rows come from the Category A suite "
-            f"run on **{report_date(results_dir, CATEGORY_A_CLASS)}**."
+            f"run on **{category_a_version}**."
         )
     elif target.lang == "en":
         text = (
@@ -1613,7 +1632,7 @@ def main(argv=None) -> int:
         "--date",
         default=None,
         help=(
-            "override the end-to-end date in the conditions line only "
+            "override the end-to-end date in the detailed benchmark articles only "
             "(default: the persisted UTC suite-start date)"
         ),
     )
@@ -1627,7 +1646,12 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--run-evidence",
         default=None,
-        help="source path or URL for dates recorded with --record-run-date",
+        help="source path or URL for the suites recorded with --record-run-date",
+    )
+    parser.add_argument(
+        "--run-version",
+        default=None,
+        help="Nextorm release version or Git source revision measured by the recorded suites",
     )
     parser.add_argument(
         "--check",
@@ -1644,6 +1668,8 @@ def main(argv=None) -> int:
                 raise TableError("--record-run-date cannot be combined with --date or --check")
             if not args.run_evidence:
                 raise TableError("--record-run-date requires --run-evidence")
+            if not args.run_version:
+                raise TableError("--record-run-date requires --run-version")
             run_dates = {}
             for assignment in args.record_run_date:
                 class_name, separator, run_date = assignment.partition("=")
@@ -1654,11 +1680,11 @@ def main(argv=None) -> int:
                 if class_name in run_dates:
                     raise TableError(f"duplicate --record-run-date for {class_name}")
                 run_dates[class_name] = run_date
-            _record_suite_run_dates(results_dir, run_dates, args.run_evidence)
-            print(f"recorded run dates for {len(run_dates)} benchmark suite(s)")
+            _record_suite_run_dates(results_dir, run_dates, args.run_evidence, args.run_version)
+            print(f"recorded run dates and source version for {len(run_dates)} benchmark suite(s)")
             return 0
-        if args.run_evidence:
-            raise TableError("--run-evidence requires --record-run-date")
+        if args.run_evidence is not None or args.run_version is not None:
+            raise TableError("--run-evidence and --run-version require --record-run-date")
 
         date = _parse_run_date(args.date, "--date") if args.date else report_date(results_dir)
         for target in TARGETS:

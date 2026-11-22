@@ -51,6 +51,58 @@ public sealed class PostgresJsonAccessExecutionTests : ProviderTestSuite
 
     protected override ITestProvider Provider => PostgresTestProvider.Instance;
 
+    [Fact]
+    public void ArrayToJson_ShouldPreserveOrderAndNullElements()
+    {
+        int?[] values = [3, null, 1];
+
+        var result = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.Postgres.array_to_json(values))
+            .First();
+
+        result.Should().NotBeNull();
+        using var document = JsonDocument.Parse(result!);
+        var array = document.RootElement;
+        array.ValueKind.Should().Be(JsonValueKind.Array);
+        array.GetArrayLength().Should().Be(3);
+        array[0].GetInt32().Should().Be(3);
+        array[1].ValueKind.Should().Be(JsonValueKind.Null);
+        array[2].GetInt32().Should().Be(1);
+    }
+
+    [Fact]
+    public void JsonGetText_FromArrayToJson_ShouldReadTheLastElement()
+    {
+        var values = new[] { 12, 34 };
+
+        var result = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.Postgres.json_get_text(
+                SqlFunctions.Postgres.array_to_json(values), -1))
+            .First();
+
+        result.Should().Be("34");
+    }
+
+    [Fact]
+    public void JsonGetPathText_WithNullPathElement_ShouldReturnSqlNull()
+    {
+        var result = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Missing = SqlFunctions.Postgres.json_get_path_text(
+                    """{"a":{"b":"present"}}""", new string?[] { "a", null }),
+                Present = SqlFunctions.Postgres.json_get_path_text(
+                    """{"a":{"b":"present"}}""", new string?[] { "a", "b" })
+            })
+            .First();
+
+        result.Missing.Should().BeNull();
+        result.Present.Should().Be("present");
+    }
+
     /// <summary>
     /// AC1: a constant raw JSON document and a constant key must resolve <c>json -&gt; key</c>
     /// instead of failing with <c>42725</c>. The accessor returns the JSON element for the key; the

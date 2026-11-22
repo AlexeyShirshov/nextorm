@@ -18,23 +18,36 @@ public sealed class MergeAssignmentTests : IDisposable
     private const int TargetId = 7401;
     private const int MissingId = 7402;
 
-    private readonly MariaDbDataContext _ctx;
+    private readonly MariaDbDataContext? _sharedContext;
+
+    private MariaDbDataContext _ctx => _sharedContext
+        ?? throw new InvalidOperationException("The owned serial worker must select only the MariaDB endpoint fact.");
 
     public MergeAssignmentTests()
     {
+        if (OwnedProviderPhase.Enabled)
+            return;
+
         Assert.SkipUnless(MariaDbContainer.IsAvailable, MariaDbContainer.Failure ?? "MariaDB is not available.");
-        _ctx = new MariaDbDataContext(MariaDbContainer.ConnectionString, new DataContextBuilder());
-        Execute("drop table if exists t301a_mariadb");
-        Execute("create table t301a_mariadb (id int not null primary key, a int not null, b int not null, total int not null default 500) engine=InnoDB");
-        Execute($"insert into t301a_mariadb (id, a, b, total) values ({TargetId}, 7, 3, 1000)");
+        _sharedContext = new MariaDbDataContext(MariaDbContainer.ConnectionString, new DataContextBuilder());
+        Seed(_sharedContext);
     }
 
-    public void Dispose() => _ctx.Dispose();
+    public void Dispose() => _sharedContext?.Dispose();
 
-    private int Execute(string sql)
+    private static void Seed(MariaDbDataContext context)
     {
-        ((DataContext)_ctx).EnsureConnectionOpen();
-        using var command = ((DataContext)_ctx).CreateCommand(sql);
+        Execute(context, "drop table if exists t301a_mariadb");
+        Execute(context, "create table t301a_mariadb (id int not null primary key, a int not null, b int not null, total int not null default 500) engine=InnoDB");
+        Execute(context, $"insert into t301a_mariadb (id, a, b, total) values ({TargetId}, 7, 3, 1000)");
+    }
+
+    private int Execute(string sql) => Execute(_ctx, sql);
+
+    private static int Execute(DataContext context, string sql)
+    {
+        context.EnsureConnectionOpen();
+        using var command = context.CreateCommand(sql);
         return command.ExecuteNonQuery();
     }
 
@@ -71,26 +84,48 @@ public sealed class MergeAssignmentTests : IDisposable
     /// shared MySQL suite — and the rendered upsert uses MariaDB's own grammar.
     /// </summary>
     [Fact]
-    public void MergeAssignments_MariaDb_RunsOnItsOwnEngine()
+    public async Task MergeAssignments_MariaDb_RunsOnItsOwnEngine()
     {
-        ((DataContext)_ctx).Dialect.Should().BeOfType<MariaDbDialect>();
-        MariaDbContainer.ConnectionString.Should().NotBe(MySqlContainer.ConnectionString,
+        if (!OwnedProviderPhase.Enabled)
+        {
+            CheckOwnEngine(_ctx, MariaDbContainer.ConnectionString, static () => MySqlContainer.ConnectionString);
+            return;
+        }
+
+        OwnedProviderPhase.RequireCompatible(MySqlContainer.IsExternallyConfigured || MariaDbContainer.IsExternallyConfigured);
+        var cancellationToken = TestContext.Current.CancellationToken;
+        string? stoppedMySqlIdentity = null;
+        await OwnedProviderPhase.RunEndpoint("mysql", MySqlContainer.CreateOwned, static container => container.GetConnectionString(),
+            endpoint => stoppedMySqlIdentity = endpoint, cancellationToken);
+        var mysqlIdentity = stoppedMySqlIdentity ?? throw new InvalidOperationException("The owned MySQL endpoint was not captured.");
+        await OwnedProviderPhase.RunEndpoint("mariadb", MariaDbContainer.CreateOwned, MariaDbContainer.GetConnectionString, connectionString =>
+        {
+            using var context = new MariaDbDataContext(connectionString, new DataContextBuilder());
+            Seed(context);
+            CheckOwnEngine(context, connectionString, () => mysqlIdentity);
+        }, cancellationToken);
+    }
+
+    private static void CheckOwnEngine(MariaDbDataContext context, string mariaDbIdentity, Func<string> mysqlIdentity)
+    {
+        ((DataContext)context).Dialect.Should().BeOfType<MariaDbDialect>();
+        string.Equals(mariaDbIdentity, mysqlIdentity(), StringComparison.Ordinal).Should().BeFalse(
             "the MariaDB fixture never connects to the MySQL container");
 
-        ((DataContext)_ctx).EnsureConnectionOpen();
-        using var version = ((DataContext)_ctx).CreateCommand("select version()");
+        ((DataContext)context).EnsureConnectionOpen();
+        using var version = ((DataContext)context).CreateCommand("select version()");
         var server = (string?)version.ExecuteScalar();
 
         server.Should().NotBeNull();
         server.Should().ContainEquivalentOf("mariadb");
-        _ctx.CreateMergeBuilder<MergeAssignmentRow>()
+        context.CreateMergeBuilder<MergeAssignmentRow>()
             .Using(Source(TargetId, 1, 10))
             .OnKeys()
             .WhenMatchedUpdate((t, s) => new { Total = s.A })
             .WhenNotMatchedInsert()
             .ToSql()
             .Should().ContainEquivalentOf("on duplicate key update");
-        Log($"[T301:MariaDbDialect] engine | info | server={server} | dialect={((DataContext)_ctx).Dialect.GetType().Name}");
+        Log($"[T301:MariaDbDialect] engine | info | server={server} | dialect={((DataContext)context).Dialect.GetType().Name}");
     }
 
     /// <summary>R04: the right-hand side <c>s.A + s.B</c> reads the source row; the destination is the target row.</summary>

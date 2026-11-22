@@ -346,6 +346,24 @@ The name must be a plain SQL identifier. A repeated name on the same query, an i
 ClickHouse and SQLite ([`SupportsNamedWindows`](xref:NextORM.Core.ISqlDialect.SupportsNamedWindows));
 SQL Server has no `WINDOW` clause and rejects the query with `NotSupportedException`.
 
+## PostgreSQL 19 window null treatment
+
+Call `IgnoreNulls()` or `RespectNulls()` before `Over(...)` on `lag`, `lead`,
+`first_value`, `last_value`, or `nth_value`. `IgnoreNulls()` skips null values;
+`RespectNulls()` retains them. Omitting the modifier preserves the existing SQL
+and server behavior.
+
+```csharp
+var inline = e.Select(x =>
+    SqlFunctions.Sql.lag(x.Int).IgnoreNulls().Over(SqlFunctions.Sql.asc(() => x.Id)));
+var named = e.Window("w", orderBy: [e.Asc(x => x.Id)]).Select(x =>
+    SqlFunctions.Sql.lag(x.Int).RespectNulls().Over("w"));
+```
+
+Configure the `PostgresDataContext` with the server version (for example,
+`new Version(19, 0)` for PostgreSQL 19.0). Explicit modifiers are rejected
+on older or unconfigured PostgreSQL versions and on other providers.
+
 ## Provider differences
 
 Window functions are ANSI and every SQL provider nextorm targets supports the `ROWS` and `RANGE` frame

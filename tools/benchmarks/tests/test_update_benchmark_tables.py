@@ -40,8 +40,10 @@ def write_suite_run_date_metadata(
     results_dir: Path,
     dates: dict[str, str] | None = None,
     source_evidence: str = "unit test run evidence",
+    versions: dict[str, str] | None = None,
 ) -> None:
     dates = dates or {}
+    versions = versions or {}
     suites = {}
     for class_name in tables.SUITE_RUN_DATE_CLASSES:
         csv_file = results_dir / f"NextORM.Benchmark.{class_name}-report.csv"
@@ -51,6 +53,7 @@ def write_suite_run_date_metadata(
         csv_path, md_path = tables.report_paths(results_dir, class_name)
         suites[class_name] = {
             "asOfDate": dates.get(class_name, "2026-10-17"),
+            "sourceVersion": versions.get(class_name, "1.0.10.1"),
             "sourceEvidence": source_evidence,
             "reportsSha256": {
                 path.name: hashlib.sha256(
@@ -60,7 +63,7 @@ def write_suite_run_date_metadata(
             },
         }
     metadata = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "dateBasis": "UTC suite-start date",
         "suites": suites,
     }
@@ -243,16 +246,44 @@ class E2ETableTests(unittest.TestCase):
             self.results,
             {"SqliteBenchmarkIteration": "2026-10-18"},
             "https://example.test/run/123",
+            "1.0.10.2-2-g0123456789ab",
         )
 
         self.assertEqual(tables.report_date(self.results), "2026-10-18")
         metadata = json.loads(
             (self.results / tables.SUITE_RUN_DATE_METADATA).read_text(encoding="utf-8")
         )
-        self.assertEqual(
-            metadata["suites"]["SqliteBenchmarkIteration"]["sourceEvidence"],
-            "https://example.test/run/123",
+        suite = metadata["suites"]["SqliteBenchmarkIteration"]
+        self.assertEqual(suite["sourceEvidence"], "https://example.test/run/123")
+        self.assertEqual(suite["sourceVersion"], "1.0.10.2-2-g0123456789ab")
+        self.assertEqual(metadata["suites"][tables.CATEGORY_A_CLASS]["sourceVersion"], "1.0.10.1")
+
+    def test_recording_suite_version_rejects_a_date(self):
+        with self.assertRaisesRegex(tables.TableError, "expected a release version or Git source revision"):
+            tables._record_suite_run_dates(
+                self.results,
+                {"SqliteBenchmarkIteration": "2026-10-18"},
+                "https://example.test/run/123",
+                "2026-10-18",
+            )
+
+    def test_readme_labels_each_run_from_persisted_versions_not_dates(self):
+        target = next(target for target in tables.TARGETS if target.name == "readme")
+        write_suite_run_date_metadata(
+            self.results,
+            versions={
+                tables.E2E_ROWS[1].class_name: "1.0.10.1-2-g0123456789ab",
+                tables.CATEGORY_A_CLASS: "1.0.10.2",
+            },
         )
+        conditions = dict(cpu="Test CPU", logical="8", physical="4", runtime="11.0.0",
+                          bdn="0.15.8", job="Job.Default", toolchain="InProcessEmitToolchain")
+        with mock.patch.object(tables, "read_run_conditions", return_value=conditions):
+            text = " ".join(tables.build_conditions(target, self.results, "2026-10-19").split())
+
+        self.assertIn("End-to-end suites run on **1.0.10.1**, **1.0.10.1-2-g0123456789ab**", text)
+        self.assertIn("Category A suite run on **1.0.10.2**", text)
+        self.assertNotIn("2026-10-", text)
 
     def test_date_override_remains_effective_in_conditions(self):
         target = next(target for target in tables.TARGETS if target.name == "docs")
@@ -275,6 +306,12 @@ class E2ETableTests(unittest.TestCase):
 
 
 class FeatureRowTests(unittest.TestCase):
+    def test_feature_labels_use_plain_text_in_both_languages(self):
+        for category, en, ru in tables.FEATURE_CATEGORIES:
+            with self.subTest(category=category):
+                self.assertNotIn("`", en)
+                self.assertNotIn("`", ru)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.results = Path(self.tmp.name)
@@ -309,7 +346,7 @@ class FeatureRowTests(unittest.TestCase):
         self.assertEqual(
             rows,
             [
-                "| [`CASE WHEN`](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/"
+                "| [CASE WHEN](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/"
                 "BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md)"
                 " | **10.00 μs** | 14.00 μs | 15.00 μs | 35.00 μs |",
                 "| [CTE](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/"
@@ -424,7 +461,7 @@ class CategoryBTests(unittest.TestCase):
         with mock.patch.object(tables, "CATEGORY_B", categories):
             table = tables.build_category_b_table(self.results, "en")
         self.assertIn("| CTE | **14.00 μs / 4.00 KB** | 15.00 μs / 1.30 KB | — | — |", table)
-        self.assertIn("| `CASE WHEN` | **10.00 μs / 2.00 KB** |", table)
+        self.assertIn("| CASE WHEN | **10.00 μs / 2.00 KB** |", table)
 
     def test_unknown_category_fails_closed(self):
         write_report(

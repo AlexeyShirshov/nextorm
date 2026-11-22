@@ -11,6 +11,8 @@ namespace NextORM.Core;
 /// </summary>
 public abstract class SqlDialectBase : ISqlDialect
 {
+    internal virtual bool SupportsWindowNullTreatment => false;
+
     /// <inheritdoc/>
     public virtual string ConcatStringOperator => "+";
     /// <inheritdoc/>
@@ -1164,6 +1166,8 @@ public abstract class SqlDialectBase : ISqlDialect
 
     /// <summary>Defaults to <c>true</c>; ClickHouse renders its <c>ALTER TABLE ... DELETE</c> mutation through <see cref="MakeDeleteHead"/>.</summary>
     public virtual bool SupportsDelete => true;
+
+    internal virtual bool SupportsBoundedDelete => false;
 
     /// <summary>Defaults to <c>false</c>; SQLite has no <c>TRUNCATE</c>, so it keeps the default and callers use <c>DELETE</c>.</summary>
     public virtual bool SupportsTruncate => false;

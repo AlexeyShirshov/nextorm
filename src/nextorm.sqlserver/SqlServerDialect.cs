@@ -13,6 +13,8 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>The shared SQL Server dialect instance.</summary>
     public static readonly SqlServerDialect Instance = new();
 
+    internal override bool SupportsBoundedDelete => true;
+
     /// <summary>
     /// SQL Server supports <c>SAVE TRANSACTION</c> and <c>ROLLBACK TRANSACTION &lt;name&gt;</c>; its ADO.NET
     /// release is a driver no-op, which this capability still reports as supported.

@@ -164,6 +164,64 @@ public sealed class SqliteStep4JsonStreamOptionTests : ProviderTestSuite
         return Encoding.UTF8.GetString(buffer.ToArray());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task WriteJson_NdJsonWithLargeEscapedValue_ShouldKeepRowsOnSeparateLines(bool useAsync)
+    {
+        var label = string.Concat(Enumerable.Repeat("quote \" backslash \\ newline \n 雪 ", 4096));
+        using (var insert = ((DataContext)Context).GetConnection().CreateCommand())
+        {
+            insert.CommandText = "insert into s4_js_row (id, label) values (9100, @label)";
+            var parameter = insert.CreateParameter();
+            parameter.ParameterName = "@label";
+            parameter.Value = label;
+            insert.Parameters.Add(parameter);
+            insert.ExecuteNonQuery();
+        }
+
+        var query = Context.From<S4JsRow>()
+            .Where(row => row.Id == 9100 || row.Id == 9102)
+            .OrderBy(row => row.Id)
+            .Select(row => new { row.Id, row.Label });
+        var options = new JsonStreamOptions { Mode = JsonStreamMode.NdJson, IgnoreNull = true };
+
+        using var buffer = new MemoryStream();
+        if (useAsync)
+            await query.WriteJsonAsync(buffer, options, TestContext.Current.CancellationToken);
+        else
+            query.WriteJson(buffer, options);
+
+        var lines = Encoding.UTF8.GetString(buffer.ToArray()).Split('\n');
+        lines.Should().HaveCount(3);
+        using var first = JsonDocument.Parse(lines[0]);
+        first.RootElement.GetProperty("Id").GetInt32().Should().Be(9100);
+        first.RootElement.GetProperty("Label").GetString().Should().Be(label);
+        lines[1].Should().Be("""{"Id":9102}""");
+        lines[2].Should().BeEmpty("NDJSON terminates the last row with a newline");
+        buffer.CanWrite.Should().BeTrue("the destination belongs to the caller");
+    }
+
+    [Theory]
+    [InlineData(false, JsonStreamMode.Array, """{"rows":[]}""")]
+    [InlineData(true, JsonStreamMode.Array, """{"rows":[]}""")]
+    [InlineData(false, JsonStreamMode.NdJson, "")]
+    [InlineData(true, JsonStreamMode.NdJson, "")]
+    public async Task WriteJson_EmptyQuery_ShouldEmitOnlyModeFraming(bool useAsync, JsonStreamMode mode, string expected)
+    {
+        var query = Context.From<S4JsRow>().Where(row => row.Id < 0).Select(row => row.Id);
+        var options = new JsonStreamOptions { Mode = mode, Root = mode == JsonStreamMode.Array ? "rows" : null };
+        using var buffer = new MemoryStream();
+
+        if (useAsync)
+            await query.WriteJsonAsync(buffer, options, TestContext.Current.CancellationToken);
+        else
+            query.WriteJson(buffer, options);
+
+        Encoding.UTF8.GetString(buffer.ToArray()).Should().Be(expected);
+        buffer.CanWrite.Should().BeTrue();
+    }
+
     /// <summary>Marker row of the JSON-stream option facts.</summary>
     [SqlTable("s4_js_row")]
     public sealed class S4JsRow

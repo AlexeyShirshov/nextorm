@@ -17,9 +17,11 @@ public sealed class C13PreWhereInValuesClickHouseTests : ProviderTestSuite
 
     private IDataContext Db => _sut.DataProvider;
 
-    /// <summary>An In-values predicate inside PreWhere keeps exactly the requested rows.</summary>
-    [Fact]
-    public void PreWhereWithInValues_ShouldReturnTheSelectedRows()
+    /// <summary>Captured IN lists are rebound when a prepared PREWHERE query is reused.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PreWhereWithInValues_ShouldRebindWhenTheListChanges(bool filterGroups)
     {
         Execute("drop table if exists c13_prewhere");
         Execute("create table c13_prewhere (id Int32, grp Int32) engine = MergeTree order by id");
@@ -27,15 +29,32 @@ public sealed class C13PreWhereInValuesClickHouseTests : ProviderTestSuite
 
         try
         {
-            var wanted = new[] { 1, 3 };
+            int[] wanted = [1, 3];
+            int[] groups = [1, 2];
 
-            var ids = Db.From<C13PreWhere>()
-                .PreWhere(x => wanted.Contains(x.Id))
+            var source = Db.From<C13PreWhere>().PreWhere(x => wanted.Contains(x.Id));
+            if (filterGroups)
+                source = source.Where(x => groups.Contains(x.Grp));
+
+            var query = source
                 .OrderBy(x => x.Id)
-                .Select(x => x.Id)
-                .ToList();
+                .Select(x => x.Id);
 
-            ids.Should().Equal(1, 3);
+            query.ToList().Should().Equal(1, 3);
+
+            wanted = [2, 3, 4];
+            groups = [2, 3];
+            if (filterGroups)
+                query.ToList().Should().Equal(3, 4);
+            else
+                query.ToList().Should().Equal(2, 3, 4);
+
+            wanted = [];
+            query.ToList().Should().BeEmpty();
+
+            wanted = [1];
+            groups = [1];
+            query.ToList().Should().Equal(1);
         }
         finally
         {

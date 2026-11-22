@@ -5,11 +5,11 @@
 
 <!-- benchmarks:conditions:start -->
 Условия: провайдер SQLite (`Microsoft.Data.Sqlite`) у всех участников; асинхронные запросы; в ячейке — **самый
-быстрый метод** этой библиотеки в связанном отчёте BenchmarkDotNet. Машина: AMD EPYC 7763 (4 логических / 2
-физических ядер), .NET 11.0.0, BenchmarkDotNet 0.15.8 (`ShortRun` + `InProcessEmitToolchain`). На
-**2026-11-19** для таблиц сквозных сценариев и аллокаций; категория B запущена **2026-11-19**. Категория A и
-раздел tier-1 сохраняют даты своих прогонов. В каждой строке лидирующая ячейка выделена **полужирным** —
-быстрейшая в таблицах времени и с наименьшей аллокацией в таблице аллокаций.
+быстрый метод** этой библиотеки в связанном отчёте BenchmarkDotNet. Машина: AMD Ryzen 7 5800HS with Radeon
+Graphics (8 логических / 4 физических ядер), .NET 11.0.0, BenchmarkDotNet 0.15.8 (`Job.Default` +
+`InProcessEmitToolchain`). На **2026-11-18** для таблиц сквозных сценариев и аллокаций; категория B запущена
+**2026-11-18**. Категория A и раздел tier-1 сохраняют даты своих прогонов. В каждой строке лидирующая ячейка
+выделена **полужирным** — быстрейшая в таблицах времени и с наименьшей аллокацией в таблице аллокаций.
 <!-- benchmarks:conditions:end -->
 
 > **Сравнение по возможностям:** результаты сгруппированы по тирам, без веток `Prepare()`: одна
@@ -21,10 +21,10 @@
 <!-- benchmarks:e2e:start -->
 | Метод | Nextorm | Dapper | linq2db | EF Core |
 |---|:---:|:---:|:---:|:---:|
-| [Выборка данных](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md) | **10.79 μs** | 15.79 μs | 16.66 μs | 39.29 μs |
-| [Широкая выборка данных](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md) | **9.387 ms** | 10.058 ms | 10.638 ms | 11.256 ms |
-| [Where](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md) | **940.9 μs** | 1,400.0 μs | 1,449.4 μs | 3,553.3 μs |
-| [Simulate work](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md) | **9.469 ms** | 28.654 ms | 407.227 ms | 110.994 ms |
+| [Выборка данных](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md) | **11.75 μs** | 16.40 μs | 16.84 μs | 35.90 μs |
+| [Широкая выборка данных](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md) | **8.030 ms** | 8.799 ms | 9.140 ms | 9.611 ms |
+| [Where](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md) | **1.038 ms** | 1.526 ms | 1.526 ms | 3.347 ms |
+| [Simulate work](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md) | **8.425 ms** | 24.088 ms | 358.743 ms | 113.061 ms |
 | [Any](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md) | **940.9 μs** | 1,453.0 μs | 1,598.0 μs | 3,745.4 μs |
 | [FirstOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFirst-report-github.md) | **95.27 μs** | 141.48 μs | 383.95 μs | 373.45 μs |
 | [SingleOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSingle-report-github.md) | **95.42 μs** | 143.43 μs | 372.28 μs | 375.85 μs |
@@ -37,10 +37,10 @@
 <!-- benchmarks:allocations:start -->
 | Метод | Nextorm | Dapper | linq2db | EF Core |
 |---|:---:|:---:|:---:|:---:|
-| Выборка данных | **968 B** | 1,896 B | 2,456 B | 9,776 B |
+| Выборка данных | **968 B** | 1,848 B | 2,456 B | 9,776 B |
 | Широкая выборка данных | 2.21 MB | 2.59 MB | **2.14 MB** | 4.28 MB |
-| Where | **102.58 KB** | 179.23 KB | 252.74 KB | 745.41 KB |
-| Simulate work | **6.21 MB** | 8.86 MB | 107.45 MB | 13.57 MB |
+| Where | **117.42 KB** | 179.23 KB | 252.75 KB | 745.41 KB |
+| Simulate work | **6.21 MB** | 8.86 MB | 107.98 MB | 13.57 MB |
 | Any | **84.38 KB** | 138.29 KB | 232.82 KB | 763.30 KB |
 | FirstOrDefault | **8.56 KB** | 16.12 KB | 159.77 KB | 76.03 KB |
 | SingleOrDefault | **8.28 KB** | 16.04 KB | 159.77 KB | 76.03 KB |
@@ -70,18 +70,18 @@
 ### Категория A — prepared против compiled и raw
 
 <!-- benchmarks:category-a:start -->
-На **2026-11-19**.
+На **2026-11-18**.
 
 | Фича | Nextorm (prepared) | Dapper | linq2db (compiled) | EF Core (compiled) |
 |---|---|---|---|---|
-| `CASE WHEN` | **9.75 μs / 664 B** | 14.93 μs / 1.34 KB | 15.84 μs / 1.59 KB | 38.16 μs / 7.46 KB |
+| CASE WHEN | **9.75 μs / 664 B** | 14.93 μs / 1.34 KB | 15.84 μs / 1.59 KB | 38.16 μs / 7.46 KB |
 | CTE | **10.34 μs / 752 B** | 22.86 μs / 1.56 KB | 23.62 μs / 1.77 KB | — |
-| `SELECT DISTINCT` | **11.63 μs / 665 B** | 18.61 μs / 1.44 KB | 19.07 μs / 1.59 KB | 43.82 μs / 7.23 KB |
-| `EXCEPT` | **11.74 μs / 680 B** | 18.86 μs / 1.43 KB | 22.70 μs / 1.67 KB | 47.81 μs / 8.38 KB |
+| SELECT DISTINCT | **11.63 μs / 665 B** | 18.61 μs / 1.44 KB | 19.07 μs / 1.59 KB | 43.82 μs / 7.23 KB |
+| EXCEPT | **11.74 μs / 680 B** | 18.86 μs / 1.43 KB | 22.70 μs / 1.67 KB | 47.81 μs / 8.38 KB |
 | IN-list | **13.18 μs / 1.55 KB** | 19.24 μs / 1.26 KB | 47.55 μs / 13.63 KB | 68.44 μs / 14.34 KB |
-| `INTERSECT` | **10.74 μs / 665 B** | 17.91 μs / 1.28 KB | 22.02 μs / 1.62 KB | 45.36 μs / 7.50 KB |
+| INTERSECT | **10.74 μs / 665 B** | 17.91 μs / 1.28 KB | 22.02 μs / 1.62 KB | 45.36 μs / 7.50 KB |
 | Join по 4 таблицам | **14.32 μs / 1.03 KB** | 28.97 μs / 2.02 KB | 27.10 μs / 2.06 KB | 51.99 μs / 8.05 KB |
-| `LEFT JOIN` | **13.66 μs / 1.16 KB** | 21.84 μs / 2.21 KB | 22.55 μs / 2.31 KB | 47.31 μs / 9.48 KB |
+| LEFT JOIN | **13.66 μs / 1.16 KB** | 21.84 μs / 2.21 KB | 22.55 μs / 2.31 KB | 47.31 μs / 9.48 KB |
 | Рекурсивный CTE | **13.05 μs / 672 B** | 26.56 μs / 1.52 KB | 28.95 μs / 1.77 KB | — |
 | Строковые функции | **9.49 μs / 656 B** | 15.12 μs / 1.27 KB | 16.24 μs / 1.63 KB | 38.10 μs / 7.05 KB |
 | UDF | **9.68 μs / 688 B** | 14.96 μs / 1.27 KB | 16.03 μs / 1.63 KB | 38.02 μs / 7.05 KB |
@@ -98,14 +98,14 @@
 <!-- benchmarks:category-b:start -->
 | Фича | Nextorm (cached) | Dapper | linq2db | EF Core |
 |---|---|---|---|---|
-| `CASE WHEN` | **12.38 μs / 2.06 KB** | 14.50 μs / 1.34 KB | 25.42 μs / 3.77 KB | 61.48 μs / 11.46 KB |
+| CASE WHEN | **12.38 μs / 2.06 KB** | 14.50 μs / 1.34 KB | 25.42 μs / 3.77 KB | 61.48 μs / 11.46 KB |
 | CTE | 33.87 μs / 9.43 KB | **22.40 μs / 1.56 KB** | 60.93 μs / 9.13 KB | — |
-| `SELECT DISTINCT` | **16.29 μs / 3.03 KB** | 18.34 μs / 1.44 KB | 31.43 μs / 3.88 KB | 68.65 μs / 11.70 KB |
-| `EXCEPT` | **17.99 μs / 4.19 KB** | 18.38 μs / 1.43 KB | 42.45 μs / 5.01 KB | 81.33 μs / 14.73 KB |
+| SELECT DISTINCT | **16.29 μs / 3.03 KB** | 18.34 μs / 1.44 KB | 31.43 μs / 3.88 KB | 68.65 μs / 11.70 KB |
+| EXCEPT | **17.99 μs / 4.19 KB** | 18.38 μs / 1.43 KB | 42.45 μs / 5.01 KB | 81.33 μs / 14.73 KB |
 | IN-list | 37.36 μs / 7.04 KB | **19.37 μs / 1.26 KB** | 75.43 μs / 17.40 KB | 119.74 μs / 22.21 KB |
-| `INTERSECT` | 17.22 μs / 4.17 KB | **16.97 μs / 1.28 KB** | 39.53 μs / 4.96 KB | 78.08 μs / 13.81 KB |
+| INTERSECT | 17.22 μs / 4.17 KB | **16.97 μs / 1.28 KB** | 39.53 μs / 4.96 KB | 78.08 μs / 13.81 KB |
 | Join по 4 таблицам | 37.71 μs / 10.09 KB | **27.97 μs / 2.02 KB** | 70.96 μs / 14.06 KB | 125.13 μs / 24.09 KB |
-| `LEFT JOIN` | 26.45 μs / 5.67 KB | **21.38 μs / 2.21 KB** | 74.92 μs / 8.94 KB | 105.01 μs / 19.99 KB |
+| LEFT JOIN | 26.45 μs / 5.67 KB | **21.38 μs / 2.21 KB** | 74.92 μs / 8.94 KB | 105.01 μs / 19.99 KB |
 | Рекурсивный CTE | 36.76 μs / 10.14 KB | **27.02 μs / 1.52 KB** | 68.99 μs / 8.31 KB | — |
 | Строковые функции | **13.83 μs / 2.81 KB** | 14.62 μs / 1.27 KB | 33.38 μs / 4.86 KB | 72.49 μs / 12.74 KB |
 | UDF | **14.50 μs / 2.90 KB** | 14.62 μs / 1.27 KB | 51.78 μs / 6.75 KB | 70.51 μs / 12.74 KB |
@@ -402,12 +402,13 @@ Tier-1 использует отчёты Projection, Aggregates, Paging, Streami
 поэтому настройки окончаний строк при checkout не влияют на проверку; остальные байты отчёта по-прежнему
 проверяются хешем.
 
-Генератор читает дату начала каждого набора в UTC и хеши отчётов из `suite-run-dates.json`; время
-изменения файла не считается свидетельством даты измерений. После локального прогона запишите дату UTC,
-снятую непосредственно перед каждым набором, с помощью `--record-run-date CLASS=YYYY-MM-DD
---run-evidence SOURCE`, где `SOURCE` — путь к журналу прогона или URL. Повторите `--record-run-date` для
-каждого обновлённого набора. Workflow записывает дату каждого набора и связывает её с созданными CSV- и
-Markdown-отчётами перед обновлением таблиц.
+Генератор читает дату начала каждого набора в UTC, версию Nextorm и хеши отчётов из
+`suite-run-dates.json`. README показывает версии, а подробные статьи сохраняют даты.
+После локального прогона передайте `--record-run-date CLASS=YYYY-MM-DD --run-version VERSION
+--run-evidence SOURCE`. Повторите `--record-run-date` для каждого набора, замеренного на той же
+ревизии. Укажите дату UTC начала набора, замеренную версию или Git-ревизию вместо `VERSION` и
+путь к журналу или его URL вместо `SOURCE`. CI определяет версию по тегу замеренного коммита.
+Если коммит не совпадает с тегом релиза, CI включает в подпись идентификатор коммита.
 
 Тот же процесс обновления сквозных таблиц запускается из `.github/workflows/benchmarks.yml` — автоматически
 после каждого мержа в `main`, затрагивающего движок (`src/**`) или проект бенчмарков, и вручную из вкладки

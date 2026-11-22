@@ -63,6 +63,20 @@ internal static class PostgresContainer
         }
     }
 
+    internal static PostgreSqlContainer CreateOwned() =>
+        new PostgreSqlBuilder(DefaultImage)
+            .WithReuse(false)
+            .Build();
+
+    internal static void InitializeVector(PostgreSqlContainer container)
+    {
+        using var connection = new Npgsql.NpgsqlConnection(container.GetConnectionString());
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "create extension if not exists vector;";
+        command.ExecuteNonQuery();
+    }
+
     private static void Resolve()
     {
         if (_resolved)
@@ -89,13 +103,7 @@ internal static class PostgresContainer
 
                 container.StartAsync().GetAwaiter().GetResult();
 
-                using (var connection = new Npgsql.NpgsqlConnection(container.GetConnectionString()))
-                {
-                    connection.Open();
-                    using var command = connection.CreateCommand();
-                    command.CommandText = "create extension if not exists vector;";
-                    command.ExecuteNonQuery();
-                }
+                InitializeVector(container);
 
                 _container = container;
                 _connectionString = container.GetConnectionString();

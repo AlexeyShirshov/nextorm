@@ -5,11 +5,11 @@ evidence for these scenarios, not a prediction for every provider, workload, or 
 
 <!-- benchmarks:conditions:start -->
 Benchmark conditions: provider SQLite (`Microsoft.Data.Sqlite`) for every participant; async queries; each
-cell is the **fastest method** for that library in the linked BenchmarkDotNet report. Machine: AMD EPYC 7763
-(4 logical / 2 physical cores), .NET 11.0.0, BenchmarkDotNet 0.15.8 (`ShortRun` + `InProcessEmitToolchain`).
-As of **2026-11-19** for the end-to-end and allocations tables; Category B was run on **2026-11-19**. Category
-A and Tier-1 keep the dates of their own runs. In each row the leading cell is **bold** — the fastest in the
-time tables and the smallest allocation in the allocations table.
+cell is the **fastest method** for that library in the linked BenchmarkDotNet report. Machine: AMD Ryzen 7
+5800HS with Radeon Graphics (8 logical / 4 physical cores), .NET 11.0.0, BenchmarkDotNet 0.15.8 (`Job.Default`
++ `InProcessEmitToolchain`). As of **2026-11-18** for the end-to-end and allocations tables; Category B was
+run on **2026-11-18**. Category A and Tier-1 keep the dates of their own runs. In each row the leading cell is
+**bold** — the fastest in the time tables and the smallest allocation in the allocations table.
 <!-- benchmarks:conditions:end -->
 
 > **Feature-level view:** a per-feature, tiered comparison — no `Prepare()` arms, one table per tier,
@@ -20,10 +20,10 @@ time tables and the smallest allocation in the allocations table.
 <!-- benchmarks:e2e:start -->
 | Method | Nextorm | Dapper | linq2db | EF Core |
 |---|:---:|:---:|:---:|:---:|
-| [Data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md) | **10.79 μs** | 15.79 μs | 16.66 μs | 39.29 μs |
-| [Wide data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md) | **9.387 ms** | 10.058 ms | 10.638 ms | 11.256 ms |
-| [Where](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md) | **940.9 μs** | 1,400.0 μs | 1,449.4 μs | 3,553.3 μs |
-| [Simulate work](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md) | **9.469 ms** | 28.654 ms | 407.227 ms | 110.994 ms |
+| [Data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md) | **11.75 μs** | 16.40 μs | 16.84 μs | 35.90 μs |
+| [Wide data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md) | **8.030 ms** | 8.799 ms | 9.140 ms | 9.611 ms |
+| [Where](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md) | **1.038 ms** | 1.526 ms | 1.526 ms | 3.347 ms |
+| [Simulate work](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md) | **8.425 ms** | 24.088 ms | 358.743 ms | 113.061 ms |
 | [Any](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md) | **940.9 μs** | 1,453.0 μs | 1,598.0 μs | 3,745.4 μs |
 | [FirstOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFirst-report-github.md) | **95.27 μs** | 141.48 μs | 383.95 μs | 373.45 μs |
 | [SingleOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSingle-report-github.md) | **95.42 μs** | 143.43 μs | 372.28 μs | 375.85 μs |
@@ -36,10 +36,10 @@ Allocations for the same fastest method per library (BenchmarkDotNet `Allocated`
 <!-- benchmarks:allocations:start -->
 | Method | Nextorm | Dapper | linq2db | EF Core |
 |---|:---:|:---:|:---:|:---:|
-| Data fetch | **968 B** | 1,896 B | 2,456 B | 9,776 B |
+| Data fetch | **968 B** | 1,848 B | 2,456 B | 9,776 B |
 | Wide data fetch | 2.21 MB | 2.59 MB | **2.14 MB** | 4.28 MB |
-| Where | **102.58 KB** | 179.23 KB | 252.74 KB | 745.41 KB |
-| Simulate work | **6.21 MB** | 8.86 MB | 107.45 MB | 13.57 MB |
+| Where | **117.42 KB** | 179.23 KB | 252.75 KB | 745.41 KB |
+| Simulate work | **6.21 MB** | 8.86 MB | 107.98 MB | 13.57 MB |
 | Any | **84.38 KB** | 138.29 KB | 232.82 KB | 763.30 KB |
 | FirstOrDefault | **8.56 KB** | 16.12 KB | 159.77 KB | 76.03 KB |
 | SingleOrDefault | **8.28 KB** | 16.04 KB | 159.77 KB | 76.03 KB |
@@ -66,18 +66,18 @@ BenchmarkDotNet `Mean` and `Allocated` divided by 10. See the source reports:
 ### Category A — prepared vs compiled vs raw
 
 <!-- benchmarks:category-a:start -->
-As of **2026-11-19**.
+As of **2026-11-18**.
 
 | Feature | Nextorm (prepared) | Dapper | linq2db (compiled) | EF Core (compiled) |
 |---|---|---|---|---|
-| `CASE WHEN` | **9.75 μs / 664 B** | 14.93 μs / 1.34 KB | 15.84 μs / 1.59 KB | 38.16 μs / 7.46 KB |
+| CASE WHEN | **9.75 μs / 664 B** | 14.93 μs / 1.34 KB | 15.84 μs / 1.59 KB | 38.16 μs / 7.46 KB |
 | CTE | **10.34 μs / 752 B** | 22.86 μs / 1.56 KB | 23.62 μs / 1.77 KB | — |
-| `SELECT DISTINCT` | **11.63 μs / 665 B** | 18.61 μs / 1.44 KB | 19.07 μs / 1.59 KB | 43.82 μs / 7.23 KB |
-| `EXCEPT` | **11.74 μs / 680 B** | 18.86 μs / 1.43 KB | 22.70 μs / 1.67 KB | 47.81 μs / 8.38 KB |
+| SELECT DISTINCT | **11.63 μs / 665 B** | 18.61 μs / 1.44 KB | 19.07 μs / 1.59 KB | 43.82 μs / 7.23 KB |
+| EXCEPT | **11.74 μs / 680 B** | 18.86 μs / 1.43 KB | 22.70 μs / 1.67 KB | 47.81 μs / 8.38 KB |
 | IN-list | **13.18 μs / 1.55 KB** | 19.24 μs / 1.26 KB | 47.55 μs / 13.63 KB | 68.44 μs / 14.34 KB |
-| `INTERSECT` | **10.74 μs / 665 B** | 17.91 μs / 1.28 KB | 22.02 μs / 1.62 KB | 45.36 μs / 7.50 KB |
+| INTERSECT | **10.74 μs / 665 B** | 17.91 μs / 1.28 KB | 22.02 μs / 1.62 KB | 45.36 μs / 7.50 KB |
 | 4-table join | **14.32 μs / 1.03 KB** | 28.97 μs / 2.02 KB | 27.10 μs / 2.06 KB | 51.99 μs / 8.05 KB |
-| `LEFT JOIN` | **13.66 μs / 1.16 KB** | 21.84 μs / 2.21 KB | 22.55 μs / 2.31 KB | 47.31 μs / 9.48 KB |
+| LEFT JOIN | **13.66 μs / 1.16 KB** | 21.84 μs / 2.21 KB | 22.55 μs / 2.31 KB | 47.31 μs / 9.48 KB |
 | Recursive CTE | **13.05 μs / 672 B** | 26.56 μs / 1.52 KB | 28.95 μs / 1.77 KB | — |
 | String functions | **9.49 μs / 656 B** | 15.12 μs / 1.27 KB | 16.24 μs / 1.63 KB | 38.10 μs / 7.05 KB |
 | UDF | **9.68 μs / 688 B** | 14.96 μs / 1.27 KB | 16.03 μs / 1.63 KB | 38.02 μs / 7.05 KB |
@@ -93,14 +93,14 @@ with the runner, so treat deltas below ~20 % as noise.
 <!-- benchmarks:category-b:start -->
 | Feature | Nextorm (cached) | Dapper | linq2db | EF Core |
 |---|---|---|---|---|
-| `CASE WHEN` | **12.38 μs / 2.06 KB** | 14.50 μs / 1.34 KB | 25.42 μs / 3.77 KB | 61.48 μs / 11.46 KB |
+| CASE WHEN | **12.38 μs / 2.06 KB** | 14.50 μs / 1.34 KB | 25.42 μs / 3.77 KB | 61.48 μs / 11.46 KB |
 | CTE | 33.87 μs / 9.43 KB | **22.40 μs / 1.56 KB** | 60.93 μs / 9.13 KB | — |
-| `SELECT DISTINCT` | **16.29 μs / 3.03 KB** | 18.34 μs / 1.44 KB | 31.43 μs / 3.88 KB | 68.65 μs / 11.70 KB |
-| `EXCEPT` | **17.99 μs / 4.19 KB** | 18.38 μs / 1.43 KB | 42.45 μs / 5.01 KB | 81.33 μs / 14.73 KB |
+| SELECT DISTINCT | **16.29 μs / 3.03 KB** | 18.34 μs / 1.44 KB | 31.43 μs / 3.88 KB | 68.65 μs / 11.70 KB |
+| EXCEPT | **17.99 μs / 4.19 KB** | 18.38 μs / 1.43 KB | 42.45 μs / 5.01 KB | 81.33 μs / 14.73 KB |
 | IN-list | 37.36 μs / 7.04 KB | **19.37 μs / 1.26 KB** | 75.43 μs / 17.40 KB | 119.74 μs / 22.21 KB |
-| `INTERSECT` | 17.22 μs / 4.17 KB | **16.97 μs / 1.28 KB** | 39.53 μs / 4.96 KB | 78.08 μs / 13.81 KB |
+| INTERSECT | 17.22 μs / 4.17 KB | **16.97 μs / 1.28 KB** | 39.53 μs / 4.96 KB | 78.08 μs / 13.81 KB |
 | 4-table join | 37.71 μs / 10.09 KB | **27.97 μs / 2.02 KB** | 70.96 μs / 14.06 KB | 125.13 μs / 24.09 KB |
-| `LEFT JOIN` | 26.45 μs / 5.67 KB | **21.38 μs / 2.21 KB** | 74.92 μs / 8.94 KB | 105.01 μs / 19.99 KB |
+| LEFT JOIN | 26.45 μs / 5.67 KB | **21.38 μs / 2.21 KB** | 74.92 μs / 8.94 KB | 105.01 μs / 19.99 KB |
 | Recursive CTE | 36.76 μs / 10.14 KB | **27.02 μs / 1.52 KB** | 68.99 μs / 8.31 KB | — |
 | String functions | **13.83 μs / 2.81 KB** | 14.62 μs / 1.27 KB | 33.38 μs / 4.86 KB | 72.49 μs / 12.74 KB |
 | UDF | **14.50 μs / 2.90 KB** | 14.62 μs / 1.27 KB | 51.78 μs / 6.75 KB | 70.51 μs / 12.74 KB |
@@ -392,12 +392,13 @@ and update the sidecar's run date and report hashes. Each report hash is compute
 line endings with LF, so checkout line-ending settings do not affect validation; all other report bytes
 remain covered by the hash.
 
-The generator reads each comparison suite's UTC start date and report hashes from
-`suite-run-dates.json`; report modification times are not measurement evidence. After a local run,
-record the UTC date captured immediately before each suite with `--record-run-date
-CLASS=YYYY-MM-DD --run-evidence SOURCE`, where `SOURCE` is that run's log path or URL. Repeat
-`--record-run-date` for every suite you refreshed. The workflow records each suite date and binds it
-to the generated CSV and Markdown reports before regenerating the tables.
+The generator reads each comparison suite's UTC start date, measured Nextorm version, and report
+hashes from `suite-run-dates.json`. The README shows versions; the detailed articles retain dates.
+After a local run, pass `--record-run-date CLASS=YYYY-MM-DD --run-version VERSION --run-evidence SOURCE`.
+Repeat `--record-run-date` for each suite run on the same source revision. Use the date captured
+immediately before each suite, the measured release version or Git revision for `VERSION`, and the
+run's log path or URL for `SOURCE`. CI derives the version from the checked-out commit's Git tag
+and includes the commit identifier if that checkout isn't at a release tag.
 
 The same end-to-end refresh runs from `.github/workflows/benchmarks.yml` — automatically after every
 merge into `main` that touches the engine (`src/**`) or the benchmark project, and on demand from the

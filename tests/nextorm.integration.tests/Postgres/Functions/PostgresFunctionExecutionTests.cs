@@ -192,6 +192,62 @@ public sealed class PostgresFunctionExecutionTests : ProviderTestSuite
     }
 
     [Fact]
+    public void ArrayQuantifiers_WithEmptyAndNullableArrays_ShouldPreserveSqlTruthValues()
+    {
+        int?[] values = [];
+        var candidates = _sut.SimpleEntity.Where(x => x.Id <= 3);
+
+        List<int> MatchingAny() => candidates
+            .Where(x => (int?)x.Id == SqlFunctions.Postgres.any(values))
+            .OrderBy(x => x.Id).Select(x => x.Id).ToList();
+        List<int> MatchingAll() => candidates
+            .Where(x => SqlFunctions.Postgres.all((int?)x.Id, values))
+            .OrderBy(x => x.Id).Select(x => x.Id).ToList();
+        List<int> NotMatchingAny() => candidates
+            .Where(x => !SqlFunctions.Postgres.any((int?)x.Id, values))
+            .OrderBy(x => x.Id).Select(x => x.Id).ToList();
+
+        MatchingAny().Should().BeEmpty();
+        MatchingAll().Should().Equal(1, 2, 3);
+        NotMatchingAny().Should().Equal(1, 2, 3);
+
+        values = [2, null];
+        MatchingAny().Should().Equal(2);
+        MatchingAll().Should().BeEmpty();
+        NotMatchingAny().Should().BeEmpty("a non-match against an array containing NULL is unknown, not false");
+
+        values = [3, 3];
+        MatchingAny().Should().Equal(3);
+        MatchingAll().Should().Equal(3);
+        NotMatchingAny().Should().Equal(1, 2);
+    }
+
+    [Fact]
+    public void ArrayPositions_AndFill_ShouldPreserveNullElementsAndOneBasedPositions()
+    {
+        int?[] values = [null, 8, null, 8];
+        int? missing = null;
+        int[] dimensions = [3];
+
+        var row = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                NullPositions = SqlFunctions.Postgres.array_positions(values, missing),
+                ValuePositions = SqlFunctions.Postgres.array_positions(values, 8),
+                AbsentPositions = SqlFunctions.Postgres.array_positions(values, 9),
+                Filled = SqlFunctions.Postgres.array_fill(7, dimensions),
+                Dimensions = SqlFunctions.Postgres.array_dims(values)
+            })
+            .First();
+
+        row.NullPositions.Should().Equal(1, 3);
+        row.ValuePositions.Should().Equal(2, 4);
+        row.AbsentPositions.Should().BeEmpty();
+        row.Filled.Should().Equal(7, 7, 7);
+        row.Dimensions.Should().Be("[1:4]");
+    }
+
+    [Fact]
     public void SessionInfoFunctions_ShouldExecute()
     {
         var r = _sut.SimpleEntity

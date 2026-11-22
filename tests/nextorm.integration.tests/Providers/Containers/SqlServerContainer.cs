@@ -62,6 +62,11 @@ internal static class SqlServerContainer
         }
     }
 
+    internal static MsSqlContainer CreateOwned() =>
+        new MsSqlBuilder(DefaultImage)
+            .WithReuse(false)
+            .Build();
+
     private static void Resolve()
     {
         if (_resolved)

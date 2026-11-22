@@ -100,7 +100,7 @@
 
 ### Сравнения
 
-- [Nextorm против Dapper, linq2db и EF Core](comparisons/index.md)
+- [Сравнения](comparisons/index.md)
 
 ### Продвинутое
 

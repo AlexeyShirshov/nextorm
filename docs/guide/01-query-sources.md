@@ -22,6 +22,11 @@ the query and returns those values in a list.
 Choose another `From` overload when your rows come from a subquery, raw SQL, a common table expression
 (CTE), a temporary table, or a table-valued function.
 
+## Expose typed sources from an application context
+
+To expose named entity sources such as `app.Orders` and use them with `From` or `Join`,
+see [Repositories and application context](37-repositories.md).
+
 ## Query sources at a glance
 
 [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) has an overload for each source type. Every overload returns an [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1), so you can compose the same query operators (`Where`, `Join`, `GroupBy`, `Having`, `OrderBy`, `Limit`, and `Select`) with any source, subject to the source and provider limitations documented for each operator:

@@ -8,8 +8,6 @@
 
 Global query filters attach a recurring predicate — soft-delete and multi-tenancy are the canonical cases — to the entity type instead of repeating it in every `Where`. A filter can read the executing [`IDataContext`](xref:NextORM.Core.IDataContext), so a tenant identifier or a soft-delete flag is resolved per query while the generated plan stays cached and shared across contexts.
 
-This is the nextorm equivalent of EF Core global query filters and linq2db query filters.
-
 ## Declaring a filter
 
 ### Fluent
@@ -155,7 +153,7 @@ Rules that follow from the above:
 - **Types only** disables **all filters** of those entity types (anonymous and keyed).
 - **Keys only** disables **those keys across all entity types**.
 - **Keys and types** disables the **intersection** — only the listed keys on the listed types.
-- **Empty or `null` key or type list is a no-op**: nothing is disabled. The key list is the gate, so an empty key list disables nothing even when entity types are supplied (mirroring EF Core).
+- **Empty or `null` key or type list is a no-op**: nothing is disabled. An empty key list disables nothing even when entity types are supplied.
 - [`QueryFilters.AnonymousKey`](xref:NextORM.Core.QueryFilters.AnonymousKey) (`""`) targets anonymous filters, e.g. `IgnoreFilters([QueryFilters.AnonymousKey])`.
 
 For example, ignoring only the soft-delete filter while keeping tenant scoping:

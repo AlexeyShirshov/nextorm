@@ -91,6 +91,69 @@ public sealed class SqliteStep4SourceRendererTests : ProviderTestSuite
         ids.Should().Equal(2, 3);
     }
 
+    [Fact]
+    public void RawSource_TypedNullableAccessors_ShouldPreserveZeroAndDatabaseNull()
+    {
+        using (var setup = Context.ExecuteRaw("""
+            create table if not exists s4_src_typed (id integer primary key, n integer, weight real, payload blob);
+            delete from s4_src_typed;
+            insert into s4_src_typed values (1, 0, 1.25, X'00FF'), (2, null, null, null), (3, 7, -2.5, X'');
+            """))
+        {
+        }
+
+        var rows = Context.From("s4_src_typed")
+            .OrderBy(t => t.GetInt32("id"))
+            .Select(t => new
+            {
+                Id = t.GetInt32("id"),
+                Small = t.GetNullableInt16("n"),
+                Wide = t.GetNullableInt64("n"),
+                Byte = t.GetNullableByte("n"),
+                Flag = t.GetNullableBoolean("n"),
+                Float = t.GetNullableSingle("weight"),
+                Double = t.GetNullableDouble("weight"),
+                Blob = t.GetNullableBytes("payload")
+            })
+            .ToList();
+
+        rows.Select(r => r.Id).Should().Equal(1, 2, 3);
+        rows.Select(r => r.Small).Should().Equal((short?)0, null, 7);
+        rows.Select(r => r.Wide).Should().Equal(0L, null, 7L);
+        rows.Select(r => r.Byte).Should().Equal((byte?)0, null, 7);
+        rows.Select(r => r.Flag).Should().Equal(false, null, true);
+        rows.Select(r => r.Float).Should().Equal(1.25f, null, -2.5f);
+        rows.Select(r => r.Double).Should().Equal(1.25, null, -2.5);
+        rows[0].Blob.Should().Equal(0, 255);
+        rows[1].Blob.Should().BeNull();
+        rows[2].Blob.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void RawSource_TypedAccessors_ShouldReadDateGuidAndDecimal()
+    {
+        using (var setup = Context.ExecuteRaw("""
+            create table if not exists s4_src_values (id integer primary key, moment text, token text, amount text);
+            delete from s4_src_values;
+            insert into s4_src_values values (1, '2024-02-29 13:14:15', 'f970c0f8-84c0-417b-97ee-842a90866fdf', '19.875');
+            """))
+        {
+        }
+
+        var row = Context.From("s4_src_values")
+            .Select(t => new
+            {
+                Moment = t.GetDateTime("moment"),
+                Token = t.GetGuid("token"),
+                Amount = t.GetDecimal("amount")
+            })
+            .Single();
+
+        row.Moment.Should().Be(new DateTime(2024, 2, 29, 13, 14, 15, DateTimeKind.Unspecified));
+        row.Token.Should().Be(Guid.Parse("f970c0f8-84c0-417b-97ee-842a90866fdf"));
+        row.Amount.Should().Be(19.875m);
+    }
+
     /// <summary>Two raw sources join on their by-name columns.</summary>
     [Fact]
     public void RawSource_JoinedToRawSource_ShouldJoin()
@@ -190,18 +253,18 @@ public sealed class SqliteStep4SourceRendererTests : ProviderTestSuite
     }
 
     /// <summary>
-    /// The table-valued row shape is an interface, so a whole-row projection has no constructor to
-    /// materialize: the planner refuses it before SQL with its own preparation marker.
+    /// A whole-row projection materializes the declared interface from the table-valued source.
     /// </summary>
     [Fact]
-    public void TableFunction_WholeRowProjection_ShouldBeRefusedByThePlanner()
+    public void TableFunction_WholeRowProjection_ShouldMaterializeTheInterface()
     {
-        var act = () => Context.From(() => JsonEach("[7]"))
+        var rows = Context.From(() => JsonEach("[7]"))
             .Select(r => r)
             .ToList();
 
-        act.Should().Throw<QueryPreparationException>()
-            .WithMessage("*Cannot get ctor*IS4JsonEachRow*");
+        var row = rows.Should().ContainSingle().Which;
+        row.Key.Should().Be(0);
+        row.Value.Should().Be(7);
     }
 
     private static TvfEntityBuilder<IS4JsonEachRow> JsonEach(string json) => new("json_each");

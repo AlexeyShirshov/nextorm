@@ -1,5 +1,33 @@
 # Release notes
 
+## 1.0.11 — 2026-11-22
+
+This release adds a provider-neutral repository API, source-generated interface entities,
+and mutable struct projections. The packages still target .NET 10 and .NET 11.
+
+- **Repository API:** `RepositoryContext` (renamed from `DbContext`) exposes typed repositories
+  (`Repository<T>()`) with `From`/`Join`, `Where`/`OrderBy`/`Limit`, `ToList`/`Count` and their
+  async twins, plus bounded query `DELETE`. See the [repositories guide](docs/guide/37-repositories.md).
+- **Interface entities:** interface-shaped query results can be materialized through source
+  generation instead of hand-written POCO classes.
+- **Struct projections:** mutable struct and readonly struct/record struct projections are
+  supported in SQL queries with zero-allocation materialization.
+- **Docs:** a dedicated [repositories guide](docs/guide/37-repositories.md) and expanded
+  live database integration coverage.
+
+[Changes since 1.0.10.2](https://github.com/AlexeyShirshov/nextorm/compare/v1.0.10.2...v1.0.11)
+
+## 1.0.10.2 — 2026-11-19
+
+### Fixed
+
+- NativeAOT query preparation no longer fails when Nextorm builds an implicit whole-entity
+  projection for a mapped property whose expression metadata isn't available at runtime.
+  Existing queries don't need changes. Regression coverage includes scalar and entity forms of
+  `FirstOrDefault` and `SingleOrDefault`, as well as `Any`.
+
+[Changes since 1.0.10.1](https://github.com/AlexeyShirshov/nextorm/compare/v1.0.10.1...v1.0.10.2)
+
 ## 1.0.10
 
 This release adds vector search, runtime mapping and data routing, and extends the verified

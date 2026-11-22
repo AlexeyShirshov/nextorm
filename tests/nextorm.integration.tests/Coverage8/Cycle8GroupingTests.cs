@@ -46,11 +46,11 @@ public sealed class Cycle8GroupingCollectionDefinition;
 /// <c>GROUPING SETS</c> + <c>WITH TOTALS</c> rejection at :275-276 has no public chain here because
 /// <c>WithTotals</c> is a ClickHouse-only extension and the ClickHouse dialect never reports
 /// <c>SupportsGroupingSets</c>, so :272 rejects first. No skip is declared: both containers are
-/// required and the class fails closed.
+/// required across the two arms and each arm checks its own provider.
 /// </para>
 /// </summary>
 [Collection("Cycle 8 grouping")]
-public sealed class Cycle8GroupingTests : ProviderTestSuite
+public sealed class Cycle8GroupingTests
 {
     private const string PostgresEngine = "postgres";
 
@@ -95,25 +95,14 @@ public sealed class Cycle8GroupingTests : ProviderTestSuite
             (6, null, null, null);
         """;
 
-    public Cycle8GroupingTests()
-    {
-        Execute(Context, PostgresDdl);
-
-        using var sqlServer = CreateSqlServerContext();
-        Execute(sqlServer, SqlServerDdl);
-    }
-
-    /// <summary>
-    /// The base suite (fail-closed availability, shared seed) is declared for PostgreSQL; the SQL
-    /// Server context is created per theory row because one harness instance owns one provider. Both
-    /// providers are mandatory for this class, so an unavailable SQL Server fails the fact instead of
-    /// skipping it.
-    /// </summary>
-    protected override ITestProvider Provider => PostgresTestProvider.Instance;
-
     public static TheoryData<string> Engines => new() { PostgresEngine, SqlServerEngine };
 
-    private IDataContext Context => _sut.DataProvider;
+    private sealed class PostgresFixture : ProviderTestSuite
+    {
+        protected override ITestProvider Provider => PostgresTestProvider.Instance;
+
+        internal IDataContext Context => _sut.DataProvider;
+    }
 
     private static IDataContext CreateSqlServerContext()
     {
@@ -124,20 +113,21 @@ public sealed class Cycle8GroupingTests : ProviderTestSuite
         return provider.CreateContext();
     }
 
-    /// <summary>
-    /// Runs one theory body on the named engine: the shared PostgreSQL suite context, or a dedicated
-    /// SQL Server context disposed with the body.
-    /// </summary>
-    private void OnEngine(string engine, Action<IDataContext> body)
+    // xUnit constructs the test before it supplies the row; defer all database work until here.
+    private static void OnEngine(string engine, Action<IDataContext> body)
     {
         if (string.Equals(engine, PostgresEngine, StringComparison.Ordinal))
         {
-            body(Context);
+            using var fixture = new PostgresFixture();
+            var postgres = fixture.Context;
+            Execute(postgres, PostgresDdl);
+            body(postgres);
             return;
         }
 
-        using var context = CreateSqlServerContext();
-        body(context);
+        using var sqlServer = CreateSqlServerContext();
+        Execute(sqlServer, SqlServerDdl);
+        body(sqlServer);
     }
 
     private static void Execute(IDataContext context, string sql)

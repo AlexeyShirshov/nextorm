@@ -63,6 +63,12 @@ internal static class MySqlContainer
         }
     }
 
+    internal static Testcontainers.MySql.MySqlContainer CreateOwned() =>
+        new MySqlBuilder(DefaultImage)
+            .WithCommand("--local-infile=1")
+            .WithReuse(false)
+            .Build();
+
     private static void Resolve()
     {
         if (_resolved)

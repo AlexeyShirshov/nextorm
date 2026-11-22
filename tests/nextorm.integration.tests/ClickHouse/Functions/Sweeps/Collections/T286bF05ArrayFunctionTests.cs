@@ -46,6 +46,12 @@ public sealed class T286bF05ArrayFunctionTests : ProviderTestSuite
 
         [Column("elem")]
         int Element { get; set; }
+
+        [Column("_x")]
+        int RemovalElement { get; set; }
+
+        [Column("_x2")]
+        int NextRemovalElement { get; set; }
     }
 
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;
@@ -69,9 +75,10 @@ public sealed class T286bF05ArrayFunctionTests : ProviderTestSuite
                  {
                      "drop table if exists t286b_f05_entity",
                      "create table t286b_f05_entity (id Int32, ints Array(Int32), nints Array(Nullable(Int32)), "
-                     + "longs Array(Int64), strs Array(String), nested Array(Array(Int64)), k Int64, elem Int32) "
-                     + "engine = Memory",
-                     "insert into t286b_f05_entity (id, ints, nints, longs, strs, nested, k, elem) values "
+                      + "longs Array(Int64), strs Array(String), nested Array(Array(Int64)), k Int64, elem Int32, "
+                      + "_x Int32 alias elem, _x2 Int32 alias (elem + 1)) "
+                      + "engine = Memory",
+                      "insert into t286b_f05_entity (id, ints, nints, longs, strs, nested, k, elem) values "
                      + "(1, [1, 2, 3, 2], [1, NULL, 3], [10, 20, 30, 40], ['a', 'b', 'c', 'd'], [[1, 2, 3], [4, 5, 6]], 2, 2), "
                      + "(2, [], [], [], [], [], 0, 0), "
                      + "(3, [4, 4, 5], [NULL, NULL], [7], ['x'], [[1], [2]], 1, 4)"
@@ -81,6 +88,48 @@ public sealed class T286bF05ArrayFunctionTests : ProviderTestSuite
             command.CommandText = statement;
             command.ExecuteNonQuery();
         }
+    }
+
+    [Fact]
+    public void ArrayRemove_ColumnNamesMatchGeneratedLambdaNames_ShouldStillRemoveOnlyTheRequestedValue()
+    {
+        Seed();
+        using var ctx = Provider.CreateContext();
+        var rows = ctx.From<IT286bArrayEntity>()
+            .OrderBy(x => x.Id)
+            .Select(x => new
+            {
+                x.Id,
+                Values = SqlFunctions.ClickHouse.array_remove(x.Ints,
+                    x.RemovalElement + x.NextRemovalElement - x.Element - 1)
+            })
+            .ToList();
+
+        rows.Select(x => x.Id).Should().Equal(1, 2, 3);
+        rows[0].Values.Should().Equal(1, 3);
+        rows[1].Values.Should().BeEmpty();
+        rows[2].Values.Should().Equal(5);
+    }
+
+    [Fact]
+    public void ArrayPartialSort_TwoCapturedOperands_ShouldRebindBothOnRepeatedExecution()
+    {
+        Seed();
+        using var ctx = Provider.CreateContext();
+        int[] values = [5, 3, 1, 4];
+        long count = 2;
+        int[] Sorted() => ctx.From<IT286bArrayEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.ClickHouse.array_partial_sort(values, count))
+            .First();
+
+        var first = Sorted();
+        first.Take(2).Should().Equal(1, 3);
+        first.Should().BeEquivalentTo(values);
+
+        values = [40, -2, 10];
+        count = 3;
+        Sorted().Should().Equal(-2, 10, 40);
     }
 
     [Fact]

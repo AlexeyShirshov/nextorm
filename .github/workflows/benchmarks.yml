@@ -37,6 +37,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # git describe needs the checkout's reachable release tags.
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
@@ -55,6 +57,10 @@ jobs:
           mkdir -p "$(dirname "$NEXTORM_BENCH_DB")"
           cp benchmarks/nextorm.benchmark/data/test.db "$NEXTORM_BENCH_DB"
           touch "$RUNNER_TEMP/bench-start"
+
+          # Label the measured checkout, never a newer release that happens to exist.
+          source_version="$(git describe --tags --match 'v[0-9]*' --abbrev=12 --always HEAD)"
+          source_version="${source_version#v}"
 
           # Full globs (BDN rejects an exact-suffix filter): "*SqliteBenchmarkIteration*" does not
           # match SqliteBenchmarkLargeIteration because the type name differs after "SqliteBenchmark".
@@ -111,6 +117,7 @@ jobs:
 
           python3 tools/benchmarks/update_benchmark_tables.py \
             --run-evidence "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --run-version "${source_version}" \
             "${suite_dates[@]}"
 
       - name: Regenerate tables from the new reports

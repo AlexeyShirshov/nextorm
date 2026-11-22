@@ -34,6 +34,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
     private Expression<Func<TEntity, bool>>? _condition;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
     private MappingVariant _mappingVariant = MappingVariant.Default;
+    private bool _hasExplicitLimit;
     private LambdaExpression? _group;
     private LimitByClause? _limitBy
     {
@@ -3489,6 +3490,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
         var b = Clone();
 
         b.Paging.Limit = limit;
+        b._hasExplicitLimit = true;
 
         return b;
     }
@@ -3513,6 +3515,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
 
         b.Paging.Limit = limit;
         b.Paging.Offset = offset;
+        b._hasExplicitLimit = true;
 
         return b;
     }
@@ -3641,6 +3644,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
     {
         dst._query = _query;
         dst.Paging = Paging;
+        dst._hasExplicitLimit = _hasExplicitLimit;
         // The ordering list is shared with the copy; the only in-place writer (OrderBy) detaches it before
         // appending, so a fork never gains the parent's later ordering keys.
         dst._sorting = _sorting;

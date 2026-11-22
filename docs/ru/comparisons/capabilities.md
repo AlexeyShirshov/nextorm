@@ -162,6 +162,27 @@
   низкоаллокационный дизайн с бенчмарками на уровне или выше Dapper, EF Core и linq2db на поставляемых
   сценариях.
 
+## Интерфейсные сущности без класса реализации
+
+В Nextorm объявите плоский интерфейс и укажите его как тип сущности в `From<T>()`.
+Генератор создаёт реализацию при компиляции: писать и регистрировать класс не нужно.
+`Returning()` также может вернуть всю строку как объект этого интерфейса, если провайдер
+поддерживает операцию. Тест SQLite NativeAOT подтверждает, что запрос к интерфейсу возвращает
+те же идентификаторы, что и запрос к эквивалентному классу. Это не гарантия поддержки NativeAOT
+для всех провайдеров и форм запросов. См. [пример запроса к интерфейсной сущности](../getting-started/03-entities-and-metadata.md#запросите-интерфейсную-сущность).
+
+Разница между библиотеками не в самом использовании интерфейса, а в том, что и когда они генерируют:
+
+| Библиотека | Как она работает с интерфейсными результатами |
+|---|---|
+| linq2db | [Документированный пример](https://github.com/linq2db/linq2db/wiki/Linq-To-DB-6) начинает запрос с конкретной сопоставленной сущности и обращается к её членам через интерфейс. В этом сценарии библиотека не генерирует реализацию из одного интерфейса. |
+| EF Core | [Модель не принимает интерфейс как тип сущности](https://github.com/dotnet/efcore/blob/main/src/Shared/SharedTypeExtensions.cs#L42-L51). [Прекомпиляция запросов для NativeAOT](https://learn.microsoft.com/en-us/ef/core/performance/nativeaot-and-precompiled-queries) генерирует код запроса и материализации, а не класс, реализующий интерфейс. |
+| Dapper.Contrib | [`Get<T>()` и `GetAll<T>()`](https://github.com/DapperLib/Dapper.Contrib/blob/main/src/Dapper.Contrib/SqlMapperExtensions.cs#L185-L260) могут читать строки в интерфейс без пользовательского класса. Библиотека [создаёт прокси во время выполнения через `Reflection.Emit`](https://github.com/DapperLib/Dapper.Contrib/blob/main/src/Dapper.Contrib/SqlMapperExtensions.cs#L553-L598). |
+| Dapper.AOT | Генерирует маппер строк при компиляции. [Типу результата нужен подходящий конструктор или фабрика](https://github.com/DapperLib/DapperAOT/blob/main/docs/rules/DAP050.md); маппер не генерирует реализацию из одного интерфейса. |
+| NHibernate | [Интерфейсный прокси опирается на сопоставленный класс](https://nhibernate.info/doc/nhibernate-reference/persistent-classes.html#persistent-classes-poco-sealed). [Динамические модели](https://nhibernate.info/doc/nhibernate-reference/persistent-classes.html#persistent-classes-dynamicmodels) обходятся без класса, но используют словарь или `dynamic`, а не типизированный интерфейс. |
+
+Сравнение основано на документации и исходном коде, а не на сравнительных запусках библиотек.
+
 ## Осознанные границы: что Nextorm оставляет linq2db
 
 Это сознательные решения по scope в сфокусированной модели Nextorm без отслеживания изменений — не пробелы
