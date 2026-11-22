@@ -3,84 +3,84 @@
   "dateBasis": "UTC suite-start date",
   "suites": {
     "SqliteBenchmarkIteration": {
-      "asOfDate": "2026-11-18",
-      "sourceVersion": "1.0.10.1",
-      "sourceEvidence": "https://github.com/AlexeyShirshov/nextorm/actions/runs/44277783065",
+      "asOfDate": "2026-11-22",
+      "sourceVersion": "1.0.10.2-30-gc057a6c3836e",
+      "sourceEvidence": "https://github.com/AlexeyShirshov/nextorm/actions/runs/45032745550",
       "reportsSha256": {
-        "NextORM.Benchmark.SqliteBenchmarkIteration-report.csv": "0a4f61c2c7747c8dfe4ab8f653d01a40fd1d718117bf0f27042da8197991a78f",
-        "NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md": "70ea76823305826d276f58c42be5eeb2d9140b9995ff209708226782c1ef3984"
+        "NextORM.Benchmark.SqliteBenchmarkIteration-report.csv": "181ebb11ac0c8fb63f8c9aa7ace955ff7bb0c9d82822eea7d6a3483e28238dfb",
+        "NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md": "fd075a272214b1f4f44b7242f260c84fa0a7833959bcedf6a9b8d7cef1b08ea2"
       }
     },
     "SqliteBenchmarkLargeIteration": {
-      "asOfDate": "2026-11-18",
-      "sourceVersion": "1.0.10.1",
-      "sourceEvidence": "https://github.com/AlexeyShirshov/nextorm/actions/runs/44277783065",
+      "asOfDate": "2026-11-22",
+      "sourceVersion": "1.0.10.2-30-gc057a6c3836e",
+      "sourceEvidence": "https://github.com/AlexeyShirshov/nextorm/actions/runs/45032745550",
       "reportsSha256": {
-        "NextORM.Benchmark.SqliteBenchmarkLargeIteration-report.csv": "7ece4e93ea39010d99ba4d54b9a2e32e0b48f693c555a17ce4fca3755cef3f0b",
-        "NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md": "8ccaa68c7fc0096739490c22ed9e7572829c73ac6dbc1a527811d46e65fb52c3"
+        "NextORM.Benchmark.SqliteBenchmarkLargeIteration-report.csv": "f5623c1166ccc14907297dbd2facb3d5138ba4ea0592d0538efb9b68f4cb841e",
+        "NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md": "536ec73065e92b38d0f5e1f950925adae545b43126c99b851e259345cf4913c0"
       }
     },
     "SqliteBenchmarkWhere": {
-      "asOfDate": "2026-11-18",
-      "sourceVersion": "1.0.10.1",
-      "sourceEvidence": "https://github.com/AlexeyShirshov/nextorm/actions/runs/44277783065",
+      "asOfDate": "2026-11-22",
+      "sourceVersion": "1.0.10.2-30-gc057a6c3836e",
+      "sourceEvidence": "https://github.com/AlexeyShirshov/nextorm/actions/runs/45032745550",
       "reportsSha256": {
-        "NextORM.Benchmark.SqliteBenchmarkWhere-report.csv": "06849080f2dd9a68428c8f757d2cec5f2ecc3fdd186fe356e6af79c5600ea712",
-        "NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md": "a22bc98566fc49b1930392a7e4b4cadfad174f05418baca6b5ffbad406204a41"
+        "NextORM.Benchmark.SqliteBenchmarkWhere-report.csv": "e884d370fed008456455f00e64687b7b999b0a0682cdf8e4efd98b378fdfc15b",
+        "NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md": "2e0168b6aa0eb71ce2df12887c9ff6c395e218ceda9ae618e807ddc921cf205f"
       }
     },
     "SqliteBenchmarkSimulateWork": {
-      "asOfDate": "2026-11-18",
-      "sourceVersion": "1.0.10.1",
-      "sourceEvidence": "https://github.com/AlexeyShirshov/nextorm/actions/runs/44277783065",
+      "asOfDate": "2026-11-22",
+      "sourceVersion": "1.0.10.2-30-gc057a6c3836e",
+      "sourceEvidence": "https://github.com/AlexeyShirshov/nextorm/actions/runs/45032745550",
       "reportsSha256": {
-        "NextORM.Benchmark.SqliteBenchmarkSimulateWork-report.csv": "b674ddf2d580cdd4ad0c238ba30af4eb4585c6a0a3e225a08528564b233e1a9a",
-        "NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md": "ba7e05bdbba3bf531b35262fa2ee04e5c6c12bef1dcb9935373f7faab6049a0e"
+        "NextORM.Benchmark.SqliteBenchmarkSimulateWork-report.csv": "1ddd4d4a2932d0e23bb9b8fc5b7b7dd08ffe3f5dcdae5fa04bbed5c41baaf67d",
+        "NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md": "d71f965eb24934a5c8d7b3a58a917f1c2b34917bf7863728710c1069bb319bba"
       }
     },
     "SqliteBenchmarkAny": {
-      "asOfDate": "2026-11-18",
-      "sourceVersion": "1.0.10.1",
-      "sourceEvidence": "https://github.com/AlexeyShirshov/nextorm/actions/runs/44277783065",
+      "asOfDate": "2026-11-22",
+      "sourceVersion": "1.0.10.2-30-gc057a6c3836e",
+      "sourceEvidence": "https://github.com/AlexeyShirshov/nextorm/actions/runs/45032745550",
       "reportsSha256": {
-        "NextORM.Benchmark.SqliteBenchmarkAny-report.csv": "857359424d18401865d0c1a3289ae968468dd1765c34549e20397fea557d8a8e",
-        "NextORM.Benchmark.SqliteBenchmarkAny-report-github.md": "dad61e5c703c908bebcaf906458819576bb42316b065f1ea2b59efc4f20b9727"
+        "NextORM.Benchmark.SqliteBenchmarkAny-report.csv": "f48814609510273ff432ef392012e3c05ff40dfadc046f42c336f75164705635",
+        "NextORM.Benchmark.SqliteBenchmarkAny-report-github.md": "6fc15e3c639ecd4d7b39618c948775510fcd767a9deacd93ef3915ab91b58853"
       }
     },
     "SqliteBenchmarkFirst": {
-      "asOfDate": "2026-11-18",
-      "sourceVersion": "1.0.10.1",
-      "sourceEvidence": "https://github.com/AlexeyShirshov/nextorm/actions/runs/44277783065",
+      "asOfDate": "2026-11-22",
+      "sourceVersion": "1.0.10.2-30-gc057a6c3836e",
+      "sourceEvidence": "https://github.com/AlexeyShirshov/nextorm/actions/runs/45032745550",
       "reportsSha256": {
-        "NextORM.Benchmark.SqliteBenchmarkFirst-report.csv": "a6719b1e012f8788f9cc936ef0b52e3daa6695ad6a8cc2c49c7ceecd17e0075d",
-        "NextORM.Benchmark.SqliteBenchmarkFirst-report-github.md": "e43187bf3566a38827c64b7127122d3ec0303c4a240c274c50e426e93f6a6ad9"
+        "NextORM.Benchmark.SqliteBenchmarkFirst-report.csv": "8d5f173e0bf221174fd79a1974c436c4ed35f8b1b0a2c979167e254d59ddcb98",
+        "NextORM.Benchmark.SqliteBenchmarkFirst-report-github.md": "98c04f92f30d2428549e4707b505fa13a821257a04e347542a97a3854700bb08"
       }
     },
     "SqliteBenchmarkSingle": {
-      "asOfDate": "2026-11-18",
-      "sourceVersion": "1.0.10.1",
-      "sourceEvidence": "https://github.com/AlexeyShirshov/nextorm/actions/runs/44277783065",
+      "asOfDate": "2026-11-22",
+      "sourceVersion": "1.0.10.2-30-gc057a6c3836e",
+      "sourceEvidence": "https://github.com/AlexeyShirshov/nextorm/actions/runs/45032745550",
       "reportsSha256": {
-        "NextORM.Benchmark.SqliteBenchmarkSingle-report.csv": "2bda647470176320a3783d96ce2e8997ae270acbfec7328496901eaa3a02593d",
-        "NextORM.Benchmark.SqliteBenchmarkSingle-report-github.md": "848ea1c38ab4e7a3c973ee80642e9faef56e87511eb0537e1417f3793bb1ab83"
+        "NextORM.Benchmark.SqliteBenchmarkSingle-report.csv": "af765e1fe6f596cfb0ebdee8897cdcc6efa8e85b23b3d6cf0fd6ac40c948d27f",
+        "NextORM.Benchmark.SqliteBenchmarkSingle-report-github.md": "ed8f514e9b4d1eb6bf11199229d7c42e92d5f671a77eb3defa283cc263d2b831"
       }
     },
     "SqliteBenchmarkFeaturesFair": {
-      "asOfDate": "2026-11-18",
-      "sourceVersion": "1.0.10.1",
-      "sourceEvidence": "https://github.com/AlexeyShirshov/nextorm/actions/runs/44277783065",
+      "asOfDate": "2026-11-22",
+      "sourceVersion": "1.0.10.2-30-gc057a6c3836e",
+      "sourceEvidence": "https://github.com/AlexeyShirshov/nextorm/actions/runs/45032745550",
       "reportsSha256": {
-        "NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report.csv": "da5077eb3c087ee8c94494dfa7e160d8d85356b57aa62ac54d8fb68d8e269647",
-        "NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md": "b1b9aa63408d69b5e1bbadd9b9ec8361f2c49f16487c7912c34c069c512be3c4"
+        "NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report.csv": "ffa2e5bed7b249e9489849273defbe5c6e4da2eb48ccdd73ecde114d1a996561",
+        "NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md": "d550e1b056519e61d0c3ba9fb6580897e8655d6ec8b1924b9145a926ee327497"
       }
     },
     "SqliteBenchmarkFeaturesFairCached": {
-      "asOfDate": "2026-11-18",
-      "sourceVersion": "1.0.10.1",
-      "sourceEvidence": "https://github.com/AlexeyShirshov/nextorm/actions/runs/44277783065",
+      "asOfDate": "2026-11-22",
+      "sourceVersion": "1.0.10.2-30-gc057a6c3836e",
+      "sourceEvidence": "https://github.com/AlexeyShirshov/nextorm/actions/runs/45032745550",
       "reportsSha256": {
-        "NextORM.Benchmark.SqliteBenchmarkFeaturesFairCached-report.csv": "ef375150be81cef762e3c58503390eb20e085395ce7ffdc5c460e8f6d13bd94b",
-        "NextORM.Benchmark.SqliteBenchmarkFeaturesFairCached-report-github.md": "9769a2c268b3969af24558e118fa5ac080b3353f5193c03c34ab2f38bf29cbc6"
+        "NextORM.Benchmark.SqliteBenchmarkFeaturesFairCached-report.csv": "14bb183c893b21f14134d1bffb5b1b4f7bb7d7ed3e5d9516f144da9eff8c258a",
+        "NextORM.Benchmark.SqliteBenchmarkFeaturesFairCached-report-github.md": "014d98cd2911535a070c5dc860e8be616ca6c2f86104de6096bf0965924aeef2"
       }
     }
   }
