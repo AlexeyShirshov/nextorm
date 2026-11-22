@@ -5,11 +5,11 @@
 
 <!-- benchmarks:conditions:start -->
 Условия: провайдер SQLite (`Microsoft.Data.Sqlite`) у всех участников; асинхронные запросы; в ячейке — **самый
-быстрый метод** этой библиотеки в связанном отчёте BenchmarkDotNet. Машина: AMD EPYC 9V45 (4 логических / 2
-физических ядер), .NET 11.0.0, BenchmarkDotNet 0.15.8 (`ShortRun` + `InProcessEmitToolchain`). На
-**2026-11-18** для таблиц сквозных сценариев и аллокаций; категория B запущена **2026-11-18**. Категория A и
-раздел tier-1 сохраняют даты своих прогонов. В каждой строке лидирующая ячейка выделена **полужирным** —
-быстрейшая в таблицах времени и с наименьшей аллокацией в таблице аллокаций.
+быстрый метод** этой библиотеки в связанном отчёте BenchmarkDotNet. Машина: AMD Ryzen 7 5800HS with Radeon
+Graphics (8 логических / 4 физических ядер), .NET 11.0.0, BenchmarkDotNet 0.15.8 (`Job.Default` +
+`InProcessEmitToolchain`). На **2026-11-18** для таблиц сквозных сценариев и аллокаций; категория B запущена
+**2026-11-18**. Категория A и раздел tier-1 сохраняют даты своих прогонов. В каждой строке лидирующая ячейка
+выделена **полужирным** — быстрейшая в таблицах времени и с наименьшей аллокацией в таблице аллокаций.
 <!-- benchmarks:conditions:end -->
 
 > **Сравнение по возможностям:** результаты сгруппированы по тирам, без веток `Prepare()`: одна
@@ -21,10 +21,10 @@
 <!-- benchmarks:e2e:start -->
 | Метод | Nextorm | Dapper | linq2db | EF Core |
 |---|:---:|:---:|:---:|:---:|
-| [Выборка данных](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md) | **8.248 μs** | 10.785 μs | 11.084 μs | 21.973 μs |
-| [Широкая выборка данных](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md) | **6.632 ms** | 7.467 ms | 7.585 ms | 7.659 ms |
-| [Where](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md) | **705.0 μs** | 896.1 μs | 926.8 μs | 1,924.2 μs |
-| [Simulate work](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md) | **5.654 ms** | 14.806 ms | 107.557 ms | 59.253 ms |
+| [Выборка данных](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md) | **11.75 μs** | 16.40 μs | 16.84 μs | 35.90 μs |
+| [Широкая выборка данных](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md) | **8.030 ms** | 8.799 ms | 9.140 ms | 9.611 ms |
+| [Where](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md) | **1.038 ms** | 1.526 ms | 1.526 ms | 3.347 ms |
+| [Simulate work](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md) | **8.425 ms** | 24.088 ms | 358.743 ms | 113.061 ms |
 | [Any](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md) | **728.6 μs** | 921.6 μs | 968.5 μs | 1,950.4 μs |
 | [FirstOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFirst-report-github.md) | **74.11 μs** | 94.52 μs | 150.02 μs | 200.65 μs |
 | [SingleOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSingle-report-github.md) | **72.72 μs** | 90.03 μs | 150.76 μs | 186.52 μs |
@@ -37,10 +37,10 @@
 <!-- benchmarks:allocations:start -->
 | Метод | Nextorm | Dapper | linq2db | EF Core |
 |---|:---:|:---:|:---:|:---:|
-| Выборка данных | **968 B** | 1,896 B | 2,080 B | 9,776 B |
-| Широкая выборка данных | **2.14 MB** | 2.59 MB | **2.14 MB** | 4.28 MB |
-| Where | **102.58 KB** | 179.22 KB | 252.74 KB | 745.39 KB |
-| Simulate work | **6.21 MB** | 8.86 MB | 107.44 MB | 13.56 MB |
+| Выборка данных | **968 B** | 1,848 B | 2,456 B | 9,776 B |
+| Широкая выборка данных | 2.21 MB | 2.59 MB | **2.14 MB** | 4.28 MB |
+| Where | **117.42 KB** | 179.23 KB | 252.75 KB | 745.41 KB |
+| Simulate work | **6.21 MB** | 8.86 MB | 107.98 MB | 13.57 MB |
 | Any | **84.38 KB** | 138.29 KB | 232.81 KB | 763.28 KB |
 | FirstOrDefault | **8.55 KB** | 16.12 KB | 159.77 KB | 76.02 KB |
 | SingleOrDefault | **8.28 KB** | 16.04 KB | 159.77 KB | 76.02 KB |

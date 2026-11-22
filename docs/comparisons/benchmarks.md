@@ -5,11 +5,11 @@ evidence for these scenarios, not a prediction for every provider, workload, or 
 
 <!-- benchmarks:conditions:start -->
 Benchmark conditions: provider SQLite (`Microsoft.Data.Sqlite`) for every participant; async queries; each
-cell is the **fastest method** for that library in the linked BenchmarkDotNet report. Machine: AMD EPYC 9V45
-(4 logical / 2 physical cores), .NET 11.0.0, BenchmarkDotNet 0.15.8 (`ShortRun` + `InProcessEmitToolchain`).
-As of **2026-11-18** for the end-to-end and allocations tables; Category B was run on **2026-11-18**. Category
-A and Tier-1 keep the dates of their own runs. In each row the leading cell is **bold** — the fastest in the
-time tables and the smallest allocation in the allocations table.
+cell is the **fastest method** for that library in the linked BenchmarkDotNet report. Machine: AMD Ryzen 7
+5800HS with Radeon Graphics (8 logical / 4 physical cores), .NET 11.0.0, BenchmarkDotNet 0.15.8 (`Job.Default`
++ `InProcessEmitToolchain`). As of **2026-11-18** for the end-to-end and allocations tables; Category B was
+run on **2026-11-18**. Category A and Tier-1 keep the dates of their own runs. In each row the leading cell is
+**bold** — the fastest in the time tables and the smallest allocation in the allocations table.
 <!-- benchmarks:conditions:end -->
 
 > **Feature-level view:** a per-feature, tiered comparison — no `Prepare()` arms, one table per tier,
@@ -20,10 +20,10 @@ time tables and the smallest allocation in the allocations table.
 <!-- benchmarks:e2e:start -->
 | Method | Nextorm | Dapper | linq2db | EF Core |
 |---|:---:|:---:|:---:|:---:|
-| [Data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md) | **8.248 μs** | 10.785 μs | 11.084 μs | 21.973 μs |
-| [Wide data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md) | **6.632 ms** | 7.467 ms | 7.585 ms | 7.659 ms |
-| [Where](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md) | **705.0 μs** | 896.1 μs | 926.8 μs | 1,924.2 μs |
-| [Simulate work](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md) | **5.654 ms** | 14.806 ms | 107.557 ms | 59.253 ms |
+| [Data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md) | **11.75 μs** | 16.40 μs | 16.84 μs | 35.90 μs |
+| [Wide data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md) | **8.030 ms** | 8.799 ms | 9.140 ms | 9.611 ms |
+| [Where](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md) | **1.038 ms** | 1.526 ms | 1.526 ms | 3.347 ms |
+| [Simulate work](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md) | **8.425 ms** | 24.088 ms | 358.743 ms | 113.061 ms |
 | [Any](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md) | **728.6 μs** | 921.6 μs | 968.5 μs | 1,950.4 μs |
 | [FirstOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFirst-report-github.md) | **74.11 μs** | 94.52 μs | 150.02 μs | 200.65 μs |
 | [SingleOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSingle-report-github.md) | **72.72 μs** | 90.03 μs | 150.76 μs | 186.52 μs |
@@ -36,10 +36,10 @@ Allocations for the same fastest method per library (BenchmarkDotNet `Allocated`
 <!-- benchmarks:allocations:start -->
 | Method | Nextorm | Dapper | linq2db | EF Core |
 |---|:---:|:---:|:---:|:---:|
-| Data fetch | **968 B** | 1,896 B | 2,080 B | 9,776 B |
-| Wide data fetch | **2.14 MB** | 2.59 MB | **2.14 MB** | 4.28 MB |
-| Where | **102.58 KB** | 179.22 KB | 252.74 KB | 745.39 KB |
-| Simulate work | **6.21 MB** | 8.86 MB | 107.44 MB | 13.56 MB |
+| Data fetch | **968 B** | 1,848 B | 2,456 B | 9,776 B |
+| Wide data fetch | 2.21 MB | 2.59 MB | **2.14 MB** | 4.28 MB |
+| Where | **117.42 KB** | 179.23 KB | 252.75 KB | 745.41 KB |
+| Simulate work | **6.21 MB** | 8.86 MB | 107.98 MB | 13.57 MB |
 | Any | **84.38 KB** | 138.29 KB | 232.81 KB | 763.28 KB |
 | FirstOrDefault | **8.55 KB** | 16.12 KB | 159.77 KB | 76.02 KB |
 | SingleOrDefault | **8.28 KB** | 16.04 KB | 159.77 KB | 76.02 KB |

@@ -157,23 +157,23 @@ The reference app ships in the repository:
 
 <!-- benchmarks:conditions:start -->
 Benchmark conditions: provider SQLite (`Microsoft.Data.Sqlite`); async queries; each cell is the fastest
-method for that ORM in the linked report. Machine: AMD EPYC 9V45 (4 logical / 2 physical cores), .NET 11.0.0,
-BenchmarkDotNet 0.15.8 (`ShortRun` + `InProcessEmitToolchain`). End-to-end suites run on **1.0.10.1**. Each
-method name links to its BenchmarkDotNet report, and the **Code** column links to the benchmark source in this
-repository — the exact code behind the row. The last twelve rows are the basic-feature scenarios (Category A
-in the [comparison article](https://alexeyshirshov.github.io/nextorm/comparisons/benchmarks.html)): Nextorm
-through `Prepare()` against the compiled form of EF Core and linq2db and raw Dapper, ten queries per
-iteration, so each cell there is the per-query mean. Those rows come from the Category A suite run on
-**1.0.10.1**.
+method for that ORM in the linked report. Machine: AMD Ryzen 7 5800HS with Radeon Graphics (8 logical / 4
+physical cores), .NET 11.0.0, BenchmarkDotNet 0.15.8 (`Job.Default` + `InProcessEmitToolchain`). End-to-end
+suites run on **1.0.10.1**. Each method name links to its BenchmarkDotNet report, and the **Code** column
+links to the benchmark source in this repository — the exact code behind the row. The last twelve rows are the
+basic-feature scenarios (Category A in the [comparison
+article](https://alexeyshirshov.github.io/nextorm/comparisons/benchmarks.html)): Nextorm through `Prepare()`
+against the compiled form of EF Core and linq2db and raw Dapper, ten queries per iteration, so each cell there
+is the per-query mean. Those rows come from the Category A suite run on **1.0.10.1**.
 <!-- benchmarks:conditions:end -->
 
 <!-- benchmarks:e2e:start -->
 | Method | Nextorm | Dapper | linq2db | EF Core | Code |
 |---|:---:|:---:|:---:|:---:|---|
-| [Data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md) | **8.248 μs** | 10.785 μs | 11.084 μs | 21.973 μs | [code](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkIteration.cs#L17) |
-| [Wide data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md) | **6.632 ms** | 7.467 ms | 7.585 ms | 7.659 ms | [code](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkLargeIteration.cs#L24) |
-| [Where](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md) | **705.0 μs** | 896.1 μs | 926.8 μs | 1,924.2 μs | [code](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkWhere.cs#L20) |
-| [Simulate work](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md) | **5.654 ms** | 14.806 ms | 107.557 ms | 59.253 ms | [code](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkSimulteWork.cs#L17) |
+| [Data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md) | **11.75 μs** | 16.40 μs | 16.84 μs | 35.90 μs | [code](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkIteration.cs#L17) |
+| [Wide data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md) | **8.030 ms** | 8.799 ms | 9.140 ms | 9.611 ms | [code](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkLargeIteration.cs#L24) |
+| [Where](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md) | **1.038 ms** | 1.526 ms | 1.526 ms | 3.347 ms | [code](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkWhere.cs#L20) |
+| [Simulate work](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md) | **8.425 ms** | 24.088 ms | 358.743 ms | 113.061 ms | [code](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkSimulteWork.cs#L17) |
 | [Any](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md) | **728.6 μs** | 921.6 μs | 968.5 μs | 1,950.4 μs | [code](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkAny.cs#L17) |
 | [FirstOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFirst-report-github.md) | **74.11 μs** | 94.52 μs | 150.02 μs | 200.65 μs | [code](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkFirst.cs#L17) |
 | [SingleOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSingle-report-github.md) | **72.72 μs** | 90.03 μs | 150.76 μs | 186.52 μs | [code](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkSingle.cs#L17) |
