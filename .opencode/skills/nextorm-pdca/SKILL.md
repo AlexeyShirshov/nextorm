@@ -152,6 +152,12 @@ description: "nextorm overlay for the global `pdca-dotnet` cycle: project implem
 
 ## DO: формирование гайдов (документация)
 
+- **Любая новая функциональность требует пользовательской документации.** В том же изменении обнови
+  подходящие опубликованные страницы или добавь новые, если подходящих нет. Синхронизируй версии
+  EN и RU, исправь устаревшие описания и добавь новые страницы в соответствующие `toc.yml`.
+  Объясни, как воспользоваться новой возможностью и какие ограничения действуют. Внутренняя
+  спецификация, запись PDCA и XML-комментарии не заменяют пользовательский гайд. В handoff укажи
+  пути и разделы обновлённых страниц.
 - **Крупный блок новой функциональности выносится в отдельный гайд.** Если большой
   законченный блок новой функциональности не относится ни к одному существующему
   гайду, он оформляется **своим гайдом** (`docs/<тема>/index.md` + нумерованные
@@ -186,6 +192,11 @@ nextorm-конкретикой:
 - **Без бенчмарк-выводов** (дельты <~20% — шум); числа — на perf-аналитика (через субагента).
 
 ## CHECK: независимая оценка audit evidence
+
+Для каждой новой функциональности проверь выполнение требования из
+§«DO: формирование гайдов (документация)» на том же кандидате. Если пользовательская
+документация отсутствует, неполна или противоречит реализации, верни работу в DO; не принимай
+функциональность без документации.
 
 Каждый CHECK, включая recheck, явно оценивает design-review report для текущего candidate. CHECK
 не выполняет сам дизайн-проход: он получает inline применимые инструкции, report из `evidence_root`
@@ -351,43 +362,16 @@ comparison and report reuse; прочие правила identity, повтор�
   доказанном восстановлении причины, пока evidence ещё нужен. Завершившийся assertion failure —
   результат теста, не infrastructure (`pdca-coder` §Test run safety).
 
-### Обязательный evidence contract
+### Доказательства для CHECK
 
-Executor готовит project evidence contract в DO из неизменённых критериев, применимой policy и
-base `evidence_root`; PLAN не выбирает его команды, evidence methods или artifact preparation.
-Схема и completeness rules наследуются из «Versioned evidence contract» и «CHECK completeness
-gate — mandatory evidence contract» глобального скилла `pdca-dotnet`; этот оверлей не вводит
-конкурирующую схему.
+Executor передаёт независимому CHECK утверждённый PLAN по точной ссылке, идентификатор проверенного
+кандидата и ссылки на первичные результаты по критериям PLAN. Например, для критерия о покрытии
+укажи конфигурацию, исходный отчёт покрытия и команду, которая его получила. CHECK оценивает
+каждый критерий: `met`, `unmet` или `unverified`.
 
-**Frozen evidence manifest (nextorm).** Путь — базовый дефолт `pdca-dotnet` §«Versioned evidence
-contract» (`.pdca/<task>/rv<k>/manifest.json`, `<task>` — `D<issue>`/kebab-slug, `<k>` — ревизия
-контракта `rv`). `.pdca/` — фиксированный workspace-корень скилла (§«Skill workspace» базового
-`pdca`), nextorm его **не переопределяет** и не дублирует, а схему не копирует: она — там же.
-Валидируется in-repo `python3 .pdca/scripts/validate_inner_loop.py manifest <путь>` (покрытие
-`required_rows` + форма строк и evidence). Пишет его DO на границе DO→CHECK; CHECK получает его
-как candidate evidence и оценивает строки по base procedure.
-
-**Связь `rv` и coverage-run.** `rv<k>` — ревизия evidence-контракта, не номер запуска. Текущий
-manifest может ссылаться на прежний immutable receipt/run, если он относится к тому же frozen
-candidate и его существенные inputs/условия эквивалентны; одна новая `rv`, `r`, `n` или session не
-требует повторного запуска. Обязательная проверка `lint` по-прежнему привязывает candidate receipts
-к текущему frozen tree. Baseline хранит собственную provenance и comparison basis (его исходники
-обычно отличаются от candidate); не выдавай его за receipt текущего tree и не пересобирай только
-из-за новой ревизии manifest.
-
-**Локальный provenance-гейт (nextorm).** До handoff на CHECK executor выполняет
-`python3 .pdca/scripts/pdca_evidence.py lint --repo . --manifest .pdca/<task>/rv<k>/manifest.json`
-и передаёт rc 0 плюс log как evidence: lint пересчитывает frozen-tree тем же рецептом и требует
-`manifest.tree == recomputed == tree/tree_binding каждого receipt` (включая невыбранные), ловит
-path-escape, дубли id и плейсхолдерные деревья. Гейт **принят в канонический контракт**
-`pdca-dotnet` (R234-03G закрыт): `scripts/pdca_evidence.py` вместе с harness/tests/fixtures — это
-**источник** в глобальном скилле, а проект запускает свои копии из `.pdca/scripts/`
-(§«Skill workspace»); `.pdca/scripts/**` не версионируется, поэтому на свежем клоне копию берут из
-глобального скилла и кладут в `.pdca/scripts/`; §«Versioned evidence contract» /
-§«CHECK completeness gate» требуют **обе**
-команды. Сам `lint` проверяет и двустороннее покрытие `required_rows` ↔ `rows`;
-`validate_inner_loop.py manifest` остаётся обязательным для формы строк
-(status/evidence/reason/predicate).
+`rv` — ревизия контракта, а не номер запуска. Используй прежний результат, если его существенные
+входы и условия соответствуют кандидату. Для сравнения с baseline укажи его собственную версию
+и условия измерения отдельно.
 
 **Проектные evidence-корни (nextorm).** Портативный агент `check` даёт scoped `read` на `.pdca/**`,
 `TestResults/**` и на исторические `docs/specs/status/**`, `artifacts/**`; nextorm-специфику
@@ -398,8 +382,7 @@ path-escape, дубли id и плейсхолдерные деревья. Ге�
 - scratch вне worktree — `/tmp/nextorm*/**` (через `external_directory`, см. проектный `opencode.json`).
 
 
-Строки проектной таблицы приоритетов классов — строки контракта с обязательными слотами
-и сохранёнными приоритетами. Безусловные проектные проверки нельзя снимать через N/A.
+Применяй проектные проверки по таблице приоритетов классов. Безусловные проверки нельзя снимать через N/A.
 
 **Недостающее evidence — не продуктовый дефект:** driver организует re-gather через уже разрешённые
 роли в пределах закреплённого бюджета, без product FAIL только из-за отсутствия отчёта. CHECK
