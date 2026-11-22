@@ -551,6 +551,23 @@ public sealed class T286bF18RegionFixture : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
+        var mode = Environment.GetEnvironmentVariable("NEXTORM_WSLC_F18_FIXTURE");
+        if (!string.IsNullOrEmpty(mode))
+        {
+            if (!ClickHouseContainer.IsExternallyConfigured || mode is not ("main" or "geobase"))
+                throw new InvalidOperationException("Explicit wslc F18 mode requires the owned endpoint and an explicit fixture profile.");
+
+            // The exclusive launcher supplies one fresh instance. For the region profile it
+            // installs the original geobase resources before startup; the two marker tables
+            // have disjoint names. No Testcontainers region instance is started in this mode.
+            if (mode == "geobase")
+            {
+                SeedRegionMarker(ClickHouseContainer.ConnectionString);
+                ConnectionString = ClickHouseContainer.ConnectionString;
+            }
+            return;
+        }
+
         try
         {
             var fixtureDirectory = Path.Combine(AppContext.BaseDirectory, "ClickHouse", "Fixtures", "F18");
@@ -575,18 +592,7 @@ public sealed class T286bF18RegionFixture : IAsyncLifetime
             _container = container;
             ConnectionString = container.GetConnectionString();
 
-            using var connection = new ClickHouseConnection(ConnectionString);
-            connection.Open();
-            foreach (var statement in new[]
-                     {
-                         "create table t286b_f18_region_marker (id Int32) engine = Memory",
-                         "insert into t286b_f18_region_marker values (1)"
-                     })
-            {
-                using var command = connection.CreateCommand();
-                command.CommandText = statement;
-                command.ExecuteNonQuery();
-            }
+            SeedRegionMarker(ConnectionString);
         }
         catch (Exception exception)
         {
@@ -596,6 +602,22 @@ public sealed class T286bF18RegionFixture : IAsyncLifetime
                 _container = null;
                 await container.DisposeAsync();
             }
+        }
+    }
+
+    private static void SeedRegionMarker(string connectionString)
+    {
+        using var connection = new ClickHouseConnection(connectionString);
+        connection.Open();
+        foreach (var statement in new[]
+                 {
+                     "create table t286b_f18_region_marker (id Int32) engine = Memory",
+                     "insert into t286b_f18_region_marker values (1)"
+                 })
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = statement;
+            command.ExecuteNonQuery();
         }
     }
 

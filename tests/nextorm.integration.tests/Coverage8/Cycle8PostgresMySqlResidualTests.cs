@@ -46,7 +46,7 @@ namespace NextORM.Integration.Tests;
 /// </para>
 /// </summary>
 [Collection("MySql")]
-public sealed class Cycle8PostgresMySqlResidualTests : ProviderTestSuite
+public sealed class Cycle8PostgresMySqlResidualTests : IDisposable
 {
     private static readonly DateTime PgTs = new(2023, 5, 17, 13, 45, 30);
 
@@ -76,18 +76,29 @@ public sealed class Cycle8PostgresMySqlResidualTests : ProviderTestSuite
             (4, 'delta', 2, 40, 4.0, '2023-05-17 13:45:30', '2023-05-17 13:45:30+00', 'quick quick quick');
         """;
 
-    public Cycle8PostgresMySqlResidualTests()
-    {
-        foreach (var statement in MySqlStatements())
-            Execute(Context, statement);
+    private MySqlFixture? _mySqlFixture;
+    private IDataContext? _mySqlContext;
 
-        using var postgres = CreatePostgresContext();
-        Execute(postgres, PostgresDdl);
+    private IDataContext Context => _mySqlContext ??= PrepareMySql();
+
+    private IDataContext PrepareMySql()
+    {
+        var fixture = _mySqlFixture ??= new MySqlFixture();
+        var context = fixture.Context;
+        foreach (var statement in MySqlStatements())
+            Execute(context, statement);
+
+        return context;
     }
 
-    protected override ITestProvider Provider => MySqlTestProvider.Instance;
+    public void Dispose() => _mySqlFixture?.Dispose();
 
-    private IDataContext Context => _sut.DataProvider;
+    private sealed class MySqlFixture : ProviderTestSuite
+    {
+        protected override ITestProvider Provider => MySqlTestProvider.Instance;
+
+        internal IDataContext Context => _sut.DataProvider;
+    }
 
     private static IDataContext CreatePostgresContext()
     {
@@ -95,7 +106,17 @@ public sealed class Cycle8PostgresMySqlResidualTests : ProviderTestSuite
         provider.IsAvailable.Should().BeTrue(
             $"provider '{provider.Name}' is unavailable ({provider.SkipReason}); the D6 PostgreSQL arms need a live PostgreSQL 17");
 
-        return provider.CreateContext();
+        var context = provider.CreateContext();
+        try
+        {
+            Execute(context, PostgresDdl);
+            return context;
+        }
+        catch
+        {
+            context.Dispose();
+            throw;
+        }
     }
 
     private static IEnumerable<string> MySqlStatements()

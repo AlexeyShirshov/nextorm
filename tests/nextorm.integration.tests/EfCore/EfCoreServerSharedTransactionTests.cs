@@ -346,10 +346,17 @@ public sealed class EfCoreServerSharedTransactionTests
     /// green one.
     /// </summary>
     [Fact]
-    public void EfCoreServerSharedTransaction_RequiredProvidersMustExecute()
+    public async Task EfCoreServerSharedTransaction_RequiredProvidersMustExecute()
     {
         if (!AcceptanceRunExpected())
             Assert.Skip("Set DOCKER_HOST or NEXTORM_REQUIRE_EF_CONTAINERS=1 to require the PostgreSQL, SQL Server and MySQL containers.");
+
+        if (Environment.GetEnvironmentVariable("NEXTORM_EF_SERIAL_OWNED") == "1"
+            || Environment.GetEnvironmentVariable("NEXTORM_SERIAL_WSLC") == "1")
+        {
+            await VerifyOwnedProvidersSerially(TestContext.Current.CancellationToken);
+            return;
+        }
 
         PostgresContainer.IsAvailable.Should().BeTrue(
             PostgresContainer.Failure ?? "PostgreSQL is not available; the EF shared-transaction cases would all skip.");
@@ -357,6 +364,21 @@ public sealed class EfCoreServerSharedTransactionTests
             SqlServerContainer.Failure ?? "SQL Server is not available; the EF shared-transaction cases would all skip.");
         MySqlContainer.IsAvailable.Should().BeTrue(
             MySqlContainer.Failure ?? "MySQL is not available; the EF shared-transaction cases would all skip.");
+    }
+
+    // This opt-in is for a dedicated process selecting only the guard, with the runner's
+    // exclusive lifecycle lease held. The normal suite keeps using its existing shared fixtures.
+    private static async Task VerifyOwnedProvidersSerially(CancellationToken cancellationToken)
+    {
+        OwnedProviderPhase.RequireCompatible(PostgresContainer.IsExternallyConfigured || SqlServerContainer.IsExternallyConfigured || MySqlContainer.IsExternallyConfigured);
+
+        await OwnedProviderPhase.RunEndpoint("postgres", PostgresContainer.CreateOwned, static container =>
+        {
+            PostgresContainer.InitializeVector(container);
+            return container.GetConnectionString();
+        }, static _ => { }, cancellationToken);
+        await OwnedProviderPhase.RunEndpoint("sqlserver", SqlServerContainer.CreateOwned, static container => container.GetConnectionString(), static _ => { }, cancellationToken);
+        await OwnedProviderPhase.RunEndpoint("mysql", MySqlContainer.CreateOwned, static container => container.GetConnectionString(), static _ => { }, cancellationToken);
     }
 
     private static bool AcceptanceRunExpected() =>

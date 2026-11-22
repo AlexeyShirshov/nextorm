@@ -85,10 +85,66 @@ public sealed class BuiltinCatalogExecutionTests : IDisposable
     /// typed-NULL argument form and the <c>pgcrypto</c> prerequisite.
     /// </summary>
     [Fact]
-    public void T282_Recon_NativeBase64AndCrypto()
+    public async Task T282_Recon_NativeBase64AndCrypto()
     {
+        if (OwnedProviderPhase.Enabled)
+        {
+            OwnedProviderPhase.RequireCompatible(SqlServerContainer.IsExternallyConfigured || PostgresContainer.IsExternallyConfigured
+                || MySqlContainer.IsExternallyConfigured || MariaDbContainer.IsExternallyConfigured || ClickHouseContainer.IsExternallyConfigured);
+            var cancellationToken = TestContext.Current.CancellationToken;
+            await OwnedProviderPhase.RunEndpoint("sqlserver", SqlServerContainer.CreateOwned, static container => container.GetConnectionString(), static endpoint =>
+            {
+                using var context = new SqlServerDataContext(endpoint, new DataContextBuilder());
+                CheckSqlServer(context);
+            }, cancellationToken);
+            await OwnedProviderPhase.RunEndpoint("postgres", PostgresContainer.CreateOwned, static container =>
+            {
+                PostgresContainer.InitializeVector(container);
+                return container.GetConnectionString();
+            }, static endpoint =>
+            {
+                using var context = new PostgresDataContext(endpoint, new DataContextBuilder());
+                CheckPostgres(context);
+            }, cancellationToken);
+            await OwnedProviderPhase.RunEndpoint("mysql", MySqlContainer.CreateOwned, static container => container.GetConnectionString(), static endpoint =>
+            {
+                using var context = new MySqlDataContext(endpoint, new DataContextBuilder());
+                CheckMySql(context);
+            }, cancellationToken);
+            await OwnedProviderPhase.RunEndpoint("mariadb", MariaDbContainer.CreateOwned, MariaDbContainer.GetConnectionString, static endpoint =>
+            {
+                using var context = new MariaDbDataContext(endpoint, new DataContextBuilder());
+                CheckMariaDb(context);
+            }, cancellationToken);
+            await OwnedProviderPhase.RunEndpoint("clickhouse", ClickHouseContainer.CreateOwned, static container => container.GetConnectionString(), static endpoint =>
+            {
+                using var context = new ClickHouseDataContext(endpoint, new DataContextBuilder());
+                CheckClickHouse(context);
+            }, cancellationToken);
+            return;
+        }
+
         Require("sqlserver", SqlServerTestProvider.Instance.IsAvailable, SqlServerTestProvider.Instance.SkipReason);
         using (var context = Open("sqlserver"))
+            CheckSqlServer(context);
+
+        Require("postgres", PostgresTestProvider.Instance.IsAvailable, PostgresTestProvider.Instance.SkipReason);
+        using (var context = Open("postgres"))
+            CheckPostgres(context);
+
+        Require("mysql", MySqlTestProvider.Instance.IsAvailable, MySqlTestProvider.Instance.SkipReason);
+        using (var context = Open("mysql"))
+            CheckMySql(context);
+
+        Require("mariadb", MariaDbContainer.IsAvailable, MariaDbContainer.Failure);
+        using (var context = Open("mariadb"))
+            CheckMariaDb(context);
+
+        Require("clickhouse", ClickHouseTestProvider.Instance.IsAvailable, ClickHouseTestProvider.Instance.SkipReason);
+        using (var context = Open("clickhouse"))
+            CheckClickHouse(context);
+
+        static void CheckSqlServer(IDataContext context)
         {
             Scalar(context, "select BASE64_ENCODE(0x000102FDFEFF)").Should().Be("AAEC/f7/");
             Bytes(Scalar(context, "select BASE64_DECODE('AAEC/f7/')")).Should().Equal(0, 1, 2, 253, 254, 255);
@@ -100,8 +156,7 @@ public sealed class BuiltinCatalogExecutionTests : IDisposable
             Bytes(Scalar(context, "select CRYPT_GEN_RANDOM(1024)")).Should().HaveCount(1024);
         }
 
-        Require("postgres", PostgresTestProvider.Instance.IsAvailable, PostgresTestProvider.Instance.SkipReason);
-        using (var context = Open("postgres"))
+        static void CheckPostgres(IDataContext context)
         {
             Scalar(context, "CREATE EXTENSION IF NOT EXISTS pgcrypto").Should().BeNull();
             Scalar(context, "select replace(encode(decode('AAEC/f7/', 'base64'), 'base64'), E'\\n', '')").Should().Be("AAEC/f7/");
@@ -113,8 +168,7 @@ public sealed class BuiltinCatalogExecutionTests : IDisposable
             Bytes(Scalar(context, "select gen_random_bytes(1024)")).Should().HaveCount(1024);
         }
 
-        Require("mysql", MySqlTestProvider.Instance.IsAvailable, MySqlTestProvider.Instance.SkipReason);
-        using (var context = Open("mysql"))
+        static void CheckMySql(IDataContext context)
         {
             Text(Scalar(context, "select REPLACE(REPLACE(TO_BASE64(0x000102FDFEFF), CHAR(13), ''), CHAR(10), '')")).Should().Be("AAEC/f7/");
             Bytes(Scalar(context, "select FROM_BASE64('AAEC/f7/')")).Should().Equal(0, 1, 2, 253, 254, 255);
@@ -126,8 +180,7 @@ public sealed class BuiltinCatalogExecutionTests : IDisposable
             Bytes(Scalar(context, "select RANDOM_BYTES(1024)")).Should().HaveCount(1024);
         }
 
-        Require("mariadb", MariaDbContainer.IsAvailable, MariaDbContainer.Failure);
-        using (var context = Open("mariadb"))
+        static void CheckMariaDb(IDataContext context)
         {
             Text(Scalar(context, "select REPLACE(REPLACE(TO_BASE64(0x000102FDFEFF), CHAR(13), ''), CHAR(10), '')")).Should().Be("AAEC/f7/");
             Bytes(Scalar(context, "select FROM_BASE64('AAEC/f7/')")).Should().Equal(0, 1, 2, 253, 254, 255);
@@ -137,8 +190,7 @@ public sealed class BuiltinCatalogExecutionTests : IDisposable
             Bytes(Scalar(context, "select RANDOM_BYTES(16)")).Should().HaveCount(16);
         }
 
-        Require("clickhouse", ClickHouseTestProvider.Instance.IsAvailable, ClickHouseTestProvider.Instance.SkipReason);
-        using (var context = Open("clickhouse"))
+        static void CheckClickHouse(IDataContext context)
         {
             Scalar(context, "select base64Encode(unhex('000102FDFEFF'))").Should().Be("AAEC/f7/");
             Scalar(context, "select hex(base64Decode('AAEC/f7/'))").Should().Be("000102FDFEFF");

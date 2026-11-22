@@ -168,7 +168,8 @@ public sealed class T320MariaDbTvfTests : IDisposable
         versionComment.Should().ContainEquivalentOf("MariaDB", $"the server must identify as MariaDB; observed '{versionComment}'");
         versionComment.Should().NotContainEquivalentOf("MySQL", $"a MySQL server would make this evidence invalid; observed '{versionComment}'");
 
-        if (!MariaDbContainer.IsExternallyConfigured)
+        if (!MariaDbContainer.IsExternallyConfigured
+            || Environment.GetEnvironmentVariable("NEXTORM_WSLC_MARIADB_IDENTITY") == "1")
         {
             version.Should().StartWith(
                 "11.4",

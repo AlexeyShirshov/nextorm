@@ -820,7 +820,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
                 // Same consecutive-row-count capacity hint as the synchronous twin.
                 var l = new List<TResult>(lease.RowCapacityHint);
                 var mapper = compiledQuery.MapDelegate!;
-                while (reader.Read())
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                     l.Add(mapper(reader));
 
                 if (l.Count > 0)
