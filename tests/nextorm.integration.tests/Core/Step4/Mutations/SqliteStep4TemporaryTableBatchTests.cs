@@ -196,6 +196,39 @@ public sealed class SqliteStep4TemporaryTableBatchTests : ProviderTestSuite
         result.Read<string?>().Should().Equal("c");
     }
 
+    [Fact]
+    public void Batch_CursorsShouldPreserveResultOrderAndRejectReadsOutsideTheirCurrentSet()
+    {
+        var result = Context.CreateBatchBuilder()
+            .AddQuery(Context.From<S4DcRow>().OrderBy(x => x.Id).Select(x => x.Id))
+            .AddQuery(Context.From<S4DcRow>().Where(x => x.Amount > 30).Select(x => x.Id))
+            .AddQuery(Context.From<S4DcRow>().Where(x => x.Amount == 30).Select(x => x.Name))
+            .Execute();
+
+        using var sets = result.GetEnumerator();
+        sets.MoveNext().Should().BeTrue();
+        var first = sets.Current;
+        first.Read<int>().Should().Equal(9001, 9002, 9003);
+        FluentActions.Invoking(() => first.Read<int>()).Should().Throw<InvalidOperationException>()
+            .WithMessage("*already been read*");
+        FluentActions.Invoking(() => result.Read<int>()).Should().Throw<InvalidOperationException>()
+            .WithMessage("*cannot be mixed*");
+
+        sets.MoveNext().Should().BeTrue();
+        FluentActions.Invoking(() => first.Read<int>()).Should().Throw<InvalidOperationException>()
+            .WithMessage("*cursor is stale*");
+        sets.Current.Read<int>().Should().BeEmpty();
+
+        sets.MoveNext().Should().BeTrue();
+        var last = sets.Current;
+        last.Read<string?>().Should().Equal("c");
+        sets.MoveNext().Should().BeFalse();
+        FluentActions.Invoking(() => last.Read<string?>()).Should().Throw<InvalidOperationException>()
+            .WithMessage("*cursor is stale*");
+        FluentActions.Invoking(() => result.GetEnumerator()).Should().Throw<InvalidOperationException>()
+            .WithMessage("*already enumerated*");
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Bulk insert and the identity function
     // ---------------------------------------------------------------------------------------------
