@@ -21,6 +21,7 @@
     <PackageVersion Include="nextorm" Version="$(NextOrmVersion)" />
     <PackageVersion Include="nextorm.clickhouse" Version="$(NextOrmVersion)" />
     <PackageVersion Include="nextorm.extensions" Version="$(NextOrmVersion)" />
+    <PackageVersion Include="Nextorm.Extensions.OpenCode" Version="1.0.0" />
     <PackageVersion Include="nextorm.postgres" Version="$(NextOrmVersion)" />
     <PackageVersion Include="nextorm.sqlserver" Version="$(NextOrmVersion)" />
     <PackageVersion Include="nextorm.sqlite" Version="$(NextOrmVersion)" />

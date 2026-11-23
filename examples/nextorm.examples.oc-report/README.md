@@ -7,7 +7,7 @@ no secrets in the app or the schema: it opens the database with `Mode=ReadOnly`,
 
 The app is intentionally ordinary:
 
-- typed nextorm queries over interfaces (`ISessionRow`, `IMessageRow`), no raw SQL;
+- typed nextorm queries over `SessionV2` and `SessionMessage` in `OpenCodeRepositoryContext`, no raw SQL;
 - SQL-side `GROUP BY` with aggregates, and `json_extract` for the `model` JSON column;
 - a conditional filter (`--agent` / `--all`), i.e. the query is composed at runtime.
 
@@ -56,8 +56,9 @@ command line. The csproj also carries `IlcTreatWarningsAsErrors=false` and
 here) and pins `Microsoft.DotNet.ILCompiler` 11.0.0 to match the repository's NativeAOT runner.
 Nextorm doesn't require these settings.
 
-The project uses the published `nextorm`, `nextorm.sqlite`, and `nextorm.extensions` packages.
-[`Directory.Packages.props`](../Directory.Packages.props) pins their version through `NextOrmVersion`.
+The project uses `Nextorm.Extensions.OpenCode` 1.0.0 for the schema and repository context.
+The package brings in `nextorm.sqlite` 1.0.11. The project uses `nextorm.extensions` 1.0.11
+for SQL aggregates and SQLite JSON functions.
 
 ## Reference numbers
 

@@ -39,14 +39,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" />
-    <!--
-      Consumes the published packages, like the postgres and clickhouse examples: 1.0.9-rc5 is the
-      first release that carries the NativeAOT fix this example demonstrates, so no dev-time
-      ProjectReference is needed any more.
-    -->
-    <PackageReference Include="nextorm" />
-    <PackageReference Include="nextorm.extensions" />
-    <PackageReference Include="nextorm.sqlite" />
+    <PackageReference Include="Nextorm.Extensions.OpenCode" />
+    <PackageReference Include="nextorm.extensions" VersionOverride="1.0.11" />
   </ItemGroup>
 
 </Project>

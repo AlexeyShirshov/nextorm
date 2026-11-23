@@ -7,12 +7,11 @@
 //         dotnet run --project examples/nextorm.examples.oc-report -- 1 --all
 // Синтетическая база: sqlite3 /tmp/oc-report.db < examples/nextorm.examples.oc-report/seed.sql
 
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using NextORM.Core;
 using NextORM.Extensions;
+using Nextorm.Extensions.OpenCode;
 using NextORM.Sqlite;
 
 var opts = Options.Parse(args);
@@ -28,8 +27,9 @@ var connectionString = new SqliteConnectionStringBuilder
 using var connection = new SqliteConnection(connectionString);
 connection.Open();
 using var db = new DataContextBuilder().UseSqlite(connection).CreateDataContext();
+var openCode = new OpenCodeRepositoryContext(db);
 
-var query = db.From<ISessionRow>().Where(s => s.TimeCreated >= since);
+var query = openCode.SessionV2.Query().Where(s => s.TimeCreated >= since);
 if (opts.Agent is not null)
     query = query.Where(s => s.Agent == opts.Agent);
 
@@ -37,31 +37,17 @@ var rows = await query
     .Select(s => new
     {
         s.Id,
-        s.Agent,
-        s.Model,
         s.Title,
         s.TimeCreated,
-        s.TimeUpdated,
-        s.TokensInput,
-        s.TokensOutput,
-        s.TokensCacheRead,
-        s.Cost,
         s.IdleOutcome,
     })
     .ToListAsync();
 
 var sessions = rows
     .Select(r => new Session(
-        r.Id,
-        r.Agent,
-        ParseModel(r.Model),
+        r.Id ?? throw new InvalidDataException("A session has no ID."),
         r.Title,
-        r.TimeCreated ?? 0,
-        r.TimeUpdated ?? 0,
-        r.TokensInput ?? 0,
-        r.TokensOutput ?? 0,
-        r.TokensCacheRead ?? 0,
-        r.Cost ?? 0,
+        r.TimeCreated,
         r.IdleOutcome))
     .ToList();
 
@@ -70,7 +56,7 @@ Console.WriteLine(
     $"({opts.Days}d), agent={(opts.Agent ?? "any")}, sessions={sessions.Count}");
 Console.WriteLine();
 
-var aggQuery = db.From<ISessionRow>().Where(s => s.TimeCreated >= since);
+var aggQuery = openCode.SessionV2.Query().Where(s => s.TimeCreated >= since);
 if (opts.Agent is not null)
     aggQuery = aggQuery.Where(s => s.Agent == opts.Agent);
 
@@ -98,10 +84,10 @@ var modelAggs = byModel
         g.Sum(r => r.N),
         g.Where(r => r.Outcome == "succeeded").Sum(r => r.N),
         g.Where(r => r.Outcome == "failed").Sum(r => r.N),
-        g.Sum(r => r.Input ?? 0),
-        g.Sum(r => r.Output ?? 0),
-        g.Sum(r => r.Cache ?? 0),
-        g.Sum(r => r.Cost ?? 0)))
+        g.Sum(r => r.Input),
+        g.Sum(r => r.Output),
+        g.Sum(r => r.Cache),
+        g.Sum(r => r.Cost)))
     .OrderByDescending(a => a.N)
     .ToList();
 
@@ -109,7 +95,7 @@ PrintModels(modelAggs);
 PrintOutcomes(sessions);
 
 var ids = sessions.Select(s => s.Id).ToHashSet(StringComparer.Ordinal);
-var messages = await db.From<IMessageRow>()
+var messages = await openCode.SessionMessage.Query()
     .Where(m => m.TimeCreated >= since && m.Data != null && m.Data.Contains("\"error\""))
     .Select(m => new { m.SessionId, m.Type, m.Data })
     .ToListAsync();
@@ -178,20 +164,6 @@ static void PrintErrors(IEnumerable<(string? SessionId, string? Type, string? Da
     }
 }
 
-static string ParseModel(string? raw)
-{
-    if (string.IsNullOrEmpty(raw)) return "(none)";
-    try
-    {
-        using var doc = JsonDocument.Parse(raw);
-        return ParseModelRaw(doc.RootElement);
-    }
-    catch (JsonException)
-    {
-        return raw;
-    }
-}
-
 static string ParseModelRaw(JsonElement model)
 {
     var provider = model.TryGetProperty("providerID", out var p) ? p.GetString() : null;
@@ -207,15 +179,8 @@ static string Truncate(string? s, int n) => s is null ? "" : s.Length <= n ? s :
 
 record Session(
     string Id,
-    string? Agent,
-    string ModelLabel,
     string? Title,
     long TimeCreated,
-    long TimeUpdated,
-    long TokensInput,
-    long TokensOutput,
-    long TokensCacheRead,
-    double Cost,
     string? Outcome);
 
 record ModelAgg(
@@ -232,7 +197,6 @@ record ModelAgg(
     public string Label => $"{Provider}/{Id}";
     public int Other => N - Ok - Fail;
 }
-
 sealed record Options(int Days, string? Agent, string DbPath)
 {
     public static Options Parse(string[] args)
@@ -267,62 +231,4 @@ sealed record Options(int Days, string? Agent, string DbPath)
 
         return new Options(days, agent, dbPath);
     }
-}
-
-[SqlTable("session_v2")]
-public interface ISessionRow
-{
-    [Key]
-    [Column("id")]
-    string Id { get; set; }
-
-    [Column("agent")]
-    string? Agent { get; set; }
-
-    [Column("model")]
-    string? Model { get; set; }
-
-    [Column("title")]
-    string? Title { get; set; }
-
-    [Column("time_created")]
-    long? TimeCreated { get; set; }
-
-    [Column("time_updated")]
-    long? TimeUpdated { get; set; }
-
-    [Column("tokens_input")]
-    long? TokensInput { get; set; }
-
-    [Column("tokens_output")]
-    long? TokensOutput { get; set; }
-
-    [Column("tokens_cache_read")]
-    long? TokensCacheRead { get; set; }
-
-    [Column("cost")]
-    double? Cost { get; set; }
-
-    [Column("idle_outcome")]
-    string? IdleOutcome { get; set; }
-}
-
-[SqlTable("session_message")]
-public interface IMessageRow
-{
-    [Key]
-    [Column("id")]
-    string Id { get; set; }
-
-    [Column("session_id")]
-    string? SessionId { get; set; }
-
-    [Column("type")]
-    string? Type { get; set; }
-
-    [Column("time_created")]
-    long? TimeCreated { get; set; }
-
-    [Column("data")]
-    string? Data { get; set; }
 }
