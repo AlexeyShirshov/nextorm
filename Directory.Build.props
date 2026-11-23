@@ -68,7 +68,7 @@
     The packaging CI job overrides it with -p:Version=<git tag> on the release tag.
   -->
   <PropertyGroup>
-    <Version>1.0.9-rc5</Version>
+    <Version>1.0.11</Version>
   </PropertyGroup>
 
 </Project>
