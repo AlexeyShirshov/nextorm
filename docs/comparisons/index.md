@@ -116,15 +116,16 @@ tell an implementation gap from a feature Nextorm does not aim to provide:
 - **Provider breadth**: fewer providers than linq2db and EF Core (no Oracle, Firebird, DB2, SAP HANA,
   Informix, Sybase or SQL CE).
 
-Relationship modelling, change tracking/`SaveChanges`, migrations and database-first scaffolding are
-**deliberate boundaries**, not growth points — they are listed in
-[Limitations and out-of-scope features](../advanced/limitations.md). Two composition boundaries are of the
-same kind: a correlated `APPLY` extends an existing join chain but stops at eight total sources, and the
-in-memory provider stops correlated subqueries at depth one, while every SQL provider nests them
-arbitrarily. `APPLY`/`LATERAL` itself needs a lateral source: MariaDB 11.4, SQLite and ClickHouse refuse it
-before execution, and the in-memory provider does not support it. These are API-shape and provider
-boundaries, not missing SQL capabilities — the supported forms are covered by the
-[capabilities](capabilities.md) matrix and the guide.
+Nextorm doesn't provide change tracking, `SaveChanges`, or migrations. Database-first code
+generation is available through a separate tool. See [Database-first workflows](capabilities.md#database-first-workflows)
+for the supported inputs and generated code. For runtime boundaries, see
+[Limitations and out-of-scope features](../advanced/limitations.md).
+
+A correlated `APPLY` extends an existing join chain but stops at eight total sources. The in-memory
+provider stops correlated subqueries at depth one, while every SQL provider nests them arbitrarily.
+`APPLY`/`LATERAL` itself needs a lateral source: MariaDB 11.4, SQLite, and ClickHouse refuse it before
+execution, and the in-memory provider doesn't support it. See the [capabilities](capabilities.md)
+matrix for the supported forms.
 
 ## Summary
 
@@ -138,5 +139,5 @@ workload.
 Within the verified NativeAOT surface, Nextorm requires only `PublishAot=true`; EF Core requires a
 compiled model and query precompilation, while Dapper requires the `Dapper.AOT` package and an
 interceptor opt-in. Dapper remains the lightest option for hand-written SQL with object mapping.
-Choose linq2db or EF Core when the same layer also needs to model relationships, track changes, or
-generate the data layer from a live schema—features Nextorm deliberately leaves out.
+Choose EF Core if your application needs change tracking or integrated migrations. For an existing
+schema, compare which providers and database objects each scaffolder can turn into C#.

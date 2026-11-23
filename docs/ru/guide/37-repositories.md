@@ -11,8 +11,9 @@
 каждый сервис мог начать с `app.Orders` или вызвать `app.QueryUnpaidOrders()`,
 не повторяя условие «заказ не оплачен».
 
-NextORM предоставляет базовый класс `NextORM.Core.Repositories.RepositoryContext`,
-а `AppRepositoryContext` пишете вы. Базовый класс хранит переданный
+NextORM предоставляет базовый класс `NextORM.Core.Repositories.RepositoryContext`.
+Напишите `AppRepositoryContext` вручную или [сгенерируйте его из существующей
+базы](../getting-started/05-existing-database.md). Базовый класс хранит переданный
 `IDataContext` и предоставляет защищённый метод `Repository<T>()`, который
 создаёт и переиспользует репозиторий для типа сущности. Запросы по-прежнему
 выполняет провайдер. Этот слой не создаёт отдельного соединения или транзакции.

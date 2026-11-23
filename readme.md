@@ -88,6 +88,10 @@ public interface ISimpleEntity
 The generated SQL is a plain `select id from simple_entity`. Continue with the
 [Quickstart guide](https://alexeyshirshov.github.io/nextorm/getting-started/02-quickstart.html).
 
+Already have a database? [Generate models and a repository context from its
+schema](https://alexeyshirshov.github.io/nextorm/getting-started/05-existing-database.html)
+with the separate Nextorm scaffolding tool.
+
 ## Query reuse
 
 Avoid rebuilding a query plan on every execution in two independent ways: the **implicit plan cache**

@@ -12,6 +12,8 @@
       href: getting-started/03-entities-and-metadata.md
     - name: Внедрение зависимостей
       href: getting-started/04-dependency-injection.md
+    - name: Генерация моделей из существующей базы данных
+      href: getting-started/05-existing-database.md
 - name: Руководство по запросам
   items:
     - name: Основы запросов
@@ -192,6 +194,8 @@
       href: advanced/integration-efcore.md
     - name: Ограничения и что вне области
       href: advanced/limitations.md
+    - name: Провайдеры и параметры генерации
+      href: advanced/schema-scaffolding.md
     - name: Нативные стратегии выбора экстремальной строки
       href: advanced/select-where-extrema-native.md
     - name: "Расширяемость"

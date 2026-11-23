@@ -6,7 +6,8 @@ through the library's public API; **partial** means support has a named limitati
 possible to implement but is not implemented; **no** means the feature is not supported. A Nextorm
 cell may name a database-engine restriction in parentheses. Check that restriction when choosing a
 provider; it does not lower the library-level mark. Competitor gaps with an open tracking issue link
-to it. Snapshot date: **2026-10-04**.
+to it. Baseline snapshot: **2026-10-04**. The scaffolding row reflects the companion tooling
+described on this page.
 
 Rows are ordered by area — querying, types and mapping, provider functions, writes, model, and
 tooling. The **Total** row counts yes / partial / no entries in each column (`n/a` is excluded, and
@@ -16,7 +17,7 @@ breadth, see [Provider features](provider-features.md).
 
 | Area | Nextorm | linq2db | EF Core |
 |---|---|---|---|
-| Vector nearest-neighbor search and pgvector values/operations | supported (shared nearest-neighbor API on PostgreSQL and SQL Server 2025+; PostgreSQL pgvector types and marker translation remain available) | partial (provider-specific support varies) | partial (Npgsql/provider-specific support; not a nextorm translation) |
+| Vector nearest-neighbor search and pgvector values/operations | yes (shared nearest-neighbor API on PostgreSQL and SQL Server 2025+; PostgreSQL pgvector types and marker translation remain available) | partial (provider-specific support varies) | partial (Npgsql/provider-specific support; not a nextorm translation) |
 | Projections (entity, DTO, anonymous, record, tuple, scalar; unmapped columns via `SqlFunctions.Column`) | yes | yes | yes |
 | Predicates (`WHERE`: comparison, `and`/`or`/`!`, arithmetic, bitwise/shift) | yes | yes | yes |
 | Null-safe comparison (`IS [NOT] DISTINCT FROM`; `SqlFunctions.Sql.is_distinct_from` / `is_not_distinct_from`) | yes (native on PostgreSQL, SQLite and MySQL/MariaDB; emulated on SQL Server and ClickHouse) | yes (`Sql.Is[Not]DistinctFrom`; provider coverage varies) | no |
@@ -95,14 +96,14 @@ breadth, see [Provider features](provider-features.md).
 | Explicit `Prepare()` | yes (`IPreparedQueryCommand<TResult>`) | yes | no |
 | Change tracking / identity map | no (by design) | partial | yes |
 | Migrations | no | partial (schema API; migrations via third-party) | yes |
-| Database-first scaffolding | no (mappings declared in code) | yes | yes |
+| Database-first scaffolding | partial ([separate tool](../advanced/schema-scaffolding.md): CLI for SQLite, PostgreSQL, MySQL, MariaDB, and SQL Server; generator from supplied metadata for ClickHouse) | yes ([CLI and T4](https://github.com/linq2db/docs/blob/master/source/articles/CLI.md)) | yes ([CLI and Visual Studio Package Manager Console](https://learn.microsoft.com/en-us/ef/core/managing-schemas/scaffolding/)) |
 | EF Core integration | yes (read-only MVP, `nextorm.entityframeworkcore`) | yes (`linq2db.EntityFrameworkCore`) | n/a |
 | Providers | SQL Server, PostgreSQL, MySQL, MariaDB, SQLite, ClickHouse, in-memory | SQL Server, PostgreSQL, MySQL/MariaDB, SQLite, Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, Access, SQL CE, ClickHouse, DuckDB, Ydb | SQL Server, PostgreSQL, MySQL, SQLite, Oracle, and more |
 | `SelectMany` / `GroupJoin` | partial (in-memory only; SQL providers reject) | yes (SQL translation) | yes |
 | In-memory provider (query-only, registered CLR datasets) | yes | partial | partial |
 | Connection lifecycle (`IConnectionManager`: supplied vs owned, reuse, disposal) | yes | yes | yes |
 | Extensibility (dialect, `[SqlFunction]`/`TvfEntityBuilder<T>` factories, interceptors, global query filters, raw SQL; plus **query components** — reusable structural operators added by third parties without friend access, keeping the plan cache and parameter binding) | yes (query components) | partial (`Sql.Ext`/`Sql.Function`/interceptors; no structural component contract) | partial (interceptors, global filters; no structural component contract) |
-| **Total** | 76 / 5 / 3 | 49 / 23 / 12 | 28 / 29 / 26 |
+| **Total** | 77 / 6 / 2 | 48 / 25 / 12 | 27 / 31 / 26 |
 
 ## Where Nextorm leads
 
@@ -179,6 +180,28 @@ The distinction is when and what the library generates, not whether you can use 
 
 This comparison is based on documentation and source code, not cross-library execution tests.
 
+## Database-first workflows
+
+If the database schema already exists, compare what each tool generates and how you rerun it:
+
+- **Nextorm** generates attributed C# classes and a `RepositoryContext` with typed repositories
+  over the application's `IDataContext`. The [separate CLI](../advanced/schema-scaffolding.md)
+  accepts filters and JSON configuration; it doesn't generate stored procedure or table-valued
+  function wrappers. The ClickHouse generator consumes supplied metadata outside the CLI.
+  See the [SQLite walkthrough](../getting-started/05-existing-database.md) to install and run the
+  tool from NuGet.org.
+- **linq2db** generates a data context and mapped entities. Its [CLI](https://github.com/linq2db/docs/blob/master/source/articles/CLI.md)
+  supports JSON configuration, generation of routine mappings such as table-valued functions
+  where supported, and customization through an assembly or T4.
+- **EF Core** generates entity classes and a `DbContext`, and can infer relationships from
+  foreign keys. Its [reverse engineering guide](https://learn.microsoft.com/en-us/ef/core/managing-schemas/scaffolding/)
+  explains how to keep custom code outside regenerated files.
+  [EF Core Power Tools](https://github.com/ErikEJ/EFCorePowerTools/wiki/Reverse-Engineering)
+  is a separate project that adds a Visual Studio wizard and saved configuration for repeat runs.
+- **Dapper** [maps query results](https://github.com/DapperLib/Dapper#execute-a-query-and-map-it-to-a-list-of-typed-objects)
+  to types you provide or to dynamic objects. Its core package doesn't generate models from a
+  database schema.
+
 ## Deliberate boundaries: what Nextorm leaves to linq2db
 
 These are conscious scope decisions in Nextorm's focused, no-change-tracking model — not gaps on the query
@@ -186,8 +209,6 @@ surface, which Nextorm matches or exceeds:
 
 - **Change tracking and identity map**: every write stays an explicit command; there is no `SaveChanges` and
   no automatic change tracking. linq2db flushes a tracked unit of work.
-- **Database-first tooling**: linq2db ships a CLI/T4 code-generation toolchain that scaffolds entity and
-  table-function mappings from a live database; Nextorm declares mappings in code.
 - **Provider breadth**: beyond the providers both ship, linq2db additionally covers Oracle, Firebird, DB2,
   SAP HANA, Informix, Sybase, Access, SQL CE, DuckDB and Ydb, while Nextorm adds an in-memory object context
   and separate MySQL/MariaDB providers.
@@ -223,9 +244,10 @@ conventions, and keyword casing are opt-in and can be overridden per command.
 The benchmark results show a smaller allocation footprint and results at or above Dapper,
 EF Core, and linq2db on the shipped SQLite scenarios; they do not predict every workload. Within the
 verified NativeAOT surface, Nextorm requires only `PublishAot=true`, while EF Core needs a compiled
-model and precompilation, and Dapper needs an opt-in AOT package. linq2db remains a better fit when
-the same layer must also track changes or generate the data layer from a live schema—deliberate
-boundaries listed above.
+model and precompilation, and Dapper needs an opt-in AOT package. Compare the database-first workflows
+if you need generated mappings for an existing schema. For example, linq2db can generate
+table-function mappings, and EF Core can scaffold an EF model that supports change tracking and
+migrations.
 
 ## See also
 

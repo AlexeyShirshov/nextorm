@@ -20,6 +20,7 @@ Already have a working project? Use the documentation catalog below to open a to
 - [Quickstart](getting-started/02-quickstart.md)
 - [Entities and metadata](getting-started/03-entities-and-metadata.md)
 - [Dependency injection](getting-started/04-dependency-injection.md)
+- [Generate models from an existing database](getting-started/05-existing-database.md)
 
 ### Guide
 

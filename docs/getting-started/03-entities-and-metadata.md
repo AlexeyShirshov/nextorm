@@ -20,6 +20,9 @@ to create result objects. Choose the mapping approach that fits your model:
 You can translate names derived by convention with a [naming convention](#naming-conventions).
 Names declared with attributes or a fluent mapping are always used verbatim.
 
+If the schema already exists, you can [generate the mapped classes and repository
+context](05-existing-database.md) instead of writing the initial mapping by hand.
+
 When you first query a type through [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)),
 NextORM resolves its metadata and caches it by type in the process-wide
 [`Metadata`](xref:NextORM.Core.DataContextCache.Metadata) cache. As a result:

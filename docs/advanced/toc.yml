@@ -10,5 +10,7 @@
   href: extensibility.md
 - name: Extensions package (`nextorm.extensions`)
   href: extensions-package.md
+- name: Scaffolding providers and options
+  href: schema-scaffolding.md
 - name: API quick reference
   href: api-reference.md

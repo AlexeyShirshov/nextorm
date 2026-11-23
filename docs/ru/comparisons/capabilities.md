@@ -6,7 +6,8 @@
 возможность поддерживается с оговорённым ограничением либо ещё не реализована, хотя её можно
 реализовать; **no** — возможность не поддерживается. В ячейке Nextorm может быть указано ограничение
 самой СУБД. Учитывайте его при выборе провайдера; оно не меняет оценку библиотеки в целом. Пробелы
-конкурентов с открытым issue даны ссылкой. Снимок на **2026-10-04**.
+конкурентов с открытым issue даны ссылкой. Исходный снимок на **2026-10-04**. Строка о генерации
+по схеме учитывает отдельные инструменты, описанные на этой странице.
 
 Строки сгруппированы по областям — запросы, типы и маппинг, провайдерные функции, запись, модель и
 инструменты. Строка **Итого** считает yes / partial / no в каждом столбце (`n/a` не учитывается,
@@ -16,7 +17,7 @@
 
 | Область | Nextorm | linq2db | EF Core |
 |---|---|---|---|
-| Поиск ближайших соседей по векторам и значения/операции pgvector | supported (общий API поиска ближайших соседей для PostgreSQL и SQL Server 2025+; типы pgvector и маркеры PostgreSQL сохранены) | partial (поддержка зависит от провайдера) | partial (поддержка провайдера Npgsql; не перевод nextorm) |
+| Поиск ближайших соседей по векторам и значения/операции pgvector | yes (общий API поиска ближайших соседей для PostgreSQL и SQL Server 2025+; типы pgvector и маркеры PostgreSQL сохранены) | partial (поддержка зависит от провайдера) | partial (поддержка провайдера Npgsql; не перевод nextorm) |
 | Проекции (сущность, DTO, anonymous, record, tuple, скаляр; несопоставленные колонки через `SqlFunctions.Column`) | yes | yes | yes |
 | Предикаты (`WHERE`: сравнение, `and`/`or`/`!`, арифметика, битовые операции/сдвиг) | yes | yes | yes |
 | Null-safe-сравнение (`IS [NOT] DISTINCT FROM`; `SqlFunctions.Sql.is_distinct_from` / `is_not_distinct_from`) | yes (нативно на PostgreSQL, SQLite и MySQL/MariaDB; эмуляция в SQL Server и ClickHouse) | yes (`Sql.Is[Not]DistinctFrom`; покрытие зависит от провайдера) | no |
@@ -95,14 +96,14 @@
 | Явный `Prepare()` | yes (`IPreparedQueryCommand<TResult>`) | yes | no |
 | Отслеживание изменений / identity map | no (по замыслу) | partial | yes |
 | Миграции | no | partial (schema API; миграции через сторонние) | yes |
-| Генерация по существующей БД | no (маппинг объявляется в коде) | yes | yes |
+| Генерация по существующей БД | partial ([отдельный инструмент](../advanced/schema-scaffolding.md): CLI для SQLite, PostgreSQL, MySQL, MariaDB и SQL Server; для ClickHouse — генератор по переданным метаданным) | yes ([CLI и T4](https://github.com/linq2db/docs/blob/master/source/articles/CLI.md)) | yes ([CLI и консоль диспетчера пакетов Visual Studio](https://learn.microsoft.com/en-us/ef/core/managing-schemas/scaffolding/)) |
 | Интеграция с EF Core | yes (read-only MVP, `nextorm.entityframeworkcore`) | yes (`linq2db.EntityFrameworkCore`) | n/a |
 | Провайдеры | SQL Server, PostgreSQL, MySQL, MariaDB, SQLite, ClickHouse, in-memory | SQL Server, PostgreSQL, MySQL/MariaDB, SQLite, Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, Access, SQL CE, ClickHouse, DuckDB, Ydb | SQL Server, PostgreSQL, MySQL, SQLite, Oracle и другие |
 | `SelectMany` / `GroupJoin` | partial (только in-memory; SQL-провайдеры отклоняют) | yes (трансляция в SQL) | yes |
 | In-memory-провайдер (только чтение, зарегистрированные CLR-наборы) | yes | partial | partial |
 | Жизненный цикл соединения (`IConnectionManager`: переданное vs собственное, переиспользование, dispose) | yes | yes | yes |
 | Расширяемость (диалект, `[SqlFunction]`/фабрики `TvfEntityBuilder<T>`, интерцепторы, глобальные фильтры, сырой SQL; плюс **компоненты запроса** — повторно используемые структурные операторы, добавляемые третьими сторонами без friend-доступа, с сохранением кэша планов и привязки параметров) | yes (компоненты запроса) | partial (`Sql.Ext`/`Sql.Function`/интерцепторы; нет структурного контракта компонентов) | partial (интерцепторы, глобальные фильтры; нет структурного контракта компонентов) |
-| **Итого** | 76 / 5 / 3 | 49 / 23 / 12 | 28 / 29 / 26 |
+| **Итого** | 77 / 6 / 2 | 48 / 25 / 12 | 27 / 31 / 26 |
 
 ## Где Nextorm впереди
 
@@ -183,6 +184,27 @@
 
 Сравнение основано на документации и исходном коде, а не на сравнительных запусках библиотек.
 
+## Генерация по существующей базе
+
+Если схема базы уже существует, сравните, какой код создают инструменты и как его обновлять:
+
+- **Nextorm** создаёт классы C# с атрибутами маппинга и `RepositoryContext` с типизированными
+  репозиториями поверх `IDataContext` приложения. [Отдельный CLI](../advanced/schema-scaffolding.md)
+  поддерживает фильтры и JSON-конфигурацию, но не генерирует обёртки для хранимых процедур или
+  табличных функций. Генератор ClickHouse принимает готовые метаданные вне CLI. Установка
+  инструмента с NuGet.org и его запуск показаны в [примере с SQLite](../getting-started/05-existing-database.md).
+- **linq2db** генерирует контекст данных и сопоставленные сущности. Его
+  [CLI](https://github.com/linq2db/docs/blob/master/source/articles/CLI.md) поддерживает
+  JSON-конфигурацию, генерацию маппинга для поддерживаемых серверных функций, в том числе
+  табличных, и настройку через сборку или шаблон T4.
+- **EF Core** генерирует классы сущностей и `DbContext` и может выводить связи по внешним ключам.
+  [Руководство по генерации](https://learn.microsoft.com/en-us/ef/core/managing-schemas/scaffolding/)
+  объясняет, как хранить свой код отдельно от перезаписываемых файлов.
+  [EF Core Power Tools](https://github.com/ErikEJ/EFCorePowerTools/wiki/Reverse-Engineering) —
+  отдельный проект с мастером Visual Studio и сохранением настроек для повторного запуска.
+- **Dapper** [сопоставляет результаты запроса](https://github.com/DapperLib/Dapper#execute-a-query-and-map-it-to-a-list-of-typed-objects)
+  с заданными типами или динамическими объектами. Основной пакет не генерирует модели из схемы БД.
+
 ## Осознанные границы: что Nextorm оставляет linq2db
 
 Это сознательные решения по scope в сфокусированной модели Nextorm без отслеживания изменений — не пробелы
@@ -192,8 +214,6 @@
   автоматического отслеживания. linq2db сбрасывает отслеживаемый unit of work.
   В [примере своего Unit of Work](../guide/26-optimistic-concurrency.md#свой-трекер-изменений)
   приложение отслеживает статус заказа и сохраняет изменения в транзакции. Identity map в примере нет.
-- **Database-first-инструменты**: linq2db поставляет CLI/T4-генератор, который скаффолдит маппинги сущностей
-  и табличных функций по живой БД; Nextorm объявляет маппинги в коде.
 - **Широта провайдеров**: помимо общих провайдеров linq2db дополнительно покрывает Oracle, Firebird, DB2,
   SAP HANA, Informix, Sybase, Access, SQL CE, DuckDB и Ydb, тогда как Nextorm добавляет in-memory object
   context и отдельные провайдеры MySQL/MariaDB.
@@ -230,9 +250,9 @@ SQL-провайдеры поддерживают коррелированные
 Результаты бенчмарков показывают меньшие аллокации и результаты не ниже Dapper, EF
 Core и linq2db на поставляемых сценариях SQLite; эти замеры не предсказывают результат для любой
 нагрузки. В проверенной области NativeAOT для Nextorm достаточно `PublishAot=true`, тогда как EF
-Core требует compiled model и precompilation, а Dapper — opt-in AOT-пакет. linq2db лучше подходит,
-когда тому же слою нужно также отслеживать изменения или генерировать слой данных по живой схеме —
-это осознанные границы Nextorm, перечисленные выше.
+Core требует compiled model и precompilation, а Dapper — opt-in AOT-пакет. Если нужны маппинги
+для существующей схемы, сравните возможности генераторов. Например, linq2db генерирует маппинг
+табличных функций, а EF Core создаёт модель с поддержкой отслеживания изменений и миграций.
 
 ## См. также
 

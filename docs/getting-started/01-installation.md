@@ -53,6 +53,9 @@ dotnet add package nextorm.entityframeworkcore
 
 See [EF Core integration](../advanced/integration-efcore.md) for details.
 
+To generate mappings for an existing database, use the separate scaffolding tool, not a package
+reference in your app. See [Generate models from an existing database](05-existing-database.md).
+
 ## Overview
 
 NextORM separates its query engine from database drivers:

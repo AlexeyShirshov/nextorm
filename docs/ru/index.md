@@ -20,6 +20,7 @@
 - [Быстрый старт](getting-started/02-quickstart.md)
 - [Сущности и метаданные](getting-started/03-entities-and-metadata.md)
 - [Внедрение зависимостей](getting-started/04-dependency-injection.md)
+- [Генерация моделей из существующей базы данных](getting-started/05-existing-database.md)
 
 ### Руководство
 

@@ -11,8 +11,9 @@ services need the same named entry points and reusable queries. For example,
 inject `AppRepositoryContext` so each service can start from `app.Orders` or call
 `app.QueryUnpaidOrders()` without restating what makes an order unpaid.
 
-NextORM provides the base class `NextORM.Core.Repositories.RepositoryContext`;
-you write `AppRepositoryContext`. The base class keeps the `IDataContext` you
+NextORM provides the base class `NextORM.Core.Repositories.RepositoryContext`.
+Write `AppRepositoryContext` by hand or [generate it from an existing
+database](../getting-started/05-existing-database.md). The base class keeps the `IDataContext` you
 pass in and provides the protected `Repository<T>()` method, which creates and
 reuses the repository for an entity type. The provider still executes the queries.
 Adding this layer doesn't create another connection or transaction.

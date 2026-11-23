@@ -6,3 +6,5 @@
   href: 03-entities-and-metadata.md
 - name: Dependency injection
   href: 04-dependency-injection.md
+- name: Generate models from an existing database
+  href: 05-existing-database.md
