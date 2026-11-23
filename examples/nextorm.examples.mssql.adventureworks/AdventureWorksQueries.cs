@@ -1,6 +1,6 @@
 ﻿using System.Linq.Expressions;
-using System.Text.Json;
 using NextORM.Core;
+using NextORM.Examples.SqlServer.AdventureWorks.Generated;
 using NextORM.Extensions;
 using NextORM.Generated.nextorm_examples_mssql_adventureworks;
 using NextORM.SqlServer;
@@ -21,26 +21,26 @@ public static class AdventureWorksQueries
     // is named (`WithAlias`), including the CTE-producing chain, which consumes the fix for #230. The
     // metrics root projects the named `CustomerMetricRow` DTO because the alias surface cannot render an
     // anonymous chain type (#229). FORMAT uses DemoUdf.
-    public static async Task<object> VipChurn(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> VipChurn(AdventureWorksRepositoryContext ctx, CancellationToken ct)
     {
         // CTE CustomerOrders; the manager join stays in the outer SELECT. AsCte makes it a typed
         // descriptor (member access) instead of reading it by name through TableAlias. The chain carries
         // aliases itself and is then consumed by the aliased CustomerMetrics chain below — before #230 the
         // downstream `Alias.Metrics`/`SalesPerson`/`Manager` were dropped from the generated marker.
-        var customerOrders = ctx.From<ISalesOrderHeader>().WithAlias(Alias.Order)
-            .Join<ICustomer>((soh, c) => soh.Order.CustomerId == c.CustomerId, Alias.Customer)
-            .Join<IPerson>((p, per) => p.Customer.PersonId == per.BusinessEntityId, Alias.Person)
+        var customerOrders = ctx.SalesOrderHeader.Query().WithAlias(Alias.Order)
+            .Join(ctx.Customer.Query(), (soh, c) => soh.Order.CustomerID == c.CustomerID, Alias.Customer)
+            .Join(ctx.Person.Query(), (p, per) => p.Customer.PersonID == per.BusinessEntityID, Alias.Person)
             .Select(p => new
             {
-                CustomerID = p.Order.CustomerId,
+                p.Order.CustomerID,
                 CustomerName = p.Person.FirstName + " " + p.Person.LastName,
-                SalesOrderID = p.Order.SalesOrderId,
+                p.Order.SalesOrderID,
                 OrderDate = p.Order.OrderDate,
                 TotalDue = p.Order.TotalDue,
-                SalesPersonID = p.Order.SalesPersonId,
+                p.Order.SalesPersonID,
                 LastCompanyOrderDate = SqlFunctions.Sql.max_over(p.Order.OrderDate).Over(),
                 PrevOrderDate = SqlFunctions.Sql.lag(p.Order.OrderDate)
-                    .Over(partitionBy: () => p.Order.CustomerId, orderBy: () => p.Order.OrderDate)
+                    .Over(partitionBy: () => p.Order.CustomerID, orderBy: () => p.Order.OrderDate)
             })
             .AsCte("CustomerOrders");
 
@@ -48,7 +48,7 @@ public static class AdventureWorksQueries
         // Explicit GroupBy + Select, not SelectGroup: the join-alias generator's syntax recovery does not
         // recognise SelectGroup as the operator that establishes a consumed chain's element type, so the
         // downstream `Alias.Metrics`/`SalesPerson`/`Manager` members are not emitted.
-        var metrics = ctx.From(customerOrders)
+        var metrics = ctx.DataContext.From(customerOrders)
             .GroupBy(c => new { c.CustomerID, c.CustomerName, c.SalesPersonID })
             .Select(c => new CustomerMetricRow
             {
@@ -67,9 +67,9 @@ public static class AdventureWorksQueries
         // LEFT JOINs are Alias.SalesPerson and Alias.Manager. SQL aliases stay t1/t2/t3; the names only add
         // typed projection members. The root must be a named type (CustomerMetricRow), not an anonymous
         // projection — see the DTO.
-        var rows = await ctx.From(metrics).WithAlias(Alias.Metrics)
-            .LeftJoin<ISalesPerson>((m, sp) => m.Metrics.SalesPersonID == sp.BusinessEntityId, Alias.SalesPerson)
-            .LeftJoin<IPerson>((p, per) => p.SalesPerson.BusinessEntityId == per.BusinessEntityId, Alias.Manager)
+        var rows = await ctx.DataContext.From(metrics).WithAlias(Alias.Metrics)
+            .LeftJoin(ctx.SalesPerson.Query(), (m, sp) => m.Metrics.SalesPersonID == sp.BusinessEntityID, Alias.SalesPerson)
+            .LeftJoin(ctx.Person.Query(), (p, per) => p.SalesPerson.BusinessEntityID == per.BusinessEntityID, Alias.Manager)
             .Where(p => p.Metrics.LifetimeValue > 50000 && p.Metrics.DaysSinceLastOrder > 180)
             .OrderByDescending(p => p.Metrics.LifetimeValue)
             .Select(p => new
@@ -89,11 +89,11 @@ public static class AdventureWorksQueries
     // 2. Sql/mssql_rolling_kpi.sql
     // WORKING: typed CTE MonthlySales (`AsCte`); the outer query reads it with member access, formats via
     // DemoUdf and applies cumulative/3-month window frames.
-    public static async Task<object> RollingKpi(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> RollingKpi(AdventureWorksRepositoryContext ctx, CancellationToken ct)
     {
         // CTE MonthlySales; AsCte makes it a typed descriptor (member access) instead of reading it by name.
-        var monthly = ctx.From<ISalesOrderHeader>().WithAlias(Alias.Order)
-            .Join<ISalesTerritory>((soh, st) => soh.Order.TerritoryId == st.TerritoryId, Alias.Territory)
+        var monthly = ctx.SalesOrderHeader.Query().WithAlias(Alias.Order)
+            .Join(ctx.SalesTerritory.Query(), (soh, st) => soh.Order.TerritoryID == st.TerritoryID, Alias.Territory)
             .SelectGroup(p => new
             {
                 RegionName = p.Territory.Name,
@@ -102,7 +102,7 @@ public static class AdventureWorksQueries
             })
             .AsCte("MonthlySales");
 
-        var rows = await ctx.From(monthly)
+        var rows = await ctx.DataContext.From(monthly)
             .OrderBy(m => m.RegionName)
             .OrderByDescending(m => m.SalesMonth)
             .Select(m => new
@@ -133,37 +133,37 @@ public static class AdventureWorksQueries
     // types; the outer query names the root and the joined CTE (`WithAlias(Alias.ProductionImpact)` +
     // `Alias.Supplier`) and reads each side through its named slot. The named types are required by the
     // alias surface (#229): it renders the chain's concrete type and refuses an anonymous one.
-    public static async Task<object> SupplyChain(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> SupplyChain(AdventureWorksRepositoryContext ctx, CancellationToken ct)
     {
         // CTE SupplierDelays: named joins like every other chain — the outer aliased chain joins this
         // descriptor with `Alias.Supplier`.
-        var supplierDelays = ctx.From<IPurchaseOrderDetail>().WithAlias(Alias.OrderDetail)
-            .Join<IPurchaseOrderHeader>((pod, poh) => pod.OrderDetail.PurchaseOrderId == poh.PurchaseOrderId, Alias.PurchaseOrder)
-            .Join<IVendor>((p, v) => p.PurchaseOrder.VendorId == v.BusinessEntityId, Alias.Vendor)
+        var supplierDelays = ctx.PurchaseOrderDetail.Query().WithAlias(Alias.OrderDetail)
+            .Join(ctx.PurchaseOrderHeader.Query(), (pod, poh) => pod.OrderDetail.PurchaseOrderID == poh.PurchaseOrderID, Alias.PurchaseOrder)
+            .Join(ctx.Vendor.Query(), (p, v) => p.PurchaseOrder.VendorID == v.BusinessEntityID, Alias.Vendor)
             .Where(p => p.OrderDetail.ModifiedDate > SqlFunctions.Sql.date_add("day", 5, p.OrderDetail.DueDate))
             .Select(p => new SupplierDelayRow
             {
-                ProductID = p.OrderDetail.ProductId,
-                VendorID = p.PurchaseOrder.VendorId,
+                ProductID = p.OrderDetail.ProductID,
+                VendorID = p.PurchaseOrder.VendorID,
                 VendorName = p.Vendor.Name,
                 DelayDays = SqlFunctions.Sql.date_diff("day", p.OrderDetail.DueDate, p.OrderDetail.ModifiedDate)
             })
             .AsCte("SupplierDelays");
 
         // CTE ProductionImpact
-        var productionImpact = ctx.From<IWorkOrder>().WithAlias(Alias.WorkOrder)
-            .Join<IProduct>((wo, pr) => wo.WorkOrder.ProductId == pr.ProductId, Alias.Product)
+        var productionImpact = ctx.WorkOrder.Query().WithAlias(Alias.WorkOrder)
+            .Join(ctx.Product.Query(), (wo, pr) => wo.WorkOrder.ProductID == pr.ProductID, Alias.Product)
             .Where(p => p.WorkOrder.EndDate > p.WorkOrder.DueDate)
             .Select(p => new ProductionImpactRow
             {
-                ProductID = p.WorkOrder.ProductId,
+                ProductID = p.WorkOrder.ProductID,
                 ProductName = p.Product.Name,
                 OrderQty = p.WorkOrder.OrderQty,
                 ProdDelayDays = SqlFunctions.Sql.date_diff("day", p.WorkOrder.DueDate, p.WorkOrder.EndDate)
             })
             .AsCte("ProductionImpact");
 
-        var rows = await ctx.From(productionImpact).WithAlias(Alias.ProductionImpact)
+        var rows = await ctx.DataContext.From(productionImpact).WithAlias(Alias.ProductionImpact)
             .Join(supplierDelays, (pi, sd) => pi.ProductionImpact.ProductID == sd.ProductID, Alias.Supplier)
             .OrderByDescending(p => new { p.ProductionImpact.ProdDelayDays, p.Supplier.DelayDays })
             .Select(p => new
@@ -183,15 +183,15 @@ public static class AdventureWorksQueries
     // WORKING: three chained typed CTEs (`AsCte`: ProductQuarterlySales, ProductAggregates, AbcRanking); the
     // running-share windows and CASE-based ABC/XYZ classes are computed over the CTEs. `avg`/`stdev` are
     // projected as nullable (`(double?)`) so the one-row-per-group case stays distinguishable from zero.
-    public static async Task<object> ProductAbcXyz(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> ProductAbcXyz(AdventureWorksRepositoryContext ctx, CancellationToken ct)
     {
         // CTE ProductQuarterlySales.
-        var quarterly = ctx.From<ISalesOrderDetail>().WithAlias(Alias.OrderDetail)
-            .Join<ISalesOrderHeader>((sod, soh) => sod.OrderDetail.SalesOrderId == soh.SalesOrderId, Alias.OrderHeader)
-            .Join<IProduct>((p, pr) => p.OrderDetail.ProductId == pr.ProductId, Alias.Product)
+        var quarterly = ctx.SalesOrderDetail.Query().WithAlias(Alias.OrderDetail)
+            .Join(ctx.SalesOrderHeader.Query(), (sod, soh) => sod.OrderDetail.SalesOrderID == soh.SalesOrderID, Alias.OrderHeader)
+            .Join(ctx.Product.Query(), (p, pr) => p.OrderDetail.ProductID == pr.ProductID, Alias.Product)
             .SelectGroup(p => new
             {
-                ProductID = p.OrderDetail.ProductId,
+                p.OrderDetail.ProductID,
                 ProductName = p.Product.Name,
                 SalesQuarter = SqlFunctions.Sql.date_trunc("quarter", p.OrderHeader.OrderDate),
                 QuarterlyRevenue = SqlFunctions.Sql.sum(p.OrderDetail.LineTotal),
@@ -200,7 +200,7 @@ public static class AdventureWorksQueries
             .AsCte("ProductQuarterlySales");
 
         // CTE ProductAggregates.
-        var aggregates = ctx.From(quarterly)
+        var aggregates = ctx.DataContext.From(quarterly)
             .SelectGroup(q => new
             {
                 q.ProductID,
@@ -212,7 +212,7 @@ public static class AdventureWorksQueries
             .AsCte("ProductAggregates");
 
         // CTE AbcRanking.
-        var abc = ctx.From(aggregates)
+        var abc = ctx.DataContext.From(aggregates)
             .Select(a => new
             {
                 a.ProductName,
@@ -225,7 +225,7 @@ public static class AdventureWorksQueries
             })
             .AsCte("AbcRanking");
 
-        var rows = await ctx.From(abc)
+        var rows = await ctx.DataContext.From(abc)
             .OrderByDescending(a => a.TotalRevenue)
             .Select(a => new
             {
@@ -248,13 +248,13 @@ public static class AdventureWorksQueries
     // WORKING: a derived query (5-table join with a computed Margin and FOR column) reshaped by the
     // native PIVOT. The typed overload declares the result members (the grouping category and the four
     // quarter cells) and each pivot value once, deriving the IN list from the projection.
-    public static async Task<object> QuarterlyPivot(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> QuarterlyPivot(AdventureWorksRepositoryContext ctx, CancellationToken ct)
     {
-        var orderMargins = ctx.From<ISalesOrderDetail>().WithAlias(Alias.OrderDetail)
-            .Join<ISalesOrderHeader>((sod, soh) => sod.OrderDetail.SalesOrderId == soh.SalesOrderId, Alias.OrderHeader)
-            .Join<IProduct>((p, pr) => p.OrderDetail.ProductId == pr.ProductId, Alias.Product)
-            .Join<IProductSubcategory>((p, psc) => p.Product.ProductSubcategoryId == psc.ProductSubcategoryId, Alias.Subcategory)
-            .Join<IProductCategory>((p, pc) => p.Subcategory.ProductCategoryId == pc.ProductCategoryId, Alias.Category)
+        var orderMargins = ctx.SalesOrderDetail.Query().WithAlias(Alias.OrderDetail)
+            .Join(ctx.SalesOrderHeader.Query(), (sod, soh) => sod.OrderDetail.SalesOrderID == soh.SalesOrderID, Alias.OrderHeader)
+            .Join(ctx.Product.Query(), (p, pr) => p.OrderDetail.ProductID == pr.ProductID, Alias.Product)
+            .Join(ctx.ProductSubcategory.Query(), (p, psc) => p.Product.ProductSubcategoryID == psc.ProductSubcategoryID, Alias.Subcategory)
+            .Join(ctx.ProductCategory.Query(), (p, pc) => p.Subcategory.ProductCategoryID == pc.ProductCategoryID, Alias.Category)
             .Where(p => SqlFunctions.Sql.extract("year", p.OrderHeader.OrderDate) == 2013)
             .Select(p => new
             {
@@ -263,7 +263,7 @@ public static class AdventureWorksQueries
                 Margin = p.OrderDetail.LineTotal - p.Product.StandardCost * p.OrderDetail.OrderQty
             });
 
-        var rows = await ctx.From(orderMargins)
+        var rows = await ctx.DataContext.From(orderMargins)
             .Pivot(
                 PivotAggregate.Sum,
                 m => m.Margin,
@@ -292,22 +292,22 @@ public static class AdventureWorksQueries
 
     // 6. top_products_by_category
     // WORKING: ROW_NUMBER() OVER (PARTITION BY category ORDER BY revenue DESC) top-N per group.
-    public static async Task<object> TopProductsByCategory(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> TopProductsByCategory(AdventureWorksRepositoryContext ctx, CancellationToken ct)
     {
-        var productRevenue = ctx.From<ISalesOrderDetail>().WithAlias(Alias.OrderDetail)
-            .Join<ISalesOrderHeader>((sod, soh) => sod.OrderDetail.SalesOrderId == soh.SalesOrderId, Alias.OrderHeader)
-            .Join<IProduct>((p, pr) => p.OrderDetail.ProductId == pr.ProductId, Alias.Product)
-            .Join<IProductSubcategory>((p, psc) => p.Product.ProductSubcategoryId == psc.ProductSubcategoryId, Alias.Subcategory)
-            .Join<IProductCategory>((p, pc) => p.Subcategory.ProductCategoryId == pc.ProductCategoryId, Alias.Category)
+        var productRevenue = ctx.SalesOrderDetail.Query().WithAlias(Alias.OrderDetail)
+            .Join(ctx.SalesOrderHeader.Query(), (sod, soh) => sod.OrderDetail.SalesOrderID == soh.SalesOrderID, Alias.OrderHeader)
+            .Join(ctx.Product.Query(), (p, pr) => p.OrderDetail.ProductID == pr.ProductID, Alias.Product)
+            .Join(ctx.ProductSubcategory.Query(), (p, psc) => p.Product.ProductSubcategoryID == psc.ProductSubcategoryID, Alias.Subcategory)
+            .Join(ctx.ProductCategory.Query(), (p, pc) => p.Subcategory.ProductCategoryID == pc.ProductCategoryID, Alias.Category)
             .SelectGroup(p => new
             {
                 Category = p.Category.Name,
-                p.OrderDetail.ProductId,
+                ProductId = p.OrderDetail.ProductID,
                 Product = p.Product.Name,
                 Revenue = SqlFunctions.Sql.sum(p.OrderDetail.LineTotal)
             });
 
-        var ranked = ctx.From(productRevenue)
+        var ranked = ctx.DataContext.From(productRevenue)
             .Select(p => new
             {
                 p.Category,
@@ -318,7 +318,7 @@ public static class AdventureWorksQueries
                     orderBy: new[] { SqlFunctions.Sql.desc(() => p.Revenue) })
             });
 
-        var rows = await ctx.From(ranked)
+        var rows = await ctx.DataContext.From(ranked)
             .Where(p => p.Place <= 3)
             .OrderBy(p => new { p.Category, p.Place })
             .Select(p => new
@@ -335,10 +335,10 @@ public static class AdventureWorksQueries
 
     // 7. territory_yoy
     // WORKING: LAG over a yearly aggregate (year-over-year growth).
-    public static async Task<object> TerritoryYearOverYear(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> TerritoryYearOverYear(AdventureWorksRepositoryContext ctx, CancellationToken ct)
     {
-        var yearly = ctx.From<ISalesOrderHeader>().WithAlias(Alias.Order)
-            .Join<ISalesTerritory>((soh, st) => soh.Order.TerritoryId == st.TerritoryId, Alias.Territory)
+        var yearly = ctx.SalesOrderHeader.Query().WithAlias(Alias.Order)
+            .Join(ctx.SalesTerritory.Query(), (soh, st) => soh.Order.TerritoryID == st.TerritoryID, Alias.Territory)
             .SelectGroup(p => new
             {
                 Region = p.Territory.Name,
@@ -346,7 +346,7 @@ public static class AdventureWorksQueries
                 Revenue = SqlFunctions.Sql.sum(p.Order.TotalDue)
             });
 
-        var withPrevious = ctx.From(yearly)
+        var withPrevious = ctx.DataContext.From(yearly)
             .Select(y => new
             {
                 y.Region,
@@ -356,7 +356,7 @@ public static class AdventureWorksQueries
                     .Over(partitionBy: () => y.Region, orderBy: () => y.Year)
             });
 
-        var rows = await ctx.From(withPrevious)
+        var rows = await ctx.DataContext.From(withPrevious)
             .OrderBy(y => new { y.Region, y.Year })
             .Select(y => new
             {
@@ -374,21 +374,21 @@ public static class AdventureWorksQueries
 
     // 8. customer_rfm
     // WORKING: NTILE(4) OVER (ORDER BY … DESC) RFM segmentation.
-    public static async Task<object> CustomerRfm(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> CustomerRfm(AdventureWorksRepositoryContext ctx, CancellationToken ct)
     {
-        var rfm = ctx.From<ISalesOrderHeader>().WithAlias(Alias.Order)
-            .Join<ICustomer>((soh, c) => soh.Order.CustomerId == c.CustomerId, Alias.Customer)
-            .Join<IPerson>((p, per) => p.Customer.PersonId == per.BusinessEntityId, Alias.Person)
+        var rfm = ctx.SalesOrderHeader.Query().WithAlias(Alias.Order)
+            .Join(ctx.Customer.Query(), (soh, c) => soh.Order.CustomerID == c.CustomerID, Alias.Customer)
+            .Join(ctx.Person.Query(), (p, per) => p.Customer.PersonID == per.BusinessEntityID, Alias.Person)
             .SelectGroup(p => new
             {
-                p.Order.CustomerId,
+                CustomerId = p.Order.CustomerID,
                 Name = p.Person.FirstName + " " + p.Person.LastName,
                 Frequency = SqlFunctions.Sql.count(),
                 Monetary = SqlFunctions.Sql.sum(p.Order.TotalDue),
                 Recency = SqlFunctions.Sql.max(p.Order.OrderDate)
             });
 
-        var scored = ctx.From(rfm)
+        var scored = ctx.DataContext.From(rfm)
             .Select(r => new
             {
                 r.CustomerId,
@@ -400,7 +400,7 @@ public static class AdventureWorksQueries
                 RScore = SqlFunctions.Sql.ntile(4).Over(SqlFunctions.Sql.desc(() => r.Recency))
             });
 
-        var rows = await ctx.From(scored)
+        var rows = await ctx.DataContext.From(scored)
             .OrderByDescending(r => r.Monetary)
             .Limit(20)
             .Select(r => new
@@ -421,18 +421,18 @@ public static class AdventureWorksQueries
 
     // 9. quota_attainment
     // WORKING: per-entity target vs actual, computed in Select.
-    public static async Task<object> QuotaAttainment(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> QuotaAttainment(AdventureWorksRepositoryContext ctx, CancellationToken ct)
     {
-        var rows = await ctx.From<ISalesPerson>().WithAlias(Alias.SalesPerson)
-            .Join<IPerson>((sp, per) => sp.SalesPerson.BusinessEntityId == per.BusinessEntityId, Alias.Person)
+        var rows = await ctx.SalesPerson.Query().WithAlias(Alias.SalesPerson)
+            .Join(ctx.Person.Query(), (sp, per) => sp.SalesPerson.BusinessEntityID == per.BusinessEntityID, Alias.Person)
             .Where(p => p.SalesPerson.SalesQuota != null)
-            .OrderByDescending(p => p.SalesPerson.SalesYtd / p.SalesPerson.SalesQuota)
+            .OrderByDescending(p => p.SalesPerson.SalesYTD / p.SalesPerson.SalesQuota)
             .Select(p => new
             {
                 Name = p.Person.FirstName + " " + p.Person.LastName,
                 Quota = p.SalesPerson.SalesQuota,
-                SalesYtd = p.SalesPerson.SalesYtd,
-                AttainmentPct = Math.Round((p.SalesPerson.SalesYtd / p.SalesPerson.SalesQuota * 100) ?? 0m, 1)
+                SalesYtd = p.SalesPerson.SalesYTD,
+                AttainmentPct = Math.Round((p.SalesPerson.SalesYTD / p.SalesPerson.SalesQuota * 100) ?? 0m, 1)
             })
             .ToListAsync(ct);
 
@@ -441,10 +441,10 @@ public static class AdventureWorksQueries
 
     // 10. territory_growth_mom
     // WORKING: LAG over a monthly aggregate (month-over-month % change).
-    public static async Task<object> TerritoryGrowthMonthOverMonth(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> TerritoryGrowthMonthOverMonth(AdventureWorksRepositoryContext ctx, CancellationToken ct)
     {
-        var monthly = ctx.From<ISalesOrderHeader>().WithAlias(Alias.Order)
-            .Join<ISalesTerritory>((soh, st) => soh.Order.TerritoryId == st.TerritoryId, Alias.Territory)
+        var monthly = ctx.SalesOrderHeader.Query().WithAlias(Alias.Order)
+            .Join(ctx.SalesTerritory.Query(), (soh, st) => soh.Order.TerritoryID == st.TerritoryID, Alias.Territory)
             .SelectGroup(p => new
             {
                 Region = p.Territory.Name,
@@ -452,7 +452,7 @@ public static class AdventureWorksQueries
                 MonthlyRevenue = SqlFunctions.Sql.sum(p.Order.TotalDue)
             });
 
-        var withPrevious = ctx.From(monthly)
+        var withPrevious = ctx.DataContext.From(monthly)
             .Select(m => new
             {
                 m.Region,
@@ -462,7 +462,7 @@ public static class AdventureWorksQueries
                     .Over(partitionBy: () => m.Region, orderBy: () => m.SalesMonth)
             });
 
-        var rows = await ctx.From(withPrevious)
+        var rows = await ctx.DataContext.From(withPrevious)
             .OrderBy(m => new { m.Region, m.SalesMonth })
             .Select(m => new
             {
@@ -480,12 +480,12 @@ public static class AdventureWorksQueries
 
     // 11. customer_pareto
     // WORKING: ABC / Pareto 80-20 concentration with running window shares.
-    public static async Task<object> CustomerPareto(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> CustomerPareto(AdventureWorksRepositoryContext ctx, CancellationToken ct)
     {
-        var customerRevenue = ctx.From<ISalesOrderHeader>()
-            .SelectGroup(soh => new { soh.CustomerId, Revenue = SqlFunctions.Sql.sum(soh.TotalDue) });
+        var customerRevenue = ctx.SalesOrderHeader.Query()
+            .SelectGroup(soh => new { CustomerId = soh.CustomerID, Revenue = SqlFunctions.Sql.sum(soh.TotalDue) });
 
-        var ranked = ctx.From(customerRevenue)
+        var ranked = ctx.DataContext.From(customerRevenue)
             .Select(c => new
             {
                 c.CustomerId,
@@ -494,7 +494,7 @@ public static class AdventureWorksQueries
                 TotalRevenue = SqlFunctions.Sql.sum_over(c.Revenue).Over()
             });
 
-        var rows = await ctx.From(ranked)
+        var rows = await ctx.DataContext.From(ranked)
             .OrderByDescending(c => c.Revenue)
             .Limit(40)
             .Select(c => new

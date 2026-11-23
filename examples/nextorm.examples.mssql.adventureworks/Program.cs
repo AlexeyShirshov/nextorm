@@ -5,6 +5,7 @@ using LinqToDB.DataProvider.SqlServer;
 using Microsoft.Extensions.Logging;
 using NextORM.Core;
 using NextORM.Examples.SqlServer.AdventureWorks;
+using NextORM.Examples.SqlServer.AdventureWorks.Generated;
 using NextORM.SqlServer;
 
 if (args.Contains("--benchmark"))
@@ -31,7 +32,8 @@ static async Task RunComparison(string[] args)
     if (loggerFactory is not null)
         contextBuilder.UseLoggerFactory(loggerFactory);
 
-    await using var ctx = new SqlServerDataContext(database.ConnectionString, contextBuilder);
+    await using var dataContext = new SqlServerDataContext(database.ConnectionString, contextBuilder);
+    var ctx = new AdventureWorksRepositoryContext(dataContext);
     using var l2db = new DataConnection(new DataOptions()
         .UseSqlServer(database.ConnectionString, SqlServerVersion.v2022, SqlServerProvider.MicrosoftDataSqlClient));
 

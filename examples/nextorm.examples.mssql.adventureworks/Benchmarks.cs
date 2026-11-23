@@ -9,6 +9,7 @@ using LinqToDB;
 using LinqToDB.Data;
 using LinqToDB.DataProvider.SqlServer;
 using NextORM.Core;
+using NextORM.Examples.SqlServer.AdventureWorks.Generated;
 using NextORM.SqlServer;
 
 namespace NextORM.Examples.SqlServer.AdventureWorks;
@@ -24,13 +25,13 @@ public class AdventureWorksBenchmarks
 {
     public static string ConnectionString { get; set; } = "";
 
-    private SqlServerDataContext _nextorm = null!;
+    private AdventureWorksRepositoryContext _nextorm = null!;
     private DataConnection _linq2db = null!;
 
     [GlobalSetup]
     public void Setup()
     {
-        _nextorm = new SqlServerDataContext(ConnectionString, new DataContextBuilder());
+        _nextorm = new AdventureWorksRepositoryContext(new SqlServerDataContext(ConnectionString, new DataContextBuilder()));
         _linq2db = new DataConnection(new DataOptions()
             .UseSqlServer(ConnectionString, SqlServerVersion.v2022, SqlServerProvider.MicrosoftDataSqlClient));
     }
@@ -38,7 +39,7 @@ public class AdventureWorksBenchmarks
     [GlobalCleanup]
     public void Cleanup()
     {
-        _nextorm.Dispose();
+        _nextorm.DataContext.Dispose();
         _linq2db.Dispose();
     }
 

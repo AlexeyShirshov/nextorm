@@ -64,9 +64,10 @@ summary. Only documented engine gaps (`NotSupportedException`, `QueryPreparation
 
 ## Comparison arms
 
-Each project contains the nextorm implementation (`*Queries.cs` + `Entities.cs`), its linq2db
-counterpart (`Linq2DbQueries.cs` + `Linq2DbEntities.cs`), the side-by-side runner (`Comparison.cs`) and
-a BenchmarkDotNet class (`Benchmarks.cs`). `--benchmark` runs the comparison instead of the plain pass:
+Each project contains Nextorm queries (`*Queries.cs`) and generated repositories and models
+(`Generated/`). The linq2db arm has its own queries and models (`Linq2DbQueries.cs` and
+`Linq2DbEntities.cs`). Use `--benchmark` to run BenchmarkDotNet (`Benchmarks.cs`) instead of the
+side-by-side row-count comparison (`Comparison.cs`):
 
 ```bash
 DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \

@@ -10,6 +10,7 @@ using LinqToDB.Data;
 using LinqToDB.DataProvider.ClickHouse;
 using NextORM.ClickHouse;
 using NextORM.Core;
+using NextORM.Examples.ClickHouse.Analytics.Generated;
 
 namespace NextORM.Examples.ClickHouse.Analytics;
 
@@ -24,13 +25,13 @@ public class ClickHouseBenchmarks
 {
     public static string ConnectionString { get; set; } = "";
 
-    private ClickHouseDataContext _nextorm = null!;
+    private AnalyticsRepositoryContext _nextorm = null!;
     private DataConnection _linq2db = null!;
 
     [GlobalSetup]
     public void Setup()
     {
-        _nextorm = new ClickHouseDataContext(ConnectionString, new DataContextBuilder());
+        _nextorm = new AnalyticsRepositoryContext(new ClickHouseDataContext(ConnectionString, new DataContextBuilder()));
         _linq2db = new DataConnection(new DataOptions()
             .UseClickHouse(ConnectionString, ClickHouseProvider.ClickHouseDriver));
     }
@@ -38,7 +39,7 @@ public class ClickHouseBenchmarks
     [GlobalCleanup]
     public void Cleanup()
     {
-        _nextorm.Dispose();
+        _nextorm.DataContext.Dispose();
         _linq2db.Dispose();
     }
 

@@ -17,7 +17,7 @@ tables below map each SQL construct to the nextorm construct that replaces it.
 |---|---|
 | [`Sql/*.sql`](Sql) | Original T-SQL model queries — the reference both arms are verified against |
 | [`AdventureWorksQueries.cs`](AdventureWorksQueries.cs) | nextorm implementation of the 5 demo queries + 6 course-style exercises |
-| [`Entities.cs`](Entities.cs) | nextorm `[SqlTable]` / `[Column]` entity interfaces |
+| [`Generated/AdventureWorksRepositoryContext.g.cs`](Generated/AdventureWorksRepositoryContext.g.cs) | Generated repositories and models for the AdventureWorks tables |
 | [`Linq2DbQueries.cs`](Linq2DbQueries.cs) | linq2db implementation of the same eleven queries |
 | [`Linq2DbEntities.cs`](Linq2DbEntities.cs) | linq2db `[Table]` / `[Column]` POCOs for the same tables |
 | [`Comparison.cs`](Comparison.cs) | Runs both arms, prints `[ OK ]`/`[FAIL]`/`[DIFF]`, compares row counts |
@@ -66,15 +66,15 @@ arm's `DemoUdf`). The `PIVOT` query is expressed as the equivalent conditional a
 
 ## SQL → nextorm: general rules
 
-SQL is modelled as a chain of LINQ calls over table interfaces; the call order (roughly) matches the
-SQL clause order: `From().Join().Where().GroupBy().Having().OrderBy().Limit().Select()`.
+Start a table query with `.Query()` on a repository from `AdventureWorksRepositoryContext`. The
+following examples use `ctx` for that context and `ctx.DataContext` for its underlying data context.
 
 | SQL (T-SQL) | nextorm |
 |---|---|
-| `FROM t` | `ctx.From<IT>()`, where `IT` is an interface marked `[SqlTable("Schema.t")]` |
-| `WITH x AS (SELECT …)` | declare it as a CTE: string API `ctx.With("x", query).From("x")` (columns read by name, `t.GetInt32("id")`, because the name carries no type) or the typed `query.AsCte("x")` + `ctx.From(cte)` (member access, type inference); a later CTE reads an earlier one the same way |
+| `FROM Sales.SalesOrderHeader` | `ctx.SalesOrderHeader.Query()` |
+| `WITH x AS (SELECT …)` | `query.AsCte("x")` declares a typed CTE; `ctx.DataContext.From(cte)` reads it |
 | `SELECT a AS x` | `.Select(t => new { x = t.A })` (anonymous type = result row) |
-| `JOIN u ON a = b` / `LEFT JOIN` | `.Join<IU>((t, u) => …)` / `.LeftJoin<IU>((t, u) => …)`; joined items are `p.Item1`, `p.Item2`, … |
+| `JOIN u ON a = b` / `LEFT JOIN` | `.Join(ctx.Customer.Query(), (t, u) => …, Alias.Customer)` or `.LeftJoin(ctx.Person.Query(), (t, u) => …, Alias.Manager)` |
 | `WHERE c` | `.Where(t => c)` |
 | `GROUP BY a, b` | `.GroupBy(t => new { t.A, t.B })`, or `.SelectGroup(t => new { t.A, t.B, total = SqlFunctions.Sql.sum(t.X) })` to infer the keys from the projection (most demo queries) |
 | `HAVING c` | `.Having(g => c)` (repeat the aggregate) or a derived query + `.Where(...)` |
@@ -106,10 +106,10 @@ Two nextorm-specific rules that trip people up:
   it takes the projection alone and infers the same keys, which is why most demo queries use it (the
   `CustomerMetrics` CTE keeps `GroupBy` + `Select` because the join-alias generator does not recognise
   `SelectGroup` when it recovers a consumed chain's element type).
-* **Derived queries as a `FROM` source and as a join side** — `ctx.From(derived).Join(...)` works, and a
+* **Derived queries as a `FROM` source and as a join side** — `ctx.DataContext.From(derived).Join(...)` works, and a
   `QueryCommand<T>` can be joined directly; a `Where` may precede the join (it is pushed onto the derived
   query), while other modifiers must stay inside the derived query. The reference queries declare their
-  subqueries as CTEs, all through the typed `query.AsCte(name)` / `ctx.From(Cte<T>)` API (rule 1):
+  subqueries as CTEs, all through the typed `query.AsCte(name)` / `ctx.DataContext.From(cte)` API:
   queries 1, 3 and 4 chain typed descriptors. Two of them name every slot of every chain they own:
   query 1 — the CTE-producing one (`WithAlias(Alias.Order)`, `Alias.Customer`, `Alias.Person`) and the
   one that consumes it (`Alias.Metrics`, `Alias.SalesPerson`, `Alias.Manager`) — and query 3

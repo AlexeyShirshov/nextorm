@@ -1,12 +1,38 @@
 ﻿# Examples verification report
 
+## Comparison queries use generated repositories (2026-11-23)
+
+The Nextorm queries in the three comparison projects now use the generated `RepositoryContext`
+for table sources, including joins. The comparison runners and benchmark arms share those
+queries. The linq2db queries and the separate package-based NativeAOT probes are unchanged.
+
+All three comparison projects and `nextorm.benchmark` built in Release without warnings or
+errors. The comparison apps used the checkout's source projects and the existing Podman
+dataset volumes.
+
+| Example | Queries with matching row counts |
+|---|---:|
+| PostgreSQL Aviasales | 10/10 across two runs |
+| SQL Server AdventureWorks | 11/11 |
+| ClickHouse Analytics | 9/9 |
+
+The row counts and printed Nextorm row samples matched the pre-migration logs for all 30
+comparisons. Aviasales reached the four-minute limit after eight comparisons. The other two
+(`PassengerGrowth` and `CancellationByRoute`) matched in a separate `--only` run.
+
+After SQL Server ran out of memory on the shared host, a temporary runner set
+`MSSQL_MEMORY_LIMIT_MB=1280` for its container and passed the connection to the comparison app.
+The app exited with code `0`. On that same database, the original and migrated `VipChurn` queries
+emitted identical SQL and both returned 146 rows. The example's provisioning code is unchanged.
+
+A separate live smoke run also executed the two Nextorm-only queries: `DelayPercentilesByModel`
+returned eight rows and `Retention` returned one row.
+
 ## Generated repository contexts (2026-11-23)
 
-The three comparison projects build with the generated contexts in their `Generated` directories.
-A separate smoke runner using the published Nextorm `1.0.11` packages read one row with all mapped
-columns from each generated repository on the live demo databases: Aviasales **9/9**,
-AdventureWorks **13/13**, and ClickHouse Analytics **2/2**. The comparison apps still use their
-original models and queries.
+Before the query migration, a separate smoke runner using the published Nextorm `1.0.11`
+packages read one row with all mapped columns from each generated repository on the live demo
+databases: Aviasales **9/9**, AdventureWorks **13/13**, and ClickHouse Analytics **2/2**.
 
 The Aviasales mapping omits `airports_data.coordinates` because the row mapper doesn't support
 PostgreSQL `point`. The Analytics mapping selects only the columns used by the example and omits

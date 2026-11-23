@@ -5,6 +5,7 @@ using LinqToDB.DataProvider.PostgreSQL;
 using Microsoft.Extensions.Logging;
 using NextORM.Core;
 using NextORM.Examples.Postgres.Aviasales;
+using NextORM.Examples.Postgres.Aviasales.Generated;
 using NextORM.Postgres;
 
 if (args.Contains("--benchmark"))
@@ -31,7 +32,8 @@ static async Task RunComparison(string[] args)
     if (loggerFactory is not null)
         contextBuilder.UseLoggerFactory(loggerFactory);
 
-    await using var ctx = new PostgresDataContext(database.ConnectionString, contextBuilder);
+    await using var dataContext = new PostgresDataContext(database.ConnectionString, contextBuilder);
+    var ctx = new AviasalesRepositoryContext(dataContext);
     using var l2db = new DataConnection(new DataOptions()
         .UsePostgreSQL(database.ConnectionString, PostgreSQLVersion.v15));
 

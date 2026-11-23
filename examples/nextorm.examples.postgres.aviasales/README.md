@@ -16,7 +16,7 @@ next to its two implementations and you can translate your own queries in either
 |---|---|
 | [`Sql/*.sql`](Sql) | Original model queries — the reference both arms are verified against |
 | [`AviasalesQueries.cs`](AviasalesQueries.cs) | nextorm implementation of the 5 demo queries + 6 course-style exercises |
-| [`Entities.cs`](Entities.cs) | nextorm `[SqlTable]` / `[Column]` entity interfaces for the `bookings` schema |
+| [`Generated/AviasalesRepositoryContext.g.cs`](Generated/AviasalesRepositoryContext.g.cs) | Generated repositories and models for the `bookings` schema |
 | [`Linq2DbQueries.cs`](Linq2DbQueries.cs) | linq2db implementation of ten of the eleven queries (`DelayPercentilesByModel` is nextorm-only) |
 | [`Linq2DbEntities.cs`](Linq2DbEntities.cs) | linq2db `[Table]` / `[Column]` POCOs for the same tables |
 | [`Comparison.cs`](Comparison.cs) | Runs both arms, prints `[ OK ]`/`[FAIL]`/`[DIFF]`, compares row counts |
@@ -66,15 +66,15 @@ functions use `Sql.Window.*`, `STDDEV` uses `AnalyticFunctions.StdDevSamp`, and 
 
 ## SQL → nextorm: general rules
 
-SQL is modelled as a chain of LINQ calls over table interfaces; the call order (roughly) matches the
-SQL clause order: `From().Join().Where().GroupBy().Having().OrderBy().Limit().Select()`.
+Start a table query with `.Query()` on a repository from `AviasalesRepositoryContext`. The following
+examples use `ctx` for that context and `ctx.DataContext` for its underlying data context.
 
 | SQL | nextorm |
 |---|---|
-| `FROM t` | `ctx.From<IT>()`, where `IT` is an interface marked `[SqlTable("schema.t")]` |
-| `WITH x AS (SELECT …)` | declare it as a CTE: the typed `query.AsCte("x")` + `ctx.From(cte)` (member access, type inference) or the string `ctx.With("x", query).From("x")` (columns read by name, `t.GetInt32("id")`, because the name carries no type); a later CTE reads an earlier one the same way |
+| `FROM bookings.timetable` | `ctx.Timetable.Query()` |
+| `WITH x AS (SELECT …)` | `query.AsCte("x")` declares a typed CTE; `ctx.DataContext.From(cte)` reads it |
 | `SELECT a AS x` | `.Select(t => new { x = t.A })` (anonymous type = result row) |
-| `JOIN u ON a = b` / `LEFT JOIN` | `.Join<IU>((t, u) => …)` / `.LeftJoin<IU>((t, u) => …)`; joined items are `p.Item1`, `p.Item2`, … |
+| `JOIN u ON a = b` / `LEFT JOIN` | `.Join(ctx.Segments.Query(), (t, u) => …, Alias.Segment)` or `.LeftJoin(ctx.BoardingPasses.Query(), (t, u) => …, Alias.BoardingPass)` |
 | `WHERE c` | `.Where(t => c)` |
 | `GROUP BY a, b` | `.GroupBy(t => new { t.A, t.B })`, or `.SelectGroup(t => new { t.A, t.B, total = SqlFunctions.Sql.sum(t.X) })` to infer the keys from the projection (query 5) |
 | `HAVING c` | `.Having(g => c)` (repeat the aggregate) or a derived query + `.Where(...)` |
@@ -98,24 +98,22 @@ SQL clause order: `From().Join().Where().GroupBy().Having().OrderBy().Limit().Se
 | `percentile_disc(0.5) WITHIN GROUP (ORDER BY x)` | `SqlFunctions.Postgres.percentile_disc(0.5, () => x)` |
 | `ROUND(x, n)` | `Math.Round(x, n)` (runs in C# after materialization) |
 
-Two nextorm-specific rules that trip people up:
+The examples also use these Nextorm query patterns:
 
 * **A computed `GROUP BY` key must be repeated verbatim in `Select`.** After `.GroupBy(...)` the
   `Select` lambda is still typed over the *source entity*, not over the key, so
   `GroupBy(b => new { D = date_trunc("day", b.BookDate) })` must be followed by
   `Select(b => new { D = date_trunc("day", b.BookDate), … })`.
-* **A derived query can be the primary `FROM` source while joined** — `ctx.From(derived).Join(...)` is
+* **A derived query can be the primary `FROM` source while joined** — `ctx.DataContext.From(derived).Join(...)` is
   supported (a `Where` before the join is pushed onto the derived query). The reference queries declare
-  their subqueries as CTEs, so the example uses the typed `query.AsCte(name)` / `ctx.From(cte)` API
-  (see rule 1); queries 1–5 are expressed this way and are all **WORKING**.
+  their subqueries as CTEs, so the example uses the typed `query.AsCte(name)` / `ctx.DataContext.From(cte)` API
+  in queries 1–5.
   Every method carries a `WORKING` / `NOT WORKING` comment saying which it is and, when it fails, why.
-* **Named joins are opt-in and need a named projection.** A chain names its slots with
-  `ctx.From(...).WithAlias(Alias.Root)` plus a trailing `Alias.<Name>` on each join, and reads them as
-  `p.Root`/`p.Name` instead of `p.ItemN`. Two constraints come with it: a joined **entity** uses the
-  source-less form (`.Join<IEntity>((l, r) => …, Alias.X)`), while a joined **CTE** passes its
-  descriptor (`.Join(cte, …, Alias.X)`), and the chain's **whole projection must be a named type**,
-  because the alias generator renders that concrete type and reports `NORMGEN009` for an anonymous one. Every query in this example names its joins; the `route_monthly_revenue` chain of query 5 needs
-  no DTO because its root is the mapped `ITimetable` table.
+* **Named joins need named source types.** Use `.WithAlias(Alias.Timetable)` on the root and pass a
+  trailing `Alias.<Name>` to each join to read slots by name, such as `p.Timetable` and `p.Segment`.
+  Pass a repository query for a table join and the descriptor for a CTE join (`.Join(cte, …, Alias.X)`).
+  The alias generator reports `NORMGEN009` for an anonymous chain type. In query 5, the generated
+  `Timetable` model already gives the root a named type, so it doesn't need a separate projection.
 
 ## Demo queries: SQL file → method
 

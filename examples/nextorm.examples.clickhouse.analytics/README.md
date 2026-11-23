@@ -18,7 +18,7 @@ construct that replaces it.
 |---|---|
 | [`Sql/*.sql`](Sql) | Original model queries — the reference both arms are verified against |
 | [`ClickHouseQueries.cs`](ClickHouseQueries.cs) | nextorm implementation of the 5 demo queries + 6 course-style exercises |
-| [`Entities.cs`](Entities.cs) | nextorm `[SqlTable]` / `[Column]` entity interfaces |
+| [`Generated/AnalyticsRepositoryContext.g.cs`](Generated/AnalyticsRepositoryContext.g.cs) | Generated repositories and models for the hits table and materialized view |
 | [`Linq2DbQueries.cs`](Linq2DbQueries.cs) | linq2db implementation of nine of the ten queries (`Retention` is nextorm-only) |
 | [`Linq2DbEntities.cs`](Linq2DbEntities.cs) | linq2db `[Table]` / `[Column]` POCOs for `hits_v1` and the materialized view |
 | [`Comparison.cs`](Comparison.cs) | Runs both arms, prints `[ OK ]`/`[FAIL]`/`[DIFF]`, compares row counts |
@@ -72,18 +72,17 @@ uses `COUNT(DISTINCT)` (exact) and the `Users` column can differ by a small amou
 
 ## SQL → nextorm: general rules
 
-A query is built by chaining LINQ calls over table interfaces; the order (roughly) matches the SQL
-clause order: `From().Where().GroupBy().Having().OrderBy().Limit().Select()`.
+Start a table query with `.Query()` on a repository from `AnalyticsRepositoryContext`. The following
+examples use `ctx` for that context and `ctx.DataContext` for its underlying data context.
 
 | SQL (ClickHouse) | nextorm |
 |---|---|
-| `FROM datasets.hits_v1` | `ctx.From<IHit>()` with `[SqlTable("datasets.hits_v1")]` |
-| `WITH x AS (SELECT …)` | declare it as a CTE: the typed `query.AsCte("x")` + `ctx.From(cte)` (member access, type inference) or the string `ctx.With("x", query).From("x")` (columns read by name, `t.GetInt64("UserID")`, because the name carries no type); a later CTE reads an earlier one the same way |
+| `FROM datasets.hits_v1` | `ctx.HitsV1.Query()` |
+| `WITH x AS (SELECT …)` | `query.AsCte("x")` declares a typed CTE; `ctx.DataContext.From(cte)` reads it |
 | `SELECT a AS x` | `.Select(h => new { x = h.A })` |
-| `JOIN u ON a = b` | `.Join<IU>((h, u) => …)`; joined items are `p.Item1`, `p.Item2`, … |
-| `JOIN u ON a = b` with slot names | `.Join<IU>((h, u) => …, Alias.U)` plus `.WithAlias(Alias.Root)` on the chain's root: the slots are then read as `p.Root`/`p.U`. A joined **CTE** passes its descriptor instead of a type parameter (`.Join(cte, …, Alias.X)`). The chain's projection must be a **named** type (the alias generator renders the chain's concrete type and reports `NORMGEN009` on an anonymous one). Every query in this example names its joins. |
+| `JOIN first_visits ON …` | In `Retention`, name the root with `.WithAlias(Alias.Hit)` and pass the CTE descriptor with `.Join(firstVisits, (h, fv) => …, Alias.FirstVisit)`. Read the joined slots as `p.Hit` and `p.FirstVisit`. |
 | `WHERE c` | `.Where(h => c)` |
-| `GROUP BY a` | `.GroupBy(h => new { h.A })`, or `.SelectGroup(h => new { h.A, n = SqlFunctions.Sql.count() })` to infer the keys from the projection (most demo queries). `Retention.first_visits` and `Retention.weekly` keep `GroupBy`: the first would group by the `UserId` cast, the second must stay a `Select` producer because the shipped alias generator recovers a consumed chain only through `Select` |
+| `GROUP BY a` | `.GroupBy(h => new { h.A })`, or `.SelectGroup(h => new { h.A, n = SqlFunctions.Sql.count() })` to infer the keys from the projection (most demo queries). `Retention.first_visits` and `Retention.weekly` keep `GroupBy`: the first would group by the `UserID` cast, the second must stay a `Select` producer because the shipped alias generator recovers a consumed chain only through `Select` |
 | `HAVING c` | `.Having(g => c)` or a derived query + `.Where(...)` |
 | `ORDER BY a, b DESC` | `.OrderBy(h => h.A).OrderByDescending(h => h.B)` |
 | `LIMIT n` | `.Limit(n)` |

@@ -1,5 +1,5 @@
-using System.Text.Json;
 using NextORM.Core;
+using NextORM.Examples.ClickHouse.Analytics.Generated;
 using NextORM.Extensions;
 using NextORM.Generated.nextorm_examples_clickhouse_analytics;
 
@@ -20,9 +20,9 @@ public static class ClickHouseQueries
     // length() of a higher-order lambda parameter cannot be written as x.Length (member access on the
     // parameter is rejected by the translator), so it is reached through the lower() call — a no-op on
     // the already-lowercased element. Grouping by the resulting array is supported by ClickHouse.
-    public static async Task<object> ArrayAnalytics(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> ArrayAnalytics(AnalyticsRepositoryContext ctx, CancellationToken ct)
     {
-        var rows = await ctx.From<IHit>()
+        var rows = await ctx.HitsV1.Query()
             .Where(h => h.SearchPhrase != "" && h.EventDate == new DateTime(2014, 3, 20))
             .OrderByDescending(h => SqlFunctions.Sql.count())
             .Limit(10)
@@ -43,18 +43,18 @@ public static class ClickHouseQueries
     // 2. Sql/clickhouse_funnel.sql
     // WORKING: windowFunnel(1800)(...) → SqlFunctions.ClickHouse.window_funnel(...); the inner
     // GROUP BY UserID and the outer GROUP BY level map to two derived queries.
-    public static async Task<object> Funnel(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> Funnel(AnalyticsRepositoryContext ctx, CancellationToken ct)
     {
-        var perUser = ctx.From<IHit>()
+        var perUser = ctx.HitsV1.Query()
             .Where(h => h.EventDate == new DateTime(2014, 3, 20))
             .SelectGroup(h => new
             {
-                h.UserId,
+                UserId = h.UserID,
                 Level = SqlFunctions.ClickHouse.window_funnel(1800, h.EventTime,
-                    h.Url.Contains("/product/"), h.Url.Contains("/cart"), h.Url.Contains("/checkout/success"))
+                    h.URL.Contains("/product/"), h.URL.Contains("/cart"), h.URL.Contains("/checkout/success"))
             });
 
-        var rows = await ctx.From(perUser)
+        var rows = await ctx.DataContext.From(perUser)
             .OrderBy(p => p.Level)
             .SelectGroup(p => new { p.Level, ConversionCount = SqlFunctions.Sql.count() })
             .ToListAsync(ct);
@@ -69,23 +69,23 @@ public static class ClickHouseQueries
     // (`WithAlias(Alias.Week)` + `Alias.Cohort`) — the alias surface refuses an anonymous chain type
     // (#229). groupArray((week_number, pct)) → group_array(Tuple.Create(...)), which materialises as a CLR
     // Tuple<...>[]. The matrix is formatted for display in C# (there is no portable toString()).
-    public static async Task<object> Retention(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> Retention(AnalyticsRepositoryContext ctx, CancellationToken ct)
     {
         // CTE first_visits: each user's first (Monday-aligned) visit. UserID is projected as Int64 so the
         // later join with hits_v1.UserID (UInt64) has a common key type on both sides.
-        var firstVisits = ctx.From<IHit>()
-            // Explicit GroupBy, not SelectGroup: the projection casts UserId, so key inference would
+        var firstVisits = ctx.HitsV1.Query()
+            // Explicit GroupBy, not SelectGroup: the projection casts UserID, so key inference would
             // group by the cast expression instead of the column the reference SQL groups by.
-            .GroupBy(h => new { h.UserId })
+            .GroupBy(h => new { h.UserID })
             .Select(h => new
             {
-                UserID = (long)h.UserId,
+                UserID = (long)h.UserID,
                 cohort_week = SqlFunctions.ClickHouse.to_monday(SqlFunctions.Sql.min(h.EventDate))
             })
             .AsCte("first_visits");
 
         // CTE cohort_sizes: how many users start in each cohort week.
-        var cohortSizes = ctx.From(firstVisits)
+        var cohortSizes = ctx.DataContext.From(firstVisits)
             .SelectGroup(f => new CohortSizeRow
             {
                 CohortWeek = f.cohort_week,
@@ -97,8 +97,8 @@ public static class ClickHouseQueries
         // GroupBy + Select rather than SelectGroup: this descriptor roots the aliased outer chain below,
         // and the shipped 1.0.9-rc4 alias generator recovers a consumed chain's element type only through
         // a `Select`, so a `SelectGroup` producer would drop `Alias.Week`/`Alias.Cohort` at the consumer.
-        var weekly = ctx.From<IHit>().WithAlias(Alias.Hit)
-            .Join(firstVisits, (h, fv) => (long)h.Hit.UserId == fv.UserID, Alias.FirstVisit)
+        var weekly = ctx.HitsV1.Query().WithAlias(Alias.Hit)
+            .Join(firstVisits, (h, fv) => (long)h.Hit.UserID == fv.UserID, Alias.FirstVisit)
             .GroupBy(p => new
             {
                 cohort_week = p.FirstVisit.cohort_week,
@@ -110,11 +110,11 @@ public static class ClickHouseQueries
                 CohortWeek = p.FirstVisit.cohort_week,
                 WeekNumber = (byte)((SqlFunctions.Sql.date_diff("day", p.FirstVisit.cohort_week,
                     SqlFunctions.ClickHouse.to_monday(p.Hit.EventDate)) ?? 0) / 7),
-                DistinctUsers = SqlFunctions.Sql.count_distinct(p.Hit.UserId)
+                DistinctUsers = SqlFunctions.Sql.count_distinct(p.Hit.UserID)
             })
             .AsCte("weekly");
 
-        var rows = await ctx.From(weekly).WithAlias(Alias.Week)
+        var rows = await ctx.DataContext.From(weekly).WithAlias(Alias.Week)
             .Join(cohortSizes, (w, cs) => w.Week.CohortWeek == cs.CohortWeek, Alias.Cohort)
             .Where(p => p.Week.WeekNumber <= 4)
             .OrderByDescending(p => p.Week.CohortWeek)
@@ -144,24 +144,24 @@ public static class ClickHouseQueries
     // lagInFrame → lag_in_frame(...).Over(...); runningAccumulate(if(…)) → framed sum_over(c ? 1 : 0)
     // (runningAccumulate still has no LINQ surface); the quantile threshold is computed once and
     // passed as a parameter.
-    public static async Task<object> Sessions(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> Sessions(AnalyticsRepositoryContext ctx, CancellationToken ct)
     {
         // CTE sessions.
-        var sessions = ctx.From<IHit>()
+        var sessions = ctx.HitsV1.Query()
             .Select(h => new
             {
                 // hits_v1.UserID is UInt64; cast it to a signed 64-bit value so the CTE column is
                 // materialisable by the row reader (ClickHouse UInt64 has no CLR reader getter).
-                UserID = (long)h.UserId,
+                UserID = (long)h.UserID,
                 EventTime = h.EventTime,
                 time_diff = SqlFunctions.Sql.date_diff("second",
-                    SqlFunctions.ClickHouse.lag_in_frame(h.EventTime).Over(partitionBy: () => h.UserId, orderBy: () => h.EventTime),
+                    SqlFunctions.ClickHouse.lag_in_frame(h.EventTime).Over(partitionBy: () => h.UserID, orderBy: () => h.EventTime),
                     h.EventTime)
             })
             .AsCte("sessions");
 
         // CTE session_flags.
-        var flags = ctx.From(sessions)
+        var flags = ctx.DataContext.From(sessions)
             .Select(s => new
             {
                 s.UserID,
@@ -178,7 +178,7 @@ public static class ClickHouseQueries
             .AsCte("session_flags");
 
         // CTE session_counts.
-        var counts = ctx.From(flags)
+        var counts = ctx.DataContext.From(flags)
             .SelectGroup(f => new
             {
                 f.UserID,
@@ -187,11 +187,11 @@ public static class ClickHouseQueries
             })
             .AsCte("session_counts");
 
-        var threshold = await ctx.From(counts)
+        var threshold = await ctx.DataContext.From(counts)
             .Select(c => SqlFunctions.ClickHouse.quantile(0.99, c.hits_in_session))
             .FirstAsync(ct);
 
-        var rows = await ctx.From(counts)
+        var rows = await ctx.DataContext.From(counts)
             .Where(c => c.hits_in_session > threshold)
             .OrderByDescending(c => c.hits_in_session)
             .Limit(100)
@@ -208,16 +208,16 @@ public static class ClickHouseQueries
 
     // 6. daily_traffic
     // WORKING: GROUP BY EventDate with count() + uniqExact.
-    public static async Task<object> DailyTraffic(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> DailyTraffic(AnalyticsRepositoryContext ctx, CancellationToken ct)
     {
-        var rows = await ctx.From<IHit>()
+        var rows = await ctx.HitsV1.Query()
             .Where(h => h.EventDate >= new DateTime(2014, 3, 17) && h.EventDate <= new DateTime(2014, 3, 23))
             .OrderBy(h => h.EventDate)
             .SelectGroup(h => new
             {
                 h.EventDate,
                 Hits = SqlFunctions.Sql.count(),
-                Users = SqlFunctions.ClickHouse.uniq_exact(h.UserId)
+                Users = SqlFunctions.ClickHouse.uniq_exact(h.UserID)
             })
             .ToListAsync(ct);
 
@@ -226,17 +226,17 @@ public static class ClickHouseQueries
 
     // 7. top_landing_pages
     // WORKING: URL grouping with count() + uniq, top-N by hits.
-    public static async Task<object> TopLandingPages(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> TopLandingPages(AnalyticsRepositoryContext ctx, CancellationToken ct)
     {
-        var rows = await ctx.From<IHit>()
-            .Where(h => h.EventDate == new DateTime(2014, 3, 20) && h.Url != "")
+        var rows = await ctx.HitsV1.Query()
+            .Where(h => h.EventDate == new DateTime(2014, 3, 20) && h.URL != "")
             .OrderByDescending(h => SqlFunctions.Sql.count())
             .Limit(10)
             .SelectGroup(h => new
             {
-                h.Url,
+                Url = h.URL,
                 Hits = SqlFunctions.Sql.count(),
-                Users = SqlFunctions.ClickHouse.uniq(h.UserId)
+                Users = SqlFunctions.ClickHouse.uniq(h.UserID)
             })
             .ToListAsync(ct);
 
@@ -245,16 +245,16 @@ public static class ClickHouseQueries
 
     // 8. device_split
     // WORKING: if(IsMobile = 1, …) → ternary; countIf → Sql.count(() => c); uniq → uniq; ROUND → Math.Round.
-    public static async Task<object> DeviceSplit(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> DeviceSplit(AnalyticsRepositoryContext ctx, CancellationToken ct)
     {
-        var rows = await ctx.From<IHit>()
+        var rows = await ctx.HitsV1.Query()
             .Where(h => h.EventDate >= new DateTime(2014, 3, 17) && h.EventDate <= new DateTime(2014, 3, 23))
             .OrderByDescending(h => SqlFunctions.Sql.count())
             .SelectGroup(h => new
             {
                 Device = h.IsMobile == 1 ? "mobile" : "desktop",
                 Hits = SqlFunctions.Sql.count(),
-                Users = SqlFunctions.ClickHouse.uniq(h.UserId),
+                Users = SqlFunctions.ClickHouse.uniq(h.UserID),
                 SearchShare = Math.Round(
                     (double)SqlFunctions.Sql.count(() => h.SearchPhrase != "") / SqlFunctions.Sql.count(), 4),
                 BounceShare = Math.Round(
@@ -267,9 +267,9 @@ public static class ClickHouseQueries
 
     // 9. top_referrers
     // WORKING: RefererDomain grouping with count() + uniq, top-N by hits.
-    public static async Task<object> TopReferrers(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> TopReferrers(AnalyticsRepositoryContext ctx, CancellationToken ct)
     {
-        var rows = await ctx.From<IHit>()
+        var rows = await ctx.HitsV1.Query()
             .Where(h => h.EventDate == new DateTime(2014, 3, 20) && h.RefererDomain != "")
             .OrderByDescending(h => SqlFunctions.Sql.count())
             .Limit(10)
@@ -277,7 +277,7 @@ public static class ClickHouseQueries
             {
                 h.RefererDomain,
                 Hits = SqlFunctions.Sql.count(),
-                Users = SqlFunctions.ClickHouse.uniq(h.UserId)
+                Users = SqlFunctions.ClickHouse.uniq(h.UserID)
             })
             .ToListAsync(ct);
 
@@ -286,19 +286,19 @@ public static class ClickHouseQueries
 
     // 10. session_depth
     // WORKING: lagInFrame → lag_in_frame; running sum → framed sum_over; multiIf → multi_if.
-    public static async Task<object> SessionDepth(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> SessionDepth(AnalyticsRepositoryContext ctx, CancellationToken ct)
     {
-        var hits = ctx.From<IHit>()
+        var hits = ctx.HitsV1.Query()
             .Where(h => h.EventDate == new DateTime(2014, 3, 20))
             .Select(h => new
             {
-                h.UserId,
+                UserId = h.UserID,
                 h.EventTime,
                 PrevEvent = SqlFunctions.ClickHouse.lag_in_frame((DateTime?)h.EventTime)
-                    .Over(partitionBy: () => h.UserId, orderBy: () => h.EventTime)
+                    .Over(partitionBy: () => h.UserID, orderBy: () => h.EventTime)
             });
 
-        var flags = ctx.From(hits)
+        var flags = ctx.DataContext.From(hits)
             .Select(h => new
             {
                 h.UserId,
@@ -308,10 +308,10 @@ public static class ClickHouseQueries
                     .Over(partitionBy: () => h.UserId, orderBy: () => h.EventTime, frame: WindowFrame.RowsUnboundedPrecedingToCurrentRow)
             });
 
-        var sessions = ctx.From(flags)
+        var sessions = ctx.DataContext.From(flags)
             .SelectGroup(f => new { f.UserId, f.SessionId, Hits = SqlFunctions.Sql.count() });
 
-        var rows = await ctx.From(sessions)
+        var rows = await ctx.DataContext.From(sessions)
             .OrderBy(s => SqlFunctions.ClickHouse.multi_if(
                         SqlFunctions.ClickHouse.when(s.Hits == 1, "01: single"),
                         SqlFunctions.ClickHouse.when(s.Hits <= 3, "02: 2-3"),
@@ -335,18 +335,18 @@ public static class ClickHouseQueries
 
     // 11. rolling_activity
     // WORKING: window over an aggregate with 7-day and cumulative frames.
-    public static async Task<object> RollingActivity(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> RollingActivity(AnalyticsRepositoryContext ctx, CancellationToken ct)
     {
-        var daily = ctx.From<IHit>()
+        var daily = ctx.HitsV1.Query()
             .Where(h => h.EventDate >= new DateTime(2014, 3, 17) && h.EventDate <= new DateTime(2014, 3, 23))
             .SelectGroup(h => new
             {
                 h.EventDate,
                 Hits = SqlFunctions.Sql.count(),
-                Users = SqlFunctions.ClickHouse.uniq_exact(h.UserId)
+                Users = SqlFunctions.ClickHouse.uniq_exact(h.UserID)
             });
 
-        var rows = await ctx.From(daily)
+        var rows = await ctx.DataContext.From(daily)
             .OrderBy(d => d.EventDate)
             .Select(d => new
             {

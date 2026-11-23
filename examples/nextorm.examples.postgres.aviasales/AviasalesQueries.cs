@@ -1,6 +1,6 @@
 using System.Linq.Expressions;
-using System.Text.Json;
 using NextORM.Core;
+using NextORM.Examples.Postgres.Aviasales.Generated;
 using NextORM.Extensions;
 using NextORM.Generated.nextorm_examples_postgres_aviasales;
 
@@ -19,10 +19,10 @@ public static class AviasalesQueries
     // projected into the named `DelayChainRow`; the outer query names the root and the joined table
     // (`WithAlias(Alias.DelayChain)` + `Alias.Airplane`). The named type is required by the alias
     // surface (#229), which renders the chain's concrete type and refuses an anonymous one.
-    public static async Task<object> AircraftDelayChains(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> AircraftDelayChains(AviasalesRepositoryContext ctx, CancellationToken ct)
     {
         // CTE flight_delays (delay_minutes + LAG over the same partition).
-        var flightDelays = ctx.From<ITimetable>()
+        var flightDelays = ctx.Timetable.Query()
             .Where(f => (f.Status == "Departed" || f.Status == "Arrived") && f.ActualDeparture != null)
             .Select(f => new
             {
@@ -41,7 +41,7 @@ public static class AviasalesQueries
             .AsCte("flight_delays");
 
         // CTE delay_chains: SELECT *, CASE ... AS is_chain_link FROM flight_delays.
-        var delayChains = ctx.From(flightDelays)
+        var delayChains = ctx.DataContext.From(flightDelays)
             .Select(d => new DelayChainRow
             {
                 FlightId = d.flight_id,
@@ -55,8 +55,8 @@ public static class AviasalesQueries
             })
             .AsCte("delay_chains");
 
-        var rows = await ctx.From(delayChains).WithAlias(Alias.DelayChain)
-            .Join<IAirplaneData>(
+        var rows = await ctx.DataContext.From(delayChains).WithAlias(Alias.DelayChain)
+            .Join(ctx.AirplanesData.Query(),
                 (dc, ac) => dc.DelayChain.AirplaneCode == ac.AirplaneCode, Alias.Airplane)
             .Where(p => p.DelayChain.DelayMinutes > 30 && p.DelayChain.PrevDelayMinutes > 30)
             .OrderBy(p => new { p.DelayChain.AirplaneCode, p.DelayChain.ScheduledDeparture })
@@ -78,10 +78,10 @@ public static class AviasalesQueries
     // plain AVG(CASE ...) over day_of_week. flight_occupancy is projected into the named
     // `FlightOccupancyRow`, so the outer chain can name every join (`WithAlias(Alias.Occupancy)` +
     // `Alias.Capacity`/`Alias.Airplane`); an anonymous chain type is refused by the alias surface (#229).
-    public static async Task<object> BusinessOccupancyMatrix(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> BusinessOccupancyMatrix(AviasalesRepositoryContext ctx, CancellationToken ct)
     {
         // CTE flight_business_capacity: COUNT(*) over the business seats per airplane.
-        var capacity = ctx.From<ISeat>()
+        var capacity = ctx.Seats.Query()
             .Where(s => s.FareConditions == "Business")
             .SelectGroup(s => new BusinessCapacityRow
             {
@@ -91,9 +91,9 @@ public static class AviasalesQueries
             .AsCte("flight_business_capacity");
 
         // CTE flight_occupancy: COUNT(bp.seat_no) per flight (no seats join, so no fan-out).
-        var occupancy = ctx.From<ITimetable>().WithAlias(Alias.Timetable)
-            .Join<ISegment>((f, tf) => f.Timetable.FlightId == tf.FlightId && tf.FareConditions == "Business", Alias.Segment)
-            .LeftJoin<IBoardingPass>(
+        var occupancy = ctx.Timetable.Query().WithAlias(Alias.Timetable)
+            .Join(ctx.Segments.Query(), (f, tf) => f.Timetable.FlightId == tf.FlightId && tf.FareConditions == "Business", Alias.Segment)
+            .LeftJoin(ctx.BoardingPasses.Query(),
                 (p, bp) => p.Segment.FlightId == bp.FlightId && p.Segment.TicketNo == bp.TicketNo, Alias.BoardingPass)
             .Where(p => p.Timetable.Status == "Departed" || p.Timetable.Status == "Arrived")
             // Explicit GroupBy, not SelectGroup: DayOfWeek is a computed projection column that the
@@ -112,9 +112,9 @@ public static class AviasalesQueries
             .AsCte("flight_occupancy");
 
         // FROM flight_occupancy JOIN flight_business_capacity JOIN airplanes_data.
-        var rows = await ctx.From(occupancy).WithAlias(Alias.Occupancy)
+        var rows = await ctx.DataContext.From(occupancy).WithAlias(Alias.Occupancy)
             .Join(capacity, (fo, cap) => fo.Occupancy.AirplaneCode == cap.AirplaneCode, Alias.Capacity)
-            .Join<IAirplaneData>(
+            .Join(ctx.AirplanesData.Query(),
                 (p, ac) => p.Occupancy.AirplaneCode == ac.AirplaneCode, Alias.Airplane)
             .OrderBy(p => SqlFunctions.Postgres.json_get_text(p.Airplane.Model, "ru"))
             .SelectGroup(p => new
@@ -156,13 +156,13 @@ public static class AviasalesQueries
 
     // 3. Sql/passenger_noshow_analysis.sql — WITH passenger_flight_history, passenger_stats
     // WORKING: two typed CTEs (`AsCte`); passenger_stats groups passenger_flight_history with member access.
-    public static async Task<object> PassengerNoShowAnalysis(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> PassengerNoShowAnalysis(AviasalesRepositoryContext ctx, CancellationToken ct)
     {
         // CTE passenger_flight_history: carries the is_noshow flag exactly as the original.
-        var history = ctx.From<ITicket>().WithAlias(Alias.Ticket)
-            .Join<ISegment>((t, tf) => t.Ticket.TicketNo == tf.TicketNo, Alias.Segment)
-            .Join<IFlight>((p, f) => p.Segment.FlightId == f.FlightId, Alias.Flight)
-            .LeftJoin<IBoardingPass>(
+        var history = ctx.Tickets.Query().WithAlias(Alias.Ticket)
+            .Join(ctx.Segments.Query(), (t, tf) => t.Ticket.TicketNo == tf.TicketNo, Alias.Segment)
+            .Join(ctx.Flights.Query(), (p, f) => p.Segment.FlightId == f.FlightId, Alias.Flight)
+            .LeftJoin(ctx.BoardingPasses.Query(),
                 (p, bp) => p.Segment.FlightId == bp.FlightId && p.Segment.TicketNo == bp.TicketNo, Alias.BoardingPass)
             .Where(p => p.Flight.Status == "Departed" || p.Flight.Status == "Arrived")
             .Select(p => new
@@ -177,7 +177,7 @@ public static class AviasalesQueries
             .AsCte("passenger_flight_history");
 
         // CTE passenger_stats: COUNT(flight_id), SUM(is_noshow), SUM(price).
-        var stats = ctx.From(history)
+        var stats = ctx.DataContext.From(history)
             .SelectGroup(h => new
             {
                 h.passenger_id,
@@ -188,7 +188,7 @@ public static class AviasalesQueries
             })
             .AsCte("passenger_stats");
 
-        var rows = await ctx.From(stats)
+        var rows = await ctx.DataContext.From(stats)
             .Where(s => s.total_booked_flights >= 3 && s.total_booked_flights == s.total_noshows)
             .OrderByDescending(s => s.wasted_money)
             .OrderBy(s => s.passenger_name)
@@ -207,10 +207,10 @@ public static class AviasalesQueries
     // 4. Sql/rolling_revenue_metrics.sql — WITH daily_revenue, then SUM/AVG windows
     // WORKING: typed CTE daily_revenue (`AsCte`); the outer query reads it with member access and applies
     // framed windows.
-    public static async Task<object> RollingRevenueMetrics(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> RollingRevenueMetrics(AviasalesRepositoryContext ctx, CancellationToken ct)
     {
         // CTE daily_revenue.
-        var daily = ctx.From<IBooking>()
+        var daily = ctx.Bookings.Query()
             .SelectGroup(b => new
             {
                 sales_date = SqlFunctions.Sql.date_trunc("day", b.BookDate),
@@ -218,7 +218,7 @@ public static class AviasalesQueries
             })
             .AsCte("daily_revenue");
 
-        var rows = await ctx.From(daily)
+        var rows = await ctx.DataContext.From(daily)
             .OrderByDescending(d => d.sales_date)
             .Select(d => new
             {
@@ -243,20 +243,20 @@ public static class AviasalesQueries
     // The two grouped CTEs use `SelectGroup`, which infers `GROUP BY` from the projection instead of a
     // separate `GroupBy` call. route_monthly_revenue names all five slots of its join chain
     // (`WithAlias(Alias.Timetable)` plus `Alias.Departure`/`Arrival`/`Segment`/`Ticket`): the root is the
-    // mapped `ITimetable` table, so no DTO is needed — NORMGEN009 only rejects an anonymous root or
+    // generated `Timetable` model, so no DTO is needed — NORMGEN009 only rejects an anonymous root or
     // intermediate join step (#229).
     // `avg`/`stdev` are projected as nullable (`(decimal?)`) so the one-month-per-route case stays
     // distinguishable from zero.
-    public static async Task<object> RouteNetworkAbcXyz(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> RouteNetworkAbcXyz(AviasalesRepositoryContext ctx, CancellationToken ct)
     {
         // CTE route_monthly_revenue. SelectGroup infers the GROUP BY keys from the projection: the
         // route expression and the month (first-appearance order), so the two aggregate calls never
         // become keys; the rendered GROUP BY matches the explicit GroupBy(route, flight_month) it replaced.
-        var monthly = ctx.From<ITimetable>().WithAlias(Alias.Timetable)
-            .Join<IAirportData>((f, dep) => f.Timetable.DepartureAirport == dep.AirportCode, Alias.Departure)
-            .Join<IAirportData>((p, arr) => p.Timetable.ArrivalAirport == arr.AirportCode, Alias.Arrival)
-            .Join<ISegment>((p, tf) => p.Timetable.FlightId == tf.FlightId, Alias.Segment)
-            .Join<ITicket>((p, t) => p.Segment.TicketNo == t.TicketNo, Alias.Ticket)
+        var monthly = ctx.Timetable.Query().WithAlias(Alias.Timetable)
+            .Join(ctx.AirportsData.Query(), (f, dep) => f.Timetable.DepartureAirport == dep.AirportCode, Alias.Departure)
+            .Join(ctx.AirportsData.Query(), (p, arr) => p.Timetable.ArrivalAirport == arr.AirportCode, Alias.Arrival)
+            .Join(ctx.Segments.Query(), (p, tf) => p.Timetable.FlightId == tf.FlightId, Alias.Segment)
+            .Join(ctx.Tickets.Query(), (p, t) => p.Segment.TicketNo == t.TicketNo, Alias.Ticket)
             .SelectGroup(p => new
             {
                 route = SqlFunctions.Postgres.json_get_text(p.Departure.City, "ru")
@@ -268,7 +268,7 @@ public static class AviasalesQueries
             .AsCte("route_monthly_revenue");
 
         // CTE route_aggregates: one key (`r.route`) and three aggregates, inferred the same way.
-        var aggregates = ctx.From(monthly)
+        var aggregates = ctx.DataContext.From(monthly)
             .SelectGroup(r => new
             {
                 r.route,
@@ -279,7 +279,7 @@ public static class AviasalesQueries
             .AsCte("route_aggregates");
 
         // CTE abc_analys: the running share is a window over the route aggregate.
-        var abc = ctx.From(aggregates)
+        var abc = ctx.DataContext.From(aggregates)
             .Select(a => new
             {
                 a.route,
@@ -292,7 +292,7 @@ public static class AviasalesQueries
             })
             .AsCte("abc_analys");
 
-        var rows = await ctx.From(abc)
+        var rows = await ctx.DataContext.From(abc)
             .OrderByDescending(a => a.total_revenue)
             .Select(a => new
             {
@@ -313,12 +313,12 @@ public static class AviasalesQueries
 
     // 6. top_routes_by_city
     // WORKING: RANK() OVER (PARTITION BY city ORDER BY revenue DESC) top-N per group.
-    public static async Task<object> TopRoutesByCity(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> TopRoutesByCity(AviasalesRepositoryContext ctx, CancellationToken ct)
     {
-        var routeRevenue = ctx.From<ITimetable>().WithAlias(Alias.Timetable)
-            .Join<ISegment>((f, tf) => f.Timetable.FlightId == tf.FlightId, Alias.Segment)
-            .Join<IAirportData>((p, dep) => p.Timetable.DepartureAirport == dep.AirportCode, Alias.Departure)
-            .Join<IAirportData>((p, arr) => p.Timetable.ArrivalAirport == arr.AirportCode, Alias.Arrival)
+        var routeRevenue = ctx.Timetable.Query().WithAlias(Alias.Timetable)
+            .Join(ctx.Segments.Query(), (f, tf) => f.Timetable.FlightId == tf.FlightId, Alias.Segment)
+            .Join(ctx.AirportsData.Query(), (p, dep) => p.Timetable.DepartureAirport == dep.AirportCode, Alias.Departure)
+            .Join(ctx.AirportsData.Query(), (p, arr) => p.Timetable.ArrivalAirport == arr.AirportCode, Alias.Arrival)
             .Where(p => p.Timetable.Status == "Departed" || p.Timetable.Status == "Arrived")
             .SelectGroup(p => new
             {
@@ -330,7 +330,7 @@ public static class AviasalesQueries
 
         // RANK() OVER (PARTITION BY city ORDER BY revenue DESC) has to be computed in a derived table,
         // because a window value cannot be filtered in the same SELECT.
-        var ranked = ctx.From(routeRevenue)
+        var ranked = ctx.DataContext.From(routeRevenue)
             .Select(r => new
             {
                 r.DepartureCity,
@@ -341,7 +341,7 @@ public static class AviasalesQueries
                     orderBy: new[] { SqlFunctions.Sql.desc(() => r.Revenue) })
             });
 
-        var rows = await ctx.From(ranked)
+        var rows = await ctx.DataContext.From(ranked)
             .Where(r => r.Place <= 3)
             .OrderBy(r => new { r.DepartureCity, r.Place })
             .Select(r => new
@@ -358,10 +358,10 @@ public static class AviasalesQueries
 
     // 7. airport_otp
     // WORKING: conditional aggregation (SUM(CASE…)) plus a derived-query HAVING-equivalent filter.
-    public static async Task<object> AirportOnTimePerformance(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> AirportOnTimePerformance(AviasalesRepositoryContext ctx, CancellationToken ct)
     {
-        var flights = ctx.From<ITimetable>().WithAlias(Alias.Timetable)
-            .Join<IAirportData>((f, dep) => f.Timetable.DepartureAirport == dep.AirportCode, Alias.Departure)
+        var flights = ctx.Timetable.Query().WithAlias(Alias.Timetable)
+            .Join(ctx.AirportsData.Query(), (f, dep) => f.Timetable.DepartureAirport == dep.AirportCode, Alias.Departure)
             .Where(p => p.Timetable.Status == "Departed" || p.Timetable.Status == "Arrived" || p.Timetable.Status == "Cancelled")
             .Select(p => new
             {
@@ -374,7 +374,7 @@ public static class AviasalesQueries
                 IsCancelled = p.Timetable.Status == "Cancelled" ? 1 : 0
             });
 
-        var stats = ctx.From(flights)
+        var stats = ctx.DataContext.From(flights)
             .SelectGroup(f => new
             {
                 f.City,
@@ -384,7 +384,7 @@ public static class AviasalesQueries
                 AvgDelayMinutes = SqlFunctions.Sql.avg(f.Delay)
             });
 
-        var rows = await ctx.From(stats)
+        var rows = await ctx.DataContext.From(stats)
             .Where(s => s.Flights >= 50)
             .OrderByDescending(s => (double)s.Delayed / s.Flights)
             .OrderBy(s => s.City)
@@ -404,10 +404,10 @@ public static class AviasalesQueries
 
     // 8. delay_percentiles_by_model
     // WORKING: percentile_disc(...) WITHIN GROUP (ORDER BY …).
-    public static async Task<object> DelayPercentilesByModel(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> DelayPercentilesByModel(AviasalesRepositoryContext ctx, CancellationToken ct)
     {
-        var stats = ctx.From<ITimetable>().WithAlias(Alias.Timetable)
-            .Join<IAirplaneData>((f, a) => f.Timetable.AirplaneCode == a.AirplaneCode, Alias.Airplane)
+        var stats = ctx.Timetable.Query().WithAlias(Alias.Timetable)
+            .Join(ctx.AirplanesData.Query(), (f, a) => f.Timetable.AirplaneCode == a.AirplaneCode, Alias.Airplane)
             .Where(p => (p.Timetable.Status == "Departed" || p.Timetable.Status == "Arrived")
                         && p.Timetable.ActualDeparture != null)
             .SelectGroup(p => new
@@ -420,7 +420,7 @@ public static class AviasalesQueries
                     () => SqlFunctions.Sql.date_diff("minute", p.Timetable.ScheduledDeparture, p.Timetable.ActualDeparture))
             });
 
-        var rows = await ctx.From(stats)
+        var rows = await ctx.DataContext.From(stats)
             .OrderBy(s => s.Model)
             .Select(s => new { s.Model, s.Flights, s.MedianDelay, s.P90Delay })
             .ToListAsync(ct);
@@ -430,13 +430,13 @@ public static class AviasalesQueries
 
     // 9. frequent_flyers
     // WORKING: string_agg + HAVING count() >= 5 + LIMIT.
-    public static async Task<object> FrequentFlyers(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> FrequentFlyers(AviasalesRepositoryContext ctx, CancellationToken ct)
     {
-        var rows = await ctx.From<ITicket>().WithAlias(Alias.Ticket)
-            .Join<ISegment>((t, tf) => t.Ticket.TicketNo == tf.TicketNo, Alias.Segment)
-            .Join<ITimetable>((p, f) => p.Segment.FlightId == f.FlightId, Alias.Flight)
-            .Join<IAirportData>((p, dep) => p.Flight.DepartureAirport == dep.AirportCode, Alias.Departure)
-            .Join<IAirportData>((p, arr) => p.Flight.ArrivalAirport == arr.AirportCode, Alias.Arrival)
+        var rows = await ctx.Tickets.Query().WithAlias(Alias.Ticket)
+            .Join(ctx.Segments.Query(), (t, tf) => t.Ticket.TicketNo == tf.TicketNo, Alias.Segment)
+            .Join(ctx.Timetable.Query(), (p, f) => p.Segment.FlightId == f.FlightId, Alias.Flight)
+            .Join(ctx.AirportsData.Query(), (p, dep) => p.Flight.DepartureAirport == dep.AirportCode, Alias.Departure)
+            .Join(ctx.AirportsData.Query(), (p, arr) => p.Flight.ArrivalAirport == arr.AirportCode, Alias.Arrival)
             .Where(p => p.Flight.Status == "Departed" || p.Flight.Status == "Arrived")
             .OrderByDescending(g => SqlFunctions.Sql.count())
             .Limit(10)
@@ -457,11 +457,11 @@ public static class AviasalesQueries
 
     // 10. passenger_growth_mom
     // WORKING: LAG over a monthly aggregate.
-    public static async Task<object> PassengerGrowth(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> PassengerGrowth(AviasalesRepositoryContext ctx, CancellationToken ct)
     {
-        var monthly = ctx.From<ITimetable>().WithAlias(Alias.Timetable)
-            .Join<ISegment>((f, tf) => f.Timetable.FlightId == tf.FlightId, Alias.Segment)
-            .Join<ITicket>((p, t) => p.Segment.TicketNo == t.TicketNo, Alias.Ticket)
+        var monthly = ctx.Timetable.Query().WithAlias(Alias.Timetable)
+            .Join(ctx.Segments.Query(), (f, tf) => f.Timetable.FlightId == tf.FlightId, Alias.Segment)
+            .Join(ctx.Tickets.Query(), (p, t) => p.Segment.TicketNo == t.TicketNo, Alias.Ticket)
             .Where(p => p.Timetable.Status == "Departed" || p.Timetable.Status == "Arrived")
             .SelectGroup(p => new
             {
@@ -470,7 +470,7 @@ public static class AviasalesQueries
                 Revenue = SqlFunctions.Sql.sum(p.Segment.Price)
             });
 
-        var withPrevious = ctx.From(monthly)
+        var withPrevious = ctx.DataContext.From(monthly)
             .Select(m => new
             {
                 m.Month,
@@ -480,7 +480,7 @@ public static class AviasalesQueries
                     .Over(SqlFunctions.Sql.asc(() => m.Month))
             });
 
-        var rows = await ctx.From(withPrevious)
+        var rows = await ctx.DataContext.From(withPrevious)
             .OrderBy(m => m.Month)
             .Select(m => new
             {
@@ -498,11 +498,11 @@ public static class AviasalesQueries
 
     // 11. cancellation_by_route
     // WORKING: conditional COUNT + rate, top-N.
-    public static async Task<object> CancellationByRoute(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> CancellationByRoute(AviasalesRepositoryContext ctx, CancellationToken ct)
     {
-        var perRoute = ctx.From<ITimetable>().WithAlias(Alias.Timetable)
-            .Join<IAirportData>((f, dep) => f.Timetable.DepartureAirport == dep.AirportCode, Alias.Departure)
-            .Join<IAirportData>((p, arr) => p.Timetable.ArrivalAirport == arr.AirportCode, Alias.Arrival)
+        var perRoute = ctx.Timetable.Query().WithAlias(Alias.Timetable)
+            .Join(ctx.AirportsData.Query(), (f, dep) => f.Timetable.DepartureAirport == dep.AirportCode, Alias.Departure)
+            .Join(ctx.AirportsData.Query(), (p, arr) => p.Timetable.ArrivalAirport == arr.AirportCode, Alias.Arrival)
             .SelectGroup(p => new
             {
                 Route = SqlFunctions.Postgres.json_get_text(p.Departure.City, "ru")
@@ -511,7 +511,7 @@ public static class AviasalesQueries
                 Cancelled = SqlFunctions.Sql.count(() => p.Timetable.Status == "Cancelled")
             });
 
-        var rows = await ctx.From(perRoute)
+        var rows = await ctx.DataContext.From(perRoute)
             .Where(r => r.Flights >= 30 && r.Cancelled > 0)
             .OrderByDescending(r => (double)r.Cancelled / r.Flights)
             .Limit(15)
@@ -533,10 +533,10 @@ public static class AviasalesQueries
 // type (NORMGEN009), so every aliased root is a named type.
 public sealed class DelayChainRow
 {
-    public int FlightId { get; init; }
-    public string AirplaneCode { get; init; } = "";
+    public int? FlightId { get; init; }
+    public string? AirplaneCode { get; init; }
     public DateTime? ActualDeparture { get; init; }
-    public DateTime ScheduledDeparture { get; init; }
+    public DateTime? ScheduledDeparture { get; init; }
     public double? DelayMinutes { get; init; }
     public DateTime? PrevDeparture { get; init; }
     public double? PrevDelayMinutes { get; init; }
@@ -545,9 +545,9 @@ public sealed class DelayChainRow
 
 public sealed class FlightOccupancyRow
 {
-    public int FlightId { get; init; }
-    public string AirplaneCode { get; init; } = "";
-    public DateTime ScheduledDeparture { get; init; }
+    public int? FlightId { get; init; }
+    public string? AirplaneCode { get; init; }
+    public DateTime? ScheduledDeparture { get; init; }
     public int? DayOfWeek { get; init; }
     public int OccupiedBusinessSeats { get; init; }
 }

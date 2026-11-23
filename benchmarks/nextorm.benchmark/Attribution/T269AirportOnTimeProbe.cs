@@ -1,4 +1,5 @@
 using NextORM.Examples.Postgres.Aviasales;
+using NextORM.Examples.Postgres.Aviasales.Generated;
 using NextORM.Core;
 using NextORM.Postgres;
 
@@ -12,12 +13,13 @@ internal static class T269AirportOnTimeProbe
         Directory.CreateDirectory(outDir);
         await using var database = await DemoDatabase.Start(null, CancellationToken.None);
         var context = new PostgresDataContext(database.ConnectionString, new DataContextBuilder());
+        var repositories = new AviasalesRepositoryContext(context);
         try
         {
             // Warm the public path, then measure repeated full API calls. The example exposes the query
             // only as one async operation: command construction/preparation, execution and typed row
             // materialization cannot be separated without core internals, so report that limitation.
-            var first = await AviasalesQueries.AirportOnTimePerformance(context, default);
+            var first = await AviasalesQueries.AirportOnTimePerformance(repositories, default);
             var count = ((System.Collections.ICollection)first).Count;
             if (count != 63)
             {
@@ -30,7 +32,7 @@ internal static class T269AirportOnTimeProbe
             for (var i = 0; i < iterations; i++)
             {
                 var before = GC.GetAllocatedBytesForCurrentThread();
-                var rows = await AviasalesQueries.AirportOnTimePerformance(context, default);
+                var rows = await AviasalesQueries.AirportOnTimePerformance(repositories, default);
                 bytes += GC.GetAllocatedBytesForCurrentThread() - before;
                 GC.KeepAlive(rows);
             }

@@ -4,7 +4,7 @@ namespace NextORM.Examples.ClickHouse.Analytics.Generated;
 
 [global::System.ComponentModel.Description("ClickHouse VIEW")]
 [global::NextORM.Core.SqlTable("datasets.daily_unique_users_mv")]
-internal class DailyUniqueUsersMv
+public class DailyUniqueUsersMv
 {
     // users_state is an aggregate state, not a scalar result column.
     [global::System.ComponentModel.DataAnnotations.Schema.Column("EventDate", TypeName = "Date")]
@@ -12,7 +12,7 @@ internal class DailyUniqueUsersMv
 }
 
 [global::NextORM.Core.SqlTable("datasets.hits_v1")]
-internal class HitsV1
+public class HitsV1
 {
     [global::System.ComponentModel.DataAnnotations.Schema.Column("WatchID", TypeName = "UInt64")]
     public ulong WatchID { get; set; }
@@ -34,7 +34,7 @@ internal class HitsV1
     public byte IsNotBounce { get; set; }
 }
 
-internal class AnalyticsRepositoryContext(global::NextORM.Core.IDataContext dataContext)
+public class AnalyticsRepositoryContext(global::NextORM.Core.IDataContext dataContext)
     : global::NextORM.Core.Repositories.RepositoryContext(dataContext)
 {
     public global::NextORM.Core.IRepository<DailyUniqueUsersMv> DailyUniqueUsersMv => Repository<DailyUniqueUsersMv>();

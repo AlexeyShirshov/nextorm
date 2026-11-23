@@ -9,6 +9,7 @@ using LinqToDB;
 using LinqToDB.Data;
 using LinqToDB.DataProvider.PostgreSQL;
 using NextORM.Core;
+using NextORM.Examples.Postgres.Aviasales.Generated;
 using NextORM.Postgres;
 
 namespace NextORM.Examples.Postgres.Aviasales;
@@ -24,13 +25,13 @@ public class AviasalesBenchmarks
 {
     public static string ConnectionString { get; set; } = "";
 
-    private PostgresDataContext _nextorm = null!;
+    private AviasalesRepositoryContext _nextorm = null!;
     private DataConnection _linq2db = null!;
 
     [GlobalSetup]
     public void Setup()
     {
-        _nextorm = new PostgresDataContext(ConnectionString, new DataContextBuilder());
+        _nextorm = new AviasalesRepositoryContext(new PostgresDataContext(ConnectionString, new DataContextBuilder()));
         _linq2db = new DataConnection(new DataOptions()
             .UsePostgreSQL(ConnectionString, PostgreSQLVersion.v15));
     }
@@ -38,7 +39,7 @@ public class AviasalesBenchmarks
     [GlobalCleanup]
     public void Cleanup()
     {
-        _nextorm.Dispose();
+        _nextorm.DataContext.Dispose();
         _linq2db.Dispose();
     }
 

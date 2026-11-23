@@ -5,6 +5,7 @@ using LinqToDB.DataProvider.ClickHouse;
 using NextORM.ClickHouse;
 using NextORM.Core;
 using NextORM.Examples.ClickHouse.Analytics;
+using NextORM.Examples.ClickHouse.Analytics.Generated;
 
 if (args.Contains("--benchmark"))
 {
@@ -20,7 +21,8 @@ static async Task RunComparison(string[] args)
     var connectionString = ParseConnectionString(args);
     await using var database = await DemoDatabase.Start(connectionString, CancellationToken.None);
 
-    await using var ctx = new ClickHouseDataContext(database.ConnectionString, new DataContextBuilder());
+    await using var dataContext = new ClickHouseDataContext(database.ConnectionString, new DataContextBuilder());
+    var ctx = new AnalyticsRepositoryContext(dataContext);
     using var l2db = new DataConnection(new DataOptions()
         .UseClickHouse(database.ConnectionString, ClickHouseProvider.ClickHouseDriver));
 
