@@ -1,5 +1,41 @@
 ﻿# Examples verification report
 
+## Generated repository contexts (2026-11-23)
+
+The three comparison projects build with the generated contexts in their `Generated` directories.
+A separate smoke runner using the published Nextorm `1.0.11` packages read one row with all mapped
+columns from each generated repository on the live demo databases: Aviasales **9/9**,
+AdventureWorks **13/13**, and ClickHouse Analytics **2/2**. The comparison apps still use their
+original models and queries.
+
+The Aviasales mapping omits `airports_data.coordinates` because the row mapper doesn't support
+PostgreSQL `point`. The Analytics mapping selects only the columns used by the example and omits
+the `users_state` aggregate state from the materialized view. AdventureWorks maps the sample's
+`SalesOrderDetail.LineTotal` values to `decimal`; CLR `decimal` cannot represent the full range
+of SQL Server `numeric(38,6)`.
+
+## Package update to 1.0.11 (2026-11-23)
+
+On checkout `b633ca60`, all seven example projects built in Release with no warnings or
+errors. The NuGet restore assets confirm that `oc-report` and the three NativeAOT provider
+probes resolved Nextorm `1.0.11` from packages. The three comparison apps used source projects.
+
+`oc-report` ran the three-day report on the synthetic SQLite dataset in both JIT and
+NativeAOT (`linux-x64`). Both runs exited with code `0` and produced identical report content
+apart from the time window line. The NativeAOT publish emitted trim and AOT warnings.
+
+The three comparison apps then ran against live databases using the existing Podman dataset
+volumes. Nextorm and linq2db returned the same row count for every query:
+
+| Example | Queries with matching row counts | Exit code |
+|---|---:|---:|
+| PostgreSQL Aviasales | 10/10 | 0 |
+| SQL Server AdventureWorks | 11/11 | 0 |
+| ClickHouse Analytics | 9/9 | 0 |
+
+This live run used the checkout's source projects. The three NativeAOT provider probes that
+consume the published packages were built but not run against live databases.
+
 ## Package update to 1.0.10 (2026-11-18)
 
 All seven example projects built in Release without warnings or errors. The `oc-report` example
