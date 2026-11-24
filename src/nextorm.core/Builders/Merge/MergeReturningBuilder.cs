@@ -10,24 +10,27 @@ namespace NextORM.Core;
 /// </summary>
 /// <typeparam name="TEntity">The mapped entity type merged.</typeparam>
 /// <typeparam name="TResult">The materialized row type (the entity or a projection).</typeparam>
-public sealed class MergeReturningBuilder<TEntity, TResult>
+public sealed class MergeReturningBuilder<TEntity, TResult> : IOutputIntoMutation
 {
     private readonly MergeBuilder<TEntity> _merge;
     private readonly IReadOnlyList<IPropertyMetadata> _returningColumns;
     private readonly SelectExpression[] _selectList;
     private readonly bool _oneColumn;
+    private readonly OutputIntoClause? _standaloneOutput;
 
     internal MergeReturningBuilder(
         MergeBuilder<TEntity> merge,
         IReadOnlyList<IPropertyMetadata> returningColumns,
         SelectExpression[] selectList,
         bool oneColumn,
-        System.Linq.Expressions.LambdaExpression? projection = null)
+        System.Linq.Expressions.LambdaExpression? projection = null,
+        OutputIntoClause? standaloneOutput = null)
     {
         _merge = merge;
         _returningColumns = returningColumns;
         _selectList = selectList;
         _oneColumn = oneColumn;
+        _standaloneOutput = standaloneOutput;
         Projection = projection;
     }
 
@@ -45,7 +48,51 @@ public sealed class MergeReturningBuilder<TEntity, TResult>
     internal IReadOnlyList<IPropertyMetadata> ReturningColumns => _returningColumns;
 
     /// <summary>Builds the <c>MERGE</c> command that is captured into a batch table variable.</summary>
-    internal MergeCommand BuildMutationCommand() => BuildCommand();
+    internal MergeCommand BuildMutationCommand()
+    {
+        if (_standaloneOutput is not null)
+            throw new NotSupportedException("Standalone MERGE OUTPUT INTO cannot be registered as a batch table-variable capture.");
+
+        return BuildCommand();
+    }
+
+    /// <summary>
+    /// Writes SQL Server MERGE actions into the existing table's <c>action</c> column, followed by the
+    /// projected <c>inserted</c> columns under their mapped names. Returns no rows to the client.
+    /// </summary>
+    /// <param name="targetTable">The existing table's bare name (no schema qualifier or quoting).</param>
+    /// <returns>The terminal for executing the standalone write.</returns>
+    internal OutputIntoBuilder CreateExistingTableOutput(string targetTable)
+        => new(this, CreateStandaloneOutput(targetTable), standaloneOnly: true);
+
+    /// <summary>
+    /// Writes the same capture as <see cref="CreateExistingTableOutput"/> and separately returns the projected
+    /// <c>inserted</c> values for this statement's affected rows. The client result does not include
+    /// <c>$action</c> or read existing rows from the capture table.
+    /// </summary>
+    /// <param name="targetTable">The existing table's bare name (no schema qualifier or quoting).</param>
+    /// <returns>A terminal for executing the write and reading the projected rows.</returns>
+    internal MergeReturningBuilder<TEntity, TResult> WithExistingTableOutput(string targetTable)
+        => new(_merge, _returningColumns, _selectList, _oneColumn, Projection, CreateStandaloneOutput(targetTable));
+
+    private OutputIntoClause CreateStandaloneOutput(string targetTable)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetTable);
+        if ((!char.IsAsciiLetter(targetTable[0]) && targetTable[0] != '_')
+            || targetTable.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '_'))
+            throw new ArgumentException("Standalone MERGE OUTPUT INTO requires a bare target table name.", nameof(targetTable));
+
+        if (_standaloneOutput is not null)
+            throw new InvalidOperationException("Standalone MERGE OUTPUT INTO is already configured.");
+
+        _merge.ValidateStandaloneOutput();
+        return new OutputIntoClause(targetTable, _returningColumns);
+    }
+
+    IDataContext IOutputIntoMutation.DataContext => DataContext;
+
+    MutationCommand IOutputIntoMutation.BuildOutputIntoCommand(OutputIntoClause outputInto)
+        => BuildStandaloneOutput(outputInto, returnsOutput: false);
 
     /// <summary>Executes the merge and returns the single merged row.</summary>
     /// <returns>The materialized row.</returns>
@@ -53,7 +100,8 @@ public sealed class MergeReturningBuilder<TEntity, TResult>
     /// <exception cref="NotSupportedException">The provider cannot return merged rows, or the context is read-only.</exception>
     public TResult Single()
     {
-        _merge.ValidateFilters();
+        if (_standaloneOutput is null)
+            _merge.ValidateFilters();
         return FirstOrThrow(RequireExecutor().ExecuteReturning<TResult>(BuildCommand(), _selectList, _oneColumn));
     }
 
@@ -64,7 +112,8 @@ public sealed class MergeReturningBuilder<TEntity, TResult>
     /// <exception cref="NotSupportedException">The provider cannot return merged rows, or the context is read-only.</exception>
     public async Task<TResult> SingleAsync(CancellationToken cancellationToken = default)
     {
-        await _merge.ValidateFiltersAsync(cancellationToken).ConfigureAwait(false);
+        if (_standaloneOutput is null)
+            await _merge.ValidateFiltersAsync(cancellationToken).ConfigureAwait(false);
         return FirstOrThrow(await RequireExecutor().ExecuteReturning<TResult>(BuildCommand(), _selectList, _oneColumn, cancellationToken).ConfigureAwait(false));
     }
 
@@ -73,7 +122,8 @@ public sealed class MergeReturningBuilder<TEntity, TResult>
     /// <exception cref="NotSupportedException">The provider cannot return merged rows, or the context is read-only.</exception>
     public IReadOnlyList<TResult> ToList()
     {
-        _merge.ValidateFilters();
+        if (_standaloneOutput is null)
+            _merge.ValidateFilters();
         return RequireExecutor().ExecuteReturning<TResult>(BuildCommand(), _selectList, _oneColumn);
     }
 
@@ -83,7 +133,8 @@ public sealed class MergeReturningBuilder<TEntity, TResult>
     /// <exception cref="NotSupportedException">The provider cannot return merged rows, or the context is read-only.</exception>
     public async Task<IReadOnlyList<TResult>> ToListAsync(CancellationToken cancellationToken = default)
     {
-        await _merge.ValidateFiltersAsync(cancellationToken).ConfigureAwait(false);
+        if (_standaloneOutput is null)
+            await _merge.ValidateFiltersAsync(cancellationToken).ConfigureAwait(false);
         return await RequireExecutor().ExecuteReturning<TResult>(BuildCommand(), _selectList, _oneColumn, cancellationToken).ConfigureAwait(false);
     }
 
@@ -101,7 +152,18 @@ public sealed class MergeReturningBuilder<TEntity, TResult>
         throw new NotSupportedException($"{_merge.DataContext.GetType().Name} cannot render SQL or return merged rows: it is not a database-backed context.");
     }
 
-    private MergeCommand BuildCommand() => _merge.BuildReturningCommand(_returningColumns);
+    private MergeCommand BuildCommand() => _standaloneOutput is null
+        ? _merge.BuildReturningCommand(_returningColumns)
+        : BuildStandaloneOutput(_standaloneOutput, returnsOutput: true);
+
+    private MergeCommand BuildStandaloneOutput(OutputIntoClause target, bool returnsOutput)
+    {
+        _merge.ValidateStandaloneOutput();
+        var command = _merge.BuildReturningCommand(_returningColumns);
+        command.StandaloneOutputInto = target;
+        command.ReturnsStandaloneOutput = returnsOutput;
+        return command;
+    }
 
     private static TResult FirstOrThrow(IReadOnlyList<TResult> rows)
         => rows.Count switch

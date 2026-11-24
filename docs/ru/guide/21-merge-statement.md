@@ -145,10 +145,34 @@ merge into dest as target using (values (@p0, @p1)) as source (id, name) on targ
 поэтому `.Returning()` там бросает `NotSupportedException`; SQLite и ClickHouse по-прежнему отклоняют
 полный `MERGE` (а для самой инструкции общего `MERGE` сервер должен быть PostgreSQL 15+).
 
+### Захватить слитые строки в существующую таблицу
+
+В SQL Server подключите `NextORM.SqlServer` и выберите сопоставленные колонки для захвата через `Returning(...)`:
+
+```csharp
+var result = ctx.CreateMergeBuilder<IMergeEntity>()
+    .Using(sourceRows).OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
+    .Returning(row => new { row.Id, row.Name });
+
+result.OutputInto("merge_audit").Execute();
+// Или, вместо выполнения предыдущей строки:
+var affectedRows = result.OutputIntoThenOutput("merge_audit").ToList();
+```
+
+Заранее создайте `merge_audit` с колонкой `action`, принимающей `nvarchar(10)`, и колонками с
+именами и типами полей проекции по маппингу. `$action` записывается в `action`, а выбранные значения
+`inserted` — в сопоставленные колонки в порядке проекции. Вторая форма возвращает только значения
+проекции затронутых строк, без `$action` и без гарантии порядка. Ранее существовавшие строки
+таблицы захвата она не читает. `OutputInto` возвращает только число затронутых строк.
+
+Указывайте имя цели без схемы и кавычек и соблюдайте ограничения SQL Server для `OUTPUT INTO`.
+Эти формы работают вне батча только для веток `INSERT` и `UPDATE` без активных глобальных
+фильтров. Другие провайдеры, ветки и проекция в зарезервированную колонку `action` отклоняются.
+Для табличной переменной используйте отдельный API батча.
+
 ### Захват слитых строк (только в батче)
 
-Fluent `OutputInto`/`OutputIntoThenOutput` на билдере `MERGE` **нет**. Единственная форма захвата —
-батчевая: `BatchBuilder.OutputIntoTableVariable(mergeTerminal, "@t", definitions)` рендерит
+Для табличной переменной `BatchBuilder.OutputIntoTableVariable(mergeTerminal, "@t", definitions)` рендерит
 `DECLARE @t TABLE (...); MERGE ... OUTPUT ... INTO @t (...)` одной инструкцией, а следующая инструкция
 того же батча читает захваченные строки через `FromOutput<TResult>`/`FromOutputTable`. См.
 [Захват в рамках батча](17-insert-statement.md#захват-в-рамках-батча-batchbuilderoutputintotablevariable).

@@ -972,6 +972,21 @@ public sealed partial class MergeBuilder<TEntity>
     /// <summary>Builds the command whose <c>RETURNING</c>/<c>OUTPUT</c> clause returns <paramref name="returningColumns"/>.</summary>
     internal MergeCommand BuildReturningCommand(IReadOnlyList<IPropertyMetadata> returningColumns) => BuildCommand(returningColumns);
 
+    internal void ValidateStandaloneOutput()
+    {
+        if (_dataContext is not DataContext { Dialect.SupportsOutputInto: true, Dialect.SupportsMergeStatement: true })
+            throw new NotSupportedException("Standalone MERGE OUTPUT INTO requires SQL Server.");
+
+        if (HasActiveFilter())
+            throw new NotSupportedException("Standalone MERGE OUTPUT INTO does not support active global filters.");
+
+        foreach (var branch in _branches)
+        {
+            if (branch.Action is not (MergeActionKind.Insert or MergeActionKind.Update))
+                throw new NotSupportedException("Standalone MERGE OUTPUT INTO supports only INSERT and UPDATE branches.");
+        }
+    }
+
     /// <summary>The context the merge executes on; used by <see cref="MergeReturningBuilder{TEntity, TResult}"/>.</summary>
     internal IDataContext DataContext => _dataContext;
 

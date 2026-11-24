@@ -143,6 +143,10 @@ internal sealed class MergeCommand : MutationCommand
     /// </summary>
     public MergeAssignmentSet? KeyUpdateAssignments { get; }
 
+    internal OutputIntoClause? StandaloneOutputInto { get; set; }
+
+    internal bool ReturnsStandaloneOutput { get; set; }
+
     /// <summary>
     /// The explicit assignments of the key-upsert insert branch, or <see langword="null"/> when the
     /// no-argument <c>WhenNotMatchedInsert()</c> form inserts every written column from the source.

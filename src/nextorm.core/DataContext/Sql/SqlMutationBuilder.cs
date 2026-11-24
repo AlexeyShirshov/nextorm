@@ -893,7 +893,8 @@ internal static class SqlMutationBuilder
         var rows = StringBuilderPool.Shared.Get();
         try
         {
-            if (targetFilterSql is null && keyUpdateFragment is null && keyInsertFragment is null && captureInto is null)
+            if (targetFilterSql is null && keyUpdateFragment is null && keyInsertFragment is null
+                && captureInto is null && command.StandaloneOutputInto is null)
             {
                 // Fail-closed last line of defence: an active, non-ignored target filter must never fall
                 // back to the native key-upsert skeleton, which cannot carry the predicate. The builder's
@@ -1214,6 +1215,29 @@ internal static class SqlMutationBuilder
                 writer.Append(", inserted.").Append(capturedColumns[i]);
 
             writer.Append(SqlKeywords.Of(keywordCase, " into ")).Append(captureTarget).Append(" (").Append(string.Join(", ", intoColumns)).Append(')');
+            return;
+        }
+
+        if (command.StandaloneOutputInto is { } standalone)
+        {
+            var columns = RenderColumns(dialect, quoteIdentifiers, namingConvention, standalone.Columns, command.MappingVariant, metadataProvider);
+            foreach (var column in columns)
+            {
+                if (string.Equals(column.Trim('[', ']'), "action", StringComparison.OrdinalIgnoreCase))
+                    throw new NotSupportedException("Standalone MERGE OUTPUT INTO reserves the target column 'action' for $action.");
+            }
+
+            var target = dialect.QuoteIdentifier(standalone.TableName!);
+            writer.Append(SqlKeywords.Of(keywordCase, " output ")).Append("$action");
+            foreach (var column in columns)
+                writer.Append(", inserted.").Append(column);
+            writer.Append(SqlKeywords.Of(keywordCase, " into ")).Append(target).Append(" ([action]");
+            foreach (var column in columns)
+                writer.Append(", ").Append(column);
+            writer.Append(')');
+
+            if (command.ReturnsStandaloneOutput)
+                writer.Append(dialect.MakeOutput(columns, keywordCase));
             return;
         }
 
