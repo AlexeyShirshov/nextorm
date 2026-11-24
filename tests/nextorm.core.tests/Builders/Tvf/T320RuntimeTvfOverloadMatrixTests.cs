@@ -336,26 +336,34 @@ public class T320RuntimeTvfOverloadMatrixTests
     }
 
     /// <summary>
-    /// The extension family is one 11-overload set per receiver — <see cref="EntityBuilder{TEntity}"/>, the
-    /// non-generic <see cref="EntityBuilder"/> and the joined receivers of arity 2…7 — and no lambda-source
-    /// <c>Join</c>/<c>LeftJoin</c>/<c>RightJoin</c>/<c>FullJoin</c>/<c>CrossJoin</c> instance overload exists
-    /// on those receivers (that is what keeps an untyped <c>Join(null, null)</c> binding to the CTE overload).
+    /// Every receiver has eleven zero-argument source forms. The typed receivers also have one
+    /// correlated <c>CrossJoin</c> (#415). The zero-argument join forms stay extension-only so that
+    /// an untyped <c>Join(null, null)</c> still binds to the CTE overload.
     /// </summary>
     [Fact]
-    public void OverloadFamily_ShouldExposeElevenOverloadsPerReceiverAndNoInstanceLambdaSourceJoin()
+    public void OverloadFamily_ShouldKeepAllZeroArgumentFormsAndAddCorrelatedCrossJoinOnlyOnTypedReceivers()
     {
         var overloads = typeof(TvfJoinSourceExtensions)
             .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
 
-        overloads.Should().HaveCount(88, "8 receivers × 11 forms");
+        overloads.Should().HaveCount(95, "8 receivers × 11 zero-argument forms plus 7 correlated forms");
 
         var perReceiver = overloads
+            .Where(method => IsLambdaSource(method.GetParameters()[1].ParameterType, delegateArity: 1))
             .GroupBy(method => ReceiverKey(method.GetParameters()[0].ParameterType))
             .ToDictionary(group => group.Key, group => group.Count());
 
         perReceiver.Should().HaveCount(8, "the family covers exactly the eight receivers");
         perReceiver.Keys.Should().BeEquivalentTo(Receivers.Select(ReceiverKey), "every receiver of the matrix is covered");
         perReceiver.Values.Should().OnlyContain(count => count == 11, "each receiver gets the same eleven forms");
+
+        var correlated = overloads
+            .Where(method => IsLambdaSource(method.GetParameters()[1].ParameterType, delegateArity: 2))
+            .ToArray();
+
+        correlated.Should().OnlyContain(method => method.Name == "CrossJoin" && method.GetParameters().Length == 2);
+        correlated.Select(method => ReceiverKey(method.GetParameters()[0].ParameterType))
+            .Should().BeEquivalentTo(Receivers.Where(type => type.IsGenericType).Select(ReceiverKey));
 
         // The scan itself is meaningful: the correlated instance APPLY overloads of the same shape exist,
         // so an empty result for the ordinary join family is a real absence, not a broken predicate.

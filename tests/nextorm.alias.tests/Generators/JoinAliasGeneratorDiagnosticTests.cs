@@ -960,6 +960,10 @@ public class JoinAliasGeneratorDiagnosticTests
                 "declare it unreachable-by-construction with a reason.");
         }
 
+        const string projection = "ctx.From(inner).Select(x => new MidRow { Id = x.Id })";
+        // ToCommand belongs to EntityBuilder<T>, not to the QueryCommand<T> returned by Select.
+        var receiver = member == "ToCommand" ? "ctx.From(" + projection + ")" : projection;
+
         return RecoveryHeader() +
            "public static class Cases\n{\n" +
            "    public static void Run(IDataContext ctx, EntityBuilder<Person> people)\n    {\n" +
@@ -967,7 +971,7 @@ public class JoinAliasGeneratorDiagnosticTests
            "            .Join<Person>(people, (o, p) => o.Order.Id == p.Id, Alias.Customer)\n" +
            "            .Select(o => new { Id = o.Order.Id })\n" +
            "            .AsCte(\"inner\");\n" +
-           "        var mid = ctx.From(inner).Select(x => new MidRow { Id = x.Id })" + suffix + ".AsCte(\"mid\");\n" +
+           "        var mid = " + receiver + suffix + ".AsCte(\"mid\");\n" +
            "        _ = ctx.From(mid).WithAlias(Alias.Root)\n" +
            "            .Join<Person>(people, (r, p) => r.Root.Id == p.Id, Alias.Seller);\n" +
            "    }\n}\n";
