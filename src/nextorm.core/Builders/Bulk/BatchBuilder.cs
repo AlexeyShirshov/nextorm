@@ -295,6 +295,30 @@ public sealed class BatchBuilder
         return RegisterCapture(name, typeof(TResult), shape, mutation.BuildMutationCommand(), columnDefinitions);
     }
 
+    /// <summary>Captures updated target columns from a SQL Server joined update into a same-batch table variable.</summary>
+    /// <param name="mutation">The joined update with an explicit projection of mapped <c>Item1</c> columns.</param>
+    /// <param name="variableName">The table-variable name, with or without <c>@</c>.</param>
+    /// <param name="columnDefinitions">Trusted SQL column definitions in projection order.</param>
+    /// <returns>This batch builder.</returns>
+    public BatchBuilder OutputIntoTableVariable<TProjection, TResult>(UpdateJoinReturningBuilder<TProjection, TResult> mutation, string variableName, string columnDefinitions)
+    {
+        ArgumentNullException.ThrowIfNull(mutation);
+        var name = RequireCaptureSlot(variableName, columnDefinitions, mutation.ReturningColumns, mutation.DataContext);
+        return RegisterJoinCapture<TResult>(name, mutation.BuildMutationCommand(), mutation.Projection, columnDefinitions);
+    }
+
+    /// <summary>Captures deleted target columns from a SQL Server joined delete into a same-batch table variable.</summary>
+    /// <param name="mutation">The joined delete with an explicit projection of mapped <c>Item1</c> columns.</param>
+    /// <param name="variableName">The table-variable name, with or without <c>@</c>.</param>
+    /// <param name="columnDefinitions">Trusted SQL column definitions in projection order.</param>
+    /// <returns>This batch builder.</returns>
+    public BatchBuilder OutputIntoTableVariable<TProjection, TResult>(DeleteJoinReturningBuilder<TProjection, TResult> mutation, string variableName, string columnDefinitions)
+    {
+        ArgumentNullException.ThrowIfNull(mutation);
+        var name = RequireCaptureSlot(variableName, columnDefinitions, mutation.ReturningColumns, mutation.DataContext);
+        return RegisterJoinCapture<TResult>(name, mutation.BuildMutationCommand(), mutation.Projection, columnDefinitions);
+    }
+
     /// <summary>
     /// Adds a side-effecting <c>MERGE</c> whose output rows are captured into a same-batch table
     /// variable. The captured output always leads with <c>$action</c> (written into the first column
@@ -554,6 +578,13 @@ public sealed class BatchBuilder
         _steps.Add(BatchStepSpec.ForCapture(command, name, columnDefinitions));
         _captures.Add(name, new CaptureRegistration(rowType, shape));
         return this;
+    }
+
+    private BatchBuilder RegisterJoinCapture<TResult>(string name, MutationCommand command, System.Linq.Expressions.LambdaExpression projection, string columnDefinitions)
+    {
+        var targetProjection = JoinCaptureProjection.Rewrite(projection, command.EntityType);
+        var shape = BuildTypedCaptureShape<TResult>(targetProjection, command.EntityType, "joined mutation");
+        return RegisterCapture(name, typeof(TResult), shape, command, columnDefinitions);
     }
 
     private QueryCommand BuildTypedCaptureShape<TResult>(System.Linq.Expressions.LambdaExpression? projection, Type entityType, string operation)

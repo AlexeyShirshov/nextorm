@@ -1298,7 +1298,7 @@ internal static class SqlMutationBuilder
     // the same rows. A dialect without SupportsOutput silently renders nothing for a plain RETURNING-style
     // output (the builder-level guard has already accepted the provider), but a requested OUTPUT INTO on a
     // provider without the form is rejected here.
-    private static void AppendOutputClauses(
+    internal static void AppendOutputClauses(
         StringBuilder writer,
         ISqlDialect dialect,
         bool quoteIdentifiers,

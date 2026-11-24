@@ -2342,6 +2342,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             UpdateCommand update => BuildUpdateSql(update, provider, new List<Parameter>(), parameterNamePrefix, MutationRenderKind.Batch, captureInto),
             MergeCommand merge => BuildMergeSql(merge, MutationRenderKind.Batch, captureInto, provider),
             DeleteCommand delete => BuildDeleteSql(delete, provider, parameterNamePrefix, MutationRenderKind.Batch, captureInto),
+            UpdateJoinCommand updateJoin when captureInto is not null => _planner.RenderUpdateJoin(updateJoin, provider, captureInto, parameterNamePrefix),
+            DeleteJoinCommand deleteJoin when captureInto is not null => _planner.RenderDeleteJoin(deleteJoin, provider, captureInto, parameterNamePrefix),
             TruncateCommand truncate => BuildTruncateSql(truncate),
             _ => throw new NotSupportedException($"The mutation {command.GetType().Name} cannot be added to a batch."),
         };

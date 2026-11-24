@@ -1,4 +1,6 @@
 #nullable enable
+NextORM.Core.BatchBuilder.OutputIntoTableVariable<TProjection, TResult>(NextORM.Core.DeleteJoinReturningBuilder<TProjection, TResult>! mutation, string! variableName, string! columnDefinitions) -> NextORM.Core.BatchBuilder!
+NextORM.Core.BatchBuilder.OutputIntoTableVariable<TProjection, TResult>(NextORM.Core.UpdateJoinReturningBuilder<TProjection, TResult>! mutation, string! variableName, string! columnDefinitions) -> NextORM.Core.BatchBuilder!
 NextORM.Core.WindowFunction<T>.IgnoreNulls() -> NextORM.Core.WindowFunction<T>!
 NextORM.Core.WindowFunction<T>.RespectNulls() -> NextORM.Core.WindowFunction<T>!
 NextORM.Core.EntityBuilder<TEntity>.WithVariant(NextORM.Core.MappingVariant variant) -> NextORM.Core.EntityBuilder<TEntity>!
