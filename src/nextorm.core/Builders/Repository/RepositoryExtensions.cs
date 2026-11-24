@@ -4,7 +4,7 @@ using NextORM.Core.Repositories;
 namespace NextORM.Core;
 
 /// <summary>Starts queries and mutations from a typed repository.</summary>
-public static class RepositoryExtensions
+public static partial class RepositoryExtensions
 {
     /// <summary>Starts a query against the repository's mapped table.</summary>
     public static EntityBuilder<TEntity> From<TEntity>(this IDataContext context, IRepository<TEntity> repository)

@@ -99,10 +99,21 @@ var archivedCount = await app.Orders.Where(o => o.IsArchived)
     .CountAsync(cancellationToken);
 ```
 
-The context caches one repository per entity type, not its builders. Call `Query()`
-for a fresh builder, or use an extension such as `Where` to start a query.
-`Repository<T>(configure)` follows the same first-registration-per-process rule
-as `From<T>(configure)`.
+To read only order IDs, start with `Select` directly on the repository:
+
+```csharp
+var orderIds = await app.Orders.Select(order => order.Id)
+    .ToListAsync(cancellationToken);
+```
+
+You can also start with `GroupBy`, `OrderBy`, `Page`, or `LeftJoin`, and
+execute a query directly with methods such as `AnyAsync` or `ToArrayAsync`.
+Each call starts a fresh query: the context caches the repository, not the
+builder. Use `Query()` to access builder overloads or provider-specific
+methods that the repository doesn't expose.
+
+`Repository<T>(configure)` follows the same first-registration-per-process
+rule as `From<T>(configure)`.
 
 ## Reuse and extend a query from your context
 
