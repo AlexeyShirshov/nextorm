@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 namespace NextORM.Core;
 
 /// <summary>
-/// Provider-independent helpers and convenience overloads for <see cref="IDataContext"/>.
+/// Provider-independent helpers and convenience overloads for <see cref="IDataContext"/> and its roles.
 /// These used to be default interface methods; keeping them outside the interface leaves the
 /// provider-implemented contract (the role interfaces) free of engine-independent behavior.
 /// </summary>
@@ -63,6 +63,24 @@ public static class DataContextExtensions
     {
         ArgumentNullException.ThrowIfNull(dataContext);
         return dataContext.ExecuteRawAsync(sql, Array.Empty<ProcedureParameter>(), cancellationToken);
+    }
+
+    /// <summary>Asynchronously executes raw SQL without parameters or reading the result.</summary>
+    /// <param name="executor">The raw command executor.</param>
+    /// <param name="sql">The trusted SQL text to execute verbatim.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task that completes after the result is disposed asynchronously.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="executor"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The executor does not support raw SQL execution.</exception>
+    /// <remarks>
+    /// Execution and disposal errors propagate to the caller. To bind parameters or inspect the result, use
+    /// <see cref="IRawCommandExecutor.ExecuteRawAsync(string, IReadOnlyList{ProcedureParameter}, CancellationToken)"/>.
+    /// </remarks>
+    public static async Task ExecuteSql(this IRawCommandExecutor executor, string sql, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(executor);
+        var result = await executor.ExecuteRawAsync(sql, Array.Empty<ProcedureParameter>(), cancellationToken).ConfigureAwait(false);
+        await result.DisposeAsync().ConfigureAwait(false);
     }
 
     /// <summary>

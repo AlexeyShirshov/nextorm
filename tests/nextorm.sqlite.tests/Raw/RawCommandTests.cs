@@ -160,6 +160,31 @@ public class RawCommandTests
     }
 
     [Fact]
+    public async Task ExecuteSql_AppliesPragmasAndAllowsAnotherCommandOnTheSameContext()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            await ctx.ExecuteSql(
+                "PRAGMA synchronous=EXTRA; PRAGMA cache_size=-16384",
+                TestContext.Current.CancellationToken);
+
+            using (var synchronous = ctx.ExecuteRaw("PRAGMA synchronous"))
+            {
+                synchronous.Read<int>().Should().Equal(3);
+            }
+
+            using var cacheSize = ctx.ExecuteRaw("PRAGMA cache_size");
+            cacheSize.Read<int>().Should().Equal(-16384);
+        }
+        finally
+        {
+            await ctx.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void ScalarRead_UsesParameterValue()
     {
         var (ctx, path) = CreateDb();

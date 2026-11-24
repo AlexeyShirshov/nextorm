@@ -382,6 +382,18 @@ The statement text is passed through verbatim and is **not** put through the que
 
 ### Disposal
 
+Use `ExecuteSql` for trusted SQL that needs no parameters and whose result you don't need, such as a
+SQLite `PRAGMA`:
+
+```csharp
+await dataContext.ExecuteSql("PRAGMA cache_size = -16384", cancellationToken);
+```
+
+`ExecuteSql` calls `ExecuteRawAsync` with the SQL as written, no parameters, and the same cancellation
+token. It doesn't read rows or return an affected-row count. The call waits for asynchronous disposal
+and propagates both execution and disposal errors. Use `ExecuteRawAsync` to bind parameters or inspect
+the result.
+
 `ProcedureResult` owns the ADO.NET command and reader until it is disposed; the connection stays owned by the context. Always dispose it (`using`/`await using`) so the command and reader are released and the connection becomes idle again. `Dispose`/`DisposeAsync` are idempotent.
 
 ```csharp
