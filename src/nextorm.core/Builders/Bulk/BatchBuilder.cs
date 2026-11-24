@@ -197,6 +197,30 @@ public sealed class BatchBuilder
     }
 
     /// <summary>
+    /// Adds a SQL Server <c>OUTPUT ... INTO</c> mutation targeting an existing table.
+    /// Add a regular query on that table to read all visible matching rows, not only this capture.
+    /// Use <see cref="FromOutput{TResult}"/> only with a registered batch table-variable capture.
+    /// </summary>
+    /// <param name="mutation">The existing-table output terminal from this batch's context.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mutation"/> is null.</exception>
+    /// <exception cref="ArgumentException">The mutation uses a different context or targets a table variable.</exception>
+    /// <exception cref="InvalidOperationException">A result-bearing query was already added.</exception>
+    /// <exception cref="NotSupportedException">The provider does not support <c>OUTPUT INTO</c>.</exception>
+    public BatchBuilder OutputInto(OutputIntoBuilder mutation)
+    {
+        ArgumentNullException.ThrowIfNull(mutation);
+        RequireMutationSlot(mutation.DataContext, nameof(mutation));
+        if (mutation.TargetsTableVariable)
+            throw new ArgumentException("Use the batch OutputIntoTableVariable registration for a table-variable capture.", nameof(mutation));
+        if (_context is not DataContext { Dialect.SupportsOutputInto: true })
+            throw new NotSupportedException("A batch OUTPUT INTO mutation requires SQL Server.");
+
+        _steps.Add(BatchStepSpec.ForMutation(mutation.BuildExistingTableBatchCommand()));
+        return this;
+    }
+
+    /// <summary>
     /// Adds a verbatim, side-effecting raw SQL statement to the batch. The text is rendered exactly as
     /// given — placeholders are not rewritten — and carries no parameters, so a value that must vary
     /// cannot be captured from an expression tree. Useful for statements the command model does not
@@ -522,14 +546,18 @@ public sealed class BatchBuilder
 
     private BatchBuilder AddMutation(IDataContext context, MutationCommand command, string parameterName)
     {
+        RequireMutationSlot(context, parameterName);
+        _steps.Add(BatchStepSpec.ForMutation(command));
+        return this;
+    }
+
+    private void RequireMutationSlot(IDataContext context, string parameterName)
+    {
         if (_hasResult)
             throw new InvalidOperationException("A result-bearing query has already been added; add mutations before Query()/AddQuery().");
 
         if (!ReferenceEquals(context, _context))
             throw new ArgumentException("A batch statement is bound to a different data context; build every statement from the batch's context.", parameterName);
-
-        _steps.Add(BatchStepSpec.ForMutation(command));
-        return this;
     }
 
     // The capture API is batch-owned: a name may be registered at most once per BatchBuilder instance,

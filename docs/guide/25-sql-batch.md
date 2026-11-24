@@ -212,6 +212,28 @@ select id, total
  from #recent_orders
 ```
 
+## Read an existing table after `OUTPUT INTO`
+
+On SQL Server, add an `OutputInto(tableName)` mutation to the batch with `batch.OutputInto(...)`.
+Add an ordinary query on the same table with the same context:
+
+```csharp
+const string target = "capture_log";
+var batch = ctx.CreateBatchBuilder();
+batch.OutputInto(ctx.CreateInsertBuilder<ISimpleEntity>()
+    .Value(x => x.Id, id).Returning(x => new { x.Id }).OutputInto(target));
+var rows = batch.Query(ctx.From(target)
+    .Where(row => row.GetInt32("id") >= minimumId)
+    .Select(row => row.GetInt32("id"))).ToList();
+```
+
+Create the target beforehand with columns matching the output projection, and follow SQL Server's
+`OUTPUT INTO` target restrictions. The write and the query are sent together. The query reads all
+visible rows matching its filter, including rows already in the table. It does not track which rows
+this mutation captured. `FromOutput<TResult>` still reads only a table variable registered on the
+same batch. Insert filter validation, when configured, follows the ordinary batch insert rules and
+may run a separate precheck.
+
 ## Raw steps
 
 `Raw(sql)` adds a **verbatim, side-effecting** step: the string is emitted exactly as given, placeholders are **not** rewritten, and no parameters are bound — it is the escape hatch for DDL or provider-specific statements the typed builders do not model. It is added before the result-bearing `Query`/`AddQuery`, like any other side-effecting step: adding a `Raw` step after `Query` or after the first `AddQuery` throws `InvalidOperationException`, and the batch must still end with at least one result-bearing query — a batch of `Raw` steps alone is rejected. The text is executed verbatim and binds no parameters, so pass only trusted SQL — never concatenate untrusted user input into a `Raw` string.

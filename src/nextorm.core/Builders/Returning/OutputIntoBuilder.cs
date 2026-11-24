@@ -64,6 +64,16 @@ public sealed class OutputIntoBuilder
 
     private MutationCommand BuildCommand() => _mutation.BuildOutputIntoCommand(_target);
 
+    internal IDataContext DataContext => _mutation.DataContext;
+
+    internal bool TargetsTableVariable => _target.IsTableVariable;
+
+    internal MutationCommand BuildExistingTableBatchCommand()
+    {
+        _mutation.ValidateFilters();
+        return BuildCommand();
+    }
+
     private IMutationExecutor RequireExecutor()
     {
         if (_mutation.DataContext is IMutationExecutor executor)
