@@ -714,6 +714,18 @@ var refs = db.From<InstructionState>()
     .Select(p => new { p.Item1.SessionId, p.Item3.Value });
 ```
 
+To name a joined source, pass an [alias marker](04-joins.md#named-join-aliases) as the second
+argument. Use the generated property to refer to that source in the next factory lambda:
+
+```csharp
+var refs = db.From<InstructionState>()
+    .CrossJoin(i => SqlFunctions.Sqlite.json_each(SqlFunctions.Sqlite.json_array(
+        SqlFunctions.Sqlite.json(i.InitialValues),
+        SqlFunctions.Sqlite.json(i.CurrentValues))), Alias.States)
+    .CrossJoin(p => SqlFunctions.Sqlite.json_each(p.States.Value), Alias.Refs)
+    .Select(p => new { p.Item1.SessionId, p.Refs.Value });
+```
+
 SQLite renders the function directly after `CROSS JOIN`, without `LATERAL`. Call the TVF factory
 directly in the lambda and put any filters after the join. Use `() => ...` for an uncorrelated source.
 

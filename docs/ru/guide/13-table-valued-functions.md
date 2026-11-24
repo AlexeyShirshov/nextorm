@@ -719,6 +719,19 @@ var refs = db.From<InstructionState>()
     .Select(p => new { p.Item1.SessionId, p.Item3.Value });
 ```
 
+Чтобы назвать присоединённый источник, передайте
+[маркер псевдонима](04-joins.md#именованные-псевдонимы-соединений) вторым аргументом.
+В следующей лямбде обращайтесь к этому источнику через сгенерированное свойство:
+
+```csharp
+var refs = db.From<InstructionState>()
+    .CrossJoin(i => SqlFunctions.Sqlite.json_each(SqlFunctions.Sqlite.json_array(
+        SqlFunctions.Sqlite.json(i.InitialValues),
+        SqlFunctions.Sqlite.json(i.CurrentValues))), Alias.States)
+    .CrossJoin(p => SqlFunctions.Sqlite.json_each(p.States.Value), Alias.Refs)
+    .Select(p => new { p.Item1.SessionId, p.Refs.Value });
+```
+
 SQLite выводит вызов функции сразу после `CROSS JOIN`, без `LATERAL`. Вызовите фабрику
 табличной функции непосредственно в лямбде, а фильтры задайте после соединения. Для
 некоррелированного источника используйте `() => ...`.

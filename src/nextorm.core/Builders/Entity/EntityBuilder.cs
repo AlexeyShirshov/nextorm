@@ -4482,7 +4482,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
     }
 
     /// <summary>
-    /// Correlated alias <c>CROSS APPLY</c>/<c>OUTER APPLY</c>: mirrors the positional
+    /// Correlated alias <c>CROSS APPLY</c>/<c>OUTER APPLY</c> or SQLite <c>CROSS JOIN</c>: mirrors the positional
     /// <see cref="CrossApply{TJoinEntity}(Expression{Func{TEntity, EntityBuilder{TJoinEntity}}}, Action{JoinOptions})"/>
     /// overload and carries the source through
     /// <see cref="JoinExpression.ApplySource"/> instead of a plain <c>ON</c> condition.
@@ -4491,8 +4491,8 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
     /// <typeparam name="TNextEntity">The projection type <typeparamref name="TNext"/> is built over.</typeparam>
     /// <typeparam name="TJoinEntity">The entity type yielded by the applied source.</typeparam>
     /// <param name="create">Creates an empty <typeparamref name="TNext"/> bound to this builder's data context.</param>
-    /// <param name="source">A lambda receiving the left-hand row and returning the applied builder.</param>
-    /// <param name="joinType">The APPLY kind to add.</param>
+    /// <param name="source">A lambda receiving the left-hand row. For <c>CROSS JOIN</c>, call a table-valued-function factory directly.</param>
+    /// <param name="joinType">The kind of join to add.</param>
     /// <param name="options">Optional per-join configuration.</param>
     /// <returns>A new <typeparamref name="TNext"/> carrying this builder's joins plus the applied source.</returns>
     public TNext JoinAlias<TNext, TNextEntity, TJoinEntity>(
@@ -4565,9 +4565,8 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
     }
 
     /// <summary>
-    /// Builds a correlated alias APPLY, sharing the positional correlated-apply path
-    /// (<see cref="JoinApply{TJoinEntity}"/>): the source is converted to a
-    /// <see cref="QueryCommand"/> lambda and stored as <see cref="JoinExpression.ApplySource"/>.
+    /// Builds a correlated alias join. A SQLite CROSS JOIN keeps the function call intact
+    /// for the same lowering path as the positional form.
     /// </summary>
     private TNext JoinAliasApply<TNext, TNextEntity, TJoinEntity>(
         Func<IDataContext, TNext> create,
@@ -4589,8 +4588,9 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
             throw new NotSupportedException(JoinedSourceCapMessage);
 
         if (RequireContext is InMemoryDataContext)
-            throw new NotSupportedException(
-                "A correlated CROSS/OUTER APPLY source is not supported by the in-memory provider; run the query against a SQL provider.");
+            throw new NotSupportedException(joinType == JoinType.Cross
+                ? "A correlated CROSS JOIN over a table-valued function is supported only by SQLite."
+                : "A correlated CROSS/OUTER APPLY source is not supported by the in-memory provider; run the query against a SQL provider.");
 
         if (_windows is not null)
             throw new InvalidOperationException("Named windows must be declared after joins; Window cannot be combined with a later Join.");
@@ -4598,8 +4598,19 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
         var opts = new JoinOptions();
         options?.Invoke(opts);
 
-        var body = source.Body.Type == typeof(QueryCommand) ? source.Body : Expression.Convert(source.Body, typeof(QueryCommand));
-        var applySource = Expression.Lambda(body, source.Parameters);
+        LambdaExpression applySource;
+        if (joinType == JoinType.Cross)
+        {
+            if (!SourceExpressionLowerer.TryCreateCorrelatedTvfApply<TJoinEntity>(source, RequireContext, out var tvfSource))
+                throw new NotSupportedException("A correlated CROSS JOIN requires a direct runtime table-valued-function factory call.");
+
+            applySource = tvfSource;
+        }
+        else
+        {
+            var body = source.Body.Type == typeof(QueryCommand) ? source.Body : Expression.Convert(source.Body, typeof(QueryCommand));
+            applySource = Expression.Lambda(body, source.Parameters);
+        }
 
         var join = new JoinExpression(null, joinType)
         {
@@ -4607,9 +4618,9 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
             EntityType = typeof(TJoinEntity),
             ApplySource = applySource,
             // The left-row prefix (FROM plus preceding joins, never the applied source) is rebuilt for
-            // every preparation from the command's actual prefix; recording it here makes a single-slot
-            // receiver keep its legacy resolution path unchanged.
-            ApplyLeftSlots = leftSlots >= 2
+            // every preparation from the command's actual prefix. An aliased CROSS JOIN root already
+            // exposes slot 1 as a projection member.
+            ApplyLeftSlots = leftSlots >= 2 || (joinType == JoinType.Cross && leftSlots == 1)
                 ? JoinExpression.CreateApplyLeftSlots(applySource.Parameters[0], leftSlots)
                 : null,
             Strictness = opts.Strictness ?? JoinStrictness.Default,

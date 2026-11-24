@@ -1,4 +1,5 @@
 using FluentAssertions;
+using NextORM.Generated.nextorm_integration_tests;
 
 namespace NextORM.Integration.Tests;
 
@@ -21,5 +22,20 @@ public sealed class SqliteCorrelatedTvfCrossJoinTests : ProviderTestSuite
 
         result.Select(row => (row.RootKey, row.Reference)).Should().BeEquivalentTo(
             new (string?, string?)[] { ("0", "first"), ("1", "second"), ("1", "third") });
+    }
+
+    [Fact]
+    public void CrossJoin_ReadsNamedTvfSlotInNextPositionalCrossJoin()
+    {
+        const string json = """[[{"ref":"first"},{}],[{}, {"ref":"second","extra":"third"}],[{}]]""";
+        var ctx = _sut.DataProvider;
+        var result = ctx.From(() => SqlFunctions.Sqlite.json_each(json))
+            .CrossJoin(row => SqlFunctions.Sqlite.json_each(row.Value), Alias.States)
+            .CrossJoin(row => SqlFunctions.Sqlite.json_each(row.States.Value))
+            .Select(row => new { RootKey = row.Item1.Key, StateKey = row.States.Key, Reference = row.Item3.Value })
+            .ToList();
+
+        result.Select(row => (row.RootKey, row.StateKey, row.Reference)).Should().BeEquivalentTo(
+            new (string?, string?, string?)[] { ("0", "0", "first"), ("1", "1", "second"), ("1", "1", "third") });
     }
 }
