@@ -39,6 +39,22 @@ var orders = ctx.From("recent_orders")
 
 `ToTempTableSql(name)` renders the statement without opening a connection; `ToTempTable` / `ToTempTableAsync` execute it.
 
+## Creating an empty temporary table with a primary key
+
+Use `CreateEmptyTempTable` on a SQLite or PostgreSQL `DataContext` when you need a table with an explicit schema instead of rows copied from a query:
+
+```csharp
+await db.CreateEmptyTempTable("keys_pick", [("id", typeof(string))], "id",
+    withoutRowId: true); // SQLite only; pass false on PostgreSQL.
+
+await db.CreateBulkInsertBuilder<KeyRow>(options => options
+        .Table("keys_pick").TargetKind(BulkInsertTargetKind.LocalTemporary))
+    .Values(keys)
+    .BulkInsertAsync(cancellationToken);
+```
+
+Map `KeyRow` to the declared column names and use the same context and database session for both operations. The primary key must name one declared column exactly. Supported CLR types are `string`, `int`, `long`, `double`, `decimal`, `bool`, and `byte[]`, including nullable forms of the value types. PostgreSQL rejects `withoutRowId: true`. This API does not change `ToTempTableAsync` or `BatchBuilder.CreateTempTable`, which materialize queries.
+
 ## Session affinity and connection poolers
 
 A temporary table lives in the database **session** (the server backend), not merely on the client connection. When PostgreSQL sits behind a connection pooler that reassigns the backend per transaction — PgBouncer in `transaction` mode, or any connection-level load balancer — two commands on the same client connection can be routed to different backends, and the one that reads the table fails with `relation "recent_orders" does not exist`.

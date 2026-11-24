@@ -11,6 +11,10 @@ public sealed class SqliteDialect : SqlDialectBase
 
     internal override bool SupportsTempViews => true;
 
+    internal override bool SupportsEmptyTempTables => true;
+
+    internal override bool SupportsTempTableWithoutRowId => true;
+
     internal override bool SupportsBoundedDelete => true;
 
     /// <summary>SQLite supports <c>SAVEPOINT</c>/<c>ROLLBACK TO</c>/<c>RELEASE</c> inside a transaction.</summary>

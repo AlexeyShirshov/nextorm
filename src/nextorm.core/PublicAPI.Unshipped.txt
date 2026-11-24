@@ -455,3 +455,5 @@ static NextORM.Core.TempViewExtensions.ToTempView<TResult>(this NextORM.Core.Ent
 static NextORM.Core.TempViewExtensions.ToTempView<TResult>(this NextORM.Core.QueryCommand<TResult>! query, string! name, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
 static NextORM.Core.TempViewExtensions.ToTempView<TResult>(this NextORM.Core.EntityBuilder<TResult>! builder, string! name) -> System.Threading.Tasks.Task!
 static NextORM.Core.TempViewExtensions.ToTempView<TResult>(this NextORM.Core.QueryCommand<TResult>! query, string! name) -> System.Threading.Tasks.Task!
+NextORM.Core.DataContext.CreateEmptyTempTable(string! name, System.Collections.Generic.IReadOnlyList<(string! Name, System.Type! Type)>! columns, string! primaryKey, bool withoutRowId) -> System.Threading.Tasks.Task!
+NextORM.Core.DataContext.CreateEmptyTempTable(string! name, System.Collections.Generic.IReadOnlyList<(string! Name, System.Type! Type)>! columns, string! primaryKey, bool withoutRowId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!

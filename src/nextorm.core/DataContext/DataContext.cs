@@ -2017,6 +2017,24 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         return (AppendMaxRecursionStmt(sql, maxRecursionStmt), parameters);
     }
 
+    /// <summary>Creates an empty session-local table with explicit CLR column types and a primary key.</summary>
+    /// <param name="name">The unqualified table name.</param>
+    /// <param name="columns">The column names and supported CLR storage types.</param>
+    /// <param name="primaryKey">The exact name of the primary-key column.</param>
+    /// <param name="withoutRowId">Whether to omit SQLite's hidden rowid; unsupported on PostgreSQL.</param>
+    public Task CreateEmptyTempTable(string name, IReadOnlyList<(string Name, Type Type)> columns, string primaryKey, bool withoutRowId)
+        => CreateEmptyTempTable(name, columns, primaryKey, withoutRowId, CancellationToken.None);
+
+    /// <summary>Creates an empty session-local table with explicit CLR column types and a primary key.</summary>
+    /// <param name="name">The unqualified table name.</param>
+    /// <param name="columns">The column names and supported CLR storage types.</param>
+    /// <param name="primaryKey">The exact name of the primary-key column.</param>
+    /// <param name="withoutRowId">Whether to omit SQLite's hidden rowid; unsupported on PostgreSQL.</param>
+    /// <param name="cancellationToken">Cancels the database operation.</param>
+    public Task CreateEmptyTempTable(string name, IReadOnlyList<(string Name, Type Type)> columns, string primaryKey,
+        bool withoutRowId, CancellationToken cancellationToken)
+        => _executor.ExecuteNonQueryAsync(EmptyTempTableSql.Build(Dialect, KeywordCase, name, columns, primaryKey, withoutRowId), [], cancellationToken);
+
     private (string Sql, List<Parameter> Parameters) BuildCreateTempViewSql(CreateTempViewCommand command)
     {
         if (Dialect is not SqlDialectBase { SupportsTempViews: true })

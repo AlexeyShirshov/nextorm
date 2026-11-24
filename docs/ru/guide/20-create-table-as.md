@@ -47,6 +47,22 @@ var orders = ctx.From("recent_orders")
 
 `ToTempTableSql(name)` рендерит SQL без открытия соединения; `ToTempTable` / `ToTempTableAsync` выполняют его.
 
+## Создание пустой временной таблицы с первичным ключом
+
+Используйте `CreateEmptyTempTable` на `DataContext` SQLite или PostgreSQL, если нужна таблица с явной схемой вместо копирования строк запроса:
+
+```csharp
+await db.CreateEmptyTempTable("keys_pick", [("id", typeof(string))], "id",
+    withoutRowId: true); // Только SQLite; передайте false для PostgreSQL.
+
+await db.CreateBulkInsertBuilder<KeyRow>(options => options
+        .Table("keys_pick").TargetKind(BulkInsertTargetKind.LocalTemporary))
+    .Values(keys)
+    .BulkInsertAsync(cancellationToken);
+```
+
+Сопоставьте `KeyRow` с объявленными именами колонок и выполняйте обе операции в одном контексте и сеансе БД. Имя первичного ключа должно точно совпадать с именем объявленной колонки. Поддерживаются CLR-типы `string`, `int`, `long`, `double`, `decimal`, `bool`, `byte[]`, включая nullable-варианты типов значений. PostgreSQL отклоняет `withoutRowId: true`. Новый API не меняет материализацию запросов через `ToTempTableAsync` и `BatchBuilder.CreateTempTable`.
+
 ## Привязка к сессии и пулеры соединений
 
 Временная таблица живёт в **сессии** базы (на backend-сервере), а не просто на клиентском соединении. Если PostgreSQL стоит за пулером, который переназначает backend на каждую транзакцию, — PgBouncer в режиме `transaction`, или любой балансировщик уровня соединения — две команды на одном клиентском соединении могут уйти на разные backend'ы, и читающая падает с `relation "recent_orders" does not exist`.
