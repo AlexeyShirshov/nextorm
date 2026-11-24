@@ -698,8 +698,8 @@ declare @t table (id bigint, name nvarchar(100)); insert into simple_entity (nam
   provider refuses the capture with `NotSupportedException`, and a mutation whose projection yields no
   output column (the parameterless `ReturningIdentity<TKey>()`) is refused the same way. PostgreSQL keeps
   its own [data-modifying CTE](#data-modifying-cte-postgresql) route for reading modified rows, and this
-  API refuses it. There is no fluent `OutputInto` for a `MERGE` — the batch capture is its only form (see
-  [Capturing the merged rows](21-merge-statement.md#capturing-the-merged-rows-batch-only)).
+  API refuses it. For `MERGE`, see [batch table-variable capture](21-merge-statement.md#capturing-the-merged-rows-batch-only)
+  or [standalone capture into an existing table](21-merge-statement.md#capture-merged-rows-in-an-existing-table).
 
 ## Bulk insert
 

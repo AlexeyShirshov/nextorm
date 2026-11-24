@@ -1,4 +1,7 @@
 #nullable enable
+NextORM.SqlServer.SqlServerMergeOutputExtensions
+static NextORM.SqlServer.SqlServerMergeOutputExtensions.OutputInto<TEntity, TResult>(this NextORM.Core.MergeReturningBuilder<TEntity, TResult>! merge, string! targetTable) -> NextORM.Core.OutputIntoBuilder!
+static NextORM.SqlServer.SqlServerMergeOutputExtensions.OutputIntoThenOutput<TEntity, TResult>(this NextORM.Core.MergeReturningBuilder<TEntity, TResult>! merge, string! targetTable) -> NextORM.Core.MergeReturningBuilder<TEntity, TResult>!
 NextORM.SqlServer.SqlServerVectorSearchSyntax
 NextORM.SqlServer.SqlServerVectorSearchSyntax.TopN = 0 -> NextORM.SqlServer.SqlServerVectorSearchSyntax
 NextORM.SqlServer.SqlServerVectorSearchSyntax.WithApproximate = 1 -> NextORM.SqlServer.SqlServerVectorSearchSyntax

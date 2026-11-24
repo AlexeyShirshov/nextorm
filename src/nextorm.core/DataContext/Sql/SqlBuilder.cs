@@ -1976,7 +1976,9 @@ internal readonly struct SqlBuilder
     /// <c>SELECT</c>. The dialect composes its native form (SQL Server/MySQL
     /// <c>DELETE &lt;alias&gt; FROM ... JOIN</c>, PostgreSQL <c>DELETE ... USING</c>).
     /// </summary>
-    internal (string Sql, List<Parameter> Parameters) MakeDeleteJoin(DeleteJoinCommand cmd)
+    /// <param name="cmd">The joined delete command.</param>
+    /// <param name="captureInto">A same-batch output target, or null for standalone rendering.</param>
+    internal (string Sql, List<Parameter> Parameters) MakeDeleteJoin(DeleteJoinCommand cmd, OutputIntoClause? captureInto = null)
     {
         if (!_ctx.Dialect.SupportsDeleteJoin)
             throw new NotSupportedException($"{_ctx.Dialect.GetType().Name} cannot render a multi-table DELETE.");
@@ -2051,6 +2053,9 @@ internal readonly struct SqlBuilder
                 if (source.PreparedCondition is { } condition)
                     SqlSourceRenderer.MakeWhere(in _ctx, whereSql, entityType, condition, 0);
 
+                if (captureInto is not null)
+                    return (MakeJoinCaptureSql(Kw("delete ") + targetAliasToken, captureInto, fromAndJoins, whereSql, deleted: true), _ctx.Params);
+
                 var sql = _ctx.Dialect.MakeDeleteJoin(
                     target,
                     targetAliasToken,
@@ -2090,7 +2095,9 @@ internal readonly struct SqlBuilder
     /// <c>SELECT</c>. The dialect composes its native form (PostgreSQL/SQLite <c>UPDATE ... FROM</c>,
     /// SQL Server <c>UPDATE &lt;alias&gt; ... FROM ... JOIN</c>, MySQL/MariaDB <c>UPDATE ... JOIN ... SET</c>).
     /// </summary>
-    internal (string Sql, List<Parameter> Parameters) MakeUpdateJoin(UpdateJoinCommand cmd)
+    /// <param name="cmd">The joined update command.</param>
+    /// <param name="captureInto">A same-batch output target, or null for standalone rendering.</param>
+    internal (string Sql, List<Parameter> Parameters) MakeUpdateJoin(UpdateJoinCommand cmd, OutputIntoClause? captureInto = null)
     {
         if (!_ctx.Dialect.SupportsUpdateJoin)
             throw new NotSupportedException($"{_ctx.Dialect.GetType().Name} cannot render a multi-table UPDATE.");
@@ -2165,10 +2172,15 @@ internal readonly struct SqlBuilder
                 // Rendered after the sources so each table alias is already registered. PostgreSQL and
                 // SQLite keep the SET target unqualified (their UPDATE ... FROM target is implicit); the
                 // alias-style dialects qualify it by the target alias.
-                var assignments = SqlSourceRenderer.MakeUpdateAssignments(in _ctx, entityType, cmd.Assignments, qualifyTarget: !_ctx.Dialect.UpdateJoinRequiresFrom);
+                var assignments = SqlSourceRenderer.MakeUpdateAssignments(in _ctx, entityType, cmd.Assignments,
+                    qualifyTarget: captureInto is null && !_ctx.Dialect.UpdateJoinRequiresFrom);
 
                 if (source.PreparedCondition is { } condition)
                     SqlSourceRenderer.MakeWhere(in _ctx, whereSql, entityType, condition, 0);
+
+                if (captureInto is not null)
+                    return (MakeJoinCaptureSql(Kw("update ") + targetAliasToken + Kw(" set ") + assignments,
+                        captureInto, fromAndJoins, whereSql, deleted: false), _ctx.Params);
 
                 var sql = _ctx.Dialect.MakeUpdateJoin(
                     target,
@@ -2200,6 +2212,25 @@ internal readonly struct SqlBuilder
         finally
         {
             _ctx.ColumnsProvider.PopSourceScope();
+        }
+    }
+
+    private string MakeJoinCaptureSql(string head, OutputIntoClause captureInto, StringBuilder fromAndJoins, StringBuilder whereSql, bool deleted)
+    {
+        var sql = StringBuilderPool.Shared.Get();
+        try
+        {
+            sql.Append(head);
+            SqlMutationBuilder.AppendOutputClauses(sql, _ctx.Dialect, _ctx.QuoteIdentifiers, _ctx.NamingConvention,
+                null, null, deleted, _ctx.KeywordCase, captureInto);
+            sql.Append(Kw(" from ")).Append(fromAndJoins);
+            if (whereSql.Length > 0)
+                sql.Append(Kw(" where ")).Append(whereSql);
+            return sql.ToString();
+        }
+        finally
+        {
+            StringBuilderPool.Shared.Return(sql);
         }
     }
 

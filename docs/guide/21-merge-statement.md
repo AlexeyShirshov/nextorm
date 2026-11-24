@@ -143,10 +143,34 @@ and PostgreSQL 17+ `RETURNING target.<col>`. MySQL/MariaDB have no row-returning
 `.Returning()` there throws `NotSupportedException`; SQLite and ClickHouse still reject the full
 `MERGE` (and the server must be PostgreSQL 15+ for the general `MERGE` statement itself).
 
+### Capture merged rows in an existing table
+
+On SQL Server, import `NextORM.SqlServer` and use `Returning(...)` to select the mapped columns to capture:
+
+```csharp
+var result = ctx.CreateMergeBuilder<IMergeEntity>()
+    .Using(sourceRows).OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
+    .Returning(row => new { row.Id, row.Name });
+
+result.OutputInto("merge_audit").Execute();
+// Or, instead of executing the preceding line:
+var affectedRows = result.OutputIntoThenOutput("merge_audit").ToList();
+```
+
+Create `merge_audit` first with an `action` column that accepts `nvarchar(10)` and columns
+named and typed like the mapped fields in the projection. `$action` goes to `action`; the
+projected `inserted` values go to their mapped columns in projection order. The second form
+returns only the affected rows' projected values, without `$action`, in unspecified order.
+It does not read old rows from the capture table. `OutputInto` returns only an affected-row count.
+
+Use a bare, unqualified target name and follow SQL Server's `OUTPUT INTO` target restrictions.
+These terminals are standalone and support `INSERT` and `UPDATE` branches only, without
+active global filters. They reject other providers, other branches, and a projection mapped
+to the reserved capture column `action`. Use the separate batch API for table variables.
+
 ### Capturing the merged rows (batch only)
 
-There is **no fluent `OutputInto`/`OutputIntoThenOutput` on the MERGE builder**. The only capture form is
-the batch one: `BatchBuilder.OutputIntoTableVariable(mergeTerminal, "@t", definitions)` emits
+For a same-batch table variable, `BatchBuilder.OutputIntoTableVariable(mergeTerminal, "@t", definitions)` emits
 `DECLARE @t TABLE (...); MERGE ... OUTPUT ... INTO @t (...)` as one statement, and a later step of the
 same batch reads the captured rows with `FromOutput<TResult>`/`FromOutputTable`. See
 [Batch-scoped capture](17-insert-statement.md#batch-scoped-capture-batchbuilderoutputintotablevariable).

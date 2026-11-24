@@ -600,6 +600,9 @@ internal sealed class QueryPlanner : IQueryPlanner
     internal (string Sql, List<Parameter> Parameters) RenderDeleteJoin(DeleteJoinCommand command)
         => RenderDeleteJoinCore(command, new DefaultParameterProvider(), new List<Parameter>(), suppressCtes: false);
 
+    internal (string Sql, List<Parameter> Parameters) RenderDeleteJoin(DeleteJoinCommand command, IParameterProvider provider, OutputIntoClause captureInto, string parameterNamePrefix)
+        => RenderDeleteJoinCore(command, provider, new List<Parameter>(), suppressCtes: false, captureInto, parameterNamePrefix);
+
     // Core multi-table DELETE renderer shared by the standalone statement and the body of a data-modifying
     // CTE. The provider and parameter accumulator come from the caller so a CTE body continues the enclosing
     // statement's numbering. When the command is hoisted as a CTE body (suppressCtes) its own WITH clause
@@ -608,7 +611,9 @@ internal sealed class QueryPlanner : IQueryPlanner
         DeleteJoinCommand command,
         IParameterProvider parameterProvider,
         List<Parameter> parameters,
-        bool suppressCtes)
+        bool suppressCtes,
+        OutputIntoClause? captureInto = null,
+        string parameterNamePrefix = "")
     {
         var source = command.Source;
         if (!source.IsPrepared)
@@ -622,6 +627,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             ColumnsProvider = new DefaultColumnsProvider(),
             QueryProvider = source,
             ParameterProvider = parameterProvider,
+            ParameterNamePrefix = parameterNamePrefix,
             AliasProvider = new DefaultAliasProvider(),
             Logger = _logger!,
             QuoteIdentifiers = source.ResolvedQuoteIdentifiers,
@@ -635,7 +641,7 @@ internal sealed class QueryPlanner : IQueryPlanner
         if (!suppressCtes && source.Ctes is { Count: > 0 } ctes)
             withSql = SqlSourceRenderer.MakeWithClause(in ctx, ctes, out maxRecursionStmt);
 
-        var (sql, renderedParams) = new SqlBuilder(in ctx).MakeDeleteJoin(command);
+        var (sql, renderedParams) = new SqlBuilder(in ctx).MakeDeleteJoin(command, captureInto);
         if (withSql is not null)
             sql = withSql + sql;
         if (maxRecursionStmt is not null)
@@ -649,6 +655,9 @@ internal sealed class QueryPlanner : IQueryPlanner
     internal (string Sql, List<Parameter> Parameters) RenderUpdateJoin(UpdateJoinCommand command)
         => RenderUpdateJoinCore(command, new DefaultParameterProvider(), new List<Parameter>(), suppressCtes: false);
 
+    internal (string Sql, List<Parameter> Parameters) RenderUpdateJoin(UpdateJoinCommand command, IParameterProvider provider, OutputIntoClause captureInto, string parameterNamePrefix)
+        => RenderUpdateJoinCore(command, provider, new List<Parameter>(), suppressCtes: false, captureInto, parameterNamePrefix);
+
     // Core multi-table UPDATE renderer shared by the standalone statement and the body of a data-modifying
     // CTE. The provider and parameter accumulator come from the caller so a CTE body continues the enclosing
     // statement's numbering. When the command is hoisted as a CTE body (suppressCtes) its own WITH clause
@@ -657,7 +666,9 @@ internal sealed class QueryPlanner : IQueryPlanner
         UpdateJoinCommand command,
         IParameterProvider parameterProvider,
         List<Parameter> parameters,
-        bool suppressCtes)
+        bool suppressCtes,
+        OutputIntoClause? captureInto = null,
+        string parameterNamePrefix = "")
     {
         var source = command.Source;
         if (!source.IsPrepared)
@@ -671,6 +682,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             ColumnsProvider = new DefaultColumnsProvider(),
             QueryProvider = source,
             ParameterProvider = parameterProvider,
+            ParameterNamePrefix = parameterNamePrefix,
             AliasProvider = new DefaultAliasProvider(),
             Logger = _logger!,
             QuoteIdentifiers = source.ResolvedQuoteIdentifiers,
@@ -684,7 +696,7 @@ internal sealed class QueryPlanner : IQueryPlanner
         if (!suppressCtes && source.Ctes is { Count: > 0 } ctes)
             withSql = SqlSourceRenderer.MakeWithClause(in ctx, ctes, out maxRecursionStmt);
 
-        var (sql, renderedParams) = new SqlBuilder(in ctx).MakeUpdateJoin(command);
+        var (sql, renderedParams) = new SqlBuilder(in ctx).MakeUpdateJoin(command, captureInto);
         if (withSql is not null)
             sql = withSql + sql;
         if (maxRecursionStmt is not null)

@@ -212,6 +212,28 @@ select id, total
  from #recent_orders
 ```
 
+## Read an existing table after `OUTPUT INTO`
+
+On SQL Server, add an `OutputInto(tableName)` mutation to the batch with `batch.OutputInto(...)`.
+Add an ordinary query on the same table with the same context:
+
+```csharp
+const string target = "capture_log";
+var batch = ctx.CreateBatchBuilder();
+batch.OutputInto(ctx.CreateInsertBuilder<ISimpleEntity>()
+    .Value(x => x.Id, id).Returning(x => new { x.Id }).OutputInto(target));
+var rows = batch.Query(ctx.From(target)
+    .Where(row => row.GetInt32("id") >= minimumId)
+    .Select(row => row.GetInt32("id"))).ToList();
+```
+
+Create the target beforehand with columns matching the output projection, and follow SQL Server's
+`OUTPUT INTO` target restrictions. The write and the query are sent together. The query reads all
+visible rows matching its filter, including rows already in the table. It does not track which rows
+this mutation captured. `FromOutput<TResult>` still reads only a table variable registered on the
+same batch. Insert filter validation, when configured, follows the ordinary batch insert rules and
+may run a separate precheck.
+
 ## Raw steps
 
 `Raw(sql)` adds a **verbatim, side-effecting** step: the string is emitted exactly as given, placeholders are **not** rewritten, and no parameters are bound — it is the escape hatch for DDL or provider-specific statements the typed builders do not model. It is added before the result-bearing `Query`/`AddQuery`, like any other side-effecting step: adding a `Raw` step after `Query` or after the first `AddQuery` throws `InvalidOperationException`, and the batch must still end with at least one result-bearing query — a batch of `Raw` steps alone is rejected. The text is executed verbatim and binds no parameters, so pass only trusted SQL — never concatenate untrusted user input into a `Raw` string.
@@ -307,11 +329,27 @@ For a batch with a single result the `Query<TResult>` terminal still renders wit
 
 The capability is [`ISqlDialect.SupportsBatch`](xref:NextORM.Core.ISqlDialect.SupportsBatch); a provider without it (and the in-memory context) fails fast instead of silently degrading to separate statements.
 
+### Capture rows from UPDATE or DELETE with JOIN
+
+On SQL Server, pass `joined.CreateUpdateJoinBuilder().Set(...).Returning(p => new { p.Item1.Id })`
+or `joined.CreateDeleteJoinBuilder().Returning(p => new { p.Item1.Id })` to
+`batch.OutputIntoTableVariable(mutation, "@changed", "id int")`. Apply the join and filter to the
+mutation, then read `@changed` using `batch.FromOutputTable("@changed")` inside the same batch.
+Match the column definitions to the SQL types and the projection order.
+
+Use an explicit projection of mapped columns from the first table (`Item1`). UPDATE captures
+post-update values from `inserted`; DELETE captures pre-delete values from `deleted`. Other joined
+tables can filter rows and supply UPDATE assignments, but cannot supply captured columns.
+Whole join projections and non-INNER joins are rejected before execution. For UPDATE, ensure
+at most one source match per target row when an assignment reads a joined value; SQL Server
+does not guarantee which value is used otherwise. SQL Server does not guarantee output row order.
+Standalone JOIN terminals and PostgreSQL data-modifying CTEs are unchanged.
+
 ## Limitations
 
 * A batch ends with one or more result-bearing queries — one added with the `Query<TResult>` terminal, several with `AddQuery<TResult>` and `Execute`/`ExecuteAsync` — and they are the last statements. The statements before them are side-effecting — materialisations, DML (`INSERT`/`UPDATE`/`DELETE`/`TRUNCATE`) and raw SQL steps — which return no columns.
 * Multi-result execution is **sequential and eager**: `BatchResult` yields its sets in the order the queries were added (through enumeration or `Read<TResult>()`), each set may be read once, and every set is fully buffered in memory before `Execute()`/`ExecuteAsync()` returns — there is no streaming and no random access. Only the single-result `BatchQuery<TResult>` terminal streams, through `ToAsyncEnumerable`.
-* A mutation added to a batch may not **return** rows to the client: `Returning()`/`ReturningIdentity()` terminals produce a different builder type and are not accepted by `Insert`/`Update`/`Delete`, which take only the non-returning builders. A returning builder is accepted only by the batch-scoped capture `OutputIntoTableVariable(...)`, which writes its rows into a table variable for the batch's own queries instead of returning them. Multi-table `CreateUpdateJoinBuilder`/`DeleteJoin` and the plain `Merge` terminal are not batch steps; a `MERGE` joins a batch through the same capture. Raw SQL/DDL is expressible as a verbatim step through `Raw(sql)` — see [Raw steps](#raw-steps).
+* A mutation added to a batch may not **return** rows to the client: `Returning()`/`ReturningIdentity()` terminals produce a different builder type and are not accepted by `Insert`/`Update`/`Delete`, which take only the non-returning builders. A returning builder is accepted only by the batch-scoped capture `OutputIntoTableVariable(...)`, which writes its rows into a table variable for the batch's own queries instead of returning them. Joined UPDATE, joined DELETE and MERGE can enter a batch through capture, not as standalone mutation steps. Raw SQL/DDL is expressible as a verbatim step through `Raw(sql)` — see [Raw steps](#raw-steps).
 * `ToSql()` shows the `;`-joined text without executing: on the single-result `BatchQuery<TResult>` terminal and on `BatchBuilder` for the multi-result `AddQuery`/`Execute` form (`BatchBuilder.ToSql()` renders the whole batch and requires at least one result step). On a `DbBatch` provider the statements are still sent as separate commands of one batch when the batch executes.
 * Batch execution is **not** routed through the query interceptors: their events carry a `DbCommand`, while a `DbBatch` command is a `DbBatchCommand`.
 * `SqlFunctions.Parameter` runtime placeholders cannot be used in a batched query; capture the value in a local variable instead (as in any query rendered as a source). Captured variables become parameters automatically.

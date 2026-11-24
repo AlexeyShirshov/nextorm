@@ -23,11 +23,13 @@ public sealed class OutputIntoBuilder
 {
     private readonly IOutputIntoMutation _mutation;
     private readonly OutputIntoClause _target;
+    private readonly bool _standaloneOnly;
 
-    internal OutputIntoBuilder(IOutputIntoMutation mutation, OutputIntoClause target)
+    internal OutputIntoBuilder(IOutputIntoMutation mutation, OutputIntoClause target, bool standaloneOnly = false)
     {
         _mutation = mutation;
         _target = target;
+        _standaloneOnly = standaloneOnly;
     }
 
     /// <summary>Executes the statement and returns the number of rows written into the target.</summary>
@@ -63,6 +65,19 @@ public sealed class OutputIntoBuilder
     }
 
     private MutationCommand BuildCommand() => _mutation.BuildOutputIntoCommand(_target);
+
+    internal IDataContext DataContext => _mutation.DataContext;
+
+    internal bool TargetsTableVariable => _target.IsTableVariable;
+
+    internal MutationCommand BuildExistingTableBatchCommand()
+    {
+        if (_standaloneOnly)
+            throw new NotSupportedException("Standalone MERGE OUTPUT INTO cannot be registered as a batch mutation.");
+
+        _mutation.ValidateFilters();
+        return BuildCommand();
+    }
 
     private IMutationExecutor RequireExecutor()
     {
