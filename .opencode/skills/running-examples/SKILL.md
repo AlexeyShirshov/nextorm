@@ -24,8 +24,8 @@ env var) skips the container, the volume and the dataset download entirely.
 
 ## Environment
 
-Same Podman-on-Windows machine as the integration tests; always set `DOCKER_HOST` (see the
-`running-integration-tests` skill for socket discovery/troubleshooting):
+When the examples provision their own containers, set `DOCKER_HOST` to the Podman-on-Windows
+socket (see the Podman section of the `running-integration-tests` skill for troubleshooting):
 
 ```
 unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
@@ -116,8 +116,8 @@ it before running to compare, and update it after every run (results, per-query 
   `nextorm.examples` processes, then run detached with `setsid`.
 - **Concurrent work in the same tree** can break the build or `git clean` untracked files; retry the
   build until `0 Error` and keep any temporary probe files in `/tmp`, not the repo.
-- Without `DOCKER_HOST` the examples fail to provision a container (unlike the integration tests, they
-  do not silently fall back to SQLite).
+- Container provisioning for the examples requires `DOCKER_HOST`. To use an existing database
+  instead, pass its connection string.
 - **A WSL restart clears `/tmp` and drops the `/mnt/wsl/podman-sockets/...` mount**, so a run then dies
   with `DockerUnavailableException` (worse: the log file it was writing may be gone). Recreate the mount
   with `"/mnt/c/Program Files/RedHat/Podman/podman.exe" machine start` (idempotent), wait for

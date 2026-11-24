@@ -1,34 +1,33 @@
 ---
 name: running-integration-tests
-description: Run nextorm's xUnit v3 live database integration tests through the capped runner. Use for bounded provider selection, Podman/Testcontainers troubleshooting, and native test ID reconciliation; the current runner does not support manually provisioned wslc endpoints.
+description: Run Nextorm's live integration tests against existing wslc databases or in-process SQLite. Use for provider selection, connection troubleshooting, and native xUnit ID reconciliation.
 ---
 
 # Run nextorm integration tests
 
 ## Choose the runtime
 
-- **`wslc` manual endpoints are currently unsupported by the capped runner.** See the wslc section before provisioning anything. SQLite runs in-process.
-- **Podman/Testcontainers: only when explicitly requested.** Don't switch automatically, start Podman to diagnose a `wslc` failure, or stop a shared engine without authorization.
+- **`wslc` is the local route for server providers.** The integration-test databases are already running in `wslc` containers. Connect to their existing test endpoints; the test run does not own these containers. SQLite runs in-process and needs no container.
+- **Podman/Testcontainers: only when explicitly requested.** Keep any `wslc` connection failure visible; don't switch runtimes automatically.
 - **CI is unchanged.** Use bounded affected provider groups for local regression checks. Don't use `--full`, a bare full-suite invocation, or overlapping test hosts or database containers in this workflow. A separately declared integration/release gate remains complete and unchanged; run it only through its owning acceptance process when the existing scope requires it.
 
 ## Run serially
 
 1. **Build the affected test project once.** Freeze the test assembly and xUnit discovery configuration, then reuse that build for each group (`--no-build` when using `dotnet run`). Exclude `Category=Diagnostic` unless the declared scope includes those tests.
 2. **Select affected paths.** Inspect fixture and test usage, including per-row theory parameters, before choosing a class or method filter. Verify that the discovered roster matches the intended group. Keep mixed-provider and unresolved cases visible; don't run them until their engine lifecycle is known. Don't edit tests merely to make a filter work.
-3. **Acquire the exclusive lock before provisioning.** Verify no other integration test host or conflicting workload is active. The `wslc` launcher holds `/tmp/opencode/integration/run.lock` through teardown. The Podman wrapper acquires that same non-reentrant lock itself, even when you choose a different log directory. Never remove a live lock file.
-4. **Apply the project caps and timeout.** Use [`tools/integration/run-integration-capped.py`](../../../tools/integration/run-integration-capped.py) for the standard cgroup settings (`MemoryHigh=3G`, `MemoryMax=4G`, `MemorySwapMax=1G`). Apply the same settings and a bounded timeout to a manual or exact-ID launcher. Don't use an uncapped fallback, gate on Windows free RAM, add ad hoc database caps, or require swap to be disabled. Preserve provider-fixture resource settings.
-5. **Record the first run.** Keep candidate and test assembly identities, selected scope, command, exit code, log, and known ownership/cleanup state together. For Podman, the wrapper writes `integration-receipt.jsonl` in its log directory or at `--receipt`. For `wslc`, capture these fields in the same launcher that runs the test. A Git identity alone doesn't prove which prebuilt binary ran. Don't record connection values or credentials.
-6. **Reconcile results and cleanup.** Capture native xUnit events and exit status. Remove only a disposable endpoint owned by this run, then verify removal by ID, including on failure. For an external or shared endpoint, record cleanup as external or unverified; don't claim teardown. The receipt does not claim fixture cleanup it did not verify. Keep failures in evidence; retry only affected cases after a targeted probe confirms a material correction.
+3. **Serialize runs.** Hold `/tmp/opencode/integration/run.lock` throughout a direct test run. Check for competing integration test hosts before starting. The Podman wrapper takes the same lock itself; don't hold the lock when invoking it.
+4. **Bound the run.** Apply a timeout to the selected group. Local integration testing does not require a `systemd` scope or specific cgroup settings.
+5. **Record the run.** Keep candidate and test assembly identities, selected scope, command, exit code, log, and endpoint ownership together. A Git identity alone doesn't prove which prebuilt binary ran. Keep connection values and credentials out of the record.
+6. **Reconcile results and cleanup.** Capture native xUnit events and exit status. Leave existing `wslc` containers running and record their ownership as external. Remove only disposable infrastructure owned by this run, and claim cleanup only if verified. Keep failures in evidence; retry only affected cases after a targeted probe confirms a material correction.
 
-## Use `wslc` with private provider endpoints
+## Connect to existing `wslc` databases
 
-Use the manual provider or exact-ID launcher for `wslc`. The Podman wrapper pins `DOCKER_HOST` and acquires a non-reentrant lock; don't call it while holding that lock or use it to run a manual `wslc` endpoint.
+Run the selected tests directly against the existing endpoints. The Podman wrapper is not the launcher for this route.
 
-1. Read the selected fixture under `tests/nextorm.integration.tests/Providers/` for the required image, initialization and settings. Use an available `wslc` image; pull a missing image only if authorized.
-2. Publish on a verified private loopback port (`127.0.0.1:HOST_PORT:CONTAINER_PORT`). If `inspect` omits port bindings, check the actual listener and verify its ownership with a unique response from an owned probe. Don't rely on an unverified bridge address.
-3. Verify readiness, server version and fixture settings with an authenticated query from the test worker's namespace, using its provider driver and connection options.
-4. Pass the appropriate `NEXTORM_POSTGRES_CONNECTION`, `NEXTORM_SQLSERVER_CONNECTION`, `NEXTORM_MYSQL_CONNECTION`, `NEXTORM_MARIADB_CONNECTION`, or `NEXTORM_CLICKHOUSE_CONNECTION` only to the test process. Run its selected IDs from the frozen build. `DOCKER_HOST` isn't required for a verified external endpoint. If a fixture ignores the override or starts another engine, leave the affected case outstanding; don't fall back automatically.
-5. Stop and remove only the owned endpoint and verify teardown before releasing the lock. Report external resource cleanup as unverified unless its owner supplies evidence.
+1. Read the selected fixture under `tests/nextorm.integration.tests/Providers/` for the required server version, initialization and connection options. Confirm that the selected tests accept an external endpoint.
+2. Use the existing private test endpoint. Verify its identity, readiness, server version and fixture settings with an authenticated query from the test worker's namespace. An unavailable or mismatched endpoint blocks that provider group.
+3. Pass the matching connection string to the test process via `NEXTORM_POSTGRES_CONNECTION`, `NEXTORM_SQLSERVER_CONNECTION`, `NEXTORM_MYSQL_CONNECTION`, `NEXTORM_MARIADB_CONNECTION`, or `NEXTORM_CLICKHOUSE_CONNECTION`. `DOCKER_HOST` isn't required for this route. If a test ignores the override or would use another runtime, leave that case outstanding.
+4. Run the selected IDs from the frozen build. A class selector is sufficient when discovery confirms that it selects exactly the affected group.
 
 ## Reconcile the selected group by native xUnit ID
 
@@ -51,4 +50,4 @@ Use the Windows `podman.exe` and the rootless socket at `unix:///mnt/wsl/podman-
 python3 tools/integration/run-integration-capped.py --providers postgres --timeout 600
 ```
 
-Choose one provider per invocation and verify the selected scope and standard caps. The wrapper configures `DOCKER_HOST` for this route. The `DatabaseContainers` fixture stops reused containers but leaves them available for the next run; verify they have stopped before proceeding. If SQL Server reports `container state improper`, inspect the owned container and obtain authorization before removing anything not owned by the run. Exit 137 after an intentional stop doesn't by itself prove OOM.
+Choose one provider per invocation and verify the selected scope. If `systemd` is unavailable, pass `--no-caps` and keep the timeout. The wrapper configures `DOCKER_HOST` and writes `integration-receipt.jsonl`. The `DatabaseContainers` fixture stops reused containers but leaves them available for the next run; verify they have stopped before proceeding. If SQL Server reports `container state improper`, inspect the owned container and obtain authorization before removing anything not owned by the run. Exit 137 after an intentional stop doesn't by itself prove OOM.

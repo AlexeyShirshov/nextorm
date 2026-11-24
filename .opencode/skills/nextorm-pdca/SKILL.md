@@ -156,7 +156,7 @@ discipline» (`pdca-dotnet` §Delegation), с nextorm-конкретикой:
 - **CRLF всегда.** После правки любого файла: `perl -pi -e 's/\r?\n/\r\n/g' <file>`;
   LF-only/смешанные окончания не оставлять.
 - **CPM:** версии только в `Directory.Packages.props`.
-- Без `DOCKER_HOST` контейнерные integration providers падают fail-closed, а не считаются skipped.
+- Локально серверные тесты используют уже запущенные БД в `wslc` через настройки подключения из workflow; SQLite работает в процессе теста. Пропуск или недоступность требуемого провайдера не подтверждают приёмку.
 - **Никаких `git push`/коммитов** без явной просьбы (AGENTS.md).
 - **BDN-артефакты трекаются:** после применимого бенчмарка вернуть `benchmarks/BenchmarkDotNet.Artifacts`.
 - Performance acceptance остаётся обязательной только для затрагивающих её query/cache/executor/

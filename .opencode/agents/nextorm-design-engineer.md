@@ -121,9 +121,8 @@ constrain the **fix**, not just the review:
 - **Tests before claiming done:** `dotnet test tests/<project> -c Debug`
   (e.g. `tests/nextorm.core.tests`, `tests/nextorm.sqlite.tests`); real databases
   and the full integration suite follow
-  `.opencode/skills/running-integration-tests/SKILL.md`. The suite is fail-closed:
-  without `DOCKER_HOST` the container providers fail, they do not skip — a run that
-  reports those tests as skipped is not a pass.
+  `.opencode/skills/running-integration-tests/SKILL.md`. An unavailable or skipped
+  required provider is not a pass.
 - **Never `git push`; never create commits** unless explicitly asked (AGENTS.md).
 - **Benchmark artifacts are tracked:** if you run BDN, restore
   `benchmarks/BenchmarkDotNet.Artifacts` afterwards (`git checkout --`).

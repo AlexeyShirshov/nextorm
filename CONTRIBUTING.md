@@ -68,7 +68,7 @@ For changes that execute SQL, run the live extension suite:
 dotnet test tests/nextorm.extensions.integration.tests -c Debug --filter-not-trait Category=Diagnostic
 ```
 
-These integration tests use real databases through container-backed test infrastructure. Configure Docker or Podman (including `DOCKER_HOST` where needed) before running them. A run that skips a provider does **not** establish correctness for that provider.
+These integration tests use real databases. For local runs, see the [integration test workflow](.opencode/skills/running-integration-tests/SKILL.md) for using existing `wslc` test databases and selecting affected providers. A run that skips a provider does **not** establish correctness for that provider.
 
 To run the whole solution, keep the integration test modules sequential because they share database containers and test data:
 
