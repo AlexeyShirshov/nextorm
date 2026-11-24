@@ -47,6 +47,22 @@ var orders = ctx.From("recent_orders")
 
 `ToTempTableSql(name)` рендерит SQL без открытия соединения; `ToTempTable` / `ToTempTableAsync` выполняют его.
 
+## Создание пустой временной таблицы с первичным ключом
+
+Используйте `CreateEmptyTempTable` на `DataContext` SQLite или PostgreSQL, если нужна таблица с явной схемой вместо копирования строк запроса:
+
+```csharp
+await db.CreateEmptyTempTable("keys_pick", [("id", typeof(string))], "id",
+    withoutRowId: true); // Только SQLite; передайте false для PostgreSQL.
+
+await db.CreateBulkInsertBuilder<KeyRow>(options => options
+        .Table("keys_pick").TargetKind(BulkInsertTargetKind.LocalTemporary))
+    .Values(keys)
+    .BulkInsertAsync(cancellationToken);
+```
+
+Сопоставьте `KeyRow` с объявленными именами колонок и выполняйте обе операции в одном контексте и сеансе БД. Имя первичного ключа должно точно совпадать с именем объявленной колонки. Поддерживаются CLR-типы `string`, `int`, `long`, `double`, `decimal`, `bool`, `byte[]`, включая nullable-варианты типов значений. PostgreSQL отклоняет `withoutRowId: true`. Новый API не меняет материализацию запросов через `ToTempTableAsync` и `BatchBuilder.CreateTempTable`.
+
 ## Привязка к сессии и пулеры соединений
 
 Временная таблица живёт в **сессии** базы (на backend-сервере), а не просто на клиентском соединении. Если PostgreSQL стоит за пулером, который переназначает backend на каждую транзакцию, — PgBouncer в режиме `transaction`, или любой балансировщик уровня соединения — две команды на одном клиентском соединении могут уйти на разные backend'ы, и читающая падает с `relation "recent_orders" does not exist`.
@@ -238,3 +254,22 @@ ctx.From<IOrder>().Select(x => new { x.Id, x.Total })
 - [Выполнение утверждений одним батчем](25-sql-batch.md)
 - [Транзакции](23-transactions.md)
 - [Обзор провайдеров](../connecting-providers/overview.md)
+
+## Временные представления в SQLite и PostgreSQL
+
+Используйте `await query.ToTempView("message")`, чтобы создать именованное временное представление из запроса NextORM. В отличие от `ToTempTableAsync`, эта операция не копирует строки. Если временная таблица ключей уже существует, соедините её с постоянной таблицей, явно указав схемы, и выберите столбцы представления:
+
+```csharp
+// SQLite: "main" — схема постоянной таблицы, "temp" — таблицы ключей.
+// PostgreSQL: в этом примере используйте "public" и "pg_temp" соответственно.
+var source = db.From<Message>().WithSchema("main");
+var keys = db.From<SelectedKey>().WithSchema("temp");
+var selected = db.From(source.ToCommand())
+    .Join(keys.ToCommand(), (message, key) => message.SessionId == key.Id)
+    .Select(row => row.Item1);
+await selected.ToTempView("message");
+```
+
+Читайте представление в той же открытой сессии. Если `Message` сопоставлен с `message` без явной схемы, `db.From<Message>()` обращается к представлению в этой сессии (в PostgreSQL — при стандартном `search_path`). Запрос с явно указанной схемой, такой как `source`, по-прежнему читает постоянную таблицу, а другим сессиям представление недоступно. После изменения ключей повторное чтение возвращает новый набор строк без пересоздания представления.
+
+Передавайте имя представления без схемы и кавычек: NextORM экранирует его как один идентификатор. Запрос не должен содержать связанных параметров, в том числе захваченных значений, которые преобразуются в параметры. NextORM выдаёт ошибку до отправки DDL. Вместо передачи ключей параметрами используйте соединение с временной таблицей ключей.

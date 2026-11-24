@@ -1817,6 +1817,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             TruncateCommand truncate => BuildTruncateSql(truncate),
             SqliteFts5Command sqliteFts5 => BuildSqliteFts5Sql(sqliteFts5),
             CreateTableAsCommand createTableAs => BuildCreateTableAsSql(createTableAs),
+            CreateTempViewCommand createTempView => BuildCreateTempViewSql(createTempView),
             DropTableCommand dropTable => BuildDropTableSql(dropTable),
             _ => throw new NotSupportedException($"Unsupported mutation command {command.GetType().Name}."),
         };
@@ -2014,6 +2015,40 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         var (withSql, sourceSql, sourceParameters, maxRecursionStmt) = _planner.RenderSource(command.Source, selectInto);
         var (sql, parameters) = SqlMutationBuilder.MakeCreateTableAsSelect(Dialect, quoteIdentifiers, withSql, sourceSql, sourceParameters, command, keywordCase);
         return (AppendMaxRecursionStmt(sql, maxRecursionStmt), parameters);
+    }
+
+    /// <summary>Creates an empty session-local table with explicit CLR column types and a primary key.</summary>
+    /// <param name="name">The unqualified table name.</param>
+    /// <param name="columns">The column names and supported CLR storage types.</param>
+    /// <param name="primaryKey">The exact name of the primary-key column.</param>
+    /// <param name="withoutRowId">Whether to omit SQLite's hidden rowid; unsupported on PostgreSQL.</param>
+    public Task CreateEmptyTempTable(string name, IReadOnlyList<(string Name, Type Type)> columns, string primaryKey, bool withoutRowId)
+        => CreateEmptyTempTable(name, columns, primaryKey, withoutRowId, CancellationToken.None);
+
+    /// <summary>Creates an empty session-local table with explicit CLR column types and a primary key.</summary>
+    /// <param name="name">The unqualified table name.</param>
+    /// <param name="columns">The column names and supported CLR storage types.</param>
+    /// <param name="primaryKey">The exact name of the primary-key column.</param>
+    /// <param name="withoutRowId">Whether to omit SQLite's hidden rowid; unsupported on PostgreSQL.</param>
+    /// <param name="cancellationToken">Cancels the database operation.</param>
+    public Task CreateEmptyTempTable(string name, IReadOnlyList<(string Name, Type Type)> columns, string primaryKey,
+        bool withoutRowId, CancellationToken cancellationToken)
+        => _executor.ExecuteNonQueryAsync(EmptyTempTableSql.Build(Dialect, KeywordCase, name, columns, primaryKey, withoutRowId), [], cancellationToken);
+
+    private (string Sql, List<Parameter> Parameters) BuildCreateTempViewSql(CreateTempViewCommand command)
+    {
+        if (Dialect is not SqlDialectBase { SupportsTempViews: true })
+            throw new NotSupportedException("Temporary views are supported only by SQLite and PostgreSQL.");
+
+        const string parameterError = "A temporary view cannot use bound SQL parameters in its defining query.";
+        var (withSql, body, parameters, _) = _planner.RenderSource(command.Source, null, null, runtimeParameterError: parameterError);
+        if (parameters.Count != 0)
+            throw new NotSupportedException(parameterError);
+
+        var keywordCase = command.Source.KeywordCase ?? KeywordCase;
+        var create = SqlKeywords.Of(keywordCase, "create temp view ");
+        var asClause = SqlKeywords.Of(keywordCase, " as ");
+        return ($"{create}{Dialect.QuoteIdentifier(command.Name)}{asClause}{withSql}{body}", parameters);
     }
 
     private (string Sql, List<Parameter> Parameters) BuildDropTableSql(DropTableCommand command)

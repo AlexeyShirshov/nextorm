@@ -5088,7 +5088,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
     /// </summary>
     public JoinedEntityBuilder<TEntity, TJoinEntity> OuterApply<TJoinEntity>(Expression<Func<TEntity, EntityBuilder<TJoinEntity>>> source, Action<JoinOptions>? options = null)
         => JoinApply<TJoinEntity>(source, JoinType.OuterApply, options);
-    private JoinedEntityBuilder<TEntity, TJoinEntity> JoinApply<TJoinEntity>(LambdaExpression source, JoinType joinType, Action<JoinOptions>? options = null)
+    internal JoinedEntityBuilder<TEntity, TJoinEntity> JoinApply<TJoinEntity>(LambdaExpression source, JoinType joinType, Action<JoinOptions>? options = null)
     {
         // A projection-shaped receiver (a join chain) must use the flat transition declared on the
         // joined builder: this member would nest the projection as the result's Item1. At exactly eight
@@ -5099,8 +5099,9 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
                 : JoinProjectionApplyMessage);
 
         if (RequireContext is InMemoryDataContext)
-            throw new NotSupportedException(
-                "A correlated CROSS/OUTER APPLY source is not supported by the in-memory provider; run the query against a SQL provider.");
+            throw new NotSupportedException(joinType == JoinType.Cross
+                ? "A correlated CROSS JOIN over a table-valued function is supported only by SQLite."
+                : "A correlated CROSS/OUTER APPLY source is not supported by the in-memory provider; run the query against a SQL provider.");
 
         if (_windows is not null)
             throw new InvalidOperationException("Named windows must be declared after joins; Window cannot be combined with a later Join.");
@@ -5120,6 +5121,9 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
         }
         else
         {
+            if (joinType == JoinType.Cross)
+                throw new NotSupportedException("A correlated CROSS JOIN requires a direct runtime table-valued-function factory call.");
+
             // A composed table-valued-function body (a factory call followed by builder operations) is
             // refused by name here, before the conversion below can only report a type-coercion failure.
             SourceExpressionLowerer.EnsureSupportedCorrelatedApplyBody(source, "a single-entity receiver");
@@ -5177,8 +5181,9 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
             throw new NotSupportedException(JoinedSourceCapMessage);
 
         if (RequireContext is InMemoryDataContext)
-            throw new NotSupportedException(
-                "A correlated CROSS/OUTER APPLY source is not supported by the in-memory provider; run the query against a SQL provider.");
+            throw new NotSupportedException(joinType == JoinType.Cross
+                ? "A correlated CROSS JOIN over a table-valued function is supported only by SQLite."
+                : "A correlated CROSS/OUTER APPLY source is not supported by the in-memory provider; run the query against a SQL provider.");
 
         if (_windows is not null)
             throw new InvalidOperationException("Named windows must be declared after joins; Window cannot be combined with a later Join.");
@@ -5203,6 +5208,9 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
         }
         else
         {
+            if (joinType == JoinType.Cross)
+                throw new NotSupportedException("A correlated CROSS JOIN requires a direct runtime table-valued-function factory call.");
+
             // A composed table-valued-function body (a factory call followed by builder operations) is
             // refused by name here, before the conversion below can only report a type-coercion failure.
             SourceExpressionLowerer.EnsureSupportedCorrelatedApplyBody(source, "a joined receiver");

@@ -2549,10 +2549,21 @@ public partial class QueryCommand
                             else
                             {
                                 var applyCommand = applyVisitor.BuildQueryCommand(applySource.Body);
-                                if (!applyCommand.IsPrepared)
-                                    applyCommand.PrepareCommand(noHash, cancellationToken);
-                                TransferNestedFilterSkips(applyCommand, cmd);
-                                join.SetFrom(new FromExpression(applyCommand));
+                                if (join.JoinType == JoinType.Cross)
+                                {
+                                    // The factory-only builder has no query operations. Keep its function
+                                    // in this frame so the normal CROSS JOIN renderer emits it directly.
+                                    if (applyCommand.From is not { TableFunction: not null } functionFrom)
+                                        throw new InvalidOperationException("The correlated CROSS JOIN source was not lowered to a table-valued function.");
+                                    join.SetFrom(functionFrom);
+                                }
+                                else
+                                {
+                                    if (!applyCommand.IsPrepared)
+                                        applyCommand.PrepareCommand(noHash, cancellationToken);
+                                    TransferNestedFilterSkips(applyCommand, cmd);
+                                    join.SetFrom(new FromExpression(applyCommand));
+                                }
                             }
                         }
                         finally

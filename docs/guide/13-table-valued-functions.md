@@ -701,6 +701,22 @@ Server enables `string_split`/`openjson`, ClickHouse enables `numbers`/`numbers_
 custom factory is never gated, but a caller-declared `ResultSchema` is gated by
 [`SupportsResultSchema(TableFunctionSchema)`](xref:NextORM.Core.ISqlDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema)).
 
+### Correlated `CrossJoin` in SQLite
+
+Pass a one-parameter factory lambda to reference columns from the left row. After a join,
+use `Item1`, `Item2`, and so on to address the preceding sources:
+
+```csharp
+var refs = db.From<InstructionState>()
+    .CrossJoin(i => SqlFunctions.Sqlite.json_each(SqlFunctions.Sqlite.json_array(
+        SqlFunctions.Sqlite.json(i.InitialValues), SqlFunctions.Sqlite.json(i.CurrentValues))))
+    .CrossJoin(p => SqlFunctions.Sqlite.json_each(p.Item2.Value))
+    .Select(p => new { p.Item1.SessionId, p.Item3.Value });
+```
+
+SQLite renders the function directly after `CROSS JOIN`, without `LATERAL`. Call the TVF factory
+directly in the lambda and put any filters after the join. Use `() => ...` for an uncorrelated source.
+
 ## Provider differences
 
 | Provider | Behaviour |

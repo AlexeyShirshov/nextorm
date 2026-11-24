@@ -39,6 +39,22 @@ var orders = ctx.From("recent_orders")
 
 `ToTempTableSql(name)` renders the statement without opening a connection; `ToTempTable` / `ToTempTableAsync` execute it.
 
+## Creating an empty temporary table with a primary key
+
+Use `CreateEmptyTempTable` on a SQLite or PostgreSQL `DataContext` when you need a table with an explicit schema instead of rows copied from a query:
+
+```csharp
+await db.CreateEmptyTempTable("keys_pick", [("id", typeof(string))], "id",
+    withoutRowId: true); // SQLite only; pass false on PostgreSQL.
+
+await db.CreateBulkInsertBuilder<KeyRow>(options => options
+        .Table("keys_pick").TargetKind(BulkInsertTargetKind.LocalTemporary))
+    .Values(keys)
+    .BulkInsertAsync(cancellationToken);
+```
+
+Map `KeyRow` to the declared column names and use the same context and database session for both operations. The primary key must name one declared column exactly. Supported CLR types are `string`, `int`, `long`, `double`, `decimal`, `bool`, and `byte[]`, including nullable forms of the value types. PostgreSQL rejects `withoutRowId: true`. This API does not change `ToTempTableAsync` or `BatchBuilder.CreateTempTable`, which materialize queries.
+
 ## Session affinity and connection poolers
 
 A temporary table lives in the database **session** (the server backend), not merely on the client connection. When PostgreSQL sits behind a connection pooler that reassigns the backend per transaction — PgBouncer in `transaction` mode, or any connection-level load balancer — two commands on the same client connection can be routed to different backends, and the one that reads the table fails with `relation "recent_orders" does not exist`.
@@ -223,3 +239,22 @@ On a provider without the requested form, and on the in-memory context, the term
 - [Executing statements in one batch](25-sql-batch.md)
 - [Transactions](23-transactions.md)
 - [Provider overview](../connecting-providers/overview.md)
+
+## Temporary views on SQLite and PostgreSQL
+
+Use `await query.ToTempView("message")` to define a named, session-local view from a NextORM query. Unlike `ToTempTableAsync`, this operation does not copy rows. For example, if a temporary key table already exists, join it to a schema-qualified permanent table and project the columns that the view should expose:
+
+```csharp
+// SQLite: use "main" for the permanent table and "temp" for the key table.
+// PostgreSQL: use "public" and "pg_temp" for these example schemas.
+var source = db.From<Message>().WithSchema("main");
+var keys = db.From<SelectedKey>().WithSchema("temp");
+var selected = db.From(source.ToCommand())
+    .Join(keys.ToCommand(), (message, key) => message.SessionId == key.Id)
+    .Select(row => row.Item1);
+await selected.ToTempView("message");
+```
+
+Keep the same database session open while reading the view. If `Message` maps to `message` without an explicit schema, `db.From<Message>()` resolves to the view on that session (with PostgreSQL's standard `search_path`). An explicitly qualified query such as `source` still reads the permanent table, and other sessions cannot see the view. Changing the key rows changes subsequent reads without recreating the view.
+
+Pass a raw, unqualified view name: NextORM quotes it as one identifier. The defining query must not contain bound SQL parameters, including captured values rendered as parameters; NextORM rejects them before sending DDL. Use a join to the temporary key table instead of passing the keys as parameters.
