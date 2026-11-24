@@ -224,6 +224,14 @@ internal static class SqlSourceRenderer
         if (join.JoinType is JoinType.CrossApply or JoinType.OuterApply)
             return MakeApplyJoin(in ctx, join, globalLock);
 
+        if (join.JoinType == JoinType.Cross && join.ApplySource is not null)
+        {
+            if (ctx.Dialect.SqliteFunctions is null)
+                throw new NotSupportedException("A correlated CROSS JOIN over a table-valued function is supported only by SQLite.");
+
+            RegisterApplyLeftSlots(in ctx, join);
+        }
+
         var sqlBuilder = ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
 
         try

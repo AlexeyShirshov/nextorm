@@ -23,6 +23,124 @@ namespace NextORM.Core;
 public static class TvfJoinSourceExtensions
 {
 
+    /// <summary>Adds a SQLite <c>CROSS JOIN</c> with a direct table-valued-function call that can read the left row.</summary>
+    /// <typeparam name="TEntity">A type in the left row.</typeparam>
+    /// <typeparam name="TJoinEntity">The mapped function row type.</typeparam>
+    /// <param name="builder">The query to join.</param>
+    /// <param name="source">A lambda calling the table-valued-function factory directly.</param>
+    /// <returns>The flat projection with the joined function row appended.</returns>
+    public static JoinedEntityBuilder<TEntity, TJoinEntity> CrossJoin<TEntity, TJoinEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, EntityBuilder<TJoinEntity>>> source)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(source);
+        return builder.JoinApply<TJoinEntity>(source, JoinType.Cross);
+    }
+
+    /// <summary>Adds a SQLite <c>CROSS JOIN</c> with a direct table-valued-function call that can read the left row.</summary>
+    /// <typeparam name="T1">A type in the left row.</typeparam>
+    /// <typeparam name="T2">A type in the left row.</typeparam>
+    /// <typeparam name="T3">The mapped function row type.</typeparam>
+    /// <param name="builder">The query to join.</param>
+    /// <param name="source">A lambda calling the table-valued-function factory directly.</param>
+    /// <returns>The flat projection with the joined function row appended.</returns>
+    public static JoinedEntityBuilder<T1, T2, T3> CrossJoin<T1, T2, T3>(this JoinedEntityBuilder<T1, T2> builder, Expression<Func<Projection<T1, T2>, EntityBuilder<T3>>> source)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(source);
+        return builder.ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3>, Projection<T1, T2, T3>, T3>(
+            source, JoinType.Cross, null, static (context, _) => new JoinedEntityBuilder<T1, T2, T3>(context));
+    }
+
+    /// <summary>Adds a SQLite <c>CROSS JOIN</c> with a direct table-valued-function call that can read the left row.</summary>
+    /// <typeparam name="T1">A type in the left row.</typeparam>
+    /// <typeparam name="T2">A type in the left row.</typeparam>
+    /// <typeparam name="T3">A type in the left row.</typeparam>
+    /// <typeparam name="T4">The mapped function row type.</typeparam>
+    /// <param name="builder">The query to join.</param>
+    /// <param name="source">A lambda calling the table-valued-function factory directly.</param>
+    /// <returns>The flat projection with the joined function row appended.</returns>
+    public static JoinedEntityBuilder<T1, T2, T3, T4> CrossJoin<T1, T2, T3, T4>(this JoinedEntityBuilder<T1, T2, T3> builder, Expression<Func<Projection<T1, T2, T3>, EntityBuilder<T4>>> source)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(source);
+        return builder.ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4>, Projection<T1, T2, T3, T4>, T4>(
+            source, JoinType.Cross, null, static (context, _) => new JoinedEntityBuilder<T1, T2, T3, T4>(context));
+    }
+
+    /// <summary>Adds a SQLite <c>CROSS JOIN</c> with a direct table-valued-function call that can read the left row.</summary>
+    /// <typeparam name="T1">A type in the left row.</typeparam>
+    /// <typeparam name="T2">A type in the left row.</typeparam>
+    /// <typeparam name="T3">A type in the left row.</typeparam>
+    /// <typeparam name="T4">A type in the left row.</typeparam>
+    /// <typeparam name="T5">The mapped function row type.</typeparam>
+    /// <param name="builder">The query to join.</param>
+    /// <param name="source">A lambda calling the table-valued-function factory directly.</param>
+    /// <returns>The flat projection with the joined function row appended.</returns>
+    public static JoinedEntityBuilder<T1, T2, T3, T4, T5> CrossJoin<T1, T2, T3, T4, T5>(this JoinedEntityBuilder<T1, T2, T3, T4> builder, Expression<Func<Projection<T1, T2, T3, T4>, EntityBuilder<T5>>> source)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(source);
+        return builder.ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5>, Projection<T1, T2, T3, T4, T5>, T5>(
+            source, JoinType.Cross, null, static (context, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5>(context));
+    }
+
+    /// <summary>Adds a SQLite <c>CROSS JOIN</c> with a direct table-valued-function call that can read the left row.</summary>
+    /// <typeparam name="T1">A type in the left row.</typeparam>
+    /// <typeparam name="T2">A type in the left row.</typeparam>
+    /// <typeparam name="T3">A type in the left row.</typeparam>
+    /// <typeparam name="T4">A type in the left row.</typeparam>
+    /// <typeparam name="T5">A type in the left row.</typeparam>
+    /// <typeparam name="T6">The mapped function row type.</typeparam>
+    /// <param name="builder">The query to join.</param>
+    /// <param name="source">A lambda calling the table-valued-function factory directly.</param>
+    /// <returns>The flat projection with the joined function row appended.</returns>
+    public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> CrossJoin<T1, T2, T3, T4, T5, T6>(this JoinedEntityBuilder<T1, T2, T3, T4, T5> builder, Expression<Func<Projection<T1, T2, T3, T4, T5>, EntityBuilder<T6>>> source)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(source);
+        return builder.ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>, Projection<T1, T2, T3, T4, T5, T6>, T6>(
+            source, JoinType.Cross, null, static (context, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>(context));
+    }
+
+    /// <summary>Adds a SQLite <c>CROSS JOIN</c> with a direct table-valued-function call that can read the left row.</summary>
+    /// <typeparam name="T1">A type in the left row.</typeparam>
+    /// <typeparam name="T2">A type in the left row.</typeparam>
+    /// <typeparam name="T3">A type in the left row.</typeparam>
+    /// <typeparam name="T4">A type in the left row.</typeparam>
+    /// <typeparam name="T5">A type in the left row.</typeparam>
+    /// <typeparam name="T6">A type in the left row.</typeparam>
+    /// <typeparam name="T7">The mapped function row type.</typeparam>
+    /// <param name="builder">The query to join.</param>
+    /// <param name="source">A lambda calling the table-valued-function factory directly.</param>
+    /// <returns>The flat projection with the joined function row appended.</returns>
+    public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> CrossJoin<T1, T2, T3, T4, T5, T6, T7>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> builder, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, EntityBuilder<T7>>> source)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(source);
+        return builder.ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>, Projection<T1, T2, T3, T4, T5, T6, T7>, T7>(
+            source, JoinType.Cross, null, static (context, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>(context));
+    }
+
+    /// <summary>Adds a SQLite <c>CROSS JOIN</c> with a direct table-valued-function call that can read the left row.</summary>
+    /// <typeparam name="T1">A type in the left row.</typeparam>
+    /// <typeparam name="T2">A type in the left row.</typeparam>
+    /// <typeparam name="T3">A type in the left row.</typeparam>
+    /// <typeparam name="T4">A type in the left row.</typeparam>
+    /// <typeparam name="T5">A type in the left row.</typeparam>
+    /// <typeparam name="T6">A type in the left row.</typeparam>
+    /// <typeparam name="T7">A type in the left row.</typeparam>
+    /// <typeparam name="T8">The mapped function row type.</typeparam>
+    /// <param name="builder">The query to join.</param>
+    /// <param name="source">A lambda calling the table-valued-function factory directly.</param>
+    /// <returns>The flat projection with the joined function row appended.</returns>
+    public static JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> CrossJoin<T1, T2, T3, T4, T5, T6, T7, T8>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> builder, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, EntityBuilder<T8>>> source)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(source);
+        return builder.ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>, Projection<T1, T2, T3, T4, T5, T6, T7, T8>, T8>(
+            source, JoinType.Cross, null, static (context, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>(context));
+    }
+
     // EntityBuilder<TEntity>: the single-entity receiver.
 
     /// <summary>Adds a <c>INNER JOIN</c> over a runtime table-valued-function source supplied as an expression.</summary>

@@ -706,6 +706,23 @@ SQLite включает `json_each`/`json_tree`/`fts5`, а любой друго
 `ResultSchema` гейтится
 [`SupportsResultSchema(TableFunctionSchema)`](xref:NextORM.Core.ISqlDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema)).
 
+### Коррелированный `CrossJoin` в SQLite
+
+Передайте лямбду с одним параметром, чтобы обратиться к столбцам левой строки. После соединения
+используйте `Item1`, `Item2` и т. д. для обращения к предыдущим источникам:
+
+```csharp
+var refs = db.From<InstructionState>()
+    .CrossJoin(i => SqlFunctions.Sqlite.json_each(SqlFunctions.Sqlite.json_array(
+        SqlFunctions.Sqlite.json(i.InitialValues), SqlFunctions.Sqlite.json(i.CurrentValues))))
+    .CrossJoin(p => SqlFunctions.Sqlite.json_each(p.Item2.Value))
+    .Select(p => new { p.Item1.SessionId, p.Item3.Value });
+```
+
+SQLite выводит вызов функции сразу после `CROSS JOIN`, без `LATERAL`. Вызовите фабрику
+табличной функции непосредственно в лямбде, а фильтры задайте после соединения. Для
+некоррелированного источника используйте `() => ...`.
+
 ## Различия между провайдерами
 
 | Провайдер | Поведение |
