@@ -181,7 +181,7 @@ internal static class CteHoister
             && (from.SubQuery is not null
                 || from.ColumnShape is not null
                 || from.Pivot is not null
-                || from.TempTable is not null
+                || from.TemporarySource is not null
                 || from.LinqSource is not null);
 
     private sealed class Walker

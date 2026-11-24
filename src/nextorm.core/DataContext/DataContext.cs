@@ -851,10 +851,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
         // The check is allocation-free and false for every ordinary query, so the common preparation
         // path only pays a few branches.
-        if (queryCommand.HasTemporaryTableSource())
+        if (queryCommand.HasTemporarySource())
         {
-            var tempTables = new List<ITempTableSource>();
-            queryCommand.CollectTempTableSources(tempTables);
+            var tempTables = new List<ITemporarySource>();
+            queryCommand.CollectTemporarySources(tempTables);
             return GetPreparedTemporaryTableCommand(queryCommand, tempTables, createEnumerator, cache, cancellationToken);
         }
 
@@ -950,7 +950,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // ResetPreparation clears the prepared pieces, including the source. A temporary-table source
         // cannot be reconstructed from the entity metadata (there is none for TableAlias), so preserve
         // it explicitly; otherwise the temp marker is lost and the batch guard never fires.
-        var tempSource = queryCommand.From?.TempTable is not null ? queryCommand.From : null;
+        var tempSource = queryCommand.From?.TemporarySource is not null ? queryCommand.From : null;
 
         // A native document is only attempted for a dialect that renders FOR JSON and when the caller did
         // not already attach a document clause (which the managed stream does not consume). Eligibility is
@@ -1006,7 +1006,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     // parameters may differ between executions; the read command is therefore never cached.
     private IPreparedQueryCommand<TResult> GetPreparedTemporaryTableCommand<TResult>(
         QueryCommand<TResult> queryCommand,
-        List<ITempTableSource> tempTables,
+        List<ITemporarySource> tempTables,
         bool createEnumerator,
         PreparedCommandCache cache,
         CancellationToken cancellationToken)
@@ -1047,7 +1047,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // result seam: the source is a batch (DROP + CREATE TEMPORARY TABLE AS + read) that must share one
         // session, not a lone SELECT. Only the multi-column reader (ToDataReader) opts into this guard by
         // naming its terminal; the ToStream/ToTextReader callers keep their previous behavior.
-        if (terminalName is not null && queryCommand.HasTemporaryTableSource())
+        if (terminalName is not null && queryCommand.HasTemporarySource())
             throw new NotSupportedException(LazyTemporaryTableMessage(terminalName));
 
         // Execution-local, not connection-cached: this plan is prepared with storeInCache: false, so no
@@ -1131,7 +1131,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // read here would strip the batch and execute a lone SELECT against a table that was never
         // created, surfacing the provider's raw "table does not exist" error. Fail closed instead, before
         // the calling terminal writes its header.
-        if (queryCommand.HasTemporaryTableSource())
+        if (queryCommand.HasTemporarySource())
             throw new NotSupportedException(LazyTemporaryTableMessage(terminalName));
 
         // Execution-local, not connection-cached: the plan is prepared with storeInCache: false, so no
@@ -1159,35 +1159,54 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     internal bool IsDisposed => _disposed;
 
-    BatchPlan IBatchExecutor.RenderTemporaryTableBatch(QueryCommand command)
+    BatchPlan IBatchExecutor.RenderTemporarySourceBatch(QueryCommand command)
     {
-        var tempTables = new List<ITempTableSource>();
-        command.CollectTempTableSources(tempTables);
+        var tempTables = new List<ITemporarySource>();
+        command.CollectTemporarySources(tempTables);
 
         if (tempTables.Count == 0)
-            throw new InvalidOperationException("The command does not read a temporary table; the batch form is only available for a source created with AsTempTable.");
+            throw new InvalidOperationException("The command does not read a temporary table or view; the batch form requires AsTempTable or AsTempView.");
 
         return BuildTemporaryTableBatch(command, tempTables);
     }
 
-    private BatchPlan BuildTemporaryTableBatch(QueryCommand command, List<ITempTableSource> tempTables)
+    private BatchPlan BuildTemporaryTableBatch(QueryCommand command, List<ITemporarySource> sources)
     {
         // The command's resolved quoting/case flags are set during preparation; ToBatchSql may be the
         // first to look at them, so prepare the command before rendering the DROP.
         if (!command.IsPrepared)
             command.PrepareCommand(false, CancellationToken.None);
 
-        var steps = new BatchStepSpec[tempTables.Count * 2 + 1];
-        var index = 0;
-        foreach (var tempTable in tempTables)
+        return RenderBatch([BatchStepSpec.ForResult(command)], sources);
+    }
+
+    private IReadOnlyList<BatchStepSpec> PrependTemporarySourceSteps(
+        IReadOnlyList<BatchStepSpec> steps, int firstResult, List<ITemporarySource> sources)
+    {
+        var expanded = new List<BatchStepSpec>(steps.Count + sources.Count * 2);
+        for (var i = 0; i < firstResult; i++)
+            expanded.Add(steps[i]);
+
+        var read = steps[firstResult].Query!;
+        foreach (var source in sources)
         {
-            steps[index++] = BatchStepSpec.ForRaw(RenderDropTemporaryTable(command, tempTable.Name));
-            steps[index++] = BatchStepSpec.ForCreateTableAs(
-                new CreateTableAsCommand(tempTable.Source.ResultType ?? typeof(object), tempTable.Name, temporary: true, tempTable.Source, tempTable.Options));
+            var resultType = source.Source.ResultType ?? typeof(object);
+            if (source is ITempTableSource table)
+            {
+                expanded.Add(BatchStepSpec.ForRaw(RenderDropTemporaryTable(read, table.Name)));
+                expanded.Add(BatchStepSpec.ForCreateTableAs(
+                    new CreateTableAsCommand(resultType, table.Name, temporary: true, table.Source, table.Options)));
+            }
+            else
+            {
+                expanded.Add(BatchStepSpec.ForMutation(new CreateTempViewCommand(resultType, source.Name, source.Source)));
+            }
         }
 
-        steps[index] = BatchStepSpec.ForResult(command);
-        return ((IBatchExecutor)this).RenderBatch(steps);
+        for (var i = firstResult; i < steps.Count; i++)
+            expanded.Add(steps[i]);
+
+        return expanded;
     }
 
     private string RenderDropTemporaryTable(QueryCommand command, string name)
@@ -2035,13 +2054,15 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         bool withoutRowId, CancellationToken cancellationToken)
         => _executor.ExecuteNonQueryAsync(EmptyTempTableSql.Build(Dialect, KeywordCase, name, columns, primaryKey, withoutRowId), [], cancellationToken);
 
-    private (string Sql, List<Parameter> Parameters) BuildCreateTempViewSql(CreateTempViewCommand command)
+    private (string Sql, List<Parameter> Parameters) BuildCreateTempViewSql(
+        CreateTempViewCommand command, bool forceProjectionAliases = false)
     {
         if (Dialect is not SqlDialectBase { SupportsTempViews: true })
             throw new NotSupportedException("Temporary views are supported only by SQLite and PostgreSQL.");
 
         const string parameterError = "A temporary view cannot use bound SQL parameters in its defining query.";
-        var (withSql, body, parameters, _) = _planner.RenderSource(command.Source, null, null, runtimeParameterError: parameterError);
+        var (withSql, body, parameters, _) = _planner.RenderSource(command.Source, null, null,
+            runtimeParameterError: parameterError, forceProjectionAliases: forceProjectionAliases);
         if (parameters.Count != 0)
             throw new NotSupportedException(parameterError);
 
@@ -2049,6 +2070,15 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         var create = SqlKeywords.Of(keywordCase, "create temp view ");
         var asClause = SqlKeywords.Of(keywordCase, " as ");
         return ($"{create}{Dialect.QuoteIdentifier(command.Name)}{asClause}{withSql}{body}", parameters);
+    }
+
+    private string BuildDropTempViewSql(CreateTempViewCommand command)
+    {
+        // Qualify the DROP so it cannot target a persistent object on the connection's search path.
+        var schema = ((SqlDialectBase)Dialect).TemporaryViewSchema!;
+        var keywordCase = command.Source.KeywordCase ?? KeywordCase;
+        return SqlKeywords.Of(keywordCase, "drop view if exists ")
+            + Dialect.QuoteIdentifier(schema) + "." + Dialect.QuoteIdentifier(command.Name);
     }
 
     private (string Sql, List<Parameter> Parameters) BuildDropTableSql(DropTableCommand command)
@@ -2078,6 +2108,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     // placeholder names never collide, which is what makes both the ;-joined SQLite fallback and the
     // per-command DbBatch parameters correct. The execution primitive lives on QueryExecutor.
     BatchPlan IBatchExecutor.RenderBatch(IReadOnlyList<BatchStepSpec> steps)
+        => RenderBatch(steps, null);
+
+    private BatchPlan RenderBatch(IReadOnlyList<BatchStepSpec> steps, List<ITemporarySource>? sources)
     {
         if (!Dialect.SupportsBatch)
             throw new NotSupportedException(
@@ -2105,13 +2138,28 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         if (firstResult < 0)
             throw new InvalidOperationException("A batch must end with at least one result-bearing query.");
 
+        var resultCount = steps.Count - firstResult;
+        if (sources is null)
+        {
+            for (var i = firstResult; i < steps.Count; i++)
+            {
+                var query = steps[i].Query!;
+                if (query.HasTemporarySource())
+                    query.CollectTemporarySources(sources ??= new List<ITemporarySource>());
+            }
+        }
+
+        if (sources is { Count: > 0 })
+            steps = PrependTemporarySourceSteps(steps, firstResult, sources);
+
         var kind = BatchKind(steps);
         var route = ResolveBatchRoute(steps, kind);
 
         var provider = new DefaultParameterProvider();
         var accumulator = new List<Parameter>();
         var statements = new List<BatchStatement>(steps.Count);
-        var results = new List<BatchResultSpec>(steps.Count - firstResult);
+        var results = new List<BatchResultSpec>(resultCount);
+        List<BatchStatement>? cleanup = null;
 
         for (var i = 0; i < steps.Count; i++)
         {
@@ -2152,6 +2200,14 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
                 sql = SqlKeywords.Of(KeywordCase, "declare ") + capture.VariableName
                     + SqlKeywords.Of(KeywordCase, " table (") + capture.ColumnDefinitions + "); " + sql;
             }
+            else if (step.Mutation is CreateTempViewCommand view)
+            {
+                // Preserve aliases from TableAlias accessors as well as ordinary mapped projections.
+                (sql, _) = BuildCreateTempViewSql(view, forceProjectionAliases: true);
+                var drop = new BatchStatement(BuildDropTempViewSql(view), Array.Empty<Parameter>());
+                statements.Add(drop);
+                (cleanup ??= new List<BatchStatement>()).Add(drop);
+            }
             else if (step.Mutation is { } mutation)
             {
                 (sql, var mutationParameters) = BuildBatchMutationSql(mutation, provider, BatchParameterPrefix(i));
@@ -2166,6 +2222,13 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
             var count = accumulator.Count - start;
             statements.Add(new BatchStatement(sql, SliceStatementParameters(accumulator, start, count)));
+        }
+
+        // Drop dependants first, after all reads and before releasing the session to a pooler.
+        if (cleanup is not null)
+        {
+            for (var i = cleanup.Count - 1; i >= 0; i--)
+                statements.Add(cleanup[i]);
         }
 
         return new BatchPlan(statements, results, route, Dialect.BatchUsesJoinedCommand, MultilineBatchSql);
@@ -2251,6 +2314,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
         if (step.CreateTableAs is { } createTableAs)
             return (createTableAs.MappingVariant, createTableAs.RouteSources ?? CommandRouteSources.Collect(createTableAs.Source));
+
+        if (step.Mutation is CreateTempViewCommand view)
+            return (view.MappingVariant, view.RouteSources ?? CommandRouteSources.Collect(view.Source));
 
         if (step.Mutation is { } mutation)
             return (mutation.MappingVariant, [mutation.EntityType]);
@@ -2555,10 +2621,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // A lazy temporary-table source is a batch (DROP + CREATE TEMPORARY TABLE + read) that must run on
         // one session; the boxed path mirrors the typed one: prepare the read plan uncached and attach the
         // pending batch, so behaviour is identical for a runtime-typed command.
-        if (queryCommand.HasTemporaryTableSource())
+        if (queryCommand.HasTemporarySource())
         {
-            var tempTables = new List<ITempTableSource>();
-            queryCommand.CollectTempTableSources(tempTables);
+            var tempTables = new List<ITemporarySource>();
+            queryCommand.CollectTemporarySources(tempTables);
             var prepared = (DbPreparedQueryCommand<object?>)_planner.GetObjectPreparedQueryCommand(queryCommand, createEnumerator, storeInCache: false, cache, cancellationToken);
             prepared.PendingBatch = BuildTemporaryTableBatch(queryCommand, tempTables);
             return prepared;

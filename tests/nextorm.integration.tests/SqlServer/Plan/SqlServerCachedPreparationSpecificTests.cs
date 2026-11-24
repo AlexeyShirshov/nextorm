@@ -46,7 +46,7 @@ public sealed class SqlServerCachedPreparationSpecificTests : ProviderTestSuite
         var source = ctx.From<ISimpleEntity>().Where(x => x.Id > 0).Select(x => new { x.Id }).AsTempTable();
         var read = ctx.From(source).Select(t => new { Id = t.GetInt32("id") });
 
-        read.HasTemporaryTableSource().Should().BeTrue("the FROM carries the lazy TempTable marker");
+        read.HasTemporarySource().Should().BeTrue("the FROM carries the lazy TempTable marker");
         QueryCommand.CaptureRawShape(read).Should().BeNull(
             "a lazy temporary-table source has no provable raw identity, so the recipe can never engage");
 

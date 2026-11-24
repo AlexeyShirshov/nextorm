@@ -17,7 +17,7 @@ namespace NextORM.Postgres;
 /// </remarks>
 public class PostgresDialect : SqlDialectBase
 {
-    internal override bool SupportsTempViews => true;
+    internal override string TemporaryViewSchema => "pg_temp";
 
     internal override bool SupportsEmptyTempTables => true;
 

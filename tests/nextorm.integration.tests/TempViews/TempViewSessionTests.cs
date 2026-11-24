@@ -13,6 +13,7 @@ public sealed class TempViewSessionTests
 {
     private const string TableName = "nextorm_413_messages";
     private const string KeysName = "nextorm_413_keys";
+    private const string DeferredSourceName = "nextorm_418_source";
 
     [Fact]
     public async Task Sqlite_ViewShadowsPermanentTableAndTracksCurrentKeys()
@@ -41,6 +42,57 @@ public sealed class TempViewSessionTests
         await using var second = new NpgsqlConnection(connection);
         using var db = new PostgresDataContext(first, new DataContextBuilder());
         await ExerciseView(db, first, second, "public", "pg_temp", true);
+    }
+
+    [Fact]
+    public async Task Sqlite_AsTempViewCreatesReadsAndDropsInOneBatch()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        using var db = new SqliteDataContext(connection, new DataContextBuilder());
+        await ExerciseDeferredView(db, connection, "temp", "sqlite_temp_master", "type = 'view' and name");
+    }
+
+    [Fact]
+    public async Task Postgres_AsTempViewCreatesReadsAndDropsInOneBatch()
+    {
+        var endpoint = Environment.GetEnvironmentVariable(PostgresContainer.ConnectionStringVariable);
+        Assert.SkipWhen(string.IsNullOrWhiteSpace(endpoint), "PostgreSQL external test endpoint is not configured.");
+        await using var connection = new NpgsqlConnection(endpoint);
+        using var db = new PostgresDataContext(connection, new DataContextBuilder());
+        await ExerciseDeferredView(db, connection, "pg_temp", "pg_class",
+            "relnamespace = pg_my_temp_schema() and relkind = 'v' and relname");
+    }
+
+    private static async Task ExerciseDeferredView(DataContext db, DbConnection connection,
+        string tempSchema, string catalog, string viewNameSelector)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var definition = db.From<DeferredSource>().WithSchema(tempSchema)
+            .Select(t => new { projected_id = t.Id });
+        var inner = definition.AsTempView();
+        var outer = db.From(inner).Select(t => new { id = t.GetInt32("projected_id") }).AsTempView();
+        var read = db.From(outer).OrderBy(t => t.GetInt32("id")).Select(t => t.GetInt32("id"));
+
+        // The definition reads a table that is created by the explicit batch, not before it runs.
+        var batch = db.CreateBatchBuilder()
+            .Raw($"create temp table {DeferredSourceName} (id int not null)")
+            .Raw($"insert into {tempSchema}.{DeferredSourceName} (id) values (2), (1)")
+            .Query(read);
+        (await batch.ToListAsync(cancellationToken)).Should().Equal(1, 2);
+
+        await using var objects = connection.CreateCommand();
+        objects.CommandText = $"select count(*) from {catalog} where {viewNameSelector} in ('{inner.Name}', '{outer.Name}')";
+        Convert.ToInt64(await objects.ExecuteScalarAsync(cancellationToken)).Should().Be(0);
+
+        await Execute(connection, null, $"insert into {tempSchema}.{DeferredSourceName} (id) values (3)", cancellationToken);
+        read.ToList().Should().Equal(1, 2, 3);
+        await foreach (var first in read.ToAsyncEnumerable(cancellationToken))
+        {
+            first.Should().Be(1);
+            break;
+        }
+        Convert.ToInt64(await objects.ExecuteScalarAsync(cancellationToken)).Should().Be(0);
+        await Execute(connection, null, $"drop table {tempSchema}.{DeferredSourceName}", cancellationToken);
     }
 
     private static async Task ExerciseView(DataContext db, DbConnection first, DbConnection second,
@@ -101,7 +153,7 @@ public sealed class TempViewSessionTests
         }
     }
 
-    private static async Task Execute(DbConnection connection, DbTransaction transaction, string sql,
+    private static async Task Execute(DbConnection connection, DbTransaction? transaction, string sql,
         CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
@@ -119,6 +171,13 @@ public sealed class TempViewSessionTests
 
     [SqlTable(KeysName)]
     private sealed class SelectedKey
+    {
+        [Column("id")]
+        public int Id { get; set; }
+    }
+
+    [SqlTable(DeferredSourceName)]
+    private sealed class DeferredSource
     {
         [Column("id")]
         public int Id { get; set; }

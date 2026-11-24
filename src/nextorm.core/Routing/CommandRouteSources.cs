@@ -104,7 +104,7 @@ internal static class CommandRouteSources
 
             // A lazy temporary table is materialised by the same command (one batch: drop, create, read),
             // so the entities its source query reads belong to the statement's topology too.
-            if (from.TempTable is { } tempTable)
+            if (from.TemporarySource is { } tempTable)
                 Walk(tempTable.Source);
         }
     }

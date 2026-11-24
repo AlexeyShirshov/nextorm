@@ -258,3 +258,18 @@ await selected.ToTempView("message");
 Keep the same database session open while reading the view. If `Message` maps to `message` without an explicit schema, `db.From<Message>()` resolves to the view on that session (with PostgreSQL's standard `search_path`). An explicitly qualified query such as `source` still reads the permanent table, and other sessions cannot see the view. Changing the key rows changes subsequent reads without recreating the view.
 
 Pass a raw, unqualified view name: NextORM quotes it as one identifier. The defining query must not contain bound SQL parameters, including captured values rendered as parameters; NextORM rejects them before sending DDL. Use a join to the temporary key table instead of passing the keys as parameters.
+
+### Create and read a view in one batch
+
+Use `AsTempView()` when you want to read the view in the same batch that creates it. You don't supply a name. Pass the source to `From` on the same context and select its projected columns by name:
+
+```csharp
+var view = db.From<Message>()
+    .Select(row => new { id = row.Id })
+    .AsTempView();
+
+var rows = db.From(view).Select(t => t.GetInt32("id"));
+var ids = rows.ToList();
+```
+
+`AsTempView()` and `From` don't execute SQL. Executing the read creates, reads, and drops the view in one batch on the same server session. The view doesn't copy rows, and its definition can't use bound parameters. Use `rows.ToBatchSql()` to inspect the batch without executing it. If the definition depends on a temporary table, create that table in the same batch or ensure it already exists on that server session.

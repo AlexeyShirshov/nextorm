@@ -3498,7 +3498,7 @@ public partial class QueryCommand
 
             // A lazy temporary table renders its source query as CREATE TEMPORARY TABLE ... AS SELECT in
             // the same batch as this read, so an unkeyed tuple value list there is rendered too.
-            if (from.TempTable is { } tempTable && ScanUnkeyedTupleInValues(tempTable.Source, visited))
+            if (from.TemporarySource is { } tempTable && ScanUnkeyedTupleInValues(tempTable.Source, visited))
                 return true;
 
             // An in-memory LINQ source holds the outer/inner commands and the operator lambdas. The SQL
@@ -3750,7 +3750,7 @@ public partial class QueryCommand
             if (from.ColumnShape is { } columnShape && ScanUnkeyedScalarInValues(columnShape, visited, false))
                 return true;
 
-            if (from.TempTable is { } tempTable && ScanUnkeyedScalarInValues(tempTable.Source, visited, false))
+            if (from.TemporarySource is { } tempTable && ScanUnkeyedScalarInValues(tempTable.Source, visited, false))
                 return true;
 
             if (from.LinqSource is { } linqSource)
@@ -4483,7 +4483,7 @@ public partial class QueryCommand
         // contributes its shape to the outer descriptor.
         if (depth == 0 && IsTrivialEntitySelect(cmd)) return null;
         if (cmd._referencedQueries is { Count: > 0 } || cmd._outerRefs is { Count: > 0 }) return null;
-        if (cmd.HasDataModifyingCte || cmd.HasTemporaryTableSource()) return null;
+        if (cmd.HasDataModifyingCte || cmd.HasTemporarySource()) return null;
 
         // A query component carries structural state that only it can describe before preparation. A
         // component that implements IQueryComponentShape names that state (slot, contribution, scalar
@@ -4666,7 +4666,7 @@ public partial class QueryCommand
     private static bool IsPlainTableSource(FromExpression? from)
         => from is null
             || (from.SubQuery is null && from.ColumnShape is null && from.Pivot is null
-                && from.XmlNodes is null && from.RawSqlSource is null && from.TempTable is null
+                && from.XmlNodes is null && from.RawSqlSource is null && from.TemporarySource is null
                 && from.TableFunction is null && from.TableExpressionOverride is null);
 
     /// <summary>
@@ -5082,7 +5082,7 @@ public partial class QueryCommand
         if (cmd._customData is not null) return null;
         if (depth == 0 && IsTrivialEntitySelect(cmd)) return null;
         if (cmd._referencedQueries is { Count: > 0 } || cmd._outerRefs is { Count: > 0 }) return null;
-        if (cmd.HasDataModifyingCte || cmd.HasTemporaryTableSource()) return null;
+        if (cmd.HasDataModifyingCte || cmd.HasTemporarySource()) return null;
         if (!IsPlainTableSource(cmd._from)) return null;
 
         var components = cmd.ComponentsState;

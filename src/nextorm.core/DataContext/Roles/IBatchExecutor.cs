@@ -29,15 +29,14 @@ internal interface IBatchExecutor
     BatchPlan RenderBatch(IReadOnlyList<BatchStepSpec> steps);
 
     /// <summary>
-    /// Renders the batch that materialises every temporary table <paramref name="command"/> reads
-    /// (drop and re-create each), followed by the command itself. Used by the lazy
-    /// <c>AsTempTable</c> read path and by its <c>ToBatchSql</c> inspection form.
+    /// Renders the batch that creates the deferred temporary tables and views read by
+    /// <paramref name="command"/>, executes the read, and drops the generated views.
     /// </summary>
-    /// <param name="command">The command that reads the temporary table(s).</param>
+    /// <param name="command">The command that reads the temporary sources.</param>
     /// <returns>The rendered batch.</returns>
-    /// <exception cref="InvalidOperationException">The command reads no temporary table.</exception>
+    /// <exception cref="InvalidOperationException">The command reads no deferred temporary source.</exception>
     /// <exception cref="NotSupportedException">The dialect has no batch form or cannot express a temporary materialisation.</exception>
-    BatchPlan RenderTemporaryTableBatch(QueryCommand command);
+    BatchPlan RenderTemporarySourceBatch(QueryCommand command);
 
     /// <summary>Builds the row mapper for the plan's result-bearing query.</summary>
     /// <typeparam name="TResult">The projected row type.</typeparam>
@@ -254,9 +253,8 @@ internal readonly struct BatchRoute
 
 /// <summary>
 /// A rendered batch: the statements with their (globally unique) parameters plus the ordered result
-/// specs. Produced by <see cref="IBatchExecutor.RenderBatch"/>. The result-bearing queries are the
-/// trailing statements and only they may return rows; every preceding statement is side-effecting — a
-/// materialisation or a DML mutation — which a reader exposes as a result set without columns.
+/// specs. Produced by <see cref="IBatchExecutor.RenderBatch"/>. Only the result-bearing queries
+/// return rows. Internal cleanup statements can follow the last result-bearing query.
 /// <see cref="ResultQuery"/> and <see cref="ResultSql"/> expose the first result so the single-result
 /// terminal keeps working unchanged.
 /// </summary>

@@ -376,15 +376,14 @@ public static class TempTableExtensions
     }
 
     /// <summary>
-    /// Renders the batch a query reading a lazy temporary table would execute — the table's
-    /// <c>DROP TABLE IF EXISTS</c> and <c>CREATE TEMPORARY TABLE ... AS SELECT</c> followed by the read
-    /// query — without executing it.
+    /// Renders the batch a query reading a deferred temporary table or view would execute,
+    /// without executing it.
     /// </summary>
     /// <typeparam name="TResult">The query's projected row type.</typeparam>
-    /// <param name="query">The query reading a source created with <see cref="AsTempTable{TResult}(QueryCommand{TResult}, CreateTableOptions?)"/>.</param>
+    /// <param name="query">The query reading a source created with <c>AsTempTable()</c> or <c>AsTempView()</c>.</param>
     /// <returns>The rendered batch SQL.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="query"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidOperationException">The query does not read a temporary table.</exception>
+    /// <exception cref="InvalidOperationException">The query does not read a deferred temporary table or view.</exception>
     /// <exception cref="NotSupportedException">The context or provider cannot execute a batch or express a temporary materialisation.</exception>
     public static string ToBatchSql<TResult>(this QueryCommand<TResult> query)
     {
@@ -393,9 +392,9 @@ public static class TempTableExtensions
         var context = ContextOf(query);
         if (context is not IBatchExecutor executor)
             throw new NotSupportedException(
-                $"{context.GetType().Name} cannot materialise a temporary table; use a database-backed context (PostgreSQL, SQLite, MySQL or MariaDB).");
+                $"{context.GetType().Name} cannot execute the batch for a deferred temporary table or view.");
 
-        return executor.RenderTemporaryTableBatch(query).ToSql();
+        return executor.RenderTemporarySourceBatch(query).ToSql();
     }
 
     private static void Execute<TResult>(IDataContext context, QueryCommand<TResult> source, string name, bool temporary, CreateTableOptions? options)

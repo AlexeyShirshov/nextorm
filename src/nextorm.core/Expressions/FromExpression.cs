@@ -70,12 +70,12 @@ public sealed class FromExpression
           Table = table;
           ColumnShape = columnShape;
      }
-     /// <summary>Creates a source from a lazy temporary-table materialisation.</summary>
-     /// <param name="tempTable">The temporary table to materialise and read.</param>
-     internal FromExpression(ITempTableSource tempTable)
-     {
-          TempTable = tempTable;
-          Table = tempTable.Name;
+      /// <summary>Creates a source from a deferred temporary table or view.</summary>
+      /// <param name="temporarySource">The temporary object to create and read.</param>
+      internal FromExpression(ITemporarySource temporarySource)
+      {
+           TemporarySource = temporarySource;
+           Table = temporarySource.Name;
      }
      /// <summary>Creates a source from a table-valued function.</summary>
      /// <param name="tableFunction">The table function call.</param>
@@ -119,13 +119,10 @@ public sealed class FromExpression
      /// <summary>The derived-table subquery, or <c>null</c> when the source is not a subquery.</summary>
      public readonly QueryCommand? SubQuery;
      /// <summary>
-     /// Set when the source is a lazy temporary table (see
-     /// <see cref="TempTableExtensions.AsTempTable{TResult}(QueryCommand{TResult}, CreateTableOptions?)"/>).
-     /// The physical <see cref="Table"/> name is the generated temporary-table name; the marker makes
-     /// the context materialise the table in the same batch as the read. Mutually exclusive with the
-     /// other source kinds.
-     /// </summary>
-     internal readonly ITempTableSource? TempTable;
+      /// Marks a deferred temporary table or view. <see cref="Table"/> holds its generated name.
+      /// The context creates it in the same batch as the read.
+      /// </summary>
+      internal readonly ITemporarySource? TemporarySource;
      /// <summary>The entity type, used when the source is a mapped CLR type rather than a table name.</summary>
      public readonly Type? SourceType;
      /// <summary>
@@ -249,7 +246,7 @@ public sealed class FromExpression
           IsAutoMapped = source.IsAutoMapped;
           SourceIsInterface = source.SourceIsInterface;
           SubQuery = source.SubQuery;
-          TempTable = source.TempTable;
+          TemporarySource = source.TemporarySource;
           SourceType = source.SourceType;
           ColumnShape = source.ColumnShape;
           TableFunction = source.TableFunction;

@@ -9,7 +9,7 @@ public sealed class SqliteDialect : SqlDialectBase
     /// <summary>Gets the shared SQLite dialect instance.</summary>
     public static readonly SqliteDialect Instance = new();
 
-    internal override bool SupportsTempViews => true;
+    internal override string TemporaryViewSchema => "temp";
 
     internal override bool SupportsEmptyTempTables => true;
 

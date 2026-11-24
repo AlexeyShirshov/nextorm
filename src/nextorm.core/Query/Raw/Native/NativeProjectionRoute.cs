@@ -162,7 +162,7 @@ internal static class NativeProjectionRoute
             || command.MappingVariant != MappingVariant.Default
             || command.CustomData is RawSqlOverride
             || command.HasDataModifyingCte
-            || command.HasTemporaryTableSource()
+            || command.HasTemporarySource()
             || IsSharedAnyCommand(context, command))
         {
             return false;
@@ -300,7 +300,7 @@ internal static class NativeProjectionRoute
                 && from.Pivot is null
                 && from.XmlNodes is null
                 && from.RawSqlSource is null
-                && from.TempTable is null
+                && from.TemporarySource is null
                 && from.TableFunction is null
                 && from.TableExpressionOverride is null);
 

@@ -78,6 +78,9 @@ internal readonly record struct SqlBuildContext
     /// </summary>
     internal bool ExactProjectionAliases { get; init; }
 
+    /// <summary>Emit every declared projection name when defining a deferred temporary view.</summary>
+    internal bool ForceProjectionAliases { get; init; }
+
     /// <summary>
     /// When <see langword="true"/> the select list being rendered is a boundary that an enclosing query
     /// addresses by column identifier: a derived subquery/derived table body or a CTAS source projection.

@@ -1167,7 +1167,9 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <summary>Defaults to <c>true</c>; ClickHouse renders its <c>ALTER TABLE ... DELETE</c> mutation through <see cref="MakeDeleteHead"/>.</summary>
     public virtual bool SupportsDelete => true;
 
-    internal virtual bool SupportsTempViews => false;
+    internal bool SupportsTempViews => TemporaryViewSchema is not null;
+
+    internal virtual string? TemporaryViewSchema => null;
 
     internal virtual bool SupportsEmptyTempTables => false;
 

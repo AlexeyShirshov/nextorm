@@ -754,6 +754,7 @@ internal readonly struct SqlBuilder
                         selectBuilder!.Append(column);
 
                         if (needAliasForColumn
+                            || (_ctx.ForceProjectionAliases && item.PropertyName is not null)
                             || (_ctx.RequireDerivedScalarOutputName && item.PropertyName is null && item.OutputName is not null))
                         {
                             // A generated output name (an unaliased computed scalar) is an alias only for

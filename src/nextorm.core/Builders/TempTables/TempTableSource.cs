@@ -35,22 +35,23 @@ public sealed class TempTableSource<TResult> : ITempTableSource
 
     internal QueryCommand<TResult> Source { get; }
 
-    QueryCommand ITempTableSource.Source => Source;
+    QueryCommand ITemporarySource.Source => Source;
 }
 
 /// <summary>
-/// Identifies a lazy temporary-table materialisation carried by a
-/// <see cref="FromExpression"/>. The non-generic view lets the engine collect the sources that a
-/// query reads and render one materialisation step per source.
+/// Identifies a deferred temporary object carried by a <see cref="FromExpression"/>.
 /// </summary>
-internal interface ITempTableSource
+internal interface ITemporarySource
 {
-    /// <summary>The query whose rows fill the table.</summary>
+    /// <summary>The query that defines the temporary object.</summary>
     QueryCommand Source { get; }
 
-    /// <summary>The auto-generated target table name.</summary>
+    /// <summary>The auto-generated target name.</summary>
     string Name { get; }
+}
 
+internal interface ITempTableSource : ITemporarySource
+{
     /// <summary>The materialisation options.</summary>
     CreateTableOptions Options { get; }
 }
