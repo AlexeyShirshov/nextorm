@@ -17,6 +17,8 @@ namespace NextORM.Postgres;
 /// </remarks>
 public class PostgresDialect : SqlDialectBase
 {
+    internal override bool SupportsTempViews => true;
+
     internal override bool SupportsBoundedDelete => true;
 
     internal override bool SupportsWindowNullTreatment => _version is { Major: >= 19 };

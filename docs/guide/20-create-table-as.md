@@ -223,3 +223,22 @@ On a provider without the requested form, and on the in-memory context, the term
 - [Executing statements in one batch](25-sql-batch.md)
 - [Transactions](23-transactions.md)
 - [Provider overview](../connecting-providers/overview.md)
+
+## Temporary views on SQLite and PostgreSQL
+
+Use `await query.ToTempView("message")` to define a named, session-local view from a NextORM query. Unlike `ToTempTableAsync`, this operation does not copy rows. For example, if a temporary key table already exists, join it to a schema-qualified permanent table and project the columns that the view should expose:
+
+```csharp
+// SQLite: use "main" for the permanent table and "temp" for the key table.
+// PostgreSQL: use "public" and "pg_temp" for these example schemas.
+var source = db.From<Message>().WithSchema("main");
+var keys = db.From<SelectedKey>().WithSchema("temp");
+var selected = db.From(source.ToCommand())
+    .Join(keys.ToCommand(), (message, key) => message.SessionId == key.Id)
+    .Select(row => row.Item1);
+await selected.ToTempView("message");
+```
+
+Keep the same database session open while reading the view. If `Message` maps to `message` without an explicit schema, `db.From<Message>()` resolves to the view on that session (with PostgreSQL's standard `search_path`). An explicitly qualified query such as `source` still reads the permanent table, and other sessions cannot see the view. Changing the key rows changes subsequent reads without recreating the view.
+
+Pass a raw, unqualified view name: NextORM quotes it as one identifier. The defining query must not contain bound SQL parameters, including captured values rendered as parameters; NextORM rejects them before sending DDL. Use a join to the temporary key table instead of passing the keys as parameters.

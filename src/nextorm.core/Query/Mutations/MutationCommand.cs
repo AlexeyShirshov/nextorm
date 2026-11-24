@@ -25,6 +25,8 @@ internal enum SqlStatementType
     CreateTableAsSelect,
     /// <summary>A <c>DROP TABLE IF EXISTS</c> statement.</summary>
     DropTable,
+    /// <summary>A <c>CREATE TEMP VIEW ... AS SELECT</c> statement.</summary>
+    CreateTempView,
 }
 
 /// <summary>
