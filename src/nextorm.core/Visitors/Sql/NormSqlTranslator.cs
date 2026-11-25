@@ -23,6 +23,12 @@ internal static class NormSqlTranslator
     /// </summary>
     internal static bool TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
+        if (node.Method.DeclaringType == typeof(PostgresArrayElementExtensions))
+        {
+            ArraySqlTranslator.TranslateElement(visitor, node.Arguments, 1);
+            return true;
+        }
+
         if (node.Method.DeclaringType == typeof(SqlFunctions))
         {
             if (node.Method.Name is nameof(SqlFunctions.VectorDistance) or nameof(SqlFunctions.VectorSearchDistance))

@@ -9,7 +9,7 @@ namespace NextORM.Core;
 /// Exposed through <see cref="SqlFunctions.Postgres"/>; every member is gated by a capability flag and
 /// rejected by providers that do not opt in.
 /// </summary>
-    public sealed class PostgresFunctions : CommonFunctions
+    public sealed partial class PostgresFunctions : CommonFunctions
     {
         /// <summary>
         /// <c>column = any(array)</c>: true when <paramref name="column"/> equals any element of

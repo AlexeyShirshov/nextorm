@@ -99,6 +99,9 @@ internal static class ArraySqlTranslator
 
         switch (node.Method.Name)
         {
+            case nameof(PostgresFunctions.array_element) when node.Method.DeclaringType == typeof(PostgresFunctions):
+                TranslateElement(visitor, args, 0);
+                return true;
             case nameof(PostgresFunctions.cardinality) when args.Count == 1:
                 EmitFunction(visitor, "cardinality", args);
                 return true;
@@ -177,6 +180,43 @@ internal static class ArraySqlTranslator
             default:
                 return false;
         }
+    }
+
+    internal static void TranslateElement(BaseExpressionVisitor visitor, IReadOnlyList<Expression> args, int arrayIndex)
+    {
+        if (!visitor.Dialect.SupportsArrays)
+            throw new NotSupportedException("array_element requires PostgreSQL array subscripting.");
+
+        var array = args[arrayIndex];
+        var arrayType = array.Type;
+        if (arrayType == typeof(byte[]) || RangeTypeFacts.IsRangeArray(array)
+            || (arrayType.GetElementType() is { IsArray: true } element && element != typeof(byte[])))
+            throw new NotSupportedException("array_element requires a PostgreSQL array, not bytea, multirange, or a jagged array.");
+
+        if (visitor.IsParamMode)
+        {
+            SqlOperandTranslator.AppendArrayOrColumn(visitor, array);
+            for (var i = arrayIndex + 1; i < args.Count; i++)
+                visitor.Visit(args[i]);
+            return;
+        }
+
+        var builder = visitor.Builder!;
+        var wrap = array switch
+        {
+            MemberExpression => SqlOperandTranslator.IsCapturedArray(array),
+            MethodCallExpression call when call.Method.DeclaringType == typeof(SqlFunctions)
+                && call.Method.Name == nameof(SqlFunctions.Column) => false,
+            _ => true
+        };
+        if (wrap)
+            builder.Append('(');
+        SqlOperandTranslator.AppendArrayOrColumn(visitor, array);
+        if (wrap)
+            builder.Append(')');
+        for (var i = arrayIndex + 1; i < args.Count; i++)
+            builder.Append('[').Append(visitor.VisitToString(args[i])).Append(']');
+        visitor.NeedAliasForColumn = true;
     }
 
     /// <summary>

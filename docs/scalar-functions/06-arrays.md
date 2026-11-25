@@ -48,6 +48,29 @@ select id
  from complex_entity where id = any(@norm_p0)
 ```
 
+## Read one array element
+
+Use `SqlFunctions.Postgres.array_element` to project one scalar without fetching the array.
+For a mapped `Tensor.Data` column of type `float[,]`, the following query returns a `float?`:
+
+```csharp
+var elements = dataContext.From<Tensor>()
+    .Select(t => SqlFunctions.Postgres.array_element(t.Data, 2, 3))
+    .ToList();
+```
+
+PostgreSQL evaluates `data[2][3]`, returning `6f` for `{{1,2,3},{4,5,6}}`.
+Pass one index per CLR array dimension, from rank 1 through 6. The indexes are PostgreSQL
+coordinates, not zero-based CLR offsets. They can be expressions, including query parameters.
+PostgreSQL returns `NULL` for a null array or element, a missing coordinate, or when the
+number of indexes doesn't match the stored array's dimensions.
+
+The marker supports rectangular PostgreSQL arrays with readable scalar elements. It doesn't
+index a scalar `bytea`, a multirange, or a jagged array. It doesn't change the C# array indexer
+and isn't available on other providers.
+
+## Array function reference
+
 | C# | SQL |
 |---|---|
 | `SqlFunctions.Postgres.cardinality(a)` | `cardinality(a)` |
