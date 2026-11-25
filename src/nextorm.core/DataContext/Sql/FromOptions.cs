@@ -15,6 +15,7 @@ public sealed class FromOptions
     internal IReadOnlyList<string>? IndexHints { get; private set; }
     internal IndexHintKind IndexHintKind { get; private set; }
     internal string? SubQueryHint { get; private set; }
+    internal MappingVariant? Variant { get; private set; }
     /// <summary>
     /// The source-level row lock requested for this physical source (<c>FOR UPDATE OF</c>/
     /// <c>FOR SHARE OF</c> on supporting dialects, or a per-source table hint on SQL Server), or
@@ -22,6 +23,15 @@ public sealed class FromOptions
     /// <see cref="ForShare()"/>; a repeated setter replaces the previous lock.
     /// </summary>
     internal LockClause? SourceLock { get; private set; }
+
+    /// <summary>Selects the mapping variant for this query without changing the context's default.</summary>
+    /// <param name="variant">The mapping variant. <see cref="MappingVariant.Default"/> keeps normal variant resolution.</param>
+    /// <returns>This instance, to allow chaining.</returns>
+    public FromOptions UseVariant(MappingVariant variant)
+    {
+        Variant = variant;
+        return this;
+    }
 
     /// <summary>
     /// Reads only <paramref name="percent"/> percent of the primary table with a <c>TABLESAMPLE</c>

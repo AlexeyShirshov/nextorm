@@ -164,7 +164,7 @@ var placement = context.GetPhysicalTableName<Order>(new MappingVariant("1"));
 ```csharp
 var top = context.FromSql("select Id, Tenant, Total from {qualified} where Total > @min", new { min = 100 })
     .BindEntity<Order>(["Id", "Tenant", "Total"])
-    .WithShardKey(tenant)                    // или .WithVariant(...) для явного бакета
+    .WithShardKey(tenant)                    // или передайте вариант бакета в From
     .Select(order => new { order.Id, order.Total })
     .OrderByDescending(row => row.Total)
     .ToList();
@@ -236,7 +236,7 @@ var orders = context.From<Order>()
 
 ```csharp
 context.From<Order>().WithShardKey(tenant).ToList();
-context.From<Order>().WithVariant(new MappingVariant("512")).ToList();   // номер бакета строкой
+context.From<Order>(new MappingVariant("512")).ToList();   // номер бакета строкой
 ```
 
 `WithShardKey` принимает по значению на свойство ключа, в объявленном порядке; раздел
@@ -254,7 +254,7 @@ context.From<Order>().WithVariant(new MappingVariant("512")).ToList();   // но
 
 ```csharp
 context.From<Order>().WithShardKey(tenant);          // у Order объявлен [ShardKey(nameof(Tenant))]
-// то же самое: context.From<Order>().WithVariant(router.ResolveShard(typeof(Order), [tenant]))
+// то же самое: context.From<Order>(router.ResolveShard(typeof(Order), [tenant]))
 ```
 
 Составной ключ принимает по значению на свойство, в объявленном порядке:
@@ -273,7 +273,7 @@ context.From<Shipment>().WithShardKey(tenant, region);
   Свойство-ключ типа enum, `uint`, `double`, `float` или `char` даёт `ArgumentException` вместо
   хеширования.
 * Возвращается новый builder: тот, у которого вызвали метод, остаётся без варианта. Когда бакет уже
-  известен, `WithVariant(new MappingVariant("512"))` — то же самое.
+  известен, `From<Order>(new MappingVariant("512"))` — то же самое.
 
 ### Спросить бакет у контекста
 
@@ -284,7 +284,7 @@ context.From<Shipment>().WithShardKey(tenant, region);
 var router = context.GetShardRouter();             // бросит исключение, если шардинг не настроен
 
 int bucket = router.GetBucket(order);              // по экземпляру: читает свойства ключа
-MappingVariant variant = router.GetScope(bucket);    // этот бакет как вариант — сразу для WithVariant
+MappingVariant variant = router.GetScope(bucket);    // этот бакет как вариант
 
 var same  = router.ResolveShard(typeof(Order), [order.Tenant]);   // по явным значениям
 var shard = router.GetShard(bucket);                              // "pg-2"
@@ -328,7 +328,7 @@ foreach (var entitiesPerBucket in context.GroupByBucket(orders))
 {
     context.CreateBatchBuilder()
         .Insert(context.CreateInsertBuilder<Order>().Values(entitiesPerBucket.Rows))
-        .Query(context.From<Order>().WithVariant(entitiesPerBucket.Variant).Select(order => order.Id))
+        .Query(context.From<Order>(entitiesPerBucket.Variant).Select(order => order.Id))
         .ToList();                   // все шаги на шарде этого бакета, за одно обращение к базе данных
 }
 ```
@@ -470,6 +470,7 @@ context.PinHost("sharding", "pg-2");
   сохранением таблицы бакета на старом сервере — вне области.
 - Значение, переданное через `params` и существующее только во время выполнения, не извлекается из
   предиката; захватите его в замыкании, вызовите `WithShardKey(...)` или используйте fan-out.
-- Массовая вставка (`BulkInsertBuilder`) в этой версии не учитывает шардирование.
+- Для [массовой вставки](22-bulk-insert.md) передайте `MappingVariant` одного бакета и только
+  строки этого бакета. Массовая вставка не распределяет строки по шардам.
 - `ExecuteRaw`/`ExecuteProcedure` выполняются на соединении контекста и не несут вариант: таблицу
   бакета на его шарде адресуйте через `FromSql` с вариантом или через контекст, уже направленный на шард.

@@ -488,10 +488,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
     /// the join chain can hand the pre-join builder's scope to its joined projection builder.
     /// </summary>
     internal QueryFilterScope FilterScope { get => _filterScope; set => _filterScope = value; }
-    /// <summary>Returns a copy of this builder bound to the supplied runtime mapping variant.</summary>
-    /// <param name="variant">The mapping variant used to resolve metadata for this query.</param>
-    /// <returns>A builder that carries <paramref name="variant"/> into its query command.</returns>
-    public EntityBuilder<TEntity> WithVariant(MappingVariant variant)
+    internal EntityBuilder<TEntity> CopyWithMappingVariant(MappingVariant variant)
     {
         if (_mappingVariant == variant)
             return this;
@@ -516,7 +513,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
         if (!router.IsSharded(typeof(TEntity)))
             throw new InvalidOperationException($"Entity '{typeof(TEntity)}' does not declare a shard key.");
 
-        return WithVariant(router.ResolveShard(typeof(TEntity), shardKeyValues));
+        return CopyWithMappingVariant(router.ResolveShard(typeof(TEntity), shardKeyValues));
     }
     /// <summary>
     /// Starts a client-side fan-out that runs this query once per bucket and returns one result vector
@@ -571,8 +568,8 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
         return copy;
     }
     internal Expression<Func<TEntity, bool>>? Condition { get => _condition; set => _condition = value; }
-    /// <summary>The mapping variant carried by this builder; read-only seam for native-route eligibility.</summary>
-    internal MappingVariant MappingVariant => _mappingVariant;
+    /// <summary>The mapping variant carried by this builder, set by the source factory.</summary>
+    internal MappingVariant MappingVariant { get => _mappingVariant; set => _mappingVariant = value; }
     /// <summary>
     /// Whether this builder is bound to a non-default mapping variant (one shard bucket). A scoped builder
     /// renders different table/schema names and runs on a different connection per value, so it must never
@@ -4923,6 +4920,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
         target.KeywordCase = KeywordCase;
         target.SourceFrom = SourceFrom;
         target.FilterScope = _filterScope;
+        target.MappingVariant = _mappingVariant;
 
         if (query is null)
         {

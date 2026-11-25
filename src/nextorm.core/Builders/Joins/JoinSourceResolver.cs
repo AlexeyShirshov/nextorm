@@ -11,5 +11,10 @@ namespace NextORM.Core;
 internal static class JoinSourceResolver
 {
     internal static FromExpression Resolve<TJoinEntity>(IDataContext dataProvider, EntityBuilder<TJoinEntity> builder)
-        => builder.ResolveSource() ?? dataProvider.GetFrom(typeof(TJoinEntity), null)!;
+    {
+        if (builder.MappingVariant != MappingVariant.Default && dataProvider is not InMemoryDataContext)
+            return new FromExpression(builder.ToCommand());
+
+        return builder.ResolveSource() ?? dataProvider.GetFrom(typeof(TJoinEntity), null)!;
+    }
 }

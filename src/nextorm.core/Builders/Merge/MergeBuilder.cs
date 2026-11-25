@@ -6,9 +6,10 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Fluent builder for a key upsert (a "merge" of a source row set into the target table), started with
-/// <see cref="DataContextExtensions.CreateMergeBuilder{TEntity}"/>. The source is a mapped entity or a batch of
-/// entities; the database decides, per key, whether to update the existing row or insert a new one. The
-/// statement is rendered through the active dialect as <c>INSERT ... ON CONFLICT ... DO UPDATE</c>
+/// <see cref="DataContextExtensions.CreateMergeBuilder{TEntity}(IDataContext, Action{EntityMetadataBuilder{TEntity}}?)"/>.
+/// The source is a mapped entity or a batch of entities; the database decides, per key, whether to
+/// update the existing row or insert a new one. The statement is rendered through the active dialect
+/// as <c>INSERT ... ON CONFLICT ... DO UPDATE</c>
 /// (PostgreSQL, SQLite), <c>INSERT ... ON DUPLICATE KEY UPDATE</c> (MySQL, MariaDB) or <c>MERGE</c>
 /// (SQL Server).
 /// <para>
@@ -43,22 +44,13 @@ public sealed partial class MergeBuilder<TEntity>
     private LambdaExpression? _keyUpdateAssignments;
     private LambdaExpression? _keyInsertAssignments;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
-    private MappingVariant _mappingVariant = MappingVariant.Default;
+    private readonly MappingVariant _mappingVariant;
 
-    internal MergeBuilder(IDataContext dataContext, IEntityMetadata metadata, MappingVariant mappingVariant = default)
+    internal MergeBuilder(IDataContext dataContext, IEntityMetadata metadata, MappingVariant mappingVariant)
     {
         _dataContext = dataContext;
         _metadata = metadata;
         _mappingVariant = mappingVariant;
-    }
-
-    /// <summary>Selects a runtime mapping variant for the merge target and source.</summary>
-    /// <param name="variant">The mapping variant used to resolve table, schema and column names.</param>
-    /// <returns>This builder, for chaining.</returns>
-    public MergeBuilder<TEntity> WithVariant(MappingVariant variant)
-    {
-        _mappingVariant = variant;
-        return this;
     }
 
     /// <summary>
@@ -702,7 +694,7 @@ public sealed partial class MergeBuilder<TEntity>
             return;
 
         throw new InvalidOperationException(
-            $"Entity '{typeof(TEntity)}' is sharded. Call WithVariant(...) with a shard scope before executing the merge.");
+            $"Entity '{typeof(TEntity)}' is sharded. Pass a shard mapping variant to CreateMergeBuilder(...) before executing the merge.");
     }
 
     private MergeCommand BuildCommand(IReadOnlyList<IPropertyMetadata>? returningColumns = null)

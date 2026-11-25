@@ -176,8 +176,8 @@ var written = ctx.CreateBulkInsertBuilder<IOrder>(o => o.Schema("archive"))
   it is a no-op, naming another one is refused by name. MySQL/MariaDB and ClickHouse address another database
   as a qualification, and SQL Server renders it as part of the multipart name. A dialect that cannot express
   another database refuses the request instead of dropping the part.
-- **`ServerName` is not available and is refused**: a bulk insert never reroutes to another server. Use a
-  connection that targets the required server. No rerouting is implemented and none is promised.
+- **`ServerName` is not available.** To target a shard, pass its bucket variant in `MappingVariant`.
+  For an unmapped destination on another server, use a context connected to that server.
 
 ## Local temporary targets
 
@@ -475,13 +475,14 @@ ctx.CreateBulkInsertBuilder<IOrder>(o => o.MaxBatchSize(1_000).IgnoreDuplicates(
 |---|---|---|
 | `Mode` | `Mode(BulkInsertMode)` | execution path: `Auto` (default), `Native`, `Portable` |
 | `TargetKind` | `TargetKind(BulkInsertTargetKind)` | `Regular` (default) or `LocalTemporary` |
+| `MappingVariant` | `UseVariant(variant)` | Select a mapped target and its route on the portable path. |
 | `MaxBatchSize` | `MaxBatchSize(rows)` | rows per statement/batch on the portable path; a chunk size on the native MySQL/MariaDB/ClickHouse paths; `SqlBulkCopy.BatchSize` on SQL Server; a new importer per chunk on PostgreSQL |
 | `MaxParameters` | `MaxParameters(count)` | bound parameters per statement (portable path) |
 | `MaxSqlLength` | `MaxSqlLength(chars)` | approximate SQL length per statement (portable path) |
 | `TableName` / `TableSchema` | `Table(name)` / `Table(schema, name)` | override the mapped destination table, optionally schema-qualified |
 | `SchemaName` | `Schema(schema)` | override only the schema part, keeping the mapped/explicit table |
 | `DatabaseName` | `Database(database)` | the database part where the dialect can address another database |
-| `ServerName` | `Server(server)` | **refused**: a bulk insert never reroutes to another server |
+| `ServerName` | `Server(server)` | **refused**: identifier qualification does not reroute the connection |
 | `KeepIdentity` | `KeepIdentity()` | write explicit identity values on the path that can express them; no effect when the entity has no identity column |
 | `IgnoreDuplicates` | `IgnoreDuplicates()` | skip rows that violate a unique constraint where an ignore form exists |
 | `CheckConstraints` | `CheckConstraints()` | check CHECK/FOREIGN KEY constraints; `false` only where a scoped control exists |
@@ -496,6 +497,10 @@ ctx.CreateBulkInsertBuilder<IOrder>(o => o.MaxBatchSize(1_000).IgnoreDuplicates(
 
 An option that the resolved provider/path cannot honour is refused with a `NotSupportedException` that names
 it, before the source is read — no option is accepted and silently dropped.
+
+For sharded entities, pass one bucket variant per bulk call and supply only rows for that bucket.
+With a non-default variant, `Auto` selects the portable path and `Native` is rejected. Do not combine
+the variant with a destination override, `LocalTemporary`, `CheckConstraints(false)`, or `KeepNulls(false)`.
 
 On the returned builder:
 

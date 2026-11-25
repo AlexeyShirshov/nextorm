@@ -107,18 +107,29 @@ public static class DataContextExtensions
     /// <typeparam name="TEntity">The mapped entity type to insert.</typeparam>
     /// <param name="dataContext">The context to execute against.</param>
     /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
+    /// <param name="variant">The target mapping variant, or <see langword="null"/> for normal variant resolution.</param>
     /// <returns>A builder for the insert.</returns>
-    public static InsertBuilder<TEntity> CreateInsertBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
+    public static InsertBuilder<TEntity> CreateInsertBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null, MappingVariant? variant = null)
     {
         ArgumentNullException.ThrowIfNull(dataContext);
 
-        return new(dataContext, ResolveMetadata(dataContext, configEntity));
+        return new(dataContext, ResolveMetadata(dataContext, configEntity), variant);
     }
+
+    /// <inheritdoc cref="CreateInsertBuilder{TEntity}(IDataContext, Action{EntityMetadataBuilder{TEntity}}?, MappingVariant?)"/>
+    // Preserve the original factory signature for compiled callers.
+    public static InsertBuilder<TEntity> CreateInsertBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity)
+        => dataContext.CreateInsertBuilder(configEntity, variant: null);
+
+    /// <inheritdoc cref="CreateInsertBuilder{TEntity}(IDataContext, Action{EntityMetadataBuilder{TEntity}}?, MappingVariant?)"/>
+    [OverloadResolutionPriority(-1)]
+    public static InsertBuilder<TEntity> CreateInsertBuilder<TEntity>(this IDataContext dataContext, MappingVariant variant)
+        => dataContext.CreateInsertBuilder<TEntity>(configEntity: null, variant: variant);
 
     /// <summary>
     /// Starts a bulk insert over the mapping of <typeparamref name="TEntity"/> and returns its fluent
     /// builder. The type's metadata is resolved lazily and cached per process, exactly like
-    /// <see cref="CreateInsertBuilder{TEntity}"/>; <paramref name="configEntity"/> therefore runs only on the first
+    /// a regular insert; <paramref name="configEntity"/> therefore runs only on the first
     /// call for <typeparamref name="TEntity"/>. The write uses the provider's native bulk API where one
     /// exists and a chunked parameterised <c>INSERT ... VALUES</c> otherwise.
     /// </summary>
@@ -135,7 +146,7 @@ public static class DataContextExtensions
 
     /// <summary>
     /// Starts a bulk insert with explicit <see cref="BulkInsertOptions"/>. The type's metadata is resolved
-    /// lazily and cached per process, exactly like <see cref="CreateInsertBuilder{TEntity}"/>; the write uses the
+    /// lazily and cached per process; the write uses the
     /// provider's native bulk API where one exists and a chunked parameterised <c>INSERT ... VALUES</c>
     /// otherwise. The options shape the statement (batch limits, identity, conflict handling, timeout and
     /// progress).
@@ -157,7 +168,7 @@ public static class DataContextExtensions
 
     /// <summary>
     /// Starts a bulk insert configured with the fluent <see cref="BulkInsertOptionsBuilder"/>. The type's
-    /// metadata is resolved lazily and cached per process, exactly like <see cref="CreateInsertBuilder{TEntity}"/>.
+    /// metadata is resolved lazily and cached per process.
     /// The callback must be an expression lambda that returns the builder (for example
     /// <c>o =&gt; o.MaxBatchSize(1_000)</c>), which keeps it distinct from the
     /// <see cref="EntityMetadataBuilder{TEntity}"/> overload.
@@ -184,48 +195,70 @@ public static class DataContextExtensions
     /// builder. The source row set is supplied with <c>Using</c> and the match key with <c>OnKeys</c>;
     /// the statement is rendered as <c>INSERT ... ON CONFLICT ... DO UPDATE</c>,
     /// <c>INSERT ... ON DUPLICATE KEY UPDATE</c> or <c>MERGE</c> depending on the provider. Like
-    /// <see cref="CreateInsertBuilder{TEntity}"/>, the type's metadata is resolved lazily and cached per process,
+    /// an insert, the type's metadata is resolved lazily and cached per process,
     /// so <paramref name="configEntity"/> runs only on the first call for <typeparamref name="TEntity"/>.
     /// </summary>
     /// <typeparam name="TEntity">The mapped entity type upserted.</typeparam>
     /// <param name="dataContext">The context to execute against.</param>
     /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
+    /// <param name="variant">The target mapping variant for this merge only, or <see langword="null"/> to use the context resolver.</param>
     /// <returns>A builder for the key upsert.</returns>
-    public static MergeBuilder<TEntity> CreateMergeBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
+    public static MergeBuilder<TEntity> CreateMergeBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null, MappingVariant? variant = null)
     {
         ArgumentNullException.ThrowIfNull(dataContext);
 
         var metadata = ResolveMetadata(dataContext, configEntity);
-        var scope = dataContext is DataContext scopedContext
-            ? scopedContext.EntityVariantResolver.Resolve(typeof(TEntity))
-            : MappingVariant.Default;
+        var scope = ResolveMutationVariant<TEntity>(dataContext, variant);
         return new(dataContext, metadata, scope);
     }
+
+    /// <inheritdoc cref="CreateMergeBuilder{TEntity}(IDataContext, Action{EntityMetadataBuilder{TEntity}}?, MappingVariant?)"/>
+    // 1.0.11 compatibility overload: preserve the original factory signature for compiled callers.
+    public static MergeBuilder<TEntity> CreateMergeBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity)
+        => dataContext.CreateMergeBuilder(configEntity, variant: null);
+
+    /// <summary>Starts a merge into the mapping of <typeparamref name="TEntity"/> for the supplied variant.</summary>
+    /// <typeparam name="TEntity">The mapped entity type upserted.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="variant">The target mapping variant for this merge only.</param>
+    /// <returns>A builder for the merge.</returns>
+    [OverloadResolutionPriority(-1)] // Keep CreateMergeBuilder<TEntity>(default) bound to the configuration overload.
+    public static MergeBuilder<TEntity> CreateMergeBuilder<TEntity>(this IDataContext dataContext, MappingVariant variant)
+        => dataContext.CreateMergeBuilder<TEntity>(configEntity: null, variant: variant);
 
     /// <summary>
     /// Starts an <c>UPDATE</c> over the mapping of <typeparamref name="TEntity"/> and returns its fluent
     /// builder. Add the written columns with <c>Set</c> and the row filter with <c>Where</c>; omitting
-    /// <c>Where</c> updates every row. Like <see cref="CreateInsertBuilder{TEntity}"/>, the type's metadata is
+    /// <c>Where</c> updates every row. Like an insert, the type's metadata is
     /// resolved lazily and cached per process, so <paramref name="configEntity"/> runs only on the first
     /// call for <typeparamref name="TEntity"/>.
     /// </summary>
     /// <typeparam name="TEntity">The mapped entity type to update.</typeparam>
     /// <param name="dataContext">The context to execute against.</param>
     /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
+    /// <param name="variant">The target mapping variant, or <see langword="null"/> for normal variant resolution.</param>
     /// <returns>A builder for the update.</returns>
-    public static UpdateBuilder<TEntity> CreateUpdateBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
+    public static UpdateBuilder<TEntity> CreateUpdateBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null, MappingVariant? variant = null)
     {
         ArgumentNullException.ThrowIfNull(dataContext);
 
         var metadata = ResolveMetadata(dataContext, configEntity);
-        var scope = dataContext is DataContext scopedContext
-            ? scopedContext.EntityVariantResolver.Resolve(typeof(TEntity))
-            : MappingVariant.Default;
+        var scope = ResolveMutationVariant<TEntity>(dataContext, variant);
         var targetMetadata = scope != MappingVariant.Default && dataContext is DataContext scopedDataContext
             ? scopedDataContext.EntityMetadataProvider.GetMetadata(typeof(TEntity), scope)
             : metadata;
         return new(dataContext, metadata, scope, targetMetadata);
     }
+
+    /// <inheritdoc cref="CreateUpdateBuilder{TEntity}(IDataContext, Action{EntityMetadataBuilder{TEntity}}?, MappingVariant?)"/>
+    // Preserve the original factory signature for compiled callers.
+    public static UpdateBuilder<TEntity> CreateUpdateBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity)
+        => dataContext.CreateUpdateBuilder(configEntity, variant: null);
+
+    /// <inheritdoc cref="CreateUpdateBuilder{TEntity}(IDataContext, Action{EntityMetadataBuilder{TEntity}}?, MappingVariant?)"/>
+    [OverloadResolutionPriority(-1)]
+    public static UpdateBuilder<TEntity> CreateUpdateBuilder<TEntity>(this IDataContext dataContext, MappingVariant variant)
+        => dataContext.CreateUpdateBuilder<TEntity>(configEntity: null, variant: variant);
 
     /// <summary>
     /// Updates the row identified by the declared key of <paramref name="entity"/> in one command
@@ -438,19 +471,28 @@ public static class DataContextExtensions
     /// <typeparam name="TEntity">The mapped entity type whose rows are deleted.</typeparam>
     /// <param name="dataContext">The context to execute against.</param>
     /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
+    /// <param name="variant">The target mapping variant, or <see langword="null"/> for normal variant resolution.</param>
     /// <returns>A builder for the delete.</returns>
-    public static DeleteBuilder<TEntity> CreateDeleteBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
+    public static DeleteBuilder<TEntity> CreateDeleteBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null, MappingVariant? variant = null)
     {
         ArgumentNullException.ThrowIfNull(dataContext);
         var metadata = ResolveMetadata(dataContext, configEntity);
-        var scope = dataContext is DataContext scopedContext
-            ? scopedContext.EntityVariantResolver.Resolve(typeof(TEntity))
-            : MappingVariant.Default;
+        var scope = ResolveMutationVariant<TEntity>(dataContext, variant);
         var targetMetadata = scope != MappingVariant.Default && dataContext is DataContext scopedDataContext
             ? scopedDataContext.EntityMetadataProvider.GetMetadata(typeof(TEntity), scope)
             : metadata;
         return new(dataContext, metadata, scope, targetMetadata);
     }
+
+    /// <inheritdoc cref="CreateDeleteBuilder{TEntity}(IDataContext, Action{EntityMetadataBuilder{TEntity}}?, MappingVariant?)"/>
+    // Preserve the original factory signature for compiled callers.
+    public static DeleteBuilder<TEntity> CreateDeleteBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity)
+        => dataContext.CreateDeleteBuilder(configEntity, variant: null);
+
+    /// <inheritdoc cref="CreateDeleteBuilder{TEntity}(IDataContext, Action{EntityMetadataBuilder{TEntity}}?, MappingVariant?)"/>
+    [OverloadResolutionPriority(-1)]
+    public static DeleteBuilder<TEntity> CreateDeleteBuilder<TEntity>(this IDataContext dataContext, MappingVariant variant)
+        => dataContext.CreateDeleteBuilder<TEntity>(configEntity: null, variant: variant);
 
     /// <summary>
     /// Deletes the row identified by the declared key of <paramref name="entity"/> in one command
@@ -1080,17 +1122,33 @@ public static class DataContextExtensions
     /// <typeparam name="TEntity">The mapped entity type whose table is truncated.</typeparam>
     /// <param name="dataContext">The context to execute against.</param>
     /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
+    /// <param name="variant">The target mapping variant, or <see langword="null"/> for normal variant resolution.</param>
     /// <returns>A builder for the truncate.</returns>
-    public static TruncateBuilder<TEntity> CreateTruncateBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
+    public static TruncateBuilder<TEntity> CreateTruncateBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null, MappingVariant? variant = null)
     {
         ArgumentNullException.ThrowIfNull(dataContext);
 
         var metadata = ResolveMetadata(dataContext, configEntity);
-        var scope = dataContext is DataContext scopedContext ? scopedContext.EntityVariantResolver.Resolve(typeof(TEntity)) : MappingVariant.Default;
+        var scope = ResolveMutationVariant<TEntity>(dataContext, variant);
         if (scope != MappingVariant.Default && dataContext is DataContext scopedDataContext)
             metadata = scopedDataContext.EntityMetadataProvider.GetMetadata(typeof(TEntity), scope);
         return new(dataContext, metadata, scope);
     }
+
+    /// <inheritdoc cref="CreateTruncateBuilder{TEntity}(IDataContext, Action{EntityMetadataBuilder{TEntity}}?, MappingVariant?)"/>
+    // Preserve the original factory signature for compiled callers.
+    public static TruncateBuilder<TEntity> CreateTruncateBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity)
+        => dataContext.CreateTruncateBuilder(configEntity, variant: null);
+
+    /// <inheritdoc cref="CreateTruncateBuilder{TEntity}(IDataContext, Action{EntityMetadataBuilder{TEntity}}?, MappingVariant?)"/>
+    [OverloadResolutionPriority(-1)]
+    public static TruncateBuilder<TEntity> CreateTruncateBuilder<TEntity>(this IDataContext dataContext, MappingVariant variant)
+        => dataContext.CreateTruncateBuilder<TEntity>(configEntity: null, variant: variant);
+
+    internal static MappingVariant ResolveMutationVariant<TEntity>(IDataContext dataContext, MappingVariant? variant)
+        => variant ?? (dataContext is DataContext scopedContext
+            ? scopedContext.EntityVariantResolver.Resolve(typeof(TEntity))
+            : MappingVariant.Default);
 
     /// <summary>
     /// Starts a SQLite FTS5 maintenance/control command over a raw FTS5 table name. The returned builder
@@ -1130,7 +1188,7 @@ public static class DataContextExtensions
     /// <summary>
     /// Starts a query over the mapping of <typeparamref name="T"/> with per-query source options. The
     /// values set on <paramref name="options"/> (a <c>TABLESAMPLE</c> percentage, a ClickHouse
-    /// <c>SAMPLE</c> ratio, or per-source table/index hints) are copied into the returned builder; the
+    /// <c>SAMPLE</c> ratio, per-source table/index hints, or a mapping variant) are copied into the returned builder; the
     /// options object is not retained.
     /// The type's metadata is resolved exactly like <see cref="From{T}(IDataContext, Action{EntityMetadataBuilder{T}}?)"/>.
     /// </summary>
@@ -1159,6 +1217,7 @@ public static class DataContextExtensions
             IndexHints = fromOptions.IndexHints,
             IndexHintKind = fromOptions.IndexHintKind,
             SourceLockClause = fromOptions.SourceLock,
+            MappingVariant = fromOptions.Variant.GetValueOrDefault(),
         };
     }
 
@@ -1333,6 +1392,7 @@ public static class DataContextExtensions
             IndexHints = fromOptions.IndexHints,
             IndexHintKind = fromOptions.IndexHintKind,
             SourceLockClause = fromOptions.SourceLock,
+            MappingVariant = fromOptions.Variant.GetValueOrDefault(),
         };
     }
 
@@ -1436,7 +1496,7 @@ public static class DataContextExtensions
 
     /// <summary>
     /// Starts a query from an existing <see cref="QueryCommand{TResult}"/> with per-source options. The
-    /// values set on <paramref name="options"/> (currently the derived-table <c>SubQueryHint</c>) are
+    /// values set on <paramref name="options"/> (such as a derived-table hint or a mapping variant) are
     /// copied into the returned builder; the options object is not retained.
     /// </summary>
     /// <typeparam name="TResult">The projected element type.</typeparam>
@@ -1453,7 +1513,13 @@ public static class DataContextExtensions
         var fromOptions = new FromOptions();
         options(fromOptions);
 
-        return new(dataContext, query) { Logger = dataContext.CommandLogger, SubQueryHint = fromOptions.SubQueryHint, SourceLockClause = fromOptions.SourceLock };
+        return new(dataContext, query)
+        {
+            Logger = dataContext.CommandLogger,
+            SubQueryHint = fromOptions.SubQueryHint,
+            SourceLockClause = fromOptions.SourceLock,
+            MappingVariant = fromOptions.Variant.GetValueOrDefault(),
+        };
     }
 
     /// <summary>
@@ -1500,8 +1566,8 @@ public static class DataContextExtensions
 
     /// <summary>
     /// Starts a new query builder that shares the source and definition of an existing builder, with
-    /// per-source options. The values set on <paramref name="options"/> (currently the derived-table
-    /// <c>SubQueryHint</c>) are copied into the returned builder; the options object is not retained.
+    /// per-source options. The values set on <paramref name="options"/> (such as a derived-table hint
+    /// or a mapping variant) are copied into the returned builder; the options object is not retained.
     /// </summary>
     /// <typeparam name="TResult">The projected element type.</typeparam>
     /// <param name="dataContext">The context to execute against.</param>
@@ -1517,7 +1583,13 @@ public static class DataContextExtensions
         var fromOptions = new FromOptions();
         options(fromOptions);
 
-        return new(dataContext, builder) { Logger = dataContext.CommandLogger, SubQueryHint = fromOptions.SubQueryHint, SourceLockClause = fromOptions.SourceLock };
+        return new(dataContext, builder)
+        {
+            Logger = dataContext.CommandLogger,
+            SubQueryHint = fromOptions.SubQueryHint,
+            SourceLockClause = fromOptions.SourceLock,
+            MappingVariant = fromOptions.Variant.GetValueOrDefault(),
+        };
     }
 
     /// <summary>
@@ -1571,6 +1643,8 @@ public static class DataContextExtensions
         var entity = SourceExpressionLowerer.LowerTvfSource(dataContext, source, nameof(source));
         entity.SubQueryHint = fromOptions.SubQueryHint;
         entity.SourceLockClause = fromOptions.SourceLock;
+        if (fromOptions.Variant is { } variant)
+            entity.MappingVariant = variant;
         return entity;
     }
 

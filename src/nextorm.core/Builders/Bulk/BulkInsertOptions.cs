@@ -29,6 +29,12 @@ public sealed record BulkInsertOptions
     public BulkInsertTargetKind TargetKind { get; init; } = BulkInsertTargetKind.Regular;
 
     /// <summary>
+    /// The mapping variant that selects the target table, columns and route. A non-default variant
+    /// uses the portable path and cannot be combined with a destination override or a temporary target.
+    /// </summary>
+    public MappingVariant MappingVariant { get; init; }
+
+    /// <summary>
     /// The maximum rows per statement on the portable path; the native path treats it as a batch hint
     /// (SQL Server <c>SqlBulkCopy.BatchSize</c>) or ignores it (PostgreSQL <c>COPY</c> streams). Defaults
     /// to <see langword="null"/> (one statement, or the provider default).
@@ -271,6 +277,19 @@ public sealed record BulkInsertOptions
 
         if (ServerName is not null && string.IsNullOrWhiteSpace(ServerName))
             throw new ArgumentException("ServerName must not be empty.", nameof(ServerName));
+
+        if (MappingVariant != default
+            && (TargetKind != BulkInsertTargetKind.Regular || TableName is not null
+                || SchemaName is not null || DatabaseName is not null || ServerName is not null))
+        {
+            throw new ArgumentException("A bulk mapping variant requires a regular mapped target without destination overrides.", nameof(MappingVariant));
+        }
+
+        if (MappingVariant != default && (CheckConstraints is false || KeepNulls is false))
+        {
+            throw new NotSupportedException(
+                "A bulk mapping variant cannot be combined with CheckConstraints=false or KeepNulls=false. Those options require checking or changing state on the target session.");
+        }
     }
 
     /// <summary>
@@ -489,6 +508,7 @@ public sealed class BulkInsertOptionsBuilder
 {
     private BulkInsertMode _mode = BulkInsertMode.Auto;
     private BulkInsertTargetKind _targetKind = BulkInsertTargetKind.Regular;
+    private MappingVariant _mappingVariant;
     private int? _maxBatchSize;
     private int? _maxParameters;
     private int? _maxSqlLength;
@@ -511,6 +531,15 @@ public sealed class BulkInsertOptionsBuilder
     private Action<int, CancellationToken>? _progress;
     private int _notifyEvery = 1;
     private CancellationTokenSource? _progressCancellationTokenSource;
+
+    /// <summary>Selects the mapping variant for this bulk insert.</summary>
+    /// <param name="variant">The target mapping variant.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public BulkInsertOptionsBuilder UseVariant(MappingVariant variant)
+    {
+        _mappingVariant = variant;
+        return this;
+    }
 
     /// <summary>Selects the execution path.</summary>
     /// <param name="mode">The requested mode; must be a defined <see cref="BulkInsertMode"/> value.</param>
@@ -786,6 +815,7 @@ public sealed class BulkInsertOptionsBuilder
         {
             Mode = _mode,
             TargetKind = _targetKind,
+            MappingVariant = _mappingVariant,
             MaxBatchSize = _maxBatchSize,
             MaxParameters = _maxParameters,
             MaxSqlLength = _maxSqlLength,

@@ -119,8 +119,8 @@ public sealed class BatchRoutingTests : IDisposable
         using var context = CreateShardedContext();
 
         FluentActions.Invoking(() => context.CreateBatchBuilder()
-                .AddQuery(context.From<ShardRow>().WithVariant(Scope(3)).Select(row => row.Id))
-                .AddQuery(context.From<ShardRow>().WithVariant(Scope(5)).Select(row => row.Id))
+                .AddQuery(context.From<ShardRow>(Scope(3)).Select(row => row.Id))
+                .AddQuery(context.From<ShardRow>(Scope(5)).Select(row => row.Id))
                 .ToSql())
             .Should().Throw<NotSupportedException>()
             .WithMessage("*span the mapping variants '3' and '5'*one scope*");
@@ -154,13 +154,11 @@ public sealed class BatchRoutingTests : IDisposable
 
         // The temporary table is a batch (drop, create as select, read) that runs on one session: the
         // shard the bucket belongs to, where the source rows live.
-        var source = context.From<ShardRow>()
-            .WithVariant(scope)
+        var source = context.From<ShardRow>(scope)
             .Select(row => new { row.Id, row.Name })
             .AsTempTable();
 
-        var rows = context.From(source)
-            .WithVariant(scope)
+        var rows = context.From(source, scope)
             .OrderBy(row => row.GetInt32("Id"))
             .Select(row => row.GetString("Name"))
             .ToList();
@@ -181,8 +179,7 @@ public sealed class BatchRoutingTests : IDisposable
             .Select(row => new { row.Id, row.Name })
             .AsTempTable();
 
-        FluentActions.Invoking(() => context.From(source)
-                .WithVariant(Scope(3))
+        FluentActions.Invoking(() => context.From(source, Scope(3))
                 .Select(row => row.GetInt32("Id"))
                 .ToList())
             .Should().Throw<NotSupportedException>()

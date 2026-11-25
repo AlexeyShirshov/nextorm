@@ -90,7 +90,16 @@ internal static class SqlSourceRenderer
                     // (mirroring how UNION branches are rendered). Any declarations the body itself
                     // carries have already been hoisted into this top-level WITH, so the body must not
                     // emit a nested WITH of its own (invalid on SQL Server).
-                    var builder = new SqlBuilder(ctx with { ParamMode = false, ColumnsProvider = new DefaultColumnsProvider(), QueryProvider = cte.Query, AliasProvider = new DefaultAliasProvider(), SuppressCtes = true, ExactProjectionAliases = cte.TypedProjection });
+                    var builder = new SqlBuilder(ctx with
+                    {
+                        ParamMode = false,
+                        ColumnsProvider = new DefaultColumnsProvider(),
+                        QueryProvider = cte.Query,
+                        AliasProvider = new DefaultAliasProvider(),
+                        SuppressCtes = true,
+                        ExactProjectionAliases = cte.TypedProjection,
+                        MappingVariant = cte.Query.MappingVariant,
+                    });
                     withBuilder.Append(builder.MakeSelect(cte.Query));
                 }
 
@@ -276,7 +285,8 @@ internal static class SqlSourceRenderer
                 }
 
                 if (!ctx.ParamMode) sqlBuilder!.Append(SqlKeywords.Of(ctx.KeywordCase, " on "));
-                MakeWhere(in ctx, sqlBuilder, entityType, joinCondition.Body, dim);
+                MakeWhere(in ctx, sqlBuilder, entityType, joinCondition.Body, dim, dontNeedAlias: false,
+                    primaryJoinParameter: dim == 1 ? joinCondition.Parameters[0] : null);
             }
             finally
             {
@@ -319,7 +329,11 @@ internal static class SqlSourceRenderer
             try
             {
                 if (!ctx.ParamMode)
-                    MakeWhere(in ctx, conditionBuilder, entityType, condition.Body, JoinDimension(condition));
+                {
+                    var dim = JoinDimension(condition);
+                    MakeWhere(in ctx, conditionBuilder, entityType, condition.Body, dim, dontNeedAlias: false,
+                        primaryJoinParameter: dim == 1 ? condition.Parameters[0] : null);
+                }
 
                 return (fromSql, conditionBuilder.ToString());
             }
@@ -912,7 +926,12 @@ internal static class SqlSourceRenderer
                 // derived boundary does need the generated output name of an unaliased computed scalar:
                 // its enclosing query and ORDER BY address that identifier. Both flags ride on a copy of
                 // the context scoped to this one render, so the caller's context is restored by construction.
-                var sql = new SqlBuilder(ctx with { ExactProjectionAliases = false, RequireDerivedScalarOutputName = true }).MakeSelect(cmd);
+                var sql = new SqlBuilder(ctx with
+                {
+                    ExactProjectionAliases = false,
+                    RequireDerivedScalarOutputName = true,
+                    MappingVariant = cmd.MappingVariant,
+                }).MakeSelect(cmd);
 
                 if (ctx.ParamMode) return string.Empty;
 
@@ -1503,6 +1522,7 @@ internal static class SqlSourceRenderer
     /// occurrences do not take part in template capture. When it is supplied, the clause's emissions are
     /// relocated onto it at the caller's current builder offset.
     /// </param>
+    /// <param name="primaryJoinParameter">The left parameter of a two-source join, when known.</param>
     internal static void MakeWhere(
         in SqlBuildContext ctx,
         StringBuilder? target,
@@ -1510,9 +1530,11 @@ internal static class SqlSourceRenderer
         Expression condition,
         int dim,
         bool dontNeedAlias,
-        SqlParameterTemplateRecorder? recorder = null)
+        SqlParameterTemplateRecorder? recorder = null,
+        ParameterExpression? primaryJoinParameter = null)
     {
         using var visitor = ctx.CreateWhereVisitor(entityType, dim, dontNeedAlias);
+        visitor.PrimaryJoinParameter = primaryJoinParameter;
         visitor.VisitCondition(condition);
 
         // In parameter mode nothing is emitted (the walk still collects parameters); otherwise the

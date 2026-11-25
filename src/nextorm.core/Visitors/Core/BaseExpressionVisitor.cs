@@ -340,6 +340,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     internal ILogger? Logger => _logger;
     internal Type EntityType => _entityType;
     internal int Dim => _dim;
+    internal ParameterExpression? PrimaryJoinParameter { get; set; }
     internal bool DontNeedAlias => _dontNeedAlias;
     internal bool IncludeNestedSources => _options.IncludeNestedSources;
     internal bool IsParamMode => _paramMode;

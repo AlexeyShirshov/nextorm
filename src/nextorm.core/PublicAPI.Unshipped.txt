@@ -5,7 +5,13 @@ NextORM.Core.BatchBuilder.OutputIntoTableVariable<TProjection, TResult>(NextORM.
 NextORM.Core.BatchBuilder.OutputIntoTableVariable<TProjection, TResult>(NextORM.Core.UpdateJoinReturningBuilder<TProjection, TResult>! mutation, string! variableName, string! columnDefinitions) -> NextORM.Core.BatchBuilder!
 NextORM.Core.WindowFunction<T>.IgnoreNulls() -> NextORM.Core.WindowFunction<T>!
 NextORM.Core.WindowFunction<T>.RespectNulls() -> NextORM.Core.WindowFunction<T>!
-NextORM.Core.EntityBuilder<TEntity>.WithVariant(NextORM.Core.MappingVariant variant) -> NextORM.Core.EntityBuilder<TEntity>!
+NextORM.Core.FromOptions.UseVariant(NextORM.Core.MappingVariant variant) -> NextORM.Core.FromOptions!
+NextORM.Core.MappingVariantQueryExtensions
+static NextORM.Core.MappingVariantQueryExtensions.From<T>(this NextORM.Core.IDataContext! dataContext, NextORM.Core.MappingVariant variant) -> NextORM.Core.EntityBuilder<T>!
+static NextORM.Core.MappingVariantQueryExtensions.CreateQueryBuilder<T>(this NextORM.Core.IDataContext! dataContext, NextORM.Core.MappingVariant variant) -> NextORM.Core.EntityBuilder<T>!
+static NextORM.Core.MappingVariantQueryExtensions.From<TResult>(this NextORM.Core.IDataContext! dataContext, NextORM.Core.Cte<TResult>! cte, NextORM.Core.MappingVariant variant) -> NextORM.Core.EntityBuilder<TResult>!
+static NextORM.Core.MappingVariantQueryExtensions.From<TResult>(this NextORM.Core.IDataContext! dataContext, NextORM.Core.TempTableSource<TResult>! tempTable, NextORM.Core.MappingVariant variant) -> NextORM.Core.EntityBuilder<NextORM.Core.TableAlias!>!
+static NextORM.Core.MappingVariantQueryExtensions.FromSql(this NextORM.Core.IDataContext! dataContext, string! sql, object? parameters, NextORM.Core.MappingVariant variant) -> NextORM.Core.EntityBuilder<NextORM.Core.TableAlias!>!
 NextORM.Core.EntityBuilder<TEntity>.WithShardKey(params object?[]! shardKeyValues) -> NextORM.Core.EntityBuilder<TEntity>!
 NextORM.Core.InsertBuilder<TEntity>.WithShardKey(params object?[]! shardKeyValues) -> NextORM.Core.InsertBuilder<TEntity>!
 NextORM.Core.EntityMetadataBuilder<T>.Schema(string! schema) -> NextORM.Core.EntityMetadataBuilder<T>!
@@ -62,7 +68,29 @@ NextORM.Core.PostgresFunctions.vector_concat<T>(T left, T right) -> T
 NextORM.Core.PostgresFunctions.vector_dims<T>(T value) -> int?
 NextORM.Core.PostgresFunctions.vector_multiply<T>(T left, T right) -> T
 NextORM.Core.PostgresFunctions.vector_norm<T>(T value) -> double?
-NextORM.Core.MergeBuilder<TEntity>.WithVariant(NextORM.Core.MappingVariant variant) -> NextORM.Core.MergeBuilder<TEntity>!
+*REMOVED*static NextORM.Core.DataContextExtensions.CreateMergeBuilder<TEntity>(this NextORM.Core.IDataContext! dataContext, System.Action<NextORM.Core.EntityMetadataBuilder<TEntity>!>? configEntity = null) -> NextORM.Core.MergeBuilder<TEntity>!
+static NextORM.Core.DataContextExtensions.CreateMergeBuilder<TEntity>(this NextORM.Core.IDataContext! dataContext, System.Action<NextORM.Core.EntityMetadataBuilder<TEntity>!>? configEntity) -> NextORM.Core.MergeBuilder<TEntity>!
+static NextORM.Core.DataContextExtensions.CreateMergeBuilder<TEntity>(this NextORM.Core.IDataContext! dataContext, System.Action<NextORM.Core.EntityMetadataBuilder<TEntity>!>? configEntity = null, NextORM.Core.MappingVariant? variant = null) -> NextORM.Core.MergeBuilder<TEntity>!
+static NextORM.Core.DataContextExtensions.CreateMergeBuilder<TEntity>(this NextORM.Core.IDataContext! dataContext, NextORM.Core.MappingVariant variant) -> NextORM.Core.MergeBuilder<TEntity>!
+*REMOVED*static NextORM.Core.DataContextExtensions.CreateInsertBuilder<TEntity>(this NextORM.Core.IDataContext! dataContext, System.Action<NextORM.Core.EntityMetadataBuilder<TEntity>!>? configEntity = null) -> NextORM.Core.InsertBuilder<TEntity>!
+static NextORM.Core.DataContextExtensions.CreateInsertBuilder<TEntity>(this NextORM.Core.IDataContext! dataContext, System.Action<NextORM.Core.EntityMetadataBuilder<TEntity>!>? configEntity) -> NextORM.Core.InsertBuilder<TEntity>!
+static NextORM.Core.DataContextExtensions.CreateInsertBuilder<TEntity>(this NextORM.Core.IDataContext! dataContext, System.Action<NextORM.Core.EntityMetadataBuilder<TEntity>!>? configEntity = null, NextORM.Core.MappingVariant? variant = null) -> NextORM.Core.InsertBuilder<TEntity>!
+static NextORM.Core.DataContextExtensions.CreateInsertBuilder<TEntity>(this NextORM.Core.IDataContext! dataContext, NextORM.Core.MappingVariant variant) -> NextORM.Core.InsertBuilder<TEntity>!
+*REMOVED*static NextORM.Core.DataContextExtensions.CreateUpdateBuilder<TEntity>(this NextORM.Core.IDataContext! dataContext, System.Action<NextORM.Core.EntityMetadataBuilder<TEntity>!>? configEntity = null) -> NextORM.Core.UpdateBuilder<TEntity>!
+static NextORM.Core.DataContextExtensions.CreateUpdateBuilder<TEntity>(this NextORM.Core.IDataContext! dataContext, System.Action<NextORM.Core.EntityMetadataBuilder<TEntity>!>? configEntity) -> NextORM.Core.UpdateBuilder<TEntity>!
+static NextORM.Core.DataContextExtensions.CreateUpdateBuilder<TEntity>(this NextORM.Core.IDataContext! dataContext, System.Action<NextORM.Core.EntityMetadataBuilder<TEntity>!>? configEntity = null, NextORM.Core.MappingVariant? variant = null) -> NextORM.Core.UpdateBuilder<TEntity>!
+static NextORM.Core.DataContextExtensions.CreateUpdateBuilder<TEntity>(this NextORM.Core.IDataContext! dataContext, NextORM.Core.MappingVariant variant) -> NextORM.Core.UpdateBuilder<TEntity>!
+*REMOVED*static NextORM.Core.DataContextExtensions.CreateDeleteBuilder<TEntity>(this NextORM.Core.IDataContext! dataContext, System.Action<NextORM.Core.EntityMetadataBuilder<TEntity>!>? configEntity = null) -> NextORM.Core.DeleteBuilder<TEntity>!
+static NextORM.Core.DataContextExtensions.CreateDeleteBuilder<TEntity>(this NextORM.Core.IDataContext! dataContext, System.Action<NextORM.Core.EntityMetadataBuilder<TEntity>!>? configEntity) -> NextORM.Core.DeleteBuilder<TEntity>!
+static NextORM.Core.DataContextExtensions.CreateDeleteBuilder<TEntity>(this NextORM.Core.IDataContext! dataContext, System.Action<NextORM.Core.EntityMetadataBuilder<TEntity>!>? configEntity = null, NextORM.Core.MappingVariant? variant = null) -> NextORM.Core.DeleteBuilder<TEntity>!
+static NextORM.Core.DataContextExtensions.CreateDeleteBuilder<TEntity>(this NextORM.Core.IDataContext! dataContext, NextORM.Core.MappingVariant variant) -> NextORM.Core.DeleteBuilder<TEntity>!
+*REMOVED*static NextORM.Core.DataContextExtensions.CreateTruncateBuilder<TEntity>(this NextORM.Core.IDataContext! dataContext, System.Action<NextORM.Core.EntityMetadataBuilder<TEntity>!>? configEntity = null) -> NextORM.Core.TruncateBuilder<TEntity>!
+static NextORM.Core.DataContextExtensions.CreateTruncateBuilder<TEntity>(this NextORM.Core.IDataContext! dataContext, System.Action<NextORM.Core.EntityMetadataBuilder<TEntity>!>? configEntity) -> NextORM.Core.TruncateBuilder<TEntity>!
+static NextORM.Core.DataContextExtensions.CreateTruncateBuilder<TEntity>(this NextORM.Core.IDataContext! dataContext, System.Action<NextORM.Core.EntityMetadataBuilder<TEntity>!>? configEntity = null, NextORM.Core.MappingVariant? variant = null) -> NextORM.Core.TruncateBuilder<TEntity>!
+static NextORM.Core.DataContextExtensions.CreateTruncateBuilder<TEntity>(this NextORM.Core.IDataContext! dataContext, NextORM.Core.MappingVariant variant) -> NextORM.Core.TruncateBuilder<TEntity>!
+NextORM.Core.BulkInsertOptions.MappingVariant.get -> NextORM.Core.MappingVariant
+NextORM.Core.BulkInsertOptions.MappingVariant.init -> void
+NextORM.Core.BulkInsertOptionsBuilder.UseVariant(NextORM.Core.MappingVariant variant) -> NextORM.Core.BulkInsertOptionsBuilder!
 NextORM.Core.PostgresFunctions.vector_subtract<T>(T left, T right) -> T
 *REMOVED*NextORM.Core.OuterRefMarker<T>
 *REMOVED*NextORM.Core.OuterRefMarker<T>.I.get -> int
@@ -597,7 +625,7 @@ NextORM.Core.RepositoryExtensions.extension<TEntity>(NextORM.Core.IRepository<TE
 NextORM.Core.RepositoryExtensions.extension<TEntity>(NextORM.Core.IRepository<TEntity>!).WithTablesInScopeHint(params string![]! hints) -> NextORM.Core.EntityBuilder<TEntity>!
 NextORM.Core.RepositoryExtensions.extension<TEntity>(NextORM.Core.IRepository<TEntity>!).WithTag(string? tag) -> NextORM.Core.EntityBuilder<TEntity>!
 NextORM.Core.RepositoryExtensions.extension<TEntity>(NextORM.Core.IRepository<TEntity>!).WithUppercaseKeywords(bool value = true) -> NextORM.Core.EntityBuilder<TEntity>!
-NextORM.Core.RepositoryExtensions.extension<TEntity>(NextORM.Core.IRepository<TEntity>!).WithVariant(NextORM.Core.MappingVariant variant) -> NextORM.Core.EntityBuilder<TEntity>!
+NextORM.Core.RepositoryExtensions.extension<TEntity>(NextORM.Core.IRepository<TEntity>!).Query(NextORM.Core.MappingVariant variant) -> NextORM.Core.EntityBuilder<TEntity>!
 NextORM.Core.RepositoryExtensions.extension<TEntity>(NextORM.Core.IRepository<TEntity>!).WriteCsv(System.IO.Stream! destination, NextORM.Core.CsvStreamOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> void
 NextORM.Core.RepositoryExtensions.extension<TEntity>(NextORM.Core.IRepository<TEntity>!).WriteCsvAsync(System.IO.Stream! destination, NextORM.Core.CsvStreamOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 NextORM.Core.RepositoryExtensions.extension<TEntity>(NextORM.Core.IRepository<TEntity>!).WriteJson(System.IO.Stream! destination) -> void
@@ -755,7 +783,7 @@ static NextORM.Core.RepositoryExtensions.WithTableName<TEntity>(this NextORM.Cor
 static NextORM.Core.RepositoryExtensions.WithTablesInScopeHint<TEntity>(this NextORM.Core.IRepository<TEntity>! repository, params string![]! hints) -> NextORM.Core.EntityBuilder<TEntity>!
 static NextORM.Core.RepositoryExtensions.WithTag<TEntity>(this NextORM.Core.IRepository<TEntity>! repository, string? tag) -> NextORM.Core.EntityBuilder<TEntity>!
 static NextORM.Core.RepositoryExtensions.WithUppercaseKeywords<TEntity>(this NextORM.Core.IRepository<TEntity>! repository, bool value = true) -> NextORM.Core.EntityBuilder<TEntity>!
-static NextORM.Core.RepositoryExtensions.WithVariant<TEntity>(this NextORM.Core.IRepository<TEntity>! repository, NextORM.Core.MappingVariant variant) -> NextORM.Core.EntityBuilder<TEntity>!
+static NextORM.Core.RepositoryExtensions.Query<TEntity>(this NextORM.Core.IRepository<TEntity>! repository, NextORM.Core.MappingVariant variant) -> NextORM.Core.EntityBuilder<TEntity>!
 static NextORM.Core.RepositoryExtensions.WriteCsv<TEntity>(this NextORM.Core.IRepository<TEntity>! repository, System.IO.Stream! destination, NextORM.Core.CsvStreamOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> void
 static NextORM.Core.RepositoryExtensions.WriteCsvAsync<TEntity>(this NextORM.Core.IRepository<TEntity>! repository, System.IO.Stream! destination, NextORM.Core.CsvStreamOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 static NextORM.Core.RepositoryExtensions.WriteJson<TEntity>(this NextORM.Core.IRepository<TEntity>! repository, System.IO.Stream! destination) -> void

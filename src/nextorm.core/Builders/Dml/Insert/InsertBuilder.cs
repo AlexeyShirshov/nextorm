@@ -7,7 +7,7 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Fluent builder for an <c>INSERT</c> statement over a mapped entity, started with
-/// <see cref="DataContextExtensions.CreateInsertBuilder{TEntity}"/>. It collects the columns and values, renders
+/// <see cref="DataContextExtensions.CreateInsertBuilder{TEntity}(IDataContext, MappingVariant)"/>. It collects the columns and values, renders
 /// them as a parameterised statement through the active dialect and executes it on the context.
 /// <para>
 /// There is deliberately no change tracking: each execution terminal issues an explicit command, as with
@@ -44,13 +44,11 @@ public sealed partial class InsertBuilder<TEntity>
         Select,
     }
 
-    internal InsertBuilder(IDataContext dataContext, IEntityMetadata metadata)
+    internal InsertBuilder(IDataContext dataContext, IEntityMetadata metadata, MappingVariant? variant = null)
     {
         _dataContext = dataContext;
         _metadata = metadata;
-        _mappingVariant = dataContext is DataContext scopedContext
-            ? scopedContext.EntityVariantResolver.Resolve(typeof(TEntity))
-            : MappingVariant.Default;
+        _mappingVariant = DataContextExtensions.ResolveMutationVariant<TEntity>(dataContext, variant);
     }
 
     /// <summary>
@@ -710,7 +708,7 @@ public sealed partial class InsertBuilder<TEntity>
             return;
 
         throw new InvalidOperationException(
-            $"Entity '{typeof(TEntity)}' is sharded. Insert entity values or call WithShardKey(...) before executing the insert.");
+            $"Entity '{typeof(TEntity)}' is sharded. Insert entity values, call WithShardKey(...), or pass a variant to CreateInsertBuilder(...).");
     }
 
     private InsertCommand BuildCommand(IPropertyMetadata? identityColumn, IReadOnlyList<IPropertyMetadata>? returningColumns = null, OutputIntoClause? outputInto = null)

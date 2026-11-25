@@ -159,7 +159,7 @@ the bucket's physical name, bind the entity to the raw source and use one of the
 ```csharp
 var top = context.FromSql("select Id, Tenant, Total from {qualified} where Total > @min", new { min = 100 })
     .BindEntity<Order>(["Id", "Tenant", "Total"])
-    .WithShardKey(tenant)                    // or .WithVariant(...) for an explicit bucket
+    .WithShardKey(tenant)                    // or pass an explicit bucket variant to From
     .Select(order => new { order.Id, order.Total })
     .OrderByDescending(row => row.Total)
     .ToList();
@@ -230,7 +230,7 @@ The bucket also works from an explicit key or variant:
 
 ```csharp
 context.From<Order>().WithShardKey(tenant).ToList();
-context.From<Order>().WithVariant(new MappingVariant("512")).ToList();   // the bucket number as text
+context.From<Order>(new MappingVariant("512")).ToList();   // the bucket number as text
 ```
 
 `WithShardKey` takes one value per key property, in the declared order; the section
@@ -248,7 +248,7 @@ property — and returns a builder whose variant is the bucket that tuple hashes
 
 ```csharp
 context.From<Order>().WithShardKey(tenant);          // Order declares [ShardKey(nameof(Tenant))]
-// the same as: context.From<Order>().WithVariant(router.ResolveShard(typeof(Order), [tenant]))
+// the same as: context.From<Order>(router.ResolveShard(typeof(Order), [tenant]))
 ```
 
 A composite key takes one value per property, in the declared order:
@@ -268,7 +268,7 @@ context.From<Shipment>().WithShardKey(tenant, region);
   `decimal` are supported. An enum, `uint`, `double`, `float` or `char` key property throws
   `ArgumentException` instead of hashing.
 * It returns a new builder: the one you called it on stays unscoped. When you already know the bucket,
-  `WithVariant(new MappingVariant("512"))` is the same thing.
+  `From<Order>(new MappingVariant("512"))` is the same thing.
 
 ### Ask the context for a bucket
 
@@ -280,7 +280,7 @@ configured at all:
 var router = context.GetShardRouter();             // throws when the context is not sharded
 
 int bucket = router.GetBucket(order);              // from an instance: reads the key properties
-MappingVariant variant = router.GetScope(bucket);    // that bucket as a variant, ready for WithVariant
+MappingVariant variant = router.GetScope(bucket);    // that bucket as a variant
 
 var same  = router.ResolveShard(typeof(Order), [order.Tenant]);   // from explicit values
 var shard = router.GetShard(bucket);                              // "pg-2"
@@ -322,7 +322,7 @@ foreach (var entitiesPerBucket in context.GroupByBucket(orders))
 {
     context.CreateBatchBuilder()
         .Insert(context.CreateInsertBuilder<Order>().Values(entitiesPerBucket.Rows))
-        .Query(context.From<Order>().WithVariant(entitiesPerBucket.Variant).Select(order => order.Id))
+        .Query(context.From<Order>(entitiesPerBucket.Variant).Select(order => order.Id))
         .ToList();                   // every step on that bucket's shard, one round trip
 }
 ```
@@ -461,6 +461,7 @@ that would span two buckets is rejected; run one batch per bucket.
   keep a bucket table on the old server are out of scope.
 - A `params`-supplied value that only exists at execution time cannot be extracted from the predicate;
   capture the value in a closure, call `WithShardKey(...)`, or fan out.
-- Bulk insert (`BulkInsertBuilder`) is not shard-aware in this version.
+- For [bulk inserts](22-bulk-insert.md), pass one bucket's `MappingVariant` and supply only rows
+  for that bucket. Bulk insert doesn't split rows across shards.
 - `ExecuteRaw`/`ExecuteProcedure` run on the context connection and carry no variant: address a bucket's
   table on its shard with `FromSql` under a variant, or with a context already pointed at that shard.

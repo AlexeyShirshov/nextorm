@@ -779,12 +779,18 @@ internal static class MemberTranslator
 
                     // A property inherited by a projected interface belongs to the mapping of the
                     // slot's declared entity, not to a separately registered base interface.
-                    var mappedEntityType = lambdaParameter.Type!.IsAssignableTo(typeof(IProjection))
+                    var projection = lambdaParameter.Type!.IsAssignableTo(typeof(IProjection));
+                    var mappedEntityType = projection
                         ? (node.Expression!.Type.IsInterface ? node.Expression.Type : null)
                         : lambdaParameter.Type;
+                    var usePrimaryVariant = visitor.Options.MappingVariant != MappingVariant.Default
+                        && (ReferenceEquals(lambdaParameter, visitor.PrimaryJoinParameter)
+                            || (projection && node.Expression is MemberExpression slot
+                                && ProjectionAliasCache.GetMemberPosition(slot.Member) == 0));
                     var colName = ResolveRangeColumnsMember(visitor, node.Member)
-                        ?? node.Member.GetPropertyColumnName(
-                            visitor.Options.NamingConvention, mappedEntityType);
+                        ?? (usePrimaryVariant
+                            ? node.Member.GetPropertyColumnName(visitor.Options, node.Expression!.Type)
+                            : node.Member.GetPropertyColumnName(visitor.Options.NamingConvention, mappedEntityType));
                     if (!string.IsNullOrEmpty(colName))
                     {
                         if (TryTranslateDerivedProjectionMember(visitor, node, hasTableAliasForColumn))
@@ -1072,7 +1078,11 @@ internal static class MemberTranslator
         if (innerQuery.From?.ColumnShape is not null || IsTypedCteProducer(visitor, innerQuery))
             return (true, innerCol.PropertyName!);
 
-        var sqlBuilder = new SqlBuilder(visitor.Options with { IncludeNestedSources = true });
+        var sqlBuilder = new SqlBuilder(visitor.Options with
+        {
+            IncludeNestedSources = true,
+            MappingVariant = innerQuery.MappingVariant,
+        });
         return sqlBuilder.MakeColumn(innerCol, innerQuery.EntityType!, true, renameAware: true);
     }
 

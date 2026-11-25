@@ -374,8 +374,8 @@ public interface IOrder
 
 Один класс сущности может обращаться к разным физическим таблицам, схемам или наборам колонок в
 зависимости от *варианта* времени выполнения — это механизм, на котором стоит multi-tenancy. Вариант
-выбирает `IEntityVariantResolver`, отображает на имена `IEntityMetadataProvider`, а для одной команды выбор
-переопределяется через `WithVariant(...)`:
+выбирает `IEntityVariantResolver`, отображает на имена `IEntityMetadataProvider`. Чтобы переопределить
+вариант для одного запроса, передайте его в `From<T>`:
 
 ```csharp
 var builder = new DataContextBuilder()
@@ -383,8 +383,7 @@ var builder = new DataContextBuilder()
     .UseEntityMetadataProvider(new TenantMetadataProvider());
 
 var rows = new SqliteDataContext(connectionString, builder)
-    .From<Order>()
-    .WithVariant(new MappingVariant("acme"))
+    .From<Order>(new MappingVariant("acme"))
     .ToList();
 ```
 

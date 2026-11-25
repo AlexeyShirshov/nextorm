@@ -35,6 +35,14 @@ public sealed class BulkInsertBuilder<TEntity>
     internal BulkInsertBuilder(IDataContext dataContext, IEntityMetadata metadata, BulkInsertOptions options)
     {
         options.Validate();
+        if (options.MappingVariant == MappingVariant.Default
+            && dataContext is DataContext { EntityVariantResolver: IShardRouter router }
+            && router.IsSharded(typeof(TEntity)))
+        {
+            throw new InvalidOperationException(
+                $"Entity '{typeof(TEntity)}' is sharded. Pass a bucket mapping variant in BulkInsertOptions.");
+        }
+
         _dataContext = dataContext;
         _metadata = metadata;
         _options = options;
@@ -553,6 +561,9 @@ public sealed class BulkInsertBuilder<TEntity>
     {
         var native = db as IBulkInsertNativeOptions;
         var incompatible = new List<string>(2);
+
+        if (_options.MappingVariant != MappingVariant.Default)
+            incompatible.Add("MappingVariant");
 
         if (_keepIdentity && native?.SupportsNativeKeepIdentity != true)
             incompatible.Add("KeepIdentity=true");

@@ -182,8 +182,8 @@ var written = ctx.CreateBulkInsertBuilder<IOrder>(o => o.Schema("archive"))
   именование — no-op, а другая база отклоняется по имени. MySQL/MariaDB и ClickHouse адресуют другую базу
   как квалификацию, SQL Server рендерит её как часть многочастного имени. Диалект, который не умеет
   выразить другую базу, отклоняет запрос, а не отбрасывает часть.
-- **`ServerName` недоступен и отклоняется**: bulk-вставка никогда не перенаправляется на другой сервер.
-  Используйте соединение с нужным сервером. Перенаправление не реализовано и не обещается.
+- **`ServerName` недоступен.** Для записи на шард передайте вариант его бакета в `MappingVariant`.
+  Для записи в таблицу вне маппинга на другом сервере используйте контекст с подключением к нему.
 
 ## Локальные временные таблицы
 
@@ -483,13 +483,14 @@ ctx.CreateBulkInsertBuilder<IOrder>(o => o.MaxBatchSize(1_000).IgnoreDuplicates(
 |---|---|---|
 | `Mode` | `Mode(BulkInsertMode)` | путь выполнения: `Auto` (по умолчанию), `Native`, `Portable` |
 | `TargetKind` | `TargetKind(BulkInsertTargetKind)` | `Regular` (по умолчанию) или `LocalTemporary` |
+| `MappingVariant` | `UseVariant(variant)` | Выбирает целевой маппинг и маршрут на портируемом пути. |
 | `MaxBatchSize` | `MaxBatchSize(rows)` | строк на утверждение/батч на портируемом пути; размер чанка на нативных путях MySQL/MariaDB/ClickHouse; `SqlBulkCopy.BatchSize` в SQL Server; новый importer на чанк в PostgreSQL |
 | `MaxParameters` | `MaxParameters(count)` | параметров на утверждение (портируемый путь) |
 | `MaxSqlLength` | `MaxSqlLength(chars)` | примерная длина SQL на утверждение (портируемый путь) |
 | `TableName` / `TableSchema` | `Table(name)` / `Table(schema, name)` | переопределение целевой таблицы, при желании schema-квалифицированной |
 | `SchemaName` | `Schema(schema)` | переопределение только схемы при сохранении замапленной/явной таблицы |
 | `DatabaseName` | `Database(database)` | часть базы там, где диалект умеет адресовать другую базу |
-| `ServerName` | `Server(server)` | **отклоняется**: bulk-вставка никогда не перенаправляется на другой сервер |
+| `ServerName` | `Server(server)` | **отклоняется**: квалификация имени не меняет маршрут подключения |
 | `KeepIdentity` | `KeepIdentity()` | явные значения identity на пути, который это умеет; без эффекта, если у сущности нет identity-колонки |
 | `IgnoreDuplicates` | `IgnoreDuplicates()` | пропуск строк, нарушающих уникальность, где есть форма ignore |
 | `CheckConstraints` | `CheckConstraints()` | проверять ограничения CHECK/FOREIGN KEY; `false` — только там, где есть scoped-контроль |
@@ -504,6 +505,10 @@ ctx.CreateBulkInsertBuilder<IOrder>(o => o.MaxBatchSize(1_000).IgnoreDuplicates(
 
 Опция, которую выбранный провайдер/путь не может выполнить, отклоняется `NotSupportedException` с её
 именем — до чтения источника; ни одна опция не принимается и не отбрасывается молча.
+
+Для шардированных сущностей передавайте вариант одного бакета и только строки этого бакета.
+С явным вариантом `Auto` выбирает портируемый путь, а `Native` выдаёт ошибку. Не сочетайте вариант
+с переопределением назначения, `LocalTemporary`, `CheckConstraints(false)` или `KeepNulls(false)`.
 
 На возвращаемом builder:
 

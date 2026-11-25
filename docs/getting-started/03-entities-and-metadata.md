@@ -388,7 +388,7 @@ provider-side quoting instead.
 
 One entity class can address a different physical table, schema or column set per runtime *variant* — the
 mechanism behind multi-tenancy. Choose the variant with `IEntityVariantResolver`, map it with
-`IEntityMetadataProvider`, and override the choice for a single command with `WithVariant(...)`:
+`IEntityMetadataProvider`, and pass the variant to `From<T>` to override the choice for a single query:
 
 ```csharp
 var builder = new DataContextBuilder()
@@ -396,8 +396,7 @@ var builder = new DataContextBuilder()
     .UseEntityMetadataProvider(new TenantMetadataProvider());
 
 var rows = new SqliteDataContext(connectionString, builder)
-    .From<Order>()
-    .WithVariant(new MappingVariant("acme"))
+    .From<Order>(new MappingVariant("acme"))
     .ToList();
 ```
 

@@ -38,6 +38,26 @@ public sealed class ShardConnectionRoutingTests : IDisposable
     }
 
     [Fact]
+    public void BulkInsert_WithVariant_ShouldWriteOnlyToTheSelectedShard()
+    {
+        var topology = CreateTopology();
+        using var context = CreateContext(topology);
+        Seed(topology);
+
+        var (tenant, bucket) = FindTenant(topology, "server-b");
+        var variant = context.GetShardRouter().GetScope(bucket);
+        var rows = new[] { new ShardedRow { Id = 1, Tenant = tenant, Name = "bulk-b" } };
+
+        FluentActions.Invoking(() => context.CreateBulkInsertBuilder<ShardedRow>())
+            .Should().Throw<InvalidOperationException>().WithMessage("*bucket mapping variant*");
+        context.CreateBulkInsertBuilder<ShardedRow>(new BulkInsertOptions { MappingVariant = variant })
+            .Values(rows).BulkInsert().Should().Be(1);
+
+        CountIn(topology, "server-b", bucket).Should().Be(1L);
+        CountIn(topology, "server-a", bucket).Should().Be(0L);
+    }
+
+    [Fact]
     public void RoutedRead_ShouldUseTheOwningShardDatabase()
     {
         var topology = CreateTopology();
@@ -115,7 +135,7 @@ public sealed class ShardConnectionRoutingTests : IDisposable
 
         var ids = context.CreateBatchBuilder()
             .Insert(context.CreateInsertBuilder<ShardedRow>().Values(rows))
-            .Query(context.From<ShardedRow>().WithVariant(context.GetShardRouter().GetScope(bucketA))
+            .Query(context.From<ShardedRow>(context.GetShardRouter().GetScope(bucketA))
                 .Select(row => row.Id))
             .ToList();
 

@@ -6,7 +6,7 @@ namespace NextORM.Core;
 internal static class ShardQueryExecution
 {
     internal static EntityBuilder<TEntity> Scoped<TEntity>(EntityBuilder<TEntity> source, int bucket)
-        => source.WithVariant(new MappingVariant(bucket.ToString(CultureInfo.InvariantCulture)));
+        => source.CopyWithMappingVariant(new MappingVariant(bucket.ToString(CultureInfo.InvariantCulture)));
 
     internal static TResult[] RunEach<TEntity, TResult>(
         EntityBuilder<TEntity> source,

@@ -23,20 +23,20 @@ public sealed class MappingVariantIsolationTests
             .UseEntityMetadataProvider(new ScopedMetadataProvider())
             .UseVariantResolver(new AlphaVariantResolver());
         using var context = new SqlServerDataContext("Server=localhost", builder);
-        var scope = new global::NextORM.Core.MappingVariant("alpha");
+        var scope = new global::NextORM.Core.MappingVariant("beta");
 
         var entitySql = context.CreateMergeBuilder<ScopedRow>()
             .Using(new ScopedRow { Id = 4, Name = "one" }).OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert().ToSql();
-        var batchSql = context.CreateMergeBuilder<ScopedRow>().WithVariant(scope)
+        var batchSql = context.CreateMergeBuilder<ScopedRow>(scope)
             .Using([new ScopedRow { Id = 4, Name = "one" }, new ScopedRow { Id = 5, Name = "two" }])
             .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert().ToSql();
-        var querySql = context.CreateMergeBuilder<ScopedRow>().WithVariant(scope)
-            .Using(context.From<ScopedRow>().WithVariant(scope))
+        var querySql = context.CreateMergeBuilder<ScopedRow>(scope)
+            .Using(context.From<ScopedRow>(scope))
             .OnKeys().WhenMatched().ThenUpdate().WhenNotMatched().ThenInsert().ToSql();
 
         entitySql.Should().Contain("alpha_schema.alpha_rows").And.Contain("alpha_id");
-        batchSql.Should().Contain("alpha_schema.alpha_rows").And.Contain("alpha_id");
-        querySql.Should().Contain("alpha_schema.alpha_rows").And.Contain("alpha_id");
+        batchSql.Should().Contain("beta_schema.beta_rows").And.Contain("beta_id");
+        querySql.Should().Contain("beta_schema.beta_rows").And.Contain("beta_id");
     }
 
     [Fact]
@@ -51,19 +51,19 @@ public sealed class MappingVariantIsolationTests
         var entity = new ScopedRow { Id = 4, Name = "one" };
         var batch = new[] { entity, new ScopedRow { Id = 5, Name = "two" } };
 
-        var alphaEntity = context.CreateMergeBuilder<ScopedRow>().WithVariant(alpha).Using(entity)
+        var alphaEntity = context.CreateMergeBuilder<ScopedRow>(alpha).Using(entity)
             .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert().ToSql();
-        var betaEntity = context.CreateMergeBuilder<ScopedRow>().WithVariant(beta).Using(entity)
+        var betaEntity = context.CreateMergeBuilder<ScopedRow>(beta).Using(entity)
             .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert().ToSql();
-        var alphaBatch = context.CreateMergeBuilder<ScopedRow>().WithVariant(alpha).Using(batch)
+        var alphaBatch = context.CreateMergeBuilder<ScopedRow>(alpha).Using(batch)
             .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert().ToSql();
-        var betaBatch = context.CreateMergeBuilder<ScopedRow>().WithVariant(beta).Using(batch)
+        var betaBatch = context.CreateMergeBuilder<ScopedRow>(beta).Using(batch)
             .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert().ToSql();
-        var alphaQuery = context.CreateMergeBuilder<ScopedRow>().WithVariant(alpha)
-            .Using(context.From<ScopedRow>().WithVariant(alpha))
+        var alphaQuery = context.CreateMergeBuilder<ScopedRow>(alpha)
+            .Using(context.From<ScopedRow>(alpha))
             .OnKeys().WhenMatched().ThenUpdate().WhenNotMatched().ThenInsert().ToSql();
-        var betaQuery = context.CreateMergeBuilder<ScopedRow>().WithVariant(beta)
-            .Using(context.From<ScopedRow>().WithVariant(beta))
+        var betaQuery = context.CreateMergeBuilder<ScopedRow>(beta)
+            .Using(context.From<ScopedRow>(beta))
             .OnKeys().WhenMatched().ThenUpdate().WhenNotMatched().ThenInsert().ToSql();
 
         alphaEntity.Should().Contain("alpha_schema.alpha_rows").And.Contain("alpha_id");
@@ -121,11 +121,67 @@ public sealed class MappingVariantIsolationTests
     }
 
     [Fact]
+    public void DmlFactories_ExplicitVariantOverridesContextResolver()
+    {
+        var builder = new DataContextBuilder()
+            .UseEntityMetadataProvider(new ScopedMetadataProvider())
+            .UseVariantResolver(new AlphaVariantResolver());
+        using var context = new SqlServerDataContext("Server=localhost", builder);
+        var beta = new global::NextORM.Core.MappingVariant("beta");
+
+        context.CreateInsertBuilder<ScopedRow>(beta).Value(row => row.Id, 1).ToSql()
+            .Should().Contain("beta_schema.beta_rows").And.Contain("beta_id");
+        context.CreateUpdateBuilder<ScopedRow>(beta).Set(row => row.Name, "updated").Where(row => row.Id == 1).ToSql()
+            .Should().Contain("beta_schema.beta_rows").And.Contain("beta_name").And.Contain("beta_id");
+        context.CreateDeleteBuilder<ScopedRow>(beta).Where(row => row.Id == 1).ToSql()
+            .Should().Contain("beta_schema.beta_rows").And.Contain("beta_id");
+        context.CreateTruncateBuilder<ScopedRow>(beta).ToSql()
+            .Should().Contain("beta_schema.beta_rows");
+    }
+
+    [Fact]
+    public void BulkInsertOptions_UseVariant_RendersResolvedTargetAndRefusesNativeMode()
+    {
+        using var context = new SqlServerDataContext("Server=localhost",
+            new DataContextBuilder().UseEntityMetadataProvider(new ScopedMetadataProvider()));
+        var beta = new global::NextORM.Core.MappingVariant("beta");
+        var rows = new[] { new ScopedRow { Id = 1, Name = "bulk" } };
+
+        context.CreateBulkInsertBuilder<ScopedRow>(options => options.UseVariant(beta)).Values(rows).ToSql()
+            .Should().Contain("beta_schema.beta_rows").And.Contain("beta_id");
+        var native = context.CreateBulkInsertBuilder<ScopedRow>(
+            options => options.UseVariant(beta).Mode(BulkInsertMode.Native)).Values(rows);
+        FluentActions.Invoking(() => native.BulkInsert()).Should().Throw<NotSupportedException>()
+            .WithMessage("*Mode.Native*MappingVariant*");
+    }
+
+    [Fact]
+    public void FromOptions_UseVariant_OverridesContextResolverForOneQuery()
+    {
+        var builder = new DataContextBuilder()
+            .UseEntityMetadataProvider(new ScopedMetadataProvider())
+            .UseVariantResolver(new AlphaVariantResolver());
+        using var context = new SqliteDataContext("Data Source=:memory:", builder);
+        var beta = new global::NextORM.Core.MappingVariant("beta");
+
+        var explicitQuery = context.From<ScopedRow>(options: options => options.UseVariant(beta))
+            .Select(row => row.Id);
+        var implicitQuery = context.From<ScopedRow>().Select(row => row.Id);
+        var explicitSql = ((DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
+            explicitQuery, false, true, CancellationToken.None)).DbCommand.CommandText;
+        var implicitSql = ((DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
+            implicitQuery, false, true, CancellationToken.None)).DbCommand.CommandText;
+
+        explicitSql.Should().Contain("beta_schema.beta_rows").And.Contain("beta_id");
+        implicitSql.Should().Contain("alpha_schema.alpha_rows");
+    }
+
+    [Fact]
     public void DefaultScope_PreservesLegacySelectAndInsertSqlAndParameterNames()
     {
         using var context = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
         var minimum = 3;
-        var query = context.From<ScopedRow>().WithVariant(global::NextORM.Core.MappingVariant.Default)
+        var query = context.From<ScopedRow>(global::NextORM.Core.MappingVariant.Default)
             .Where(row => row.Id > minimum).Select(row => row.Id);
         var prepared = (DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
             query, false, true, CancellationToken.None);
@@ -190,15 +246,32 @@ public sealed class MappingVariantIsolationTests
             .UseVariantResolver(new FixedVariantResolver());
         using var context = new SqliteDataContext("Data Source=:memory:", builder);
         var alpha = new global::NextORM.Core.MappingVariant("alpha");
-        var beta = new global::NextORM.Core.MappingVariant("beta");
-
-        var query = context.From<ScopedRow>()
+        var query = context.From<ScopedRow>(alpha)
             .Join(context.From<ScopedRow>(), (left, right) => left.Id == right.Id)
-            .WithVariant(alpha).Select(pair => pair.Item1.Id);
+            .Select(pair => pair.Item1.Id);
         var sql = ((DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
             query, false, true, CancellationToken.None)).DbCommand.CommandText;
 
-        sql.Should().Contain("alpha_schema.alpha_rows").And.Contain("default_schema.default_rows");
+        sql.Should().Contain("alpha_schema.alpha_rows").And.Contain("default_schema.default_rows")
+            .And.Contain("t1.alpha_id = t2.Id");
+    }
+
+    [Fact]
+    public void Join_ExplicitRightSource_KeepsItsOwnMappingVariant()
+    {
+        using var context = new SqliteDataContext("Data Source=:memory:",
+            new DataContextBuilder().UseEntityMetadataProvider(new ScopedMetadataProvider()));
+        var alpha = new global::NextORM.Core.MappingVariant("alpha");
+        var beta = new global::NextORM.Core.MappingVariant("beta");
+
+        var query = context.From<ScopedRow>(alpha)
+            .Join(context.From<ScopedRow>(beta), (left, right) => left.Id == right.Id)
+            .Select(pair => pair.Item2.Name);
+        var sql = ((DbPreparedQueryCommand<string>)context.GetPreparedQueryCommand(
+            query, false, true, CancellationToken.None)).DbCommand.CommandText;
+
+        sql.Should().Contain("alpha_schema.alpha_rows").And.Contain("beta_schema.beta_rows")
+            .And.Contain("beta_name");
     }
 
     [Fact]
@@ -210,9 +283,9 @@ public sealed class MappingVariantIsolationTests
         using var context = new SqliteDataContext("Data Source=:memory:", builder);
         var alpha = new global::NextORM.Core.MappingVariant("alpha");
         var beta = new global::NextORM.Core.MappingVariant("beta");
-        var subquery = context.From<ScopedRow>().WithVariant(beta).Where(row => row.Id > 1);
+        var subquery = context.From<ScopedRow>(beta).Where(row => row.Id > 1);
 
-        var query = context.From<ScopedRow>().WithVariant(alpha)
+        var query = context.From<ScopedRow>(alpha)
             .Where(row => subquery.Any()).Select(row => row.Id);
         var sql = ((DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
             query, false, true, CancellationToken.None)).DbCommand.CommandText;
@@ -230,13 +303,13 @@ public sealed class MappingVariantIsolationTests
         using var context = new SqliteDataContext("Data Source=:memory:", builder);
         var alpha = new global::NextORM.Core.MappingVariant("alpha");
         var beta = new global::NextORM.Core.MappingVariant("beta");
-        var cte = context.From<ScopedRow>().WithVariant(beta).ToCommand().AsCte("scoped_rows");
+        var cte = context.From<ScopedRow>(beta).ToCommand().AsCte("scoped_rows");
 
-        var query = context.From(cte).WithVariant(alpha).Select(row => row.Id);
+        var query = context.From(cte, alpha).Select(row => row.Id);
         var sql = ((DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
             query, false, true, CancellationToken.None)).DbCommand.CommandText;
 
-        sql.Should().Contain("beta_schema.beta_rows").And.Contain("alpha_id");
+        sql.Should().Contain("beta_schema.beta_rows").And.Contain("beta_id").And.NotContain("alpha_id");
     }
 
     [Fact]
@@ -297,7 +370,7 @@ public sealed class MappingVariantIsolationTests
 
     private static QueryCommand<int> BuildScopedQuery(
         SqliteDataContext context, global::NextORM.Core.MappingVariant variant, int minimum)
-        => context.From<ScopedRow>().WithVariant(variant)
+        => context.From<ScopedRow>(variant)
             .Where(row => row.Id > minimum)
             .Select(row => row.Id);
 

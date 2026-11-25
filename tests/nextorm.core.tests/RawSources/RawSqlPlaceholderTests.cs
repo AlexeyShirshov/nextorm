@@ -112,8 +112,8 @@ public sealed class RawSqlPlaceholderTests
         if (!bind)
             return Prepare(context, context.FromSql(sql).Select(row => row["Id"].AsInt));
 
-        var bound = context.FromSql(sql).BindEntity<PlaceholderRow>(["Id", "Name"]);
-        return Prepare(context, bound.WithVariant(Scope(7)).Select(row => row.Id));
+        var bound = context.FromSql(sql, parameters: null, variant: Scope(7)).BindEntity<PlaceholderRow>(["Id", "Name"]);
+        return Prepare(context, bound.Select(row => row.Id));
     }
 
     private static string Prepare(SqliteDataContext context, QueryCommand<int> command)

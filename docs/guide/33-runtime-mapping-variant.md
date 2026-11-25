@@ -46,9 +46,9 @@ var builder = new DataContextBuilder()
     .UseEntityMetadataProvider(provider);       // IEntityMetadataProvider
 ```
 
-A command can also take the variant directly with `WithVariant(...)` on the query and merge builders; that
-wins over the resolver for that command only and never changes the context's default mapping. `WithVariant`
-is not available on insert, update, delete or truncate — those take the resolver's answer.
+Pass a variant when you create the builder to select the mapping for one command without changing
+the context's default. For example, use `From<T>(variant)` for a query or
+`CreateMergeBuilder<T>(variant)` for a merge.
 
 Everything derived from a variant is keyed by it, which is what makes two variants coexist in one context:
 metadata is cached per `(entity type, variant)`, plans are cached per variant, generated parameter names get
@@ -151,54 +151,48 @@ Points worth keeping:
 
 ## An explicit variant on one command
 
-The resolver is not the only source of the key: `WithVariant` takes the same key by hand, for one command:
+To select a known variant for one command, pass it when you create the builder:
 
 ```csharp
 var variant = new MappingVariant("acme");      // the tenant slug — the same key as above
 
-var orders = context.From<Order>()
-    .WithVariant(variant)                      // reads orders_acme
+var orders = context.From<Order>(variant)      // reads orders_acme
     .Where(order => order.Total > 100m)
     .ToList();
 
 var incoming = new Order { Id = 1, Tenant = "acme", Total = 250m };
 
-context.CreateMergeBuilder<Order>()
+context.CreateMergeBuilder<Order>(variant)
     .Using(incoming)                           // writes orders_acme
     .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
-    // Optional when the ambient tenant already selects "acme": the resolver returns the same variant.
-    // `Tenant` is only written into the row; it does not select the table (see the note below).
-    .WithVariant(variant)
     .Merge();
 ```
 
 ### Choose how to supply the variant
 
-Use the resolver for the context's usual mapping. Use `WithVariant` when one query or merge must address a
-known variant explicitly:
+Use the resolver for the context's usual mapping. To select a non-default variant for one command,
+pass it as follows:
 
-| Operation | Variant source |
+| Operation | Where to pass the variant |
 |---|---|
-| Query or merge with `WithVariant` | The explicit variant for that command takes precedence. |
-| Insert, update, delete or truncate | The resolver's answer; these builders do not expose `WithVariant`. |
-| Merge without `WithVariant` | The resolver resolves the entity type, not the source object's property values. |
+| Query | `From<T>(variant)` or `From<T>(options: o => o.UseVariant(variant))` to combine it with source options. |
+| Insert, update, delete, merge, or truncate | Pass `variant` to the factory, for example `CreateDeleteBuilder<T>(variant)`. |
+| Bulk insert | Set `BulkInsertOptions.MappingVariant`, or use `CreateBulkInsertBuilder<T>(o => o.UseVariant(variant))`. |
 
-The variant applies to that command only; it never changes the context's default mapping. A variant on a
-join, a subquery or a CTE belongs to that source, so one statement may render `orders_acme` for the outer
-query and `orders_beta` for a `beta`-scoped subquery.
+The variant applies to that command only; it never changes the context's default mapping. A joined
+source, subquery, or CTE can use its own variant. For example, a statement can read `orders_acme`
+in the outer query and `orders_beta` in a subquery, provided both are accessible from the same
+database connection.
 
-The explicit call repeats the key the resolver would answer at builder creation, which is why it can be
-dropped when the ambient tenant already selects the right table — and why it has to be passed when it does
-not. Note that `incoming.Tenant` plays no part in that decision: the builder resolves the variant from the
-entity **type** (`CreateMergeBuilder` calls `Resolve(typeof(TEntity))` once), never from the source values.
-Only sharded entities route by instance, and a sharded merge still demands an explicit variant.
+For queries and regular mutations, omit the variant when the resolver already selects the right table.
+`incoming.Tenant` does not select the merge target: without an explicit variant,
+`CreateMergeBuilder` resolves the variant from the entity **type**. For a sharded merge, pass the
+bucket variant explicitly.
 
 ## Limitations
 
 - The default provider builds the same mapping for every variant: names only change when a provider derives
   them from the key.
-- `WithVariant` exists on the query and merge builders. Insert, update, delete and truncate take the
-  resolver's answer.
 - One variant means one cached plan per query shape: many tenants times many shapes grows the plan cache,
   and each entry holds its own prepared statement.
 - A variant renames objects; it does not add predicates. A table shared by several tenants still needs the

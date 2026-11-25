@@ -5,7 +5,7 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Fluent builder for a <c>DELETE</c> statement, started with
-/// <see cref="DataContextExtensions.CreateDeleteBuilder{TEntity}"/>. The rows to remove are selected either by a
+/// <see cref="DataContextExtensions.CreateDeleteBuilder{TEntity}(IDataContext, MappingVariant)"/>. The rows to remove are selected either by a
 /// predicate (<see cref="Where"/>) or explicitly as the whole table (<see cref="All"/>); both render a
 /// parameterised <c>DELETE FROM &lt;table&gt; [WHERE ...]</c>. There is deliberately no change tracking:
 /// the terminal issues exactly one explicit command.
@@ -55,7 +55,7 @@ public sealed class DeleteBuilder<TEntity>
             throw new InvalidOperationException("Ordering cannot be combined with All().");
 
         _ordered = true;
-        return _filter ?? _dataContext.From<TEntity>().WithVariant(_mappingVariant);
+        return _filter ?? _dataContext.From<TEntity>(_mappingVariant);
     }
 
     internal DeleteBuilder(IDataContext dataContext, IEntityMetadata metadata, MappingVariant mappingVariant = default, IEntityMetadata? targetMetadata = null)
@@ -84,7 +84,7 @@ public sealed class DeleteBuilder<TEntity>
         if (_all)
             throw new InvalidOperationException("Where(...) cannot be combined with All(); a delete is either filtered or full-table.");
 
-        _filter = (_filter ?? _dataContext.From<TEntity>().WithVariant(_mappingVariant)).Where(predicate);
+        _filter = (_filter ?? _dataContext.From<TEntity>(_mappingVariant)).Where(predicate);
         _hasPredicate = true;
         return this;
     }
@@ -314,7 +314,7 @@ public sealed class DeleteBuilder<TEntity>
         // The key form carries the target entity's global filter through a no-predicate source command:
         // preparing it injects the filter (minus the IgnoreFilters scope) into the condition, which the
         // planner ANDs to the key equalities.
-        var condition = ApplyFilterScope(_filter ?? _dataContext.From<TEntity>().WithVariant(_mappingVariant)).ToCommand();
+        var condition = ApplyFilterScope(_filter ?? _dataContext.From<TEntity>(_mappingVariant)).ToCommand();
         return CreateCommand(condition, keys);
     }
 
@@ -388,7 +388,7 @@ public sealed class DeleteBuilder<TEntity>
 
         throw new InvalidOperationException(
             $"Entity '{typeof(TEntity)}' is sharded. A delete must name the bucket: add an equality on the shard key " +
-            "to the predicate, or delete by entity.");
+            "to the predicate, delete by entity, or pass a variant to CreateDeleteBuilder(...).");
     }
 
     // Applies the builder's selective filter scope to the source command that carries the DELETE's

@@ -5,7 +5,9 @@ public static partial class RepositoryExtensions
     extension<TEntity>(IRepository<TEntity> repository)
     {
         /// <summary>Starts a query using the given mapping variant.</summary>
-        public EntityBuilder<TEntity> WithVariant(MappingVariant variant) => repository.Query().WithVariant(variant);
+        /// <param name="variant">The mapping variant to use for the query.</param>
+        /// <returns>A query builder for the repository's source.</returns>
+        public EntityBuilder<TEntity> Query(MappingVariant variant) => repository.Query().CopyWithMappingVariant(variant);
 
         /// <summary>Starts a query routed by the given shard key values.</summary>
         public EntityBuilder<TEntity> WithShardKey(params object?[] shardKeyValues) =>

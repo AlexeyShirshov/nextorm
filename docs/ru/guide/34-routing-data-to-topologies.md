@@ -130,13 +130,11 @@ reader. Внутри маршрутизированной транзакции �
 ```csharp
 var variant = new MappingVariant("3");
 
-var source = context.From<Order>()
-    .WithVariant(variant)                     // строки бакета 3
+var source = context.From<Order>(variant)     // строки бакета 3
     .Select(order => new { order.Id, order.Total })
     .AsTempTable();
 
-var rows = context.From(source)
-    .WithVariant(variant)                     // тот же бакет: один батч, один хост
+var rows = context.From(source, variant)      // тот же бакет: один батч, один хост
     .Select(row => new { Id = row.GetInt32("Id"), Total = row.GetDecimal("Total") })
     .ToList();
 ```

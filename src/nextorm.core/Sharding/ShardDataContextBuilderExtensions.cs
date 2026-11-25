@@ -46,7 +46,7 @@ public static class ShardDataContextBuilderExtensions
 /// <summary>
 /// The rows of one bucket, together with the variant that addresses it. A bucket is the unit a statement
 /// can target, so one group is exactly one command: pass <see cref="Rows"/> to an insert or a batch step
-/// and <see cref="Variant"/> to <c>WithVariant</c> when the command is built by hand.
+/// and <see cref="Variant"/> to <c>From</c> or <c>CreateMergeBuilder</c> when the command is built by hand.
 /// </summary>
 /// <typeparam name="TEntity">The sharded entity type the rows belong to.</typeparam>
 public sealed class BucketGroup<TEntity>
@@ -65,7 +65,7 @@ public sealed class BucketGroup<TEntity>
     /// <summary>The bucket number, in the range <c>[0, BucketCount)</c>.</summary>
     public int Bucket { get; }
 
-    /// <summary>The mapping variant that addresses <see cref="Bucket"/>, ready for <c>WithVariant</c>.</summary>
+    /// <summary>The mapping variant that addresses <see cref="Bucket"/>.</summary>
     public MappingVariant Variant { get; }
 
     /// <summary>The rows whose shard key hashes to <see cref="Bucket"/>, in the order they were supplied.</summary>

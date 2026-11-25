@@ -292,26 +292,27 @@ insert into simple_entity (id, name) values (@p0, @p1) on conflict (id) do updat
 
 ## Вариант маппинга во время выполнения
 
-Используйте `WithVariant(MappingVariant)`, если один маппинг сущности должен обращаться к таблице конкретного tenant или шарда. Вариант выбирает метаданные только для этой команды и не меняет маппинг контекста по умолчанию. Его можно применять к источнику-сущности, батчу или запросу:
+Передайте `MappingVariant` в `CreateMergeBuilder<T>`, чтобы выполнить merge в таблицу конкретного
+арендатора или шарда. Вариант выбирает метаданные целевой таблицы только для этой команды и не меняет
+маппинг контекста. Чтобы прочитать источник-запрос под тем же вариантом, передайте его и в `From`:
 
 ```csharp
 var variant = new MappingVariant("tenant_a");
-ctx.CreateMergeBuilder<Order>()
+ctx.CreateMergeBuilder<Order>(variant)
     .Using(order)
     .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
-    .WithVariant(variant)
     .Merge();
 ```
 
-Для **шардированного** merge вариант нужно передать явно: билдер определяет область по типу сущности, а не по значениям источника. Без `WithVariant(...)` он выдаёт ошибку, а не записывает данные в таблицу по умолчанию. Вариант задаёт бакет, поэтому обрабатывайте по одному бакету за раз:
+Для **шардированного** merge передайте вариант бакета явно. Билдер не выводит бакет из значений
+источника и выдаёт ошибку, если вариант не задан. Обрабатывайте по одному бакету за раз:
 
 ```csharp
 foreach (var entitiesPerBucket in ctx.GroupByBucket(orders))
 {
-    ctx.CreateMergeBuilder<Order>()
+    ctx.CreateMergeBuilder<Order>(entitiesPerBucket.Variant)
         .Using(entitiesPerBucket.Rows)
         .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
-        .WithVariant(entitiesPerBucket.Variant)   // таблица этого бакета на его шарде
         .Merge();
 }
 ```
@@ -319,7 +320,8 @@ foreach (var entitiesPerBucket in ctx.GroupByBucket(orders))
 Бакеты, их физические имена и правила shard key описаны в разделе
 [«Шардирование и горизонтальное партиционирование»](35-sharding-and-horizontal-partitioning.md).
 
-`CreateTruncateBuilder<TEntity>()` также выбирает настроенный для контекста вариант сущности, поэтому `TRUNCATE` использует соответствующую таблицу и схему.
+Передайте вариант в `CreateTruncateBuilder<TEntity>(variant)`, чтобы очистить его таблицу.
+Без явного варианта фабрика использует резолвер контекста.
 
 Сам вариант — его резолвер, провайдер метаданных для имён таблиц, схем и колонок, а также гарантии изоляции — описан в разделе
 [Вариант сопоставления времени выполнения](33-runtime-mapping-variant.md).

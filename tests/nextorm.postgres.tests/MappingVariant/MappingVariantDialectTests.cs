@@ -23,7 +23,7 @@ public sealed class MappingVariantDialectTests
         var builder = new DataContextBuilder().UseEntityMetadataProvider(new ScopedMetadataProvider());
         using var scopedContext = CreateContext(provider, builder);
         var minimum = 3;
-        var query = scopedContext.From<ScopedRow>().WithVariant(new global::NextORM.Core.MappingVariant("tenant"))
+        var query = scopedContext.From<ScopedRow>(new global::NextORM.Core.MappingVariant("tenant"))
             .Where(row => row.Id > minimum)
             .Select(row => row.Id);
         var prepared = (DbPreparedQueryCommand<int>)scopedContext.GetPreparedQueryCommand(
@@ -215,14 +215,14 @@ public sealed class MappingVariantDialectTests
         var builder = new DataContextBuilder().UseEntityMetadataProvider(new ScopedMetadataProvider());
         using var context = CreateContext(provider, builder);
         var scope = new global::NextORM.Core.MappingVariant("tenant");
-        var entity = context.CreateMergeBuilder<ScopedRow>()
+        var entity = context.CreateMergeBuilder<ScopedRow>(scope)
             .Using(new ScopedRow { Id = 1, Label = "one" })
             .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
-            .WithVariant(scope).ToSql();
-        var batch = context.CreateMergeBuilder<ScopedRow>()
+            .ToSql();
+        var batch = context.CreateMergeBuilder<ScopedRow>(scope)
             .Using(new[] { new ScopedRow { Id = 2, Label = "two" } })
             .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
-            .WithVariant(scope).ToSql();
+            .ToSql();
 
         entity.Should().Contain("tenant_schema").And.Contain("tenant_rows").And.Contain("tenant_id").And.Contain("tenant_label").And.Contain("tenant_");
         batch.Should().Contain("tenant_schema").And.Contain("tenant_rows").And.Contain("tenant_id").And.Contain("tenant_label").And.Contain("tenant_");
@@ -244,10 +244,9 @@ public sealed class MappingVariantDialectTests
             new ScopedRow { Id = 4, Label = "four" }
         };
 
-        var sql = context.CreateMergeBuilder<ScopedRow>()
+        var sql = context.CreateMergeBuilder<ScopedRow>(scope)
             .Using(source)
             .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
-            .WithVariant(scope)
             .ToSql();
 
         sql.Should().Contain("batch_schema").And.Contain("batch_rows").And.Contain("batch_id")
@@ -260,14 +259,13 @@ public sealed class MappingVariantDialectTests
         var builder = new DataContextBuilder().UseEntityMetadataProvider(new ScopedMetadataProvider());
         using var context = CreateContext("sqlserver", builder);
         var scope = new global::NextORM.Core.MappingVariant("tenant");
-        var source = context.From<ScopedRow>().WithVariant(scope).Select(row => row);
+        var source = context.From<ScopedRow>(scope).Select(row => row);
 
-        var sql = context.CreateMergeBuilder<ScopedRow>()
+        var sql = context.CreateMergeBuilder<ScopedRow>(scope)
             .Using(source)
             .OnKeys()
             .WhenMatched().ThenUpdate()
             .WhenNotMatched().ThenInsert()
-            .WithVariant(scope)
             .ToSql();
 
         sql.Should().Contain("tenant_schema").And.Contain("tenant_rows").And.Contain("tenant_id").And.Contain("tenant_label");

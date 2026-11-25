@@ -4,7 +4,7 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Fluent terminal for a <c>TRUNCATE TABLE</c>, started with
-/// <see cref="DataContextExtensions.CreateTruncateBuilder{TEntity}"/>. Renders the provider's native form and
+/// <see cref="DataContextExtensions.CreateTruncateBuilder{TEntity}(IDataContext, MappingVariant)"/>. Renders the provider's native form and
 /// executes it on the context; providers without <c>TRUNCATE</c> (SQLite) reject it with
 /// <see cref="NotSupportedException"/>.
 /// </summary>
@@ -89,7 +89,7 @@ public sealed class TruncateBuilder<TEntity>
             return;
 
         throw new InvalidOperationException(
-            $"Entity '{typeof(TEntity)}' is sharded. Configure a shard scope before truncating the entity.");
+            $"Entity '{typeof(TEntity)}' is sharded. Pass a shard mapping variant to CreateTruncateBuilder(...).");
     }
 
     private NotSupportedException Unsupported()

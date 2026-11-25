@@ -17,12 +17,45 @@ public sealed class SqliteMappingVariantLiveTests : ProviderTestSuite
     {
         using var context = (DataContext)SqliteTestProvider.Instance.CreateContext(Builder());
         context.EnsureConnectionOpen();
-        using (var setup = context.CreateCommand("ATTACH DATABASE ':memory:' AS scope_live; CREATE TABLE scope_live.scope_rows (live_id INTEGER PRIMARY KEY, live_name TEXT NOT NULL); INSERT INTO scope_live.scope_rows VALUES (41, 'scoped'); CREATE TABLE scope_rows (id INTEGER PRIMARY KEY, name TEXT NOT NULL); INSERT INTO scope_rows VALUES (99, 'default');"))
+        using (var setup = context.CreateCommand("ATTACH DATABASE ':memory:' AS scope_live; CREATE TABLE scope_live.scope_rows (live_id INTEGER PRIMARY KEY, live_name TEXT NOT NULL); INSERT INTO scope_live.scope_rows VALUES (41, 'scoped'); CREATE TABLE ScopedRow (Id INTEGER PRIMARY KEY, Name TEXT NOT NULL); INSERT INTO ScopedRow VALUES (99, 'default');"))
             setup.ExecuteNonQuery();
 
-        var rows = context.From<ScopedRow>().WithVariant(Scope).OrderBy(row => row.Id).Select(row => row.Id).ToList();
+        var rows = context.From<ScopedRow>(Scope).OrderBy(row => row.Id).Select(row => row.Id).ToList();
 
         rows.Should().Equal(41);
+        context.From<ScopedRow>().Select(row => row.Id).ToList().Should().Equal(99);
+        context.From<ScopedRow>()
+            .Join(context.From<ScopedRow>(Scope), (normal, scopedRow) => normal.Id != scopedRow.Id)
+            .Select(pair => pair.Item2.Name).ToList().Should().Equal("scoped");
+        context.From<ScopedRow>(Scope)
+            .Join(context.From<ScopedRow>(), (scopedRow, normal) => scopedRow.Id != normal.Id)
+            .CrossJoin(context.From<ScopedRow>())
+            .Select(pair => pair.Item1.Name).ToList().Should().Equal("scoped");
+    }
+
+    [Fact]
+    public void ExplicitVariantDml_OnlyMutatesAlternateAttachedTarget()
+    {
+        using var context = new SqliteDataContext("Data Source=:memory:;Pooling=False", Builder());
+        context.EnsureConnectionOpen();
+        using (var setup = context.CreateCommand("ATTACH DATABASE ':memory:' AS scope_live; CREATE TABLE scope_live.scope_rows (live_id INTEGER PRIMARY KEY, live_name TEXT NOT NULL); INSERT INTO scope_live.scope_rows VALUES (1, 'scoped'); CREATE TABLE ScopedRow (Id INTEGER PRIMARY KEY, Name TEXT NOT NULL); INSERT INTO ScopedRow VALUES (1, 'default');"))
+            setup.ExecuteNonQuery();
+
+        context.CreateInsertBuilder<ScopedRow>(Scope)
+            .Values(new ScopedRow { Id = 2, Name = "inserted" }).Insert().Should().Be(1);
+        context.CreateBulkInsertBuilder<ScopedRow>(options => options.UseVariant(Scope))
+            .Values(new[] { new ScopedRow { Id = 3, Name = "bulk" } }).BulkInsert().Should().Be(1);
+        context.CreateUpdateBuilder<ScopedRow>(Scope)
+            .Set(row => row.Name, "updated").Where(row => row.Id == 2).Update().Should().Be(1);
+        context.CreateDeleteBuilder<ScopedRow>(Scope).Where(row => row.Id == 1).Delete().Should().Be(1);
+        context.CreateMergeBuilder<ScopedRow>(Scope)
+            .Using(new ScopedRow { Id = 3, Name = "merged" })
+            .OnKeys().WhenMatchedUpdate().WhenNotMatchedInsert()
+            .Merge().Should().Be(1);
+
+        context.From<ScopedRow>(Scope).OrderBy(row => row.Id).Select(row => row.Name).ToList()
+            .Should().Equal("updated", "merged");
+        context.From<ScopedRow>().Select(row => row.Name).ToList().Should().Equal("default");
     }
 
     [Fact]
@@ -44,7 +77,7 @@ public sealed class SqliteMappingVariantLiveTests : ProviderTestSuite
         context.CreateDeleteBuilder<ScopedDmlRow>()
             .Where(row => row.Id == 2)
             .Delete().Should().Be(1);
-        context.From<ScopedDmlRow>().WithVariant(new MappingVariant("livedml"))
+        context.From<ScopedDmlRow>(new MappingVariant("livedml"))
             .OrderBy(row => row.Id).Select(row => row.Name).ToList()
             .Should().Equal("scoped-updated", "scoped-insert");
         using var defaultRead = context.CreateCommand("SELECT name FROM main.scope_dml_rows WHERE id = 1");
@@ -66,18 +99,15 @@ public sealed class SqliteMappingVariantLiveTests : ProviderTestSuite
         .UseVariantResolver(new LiveDmlVariantResolver());
 
     private static DataContextBuilder Builder() => new DataContextBuilder()
-        .UseEntityMetadataProvider(new LiveMetadataProvider())
-        .UseVariantResolver(new LiveVariantResolver());
+        .UseEntityMetadataProvider(new LiveMetadataProvider());
 
     private static readonly MappingVariant Scope = new("live");
 
-    private sealed class ScopedRow { public int Id { get; set; } public string Name { get; set; } = ""; }
-
-    private sealed class LiveVariantResolver : IEntityVariantResolver
+    private sealed class ScopedRow
     {
-        public MappingVariant Resolve(Type entityType) => Scope;
-        public MappingVariant Resolve(Type entityType, object entity) => Scope;
-        public MappingVariant Resolve(Type entityType, IReadOnlyList<object?> keyValues) => Scope;
+        [Key]
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
     }
 
     private sealed class LiveMetadataProvider : IEntityMetadataProvider
@@ -86,9 +116,12 @@ public sealed class SqliteMappingVariantLiveTests : ProviderTestSuite
         public IEntityMetadata GetMetadata(Type entityType, in MappingVariant variant)
         {
             var metadata = _inner.GetMetadata(entityType, MappingVariant.Default);
-            return new Metadata(metadata.Properties.Select(p => (IPropertyMetadata)new Property(p.PropertyInfo, "live_" + p.PropertyInfo.Name.ToLowerInvariant())).ToArray());
+            return variant == Scope
+                ? new Metadata(metadata.Properties.Select(p => (IPropertyMetadata)new Property(p.PropertyInfo, "live_" + p.PropertyInfo.Name.ToLowerInvariant())).ToArray())
+                : metadata;
         }
-        public string GetColumnName(PropertyInfo property, in MappingVariant variant, INamingConvention? convention) => "live_" + property.Name.ToLowerInvariant();
+        public string GetColumnName(PropertyInfo property, in MappingVariant variant, INamingConvention? convention)
+            => variant == Scope ? "live_" + property.Name.ToLowerInvariant() : _inner.GetColumnName(property, variant, convention);
     }
 
     private sealed class Metadata(IReadOnlyList<IPropertyMetadata> properties) : IEntityMetadata
@@ -117,7 +150,7 @@ public sealed class PostgresMappingVariantLiveTests : ProviderTestSuite
         using (var setup = context.CreateCommand("CREATE SCHEMA IF NOT EXISTS scope_live; CREATE TABLE IF NOT EXISTS scope_live.scope_rows (live_id INTEGER PRIMARY KEY, live_name TEXT NOT NULL); TRUNCATE TABLE scope_live.scope_rows; INSERT INTO scope_live.scope_rows VALUES (41, 'scoped'); CREATE TABLE IF NOT EXISTS public.scope_rows (id INTEGER PRIMARY KEY, name TEXT NOT NULL); TRUNCATE TABLE public.scope_rows; INSERT INTO public.scope_rows VALUES (99, 'default');"))
             setup.ExecuteNonQuery();
 
-        var rows = context.From<ScopedRow>().WithVariant(Scope).OrderBy(row => row.Id).Select(row => row.Id).ToList();
+        var rows = context.From<ScopedRow>(Scope).OrderBy(row => row.Id).Select(row => row.Id).ToList();
 
         rows.Should().Equal(41);
     }
@@ -154,7 +187,7 @@ public sealed class PostgresMappingVariantLiveTests : ProviderTestSuite
             .WhenNotMatchedInsert()
             .Merge().Should().Be(1);
 
-        context.From<ScopedDmlRow>().WithVariant(new MappingVariant("livedml"))
+        context.From<ScopedDmlRow>(new MappingVariant("livedml"))
             .OrderBy(row => row.Id).Select(row => row.Name).ToList()
             .Should().Equal("scoped-merged", "scoped-insert", "scoped-merge-insert");
         using var defaultRead = context.CreateCommand("SELECT name FROM public.scope_dml_rows WHERE id = 1");
@@ -169,15 +202,14 @@ public sealed class PostgresMappingVariantLiveTests : ProviderTestSuite
         using (var setup = context.CreateCommand("CREATE SCHEMA IF NOT EXISTS scope_live_dml; CREATE TABLE IF NOT EXISTS scope_live_dml.scope_dml_rows (live_id INTEGER PRIMARY KEY, live_name TEXT NOT NULL); TRUNCATE TABLE scope_live_dml.scope_dml_rows; INSERT INTO scope_live_dml.scope_dml_rows VALUES (1, 'scoped-keep'); CREATE TABLE IF NOT EXISTS public.scope_dml_rows (id INTEGER PRIMARY KEY, name TEXT NOT NULL); TRUNCATE TABLE public.scope_dml_rows; INSERT INTO public.scope_dml_rows VALUES (1, 'default-sentinel');"))
             setup.ExecuteNonQuery();
 
-        context.CreateMergeBuilder<ScopedDmlRow>()
+        context.CreateMergeBuilder<ScopedDmlRow>(new MappingVariant("livedml"))
             .Using(new[] { new ScopedDmlRow { Id = 1, Name = "batch-merged" }, new ScopedDmlRow { Id = 2, Name = "batch-inserted" } })
-            .WithVariant(new MappingVariant("livedml"))
             .OnKeys()
             .WhenMatchedUpdate()
             .WhenNotMatchedInsert()
             .Merge().Should().Be(2);
 
-        context.From<ScopedDmlRow>().WithVariant(new MappingVariant("livedml"))
+        context.From<ScopedDmlRow>(new MappingVariant("livedml"))
             .OrderBy(row => row.Id).Select(row => row.Name).ToList()
             .Should().Equal("batch-merged", "batch-inserted");
         using var defaultRead = context.CreateCommand("SELECT name FROM public.scope_dml_rows WHERE id = 1");
@@ -192,9 +224,9 @@ public sealed class PostgresMappingVariantLiveTests : ProviderTestSuite
         using (var setup = context.CreateCommand("CREATE SCHEMA IF NOT EXISTS scope_live_dml; CREATE TABLE IF NOT EXISTS scope_live_dml.scope_dml_rows (live_id INTEGER PRIMARY KEY, live_name TEXT NOT NULL); TRUNCATE TABLE scope_live_dml.scope_dml_rows; INSERT INTO scope_live_dml.scope_dml_rows VALUES (1, 'scoped'); CREATE TABLE IF NOT EXISTS public.scope_dml_rows (id INTEGER PRIMARY KEY, name TEXT NOT NULL); TRUNCATE TABLE public.scope_dml_rows; INSERT INTO public.scope_dml_rows VALUES (1, 'default-sentinel');"))
             setup.ExecuteNonQuery();
 
-        context.CreateTruncateBuilder<ScopedDmlRow>().Execute();
+        context.CreateTruncateBuilder<ScopedDmlRow>(new MappingVariant("livedml")).Execute();
 
-        context.From<ScopedDmlRow>().WithVariant(new MappingVariant("livedml")).Count().Should().Be(0);
+        context.From<ScopedDmlRow>(new MappingVariant("livedml")).Count().Should().Be(0);
         using var defaultRead = context.CreateCommand("SELECT name FROM public.scope_dml_rows WHERE id = 1");
         defaultRead.ExecuteScalar().Should().Be("default-sentinel");
     }

@@ -65,8 +65,7 @@ public sealed class MaterializationRoutingTests : IDisposable
         using var context = CreateShardedContext();
         var scope = new global::NextORM.Core.MappingVariant("3");
 
-        context.From<ShardRow>()
-            .WithVariant(scope)
+        context.From<ShardRow>(scope)
             .Select(row => new { row.Id, row.Name })
             .ToTable("bucket_copy");
 

@@ -349,7 +349,7 @@ public sealed class UpdateBuilder<TEntity>
     {
         var source = _filter ?? _dataContext.From<TEntity>();
         if (_mappingVariant != MappingVariant.Default)
-            source = source.WithVariant(_mappingVariant);
+            source = source.CopyWithMappingVariant(_mappingVariant);
 
         return source.WithFilterScope(_filterScope);
     }

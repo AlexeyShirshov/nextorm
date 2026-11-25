@@ -126,13 +126,11 @@ variant as the read:
 ```csharp
 var variant = new MappingVariant("3");
 
-var source = context.From<Order>()
-    .WithVariant(variant)                     // the rows of bucket 3
+var source = context.From<Order>(variant)     // the rows of bucket 3
     .Select(order => new { order.Id, order.Total })
     .AsTempTable();
 
-var rows = context.From(source)
-    .WithVariant(variant)                     // the same bucket: one batch, one host
+var rows = context.From(source, variant)      // the same bucket: one batch, one host
     .Select(row => new { Id = row.GetInt32("Id"), Total = row.GetDecimal("Total") })
     .ToList();
 ```
