@@ -218,7 +218,7 @@ internal static class InValues
 
     /// <summary>
     /// Metadata-only recognition of a value-list membership node, without the element type: only the
-    /// argument shapes are inspected (<c>@in</c>/<c>global_in</c> value list; instance or static
+    /// argument shapes are inspected (<c>@in</c>/<c>not_in</c>/<c>global_in</c> value list; instance or static
     /// <c>Contains</c> on a non-string collection). The translator's own <see cref="TryGetArguments"/>
     /// additionally proves the element types; this probe does not need them and never calls
     /// <see cref="System.Reflection.MethodInfo.GetGenericArguments"/> or <c>GetParameters</c>.
@@ -233,6 +233,7 @@ internal static class InValues
         {
             var name = node.Method.Name;
             if (name != nameof(CommonFunctions.@in)
+                && name != nameof(CommonFunctions.not_in)
                 && name != nameof(CommonFunctions.inUntyped)
                 && name != nameof(ClickHouseFunctions.global_in))
                 return false;
@@ -345,7 +346,7 @@ internal static class InValues
         }
     }
     /// <summary>
-    /// Matches a value-list <c>SqlFunctions.Sql.@in(column, collection)</c> or the ClickHouse
+    /// Matches a value-list <c>SqlFunctions.Sql.@in</c>/<c>SqlFunctions.Sql.not_in</c> or the ClickHouse
     /// <c>global_in</c> (the subquery overloads are excluded) or an <c>Enumerable.Contains</c> /
     /// <c>MemoryExtensions.Contains</c> / instance <c>Contains</c> on a non-string collection.
     /// <paramref name="isGlobal"/> is true for the <c>global_in</c> form.
@@ -360,6 +361,7 @@ internal static class InValues
         if ((node.Method.DeclaringType == typeof(CommonFunctions)
                 || node.Method.DeclaringType == typeof(ClickHouseFunctions))
             && (node.Method.Name == nameof(CommonFunctions.@in)
+                || node.Method.Name == nameof(CommonFunctions.not_in)
                 || node.Method.Name == nameof(CommonFunctions.inUntyped)
                 || node.Method.Name == nameof(ClickHouseFunctions.global_in)))
         {

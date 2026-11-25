@@ -501,6 +501,28 @@ select id
 обнаруживает изменившуюся форму и перестраивает команду, поэтому второй [`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})) видит новые значения,
 а не устаревшие результаты.
 
+### `NOT IN`
+
+Чтобы исключить значения, используй `SqlFunctions.Sql.not_in`. Как и `@in`, он принимает
+подзапрос, `IEnumerable<T>` или отдельные значения:
+
+```csharp
+var ids = await dataContext.From<ComplexEntity>()
+    .Where(e => SqlFunctions.Sql.not_in(e.Id, 1L, 3L))
+    .Select(e => e.Id)
+    .ToListAsync();
+```
+
+```sql
+-- SQLite
+select id
+ from complex_entity where id not in ($p0, $p1)
+```
+
+Пустая коллекция не исключает ни одной строки. Если коллекция содержит `null` и колонка
+допускает `NULL`, NextORM добавляет проверку `IS NOT NULL` вместо передачи `NULL` в списке.
+Для подзапроса действуют правила обработки `NULL` в `NOT IN` выбранной СУБД.
+
 ### `GLOBAL IN` (ClickHouse)
 
 Распределённый предикат ClickHouse `column GLOBAL IN (subquery | values)` доступен через

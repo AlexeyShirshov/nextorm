@@ -329,18 +329,21 @@ internal static class NormSqlTranslator
             return;
         }
         else if ((node.Method.Name == nameof(CommonFunctions.@in)
+            || node.Method.Name == nameof(CommonFunctions.not_in)
             || node.Method.Name == nameof(CommonFunctions.inUntyped)
             || node.Method.Name == nameof(ClickHouseFunctions.global_in))
             && node.Arguments is [Expression parExp, Expression cmdExp] && cmdExp.Type.IsAssignableTo(typeof(QueryCommand)))
         {
             var globalIn = node.Method.Name == nameof(ClickHouseFunctions.global_in);
+            var negated = node.Method.Name == nameof(CommonFunctions.not_in);
             if (globalIn && !visitor.Dialect.SupportsGlobalPredicates)
                 throw new NotSupportedException("The GLOBAL IN predicate is not supported by this provider.");
 
-            if (!visitor.IsParamMode)
+            if (!visitor.IsParamMode || negated)
                 visitor.Visit(parExp);
 
-            if (!visitor.IsParamMode) visitor.Builder!.Append(globalIn ? " global in (" : " in (");
+            if (!visitor.IsParamMode)
+                visitor.Builder!.Append(negated ? visitor.Kw(" not in (") : globalIn ? " global in (" : " in (");
 
             var constRepl = new ReplaceConstantsExpressionVisitor(visitor.QueryProvider);
             var body = constRepl.Visit(cmdExp);
@@ -375,12 +378,20 @@ internal static class NormSqlTranslator
 
             if (!visitor.IsParamMode)
             {
-                visitor.Builder!.Append(sql).Append(')');
+                if (negated)
+                {
+                    visitor.NeedAliasForColumn = true;
+                    visitor.AppendSql(sql!);
+                    visitor.Builder!.Append(')');
+                }
+                else
+                    visitor.Builder!.Append(sql).Append(')');
             }
 
             return;
         }
         else if ((node.Method.Name == nameof(CommonFunctions.@in)
+            || node.Method.Name == nameof(CommonFunctions.not_in)
             || node.Method.Name == nameof(ClickHouseFunctions.global_in))
             && node.Arguments is [Expression inColumnExp, Expression inValuesExp]
             && !inValuesExp.Type.IsAssignableTo(typeof(QueryCommand)))
@@ -389,7 +400,8 @@ internal static class NormSqlTranslator
             if (globalIn && !visitor.Dialect.SupportsGlobalPredicates)
                 throw new NotSupportedException("The GLOBAL IN predicate is not supported by this provider.");
 
-            InValuesTranslator.TranslateInValues(visitor, inColumnExp, inValuesExp, node.Method.GetGenericArguments()[0], globalIn);
+            InValuesTranslator.TranslateInValues(visitor, inColumnExp, inValuesExp, node.Method.GetGenericArguments()[0],
+                global: globalIn, negated: node.Method.Name == nameof(CommonFunctions.not_in));
             return;
         }
         else if (node.Method.Name == nameof(CommonFunctions.count)

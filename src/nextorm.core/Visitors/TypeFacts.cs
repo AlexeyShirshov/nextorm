@@ -194,6 +194,7 @@ internal static class TypeFacts
 
         return call.Method.Name is nameof(CommonFunctions.exists) or nameof(CommonFunctions.any)
             or nameof(CommonFunctions.all) or nameof(CommonFunctions.@in) or nameof(CommonFunctions.inUntyped) or nameof(ClickHouseFunctions.global_in)
+            or nameof(CommonFunctions.not_in)
             or "Contains"
             or nameof(CommonFunctions.contains) or nameof(CommonFunctions.freetext)
             or nameof(SqlServerFunctions.isjson)

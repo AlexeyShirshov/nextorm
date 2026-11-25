@@ -23,7 +23,7 @@ internal static class InValuesTranslator
             || isGlobal)
             return false;
 
-        TranslateInValues(visitor, columnExp, valuesExp, elementType);
+        TranslateInValues(visitor, columnExp, valuesExp, elementType, negated: node.Method.Name == nameof(CommonFunctions.not_in));
         return true;
     }
 
@@ -32,13 +32,13 @@ internal static class InValuesTranslator
     /// the query stays injection safe; an empty list becomes an always-false condition and a list that
     /// can contain null keeps the C# <c>Contains</c> semantics by adding an <c>is null</c> branch.
     /// <paramref name="global"/> renders the ClickHouse distributed <c>GLOBAL IN</c> form instead of
-    /// the plain <c>IN</c>.
+    /// the plain <c>IN</c>. <paramref name="negated"/> renders the inverse membership predicate.
     /// </summary>
-    internal static void TranslateInValues(BaseExpressionVisitor visitor, Expression columnExp, Expression valuesExp, Type elementType, bool global = false)
+    internal static void TranslateInValues(BaseExpressionVisitor visitor, Expression columnExp, Expression valuesExp, Type elementType, bool global = false, bool negated = false)
     {
         if (TypeFacts.IsTupleFamily(elementType))
         {
-            TranslateTupleInValues(visitor, columnExp, valuesExp, elementType, global);
+            TranslateTupleInValues(visitor, columnExp, valuesExp, elementType, global, negated);
             return;
         }
 
@@ -83,10 +83,14 @@ internal static class InValuesTranslator
         }
 
         var column = visitor.VisitToString(columnExp);
+        if (negated)
+            visitor.NeedAliasForColumn = true;
 
         if (nonNull.Count == 0)
         {
-            var emptyPredicate = nullableAware && hasNull ? $"{column} {visitor.Kw("is null")}" : "1 = 0";
+            var emptyPredicate = nullableAware && hasNull
+                ? column + visitor.Kw(negated ? " is not null" : " is null")
+                : negated ? "1 = 1" : "1 = 0";
             visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate(emptyPredicate, visitor.IsPredicateContext));
             return;
         }
@@ -97,7 +101,7 @@ internal static class InValuesTranslator
             if (nullableAware && hasNull)
                 inBuilder.Append('(');
 
-            inBuilder.Append(column).Append(global ? visitor.Kw(" global in (") : visitor.Kw(" in ("));
+            inBuilder.Append(column).Append(visitor.Kw(MembershipOperator(global, negated))).Append('(');
             for (var i = 0; i < nonNull.Count; i++)
             {
                 var paramName = visitor.ParameterProvider.GetParamName();
@@ -114,7 +118,8 @@ internal static class InValuesTranslator
             inBuilder.Append(')');
 
             if (nullableAware && hasNull)
-                inBuilder.Append(visitor.Kw(" or ")).Append(column).Append(visitor.Kw(" is null)"));
+                inBuilder.Append(visitor.Kw(negated ? " and " : " or ")).Append(column)
+                    .Append(visitor.Kw(negated ? " is not null)" : " is null)"));
 
             visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate(inBuilder.ToString(), visitor.IsPredicateContext));
         }
@@ -133,7 +138,7 @@ internal static class InValuesTranslator
     /// rows that contain a null use explicit OR-of-AND component arms. An empty list is <c>1 = 0</c>. SQL
     /// Server has no row-value form and rejects the predicate before any empty-list folding.
     /// </summary>
-    private static void TranslateTupleInValues(BaseExpressionVisitor visitor, Expression columnExp, Expression valuesExp, Type elementType, bool global)
+    private static void TranslateTupleInValues(BaseExpressionVisitor visitor, Expression columnExp, Expression valuesExp, Type elementType, bool global, bool negated)
     {
         // SQL Server exposes no ITupleRenderer, so the whole tuple surface is unsupported there. The
         // rejection is deliberately first: it must fire before the empty-list fold below.
@@ -186,6 +191,9 @@ internal static class InValuesTranslator
         for (var i = 0; i < arity; i++)
             lhs[i] = visitor.VisitToString(components[i]);
 
+        if (negated)
+            visitor.NeedAliasForColumn = true;
+
         var arms = new List<string>();
 
         // Non-null rows: one native row-IN list, guarded on every nullable LHS component so a null LHS
@@ -205,18 +213,19 @@ internal static class InValuesTranslator
 
         if (rhsRows.Count > 0)
         {
-            var inClause = global ? visitor.Kw(" global in ") : visitor.Kw(" in ");
+            var inClause = visitor.Kw(MembershipOperator(global, negated));
             var arm = tupleRenderer.RenderConstructor(lhs) + inClause + tupleRenderer.RenderInValues(rhsRows);
 
             List<string>? guards = null;
             for (var i = 0; i < arity; i++)
             {
                 if (IsNullableComponent(components[i].Type))
-                    (guards ??= []).Add(lhs[i] + visitor.Kw(" is not null"));
+                    (guards ??= []).Add(lhs[i] + visitor.Kw(negated ? " is null" : " is not null"));
             }
 
             arms.Add(guards is { Count: > 0 }
-                ? "(" + string.Join(visitor.Kw(" and "), guards) + visitor.Kw(" and ") + arm + ")"
+                ? "(" + string.Join(visitor.Kw(negated ? " or " : " and "), guards)
+                    + visitor.Kw(negated ? " or " : " and ") + arm + ")"
                 : "(" + arm + ")");
         }
 
@@ -240,18 +249,21 @@ internal static class InValuesTranslator
                 }
             }
 
-            arms.Add("(" + string.Join(visitor.Kw(" and "), parts) + ")");
+            arms.Add((negated ? visitor.Kw("not (") : "(") + string.Join(visitor.Kw(" and "), parts) + ")");
         }
 
         var predicate = arms.Count switch
         {
-            0 => "1 = 0",
+            0 => negated ? "1 = 1" : "1 = 0",
             1 => arms[0],
-            _ => "(" + string.Join(visitor.Kw(" or "), arms) + ")",
+            _ => "(" + string.Join(visitor.Kw(negated ? " and " : " or "), arms) + ")",
         };
 
         visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate(predicate, visitor.IsPredicateContext));
     }
+
+    private static string MembershipOperator(bool global, bool negated)
+        => global ? " global in " : negated ? " not in " : " in ";
 
     // Non-null rows first, then rows containing a null, in source order; within a row, component order,
     // skipping null cells (which have no parameter). This mirrors the render arm order exactly so the

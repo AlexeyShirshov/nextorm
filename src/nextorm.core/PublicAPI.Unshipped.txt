@@ -1,4 +1,7 @@
 #nullable enable
+NextORM.Core.CommonFunctions.not_in<T>(T column, NextORM.Core.QueryCommand<T>! cmd) -> bool
+NextORM.Core.CommonFunctions.not_in<T>(T column, params T[]! values) -> bool
+NextORM.Core.CommonFunctions.not_in<T>(T column, System.Collections.Generic.IEnumerable<T>! values) -> bool
 static NextORM.Core.DataContextExtensions.ExecuteSql(this NextORM.Core.IRawCommandExecutor! executor, string! sql, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 NextORM.Core.BatchBuilder.OutputInto(NextORM.Core.OutputIntoBuilder! mutation) -> NextORM.Core.BatchBuilder!
 NextORM.Core.BatchBuilder.OutputIntoTableVariable<TProjection, TResult>(NextORM.Core.DeleteJoinReturningBuilder<TProjection, TResult>! mutation, string! variableName, string! columnDefinitions) -> NextORM.Core.BatchBuilder!

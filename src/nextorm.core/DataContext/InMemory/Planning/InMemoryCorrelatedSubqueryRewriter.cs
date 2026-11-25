@@ -117,6 +117,7 @@ internal sealed class InMemoryCorrelatedSubqueryRewriter : ExpressionVisitor
     {
         CorrelatedTerminal terminal;
         Expression? inValue = null;
+        var negated = false;
         int index;
 
         if (body is MethodCallExpression call)
@@ -126,9 +127,11 @@ internal sealed class InMemoryCorrelatedSubqueryRewriter : ExpressionVisitor
                 terminal = CorrelatedTerminal.Exists;
                 index = GetReferencedQueryIndex(call.Arguments[0]);
             }
-            else if (call.Method.Name == nameof(CommonFunctions.@in) || call.Method.Name == nameof(CommonFunctions.inUntyped) || call.Method.Name == nameof(ClickHouseFunctions.global_in))
+            else if (call.Method.Name is nameof(CommonFunctions.@in) or nameof(CommonFunctions.not_in)
+                or nameof(CommonFunctions.inUntyped) or nameof(ClickHouseFunctions.global_in))
             {
                 terminal = CorrelatedTerminal.In;
+                negated = call.Method.Name == nameof(CommonFunctions.not_in);
                 inValue = call.Arguments[0];
                 index = GetReferencedQueryIndex(call.Arguments[1]);
             }
@@ -147,12 +150,14 @@ internal sealed class InMemoryCorrelatedSubqueryRewriter : ExpressionVisitor
         var plan = _context.GetCorrelatedPlan(inner);
         var rowParameter = FindRowParameter();
 
-        if (rowParameter is null)
+        if (rowParameter is null && !negated)
             return FoldConstant(plan, terminal, inValue, inner.ResultType!);
 
-        var values = BuildOuterValuesExpression(rowParameter);
+        Expression values = rowParameter is null
+            ? Expression.Constant(Array.Empty<object?>())
+            : BuildOuterValuesExpression(rowParameter);
 
-        return terminal switch
+        Expression result = terminal switch
         {
             CorrelatedTerminal.Exists =>
                 Expression.Invoke(Expression.Constant((Func<object?[], bool>)plan.Any), values),
@@ -164,6 +169,7 @@ internal sealed class InMemoryCorrelatedSubqueryRewriter : ExpressionVisitor
                 Expression.Invoke(Expression.Constant((Func<object?[], object?>)plan.Scalar), values),
                 inner.ResultType!),
         };
+        return negated ? Expression.Not(result) : result;
     }
 
     private Expression FoldConstant(InMemoryCorrelatedPlan plan, CorrelatedTerminal terminal, Expression? inValue, Type resultType)
@@ -314,7 +320,8 @@ internal sealed class InMemoryCorrelatedSubqueryRewriter : ExpressionVisitor
                 && call.Arguments is [Expression arg])
                 return IsReferencedQueryIndex(arg);
 
-            if (call.Method.Name is (nameof(CommonFunctions.@in) or nameof(CommonFunctions.inUntyped) or nameof(ClickHouseFunctions.global_in))
+            if (call.Method.Name is (nameof(CommonFunctions.@in) or nameof(CommonFunctions.not_in)
+                    or nameof(CommonFunctions.inUntyped) or nameof(ClickHouseFunctions.global_in))
                 && call.Arguments is [_, Expression cmdArg])
                 return IsReferencedQueryIndex(cmdArg);
         }

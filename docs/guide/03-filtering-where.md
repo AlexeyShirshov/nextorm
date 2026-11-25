@@ -495,6 +495,28 @@ into the prepared command. When the collection is mutated or reassigned between 
 detects the changed shape and rebuilds the command, so a second [`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})) sees the new values rather
 than stale results.
 
+### `NOT IN`
+
+Use `SqlFunctions.Sql.not_in` to exclude values. Like `@in`, it accepts a subquery, an
+`IEnumerable<T>`, or individual values:
+
+```csharp
+var ids = await dataContext.From<ComplexEntity>()
+    .Where(e => SqlFunctions.Sql.not_in(e.Id, 1L, 3L))
+    .Select(e => e.Id)
+    .ToListAsync();
+```
+
+```sql
+-- SQLite
+select id
+ from complex_entity where id not in ($p0, $p1)
+```
+
+An empty collection excludes no rows. For a nullable column, a collection containing `null`
+adds an `IS NOT NULL` check instead of binding `NULL` into the list. With a subquery, the
+database applies its own `NOT IN` null semantics.
+
 ### `GLOBAL IN` (ClickHouse)
 
 ClickHouse's distributed predicate `column GLOBAL IN (subquery | values)` is exposed through

@@ -231,6 +231,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 }
             }
             else if ((node.Method.Name == nameof(CommonFunctions.@in)
+                || node.Method.Name == nameof(CommonFunctions.not_in)
                 || node.Method.Name == nameof(CommonFunctions.inUntyped)
                 || node.Method.Name == nameof(ClickHouseFunctions.global_in))
                 && node.Arguments is [Expression propExp, Expression cmdExp] && cmdExp.Type.IsAssignableTo(typeof(QueryCommand)))

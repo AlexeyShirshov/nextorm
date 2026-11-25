@@ -95,6 +95,41 @@ public class CorrelatedQueryInMemoryTests
     }
 
     [Fact]
+    public void CorrelatedNotIn_ShouldExcludeMatchingRows()
+    {
+        var rows = _sut.SimpleEntity
+            .Where(it => SqlFunctions.Sql.not_in(it.Id,
+                _sut.SimpleEntity.Where(s => s.Id == it.Id && s.Id > 1).Select(s => s.Id)))
+            .Select(it => it.Id)
+            .ToList();
+
+        rows.Should().Equal(1);
+    }
+
+    [Fact]
+    public void UncorrelatedNotIn_ShouldCompareEachRow()
+    {
+        var excluded = _sut.SimpleEntity.Where(s => s.Id == 2).Select(s => s.Id);
+        var rows = _sut.SimpleEntity
+            .Where(it => SqlFunctions.Sql.not_in(it.Id, excluded))
+            .Select(it => it.Id)
+            .ToList();
+
+        rows.Should().Equal(1);
+    }
+
+    [Fact]
+    public void NotInValueList_ShouldExcludeMatchingRows()
+    {
+        var rows = _sut.SimpleEntity
+            .Where(it => SqlFunctions.Sql.not_in(it.Id, 2))
+            .Select(it => it.Id)
+            .ToList();
+
+        rows.Should().Equal(1);
+    }
+
+    [Fact]
     public void CorrelatedAggregateInProjection_ShouldAggregatePerRow()
     {
         var r = _sut.SimpleEntity

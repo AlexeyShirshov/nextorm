@@ -286,6 +286,11 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
             if (node.Method.Name == nameof(CommonFunctions.collate) && node.Arguments.Count == 2)
                 return Visit(node.Arguments[0])!;
 
+            if (node.Method.Name == nameof(CommonFunctions.not_in)
+                && InValues.TryGetArguments(node, out var column, out var values, out var elementType, out _))
+                return Expression.Not(Expression.Call(typeof(Enumerable), nameof(Enumerable.Contains), [elementType],
+                    Visit(values)!, Visit(column)!));
+
             if (PortableBinaryFunctionNames.Contains(node.Method.Name))
                 throw new NotSupportedException($"The {node.Method.Name} function is not supported by the in-memory provider.");
 

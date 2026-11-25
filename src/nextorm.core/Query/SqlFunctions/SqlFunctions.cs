@@ -1237,6 +1237,24 @@ public static partial class SqlFunctions
         /// <param name="values">The candidate values.</param>
         public bool @in<T>(T column, params T[] values) => default!;
 
+        /// <summary>Tests <c>column NOT IN (subquery)</c> with the database's null semantics.</summary>
+        /// <typeparam name="T">The compared value type.</typeparam>
+        /// <param name="column">The value to test.</param>
+        /// <param name="cmd">The subquery producing candidate values.</param>
+        public bool not_in<T>(T column, QueryCommand<T> cmd) => default!;
+
+        /// <summary>Tests <c>column NOT IN (values)</c>, the inverse of value-list <c>IN</c>.</summary>
+        /// <typeparam name="T">The compared value type.</typeparam>
+        /// <param name="column">The value to test.</param>
+        /// <param name="values">The values to exclude. An empty collection excludes no rows.</param>
+        public bool not_in<T>(T column, IEnumerable<T> values) => default!;
+
+        /// <summary>Tests <c>column NOT IN (v0, v1, ...)</c>, the inverse of value-list <c>IN</c>.</summary>
+        /// <typeparam name="T">The compared value type.</typeparam>
+        /// <param name="column">The value to test.</param>
+        /// <param name="values">The values to exclude. An empty array excludes no rows.</param>
+        public bool not_in<T>(T column, params T[] values) => default!;
+
         /// <summary>
         /// <c>any(subquery)</c>: the <c>ANY</c> subquery quantifier, true when any row of the subquery
         /// satisfies the comparison. Distinct from <c>any_agg</c>, the arbitrary-value aggregate.

@@ -202,6 +202,33 @@ public class CorrelatedQueryTests
     }
 
     [Fact]
+    public void CorrelatedNotInInWhere_ShouldRenderNotInAndReferenceOuterAlias()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var outer = ctx.From<IComplexEntity>();
+        var inner = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, outer
+            .Where(it => SqlFunctions.Sql.not_in((int)it.Id, inner.Where(s => s.Id == it.Id).Select(s => s.Id)))
+            .Select(it => it.Id));
+
+        sql.Should().Contain(" not in (select ");
+        sql.Should().Contain("cast(t2.id as bigint) = t1.id");
+        sql.Should().NotContain("not (");
+    }
+
+    [Fact]
+    public void NotInValueList_ShouldRenderParameterizedNotIn()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var outer = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, outer.Where(it => SqlFunctions.Sql.not_in(it.Id, 1, 2)).Select(it => it.Id));
+
+        sql.Should().Be("select id\n from simple_entity\n where id not in ($p0, $p1)");
+    }
+
+    [Fact]
     public void CorrelatedExistsInOrderBy_ShouldReferenceOuterAlias()
     {
         using var ctx = SqliteTestContext.Create();
