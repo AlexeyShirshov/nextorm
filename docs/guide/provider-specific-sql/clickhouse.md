@@ -476,6 +476,11 @@ reachable only through raw SQL or a `[SqlFunction]` wrapper. The dialect rejects
 boundary test checks every function in the server's `system.table_functions` and verifies that only the
 thirteen names above are accepted.
 
+Integration tests verify that nextorm reads rows through `remote` using a loopback address, `cluster`
+using a named single-shard cluster, `file` using a CSV in the server's `user_files_path`, and `s3`
+using a CSV object in S3-compatible storage. These tests don't cover multi-node clusters or
+end-to-end execution of `url`, `remote_secure`, or `cluster_all_replicas`.
+
 See [Table-valued functions](../13-table-valued-functions.md).
 
 ## Native JSON columns
@@ -538,14 +543,11 @@ truncate their results.
 | Dictionary | `dict_get_keys`, `dict_get_root` | Introduced in 25.12 and 26.7 respectively; absent from the pinned server. Use `dict_get_hierarchy` (last element for the root). |
 | Dictionary | `region_to_parent`, `region_to_parents` | No such functions in 25.8.33.6; the documented composition is `region_hierarchy` without the first element. |
 
-Exercising the server/cluster table functions (`url`, `s3`, `file`, `remote`, `remote_secure`, `cluster`,
-`cluster_all_replicas`) end-to-end against a real cluster is **not** covered and stays out of scope. See
-[Limitations and out-of-scope features](../../advanced/limitations.md).
-
 ## See also
 
 * [ClickHouse provider](../../connecting-providers/clickhouse.md)
 * [Provider-specific SQL](overview.md)
+* [Limitations and out-of-scope features](../../advanced/limitations.md)
 
 ---
 

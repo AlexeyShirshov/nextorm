@@ -29,14 +29,14 @@ internal static class ClickHouseContainer
     private const string ReuseLabel = "reuse-id";
 
     /// <summary>
-    /// T359 (#349): the reuse identity was bumped when the resource envelope was introduced.
+    /// The reuse identity includes the resource envelope and the #129 server-file fixture.
     /// Testcontainers' reuse hash covers the image, environment, command and labels but not the
     /// resource mappings or create-parameter modifiers, so a host that already owns the pre-envelope
     /// container would silently keep the unbounded server (measured: the envelope first ran against
     /// the old container with <c>Memory = 0</c> and a 10.5 GiB allowance). A new identity forces the
     /// bounded container to be created; the old one is left stopped and can be removed by hand.
     /// </summary>
-    private const string ReuseIdentity = "nextorm-clickhouse-mem2g";
+    private const string ReuseIdentity = "nextorm-clickhouse-mem2g-tvf129";
 
     /// <summary>
     /// T359 (#349): hard cgroup ceiling for every ClickHouse container the harness starts (2 GiB).
@@ -164,6 +164,7 @@ internal static class ClickHouseContainer
                 var container = new ClickHouseBuilder(DefaultImage)
                     .WithEnvironment("TZ", "UTC")
                     .WithResourceEnvelope()
+                    .WithResourceMapping(ClickHouseServerTableFunctionTests.CsvFixture, "/var/lib/clickhouse/user_files/")
                     .WithReuse(true)
                     .WithLabel(ReuseLabel, ReuseIdentity)
                     .Build();

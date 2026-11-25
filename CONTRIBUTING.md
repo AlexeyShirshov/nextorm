@@ -70,6 +70,17 @@ dotnet test tests/nextorm.extensions.integration.tests -c Debug --filter-not-tra
 
 These integration tests use real databases. For local runs, see the [integration test workflow](.opencode/skills/running-integration-tests/SKILL.md) for using existing `wslc` test databases and selecting affected providers. A run that skips a provider does **not** establish correctness for that provider.
 
+To run `ClickHouseServerTableFunctionTests` with `NEXTORM_CLICKHOUSE_CONNECTION`,
+use a test server with a native listener at `127.0.0.1:9000` and a one-shard
+cluster named `default` that points back to the server. The test user must be
+able to create, populate, and drop tables in the test database. Copy
+[`nextorm-tvf-129.csv`](tests/nextorm.integration.tests/ClickHouse/Fixtures/TableFunctions/nextorm-tvf-129.csv)
+into the server's `user_files_path` with the same filename. Store a copy in a
+private test S3-compatible service, then set `NEXTORM_CLICKHOUSE_TVF_S3_URL`
+to the object URL reachable from the ClickHouse server. Do not put credentials
+in the URL. When the suite starts its own containers, it provisions both
+copies automatically.
+
 To run the whole solution, keep the integration test modules sequential because they share database containers and test data:
 
 ```bash
