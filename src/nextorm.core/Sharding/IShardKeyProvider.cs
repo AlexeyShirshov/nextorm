@@ -8,7 +8,7 @@ public interface IShardKeyProvider
 {
     /// <summary>Returns whether the entity type declares a shard key.</summary>
     /// <param name="entityType">The entity type to inspect.</param>
-    /// <returns><see langword="true"/> when the type declares <see cref="ShardKeyAttribute"/>.</returns>
+    /// <returns><see langword="true"/> when the provider recognizes a shard key for the type.</returns>
     bool IsSharded(Type entityType);
 
     /// <summary>Gets the ordered CLR properties that compose the entity's shard key.</summary>
@@ -65,4 +65,21 @@ public sealed class AttributeShardKeyProvider : IShardKeyProvider
 
         return Array.AsReadOnly(properties);
     }
+}
+
+internal sealed class MappedShardKeyProvider : IShardKeyProvider
+{
+    private readonly AttributeShardKeyProvider _attributes = new();
+
+    public bool IsSharded(Type entityType)
+        => GetMappedKey(entityType) is not null || _attributes.IsSharded(entityType);
+
+    public IReadOnlyList<PropertyInfo> GetShardKey(Type entityType)
+        => GetMappedKey(entityType) ?? _attributes.GetShardKey(entityType);
+
+    // Do not auto-build metadata here: a lookup before From<T>(cfg) must not block that registration.
+    private static IReadOnlyList<PropertyInfo>? GetMappedKey(Type entityType)
+        => DataContextCache.Metadata.TryGetValue(entityType, out var metadata) && metadata is EntityMetadata mapped
+            ? mapped.ShardKey
+            : null;
 }

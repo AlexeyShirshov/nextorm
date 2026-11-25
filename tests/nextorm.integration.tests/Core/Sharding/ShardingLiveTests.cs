@@ -59,6 +59,29 @@ public sealed class SqliteShardingLiveTests : IDisposable
     }
 
     [Fact]
+    public void FluentShardKey_ShouldRouteInsertAndPointReadsToTheBucketTable()
+    {
+        var topology = CreateTopology();
+        using var context = CreateContext(topology);
+        Seed(topology);
+
+        var (tenant, bucket) = FindTenant(topology, "shard-2");
+        var router = context.GetShardRouter();
+        router.IsSharded(typeof(FluentRow)).Should().BeFalse();
+
+        var query = context.From<FluentRow>(map => map.Table(nameof(ShardedRow)).HasShardKey(x => x.Tenant));
+        var row = new FluentRow { Id = 1, Tenant = tenant, Name = "fluent" };
+
+        router.GetBucket(row).Should().Be(bucket);
+        context.CreateInsertBuilder<FluentRow>().Values(row).Insert().Should().Be(1);
+        query.Where(x => x.Tenant == tenant).Select(x => x.Name).ToList().Should().Equal("fluent");
+        context.From<FluentRow>().WithShardKey(tenant).Select(x => x.Name).ToList().Should().Equal("fluent");
+        CountRows(topology, "shard-2", $"SELECT COUNT(*) FROM ShardedRow_{bucket}").Should().Be(1L);
+        FluentActions.Invoking(() => context.From<FluentRow>().Select(x => x.Name).ToList())
+            .Should().Throw<InvalidOperationException>().WithMessage("*sharded*");
+    }
+
+    [Fact]
     public void AddingAShard_ShouldKeepTheBucketTableName()
     {
         var topology = CreateTopology();
@@ -241,6 +264,13 @@ public sealed class SqliteShardingLiveTests : IDisposable
         context.EnsureConnectionOpen();
         using var command = context.CreateCommand(sql);
         return command.ExecuteScalar();
+    }
+
+    private sealed class FluentRow
+    {
+        public int Id { get; set; }
+        public string Tenant { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
     }
 }
 

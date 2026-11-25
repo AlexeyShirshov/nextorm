@@ -60,7 +60,7 @@
 
 ## Объявление shard key
 
-Shard key — одно или несколько читаемых свойств экземпляра:
+Shard key — одно или несколько читаемых свойств экземпляра. Его можно объявить атрибутом:
 
 ```csharp
 [ShardKey(nameof(Tenant))]
@@ -71,6 +71,23 @@ public sealed class Order
     public decimal Total { get; set; }
 }
 ```
+
+Чтобы объявить ключ без атрибута, вызовите `HasShardKey` при первой настройке маппинга сущности
+в контексте с `UseSharding`:
+
+```csharp
+var orders = context.From<Order>(map => map.HasShardKey(x => x.Tenant));
+var shipments = context.From<Shipment>(map =>
+    map.HasShardKey(x => new { x.Tenant, x.Region }));
+```
+
+Для составного ключа перечислите свойства в порядке компонентов ключа. Маппинг общий для процесса:
+настройте его до первого чтения или записи сущности этого типа. Роутер по умолчанию предпочитает
+`HasShardKey` атрибуту `[ShardKey]`. Если передать свой `IShardKeyProvider` в `UseSharding`, ключ
+определяет этот провайдер.
+
+Срок хранения маппинга с ключом `HasShardKey` не ограничен. Если вызвали `DataContextCache.Clear()`,
+зарегистрируйте маппинг снова, прежде чем использовать сущность.
 
 Значения ключа хешируются детерминированной некриптографической функцией, поэтому один и тот же
 ключ попадает в тот же бакет в любом процессе и после перезапуска. Поддержаны `int`, `long`, `short`,
@@ -266,7 +283,8 @@ public sealed class Shipment { /* ... */ }
 context.From<Shipment>().WithShardKey(tenant, region);
 ```
 
-* Порядок задаёт атрибут либо ваш `IShardKeyProvider`, переданный в `UseSharding(topology, keyProvider)`.
+* Порядок задаёт `HasShardKey`, атрибут `[ShardKey]` или ваш `IShardKeyProvider`, переданный
+  в `UseSharding(topology, keyProvider)`.
 * Число значений должно совпадать с ключом точно; `null` — такое же значение, как и любое другое.
 * **Типы** значений входят в ключ: `int 5` и `long 5` дают разные бакеты, а поддержаны только `null`,
   `int`, `long`, `short`, `byte`, `Guid`, `string`, `bool`, `DateTime`, `DateTimeOffset` и `decimal`.

@@ -54,6 +54,45 @@ public sealed class ShardRouterTests
     }
 
     [Fact]
+    public void FluentCompositeKey_ShouldOverrideTheAttributeAndPreserveSelectorOrder()
+    {
+        var topology = CreateTopology();
+        var router = new ShardRouter(topology);
+        var row = new FluentOverrideRow { Tenant = "tenant-1", Region = 42 };
+
+        router.GetShardKey(typeof(FluentOverrideRow)).Select(property => property.Name)
+            .Should().Equal(nameof(FluentOverrideRow.Tenant));
+
+        using var context = new InMemoryDataContext();
+        context.From<FluentOverrideRow>(map => map.HasShardKey(x => new { x.Region, x.Tenant }));
+
+        router.GetShardKey(typeof(FluentOverrideRow)).Select(property => property.Name)
+            .Should().Equal(nameof(FluentOverrideRow.Region), nameof(FluentOverrideRow.Tenant));
+        var expected = topology.Ring.GetBucket(ShardKeyHasher.GetCanonicalBytes([row.Region, row.Tenant]));
+        router.GetBucket(row).Should().Be(expected);
+        router.GetBucket(typeof(FluentOverrideRow), [row.Region, row.Tenant]).Should().Be(expected);
+
+        var customRouter = new ShardRouter(topology, new AttributeShardKeyProvider());
+        customRouter.GetShardKey(typeof(FluentOverrideRow)).Select(property => property.Name)
+            .Should().Equal(nameof(FluentOverrideRow.Tenant));
+    }
+
+    [Fact]
+    public void FluentKey_ShouldRejectComputedDuplicateAndUnmappedProperties()
+    {
+        var mapping = new EntityMetadataBuilder<FluentOverrideRow>();
+
+        FluentActions.Invoking(() => mapping.HasShardKey(x => x.Region + 1))
+            .Should().Throw<NotSupportedException>().WithMessage("*shard-key selector*");
+        FluentActions.Invoking(() => mapping.HasShardKey(x => new { x.Region, Other = x.Region }))
+            .Should().Throw<NotSupportedException>().WithMessage("*repeats the property*");
+
+        mapping.HasShardKey(x => x.Region).Property(x => x.Tenant);
+        FluentActions.Invoking(() => mapping.Build())
+            .Should().Throw<InvalidOperationException>().WithMessage("*Region*readable, mapped property*");
+    }
+
+    [Fact]
     public void UseSharding_ShouldPreserveUserMetadataProviderAndRejectCustomResolver()
     {
         var topology = CreateTopology();
@@ -144,6 +183,13 @@ public sealed class ShardRouterTests
     {
         public string Tenant { get; set; } = string.Empty;
         public int Id { get; set; }
+    }
+
+    [ShardKey(nameof(Tenant))]
+    private sealed class FluentOverrideRow
+    {
+        public string Tenant { get; set; } = string.Empty;
+        public int Region { get; set; }
     }
 
     [ShardKey("Missing")]

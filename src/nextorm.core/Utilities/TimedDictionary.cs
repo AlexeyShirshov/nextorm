@@ -13,7 +13,7 @@ namespace NextORM.Core;
 /// </summary>
 /// <typeparam name="TKey">The key type.</typeparam>
 /// <typeparam name="TValue">The cached value type.</typeparam>
-internal sealed class TimedDictionary<TKey, TValue> : IDictionary<TKey, TValue>
+internal sealed class TimedDictionary<TKey, TValue>(Func<TValue, bool>? retain = null) : IDictionary<TKey, TValue>
     where TKey : notnull
 {
     private sealed class Entry
@@ -36,7 +36,7 @@ internal sealed class TimedDictionary<TKey, TValue> : IDictionary<TKey, TValue>
 
     private Entry MakeEntry(TValue value)
     {
-        var timed = DataContextCache.CacheSlidingExpiration > TimeSpan.Zero;
+        var timed = DataContextCache.CacheSlidingExpiration > TimeSpan.Zero && retain?.Invoke(value) != true;
         return new Entry(value, timed ? UtcNowTicks : 0, timed);
     }
 

@@ -57,7 +57,7 @@ and it stays on the context connection — the same `false` any other topology r
 
 ## Declare a shard key
 
-A shard key is one or more readable instance properties. Declare it with the attribute:
+A shard key is one or more readable instance properties. You can declare it with an attribute:
 
 ```csharp
 [ShardKey(nameof(Tenant))]
@@ -68,6 +68,23 @@ public sealed class Order
     public decimal Total { get; set; }
 }
 ```
+
+To declare the key without an attribute, call `HasShardKey` when you first map the entity
+in a context configured with `UseSharding`:
+
+```csharp
+var orders = context.From<Order>(map => map.HasShardKey(x => x.Tenant));
+var shipments = context.From<Shipment>(map =>
+    map.HasShardKey(x => new { x.Tenant, x.Region }));
+```
+
+For a composite key, list the properties in key order. The mapping is process-wide: configure it
+before the first read or write of that entity type. The default router prefers `HasShardKey` to
+`[ShardKey]`. If you pass a custom `IShardKeyProvider` to `UseSharding`, that provider defines the key
+instead.
+
+Fluent shard-key mappings don't expire. If you call `DataContextCache.Clear()`, register the mapping
+again before using the entity.
 
 The key values are hashed with a fixed, deterministic, non-cryptographic function, so the same key
 resolves to the same bucket in every process and after a restart. Supported value types are `int`,
@@ -260,7 +277,7 @@ public sealed class Shipment { /* ... */ }
 context.From<Shipment>().WithShardKey(tenant, region);
 ```
 
-* The order is the attribute's, or the one of the custom `IShardKeyProvider` passed to
+* The order comes from `HasShardKey`, `[ShardKey]`, or the custom `IShardKeyProvider` passed to
   `UseSharding(topology, keyProvider)`.
 * The value count must match the key exactly, and `null` is a value like any other.
 * The value **types** are part of the key: `int 5` and `long 5` hash to different buckets, and only

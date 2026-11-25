@@ -18,6 +18,7 @@ static NextORM.Core.MappingVariantQueryExtensions.FromSql(this NextORM.Core.IDat
 NextORM.Core.EntityBuilder<TEntity>.WithShardKey(params object?[]! shardKeyValues) -> NextORM.Core.EntityBuilder<TEntity>!
 NextORM.Core.InsertBuilder<TEntity>.WithShardKey(params object?[]! shardKeyValues) -> NextORM.Core.InsertBuilder<TEntity>!
 NextORM.Core.EntityMetadataBuilder<T>.Schema(string! schema) -> NextORM.Core.EntityMetadataBuilder<T>!
+NextORM.Core.EntityMetadataBuilder<T>.HasShardKey(System.Linq.Expressions.Expression<System.Func<T, object?>!>! keySelector) -> NextORM.Core.EntityMetadataBuilder<T>!
 NextORM.Core.DataContextBuilder.EntityMetadataProvider.get -> NextORM.Core.IEntityMetadataProvider!
 NextORM.Core.DataContextBuilder.EntityVariantResolver.get -> NextORM.Core.IEntityVariantResolver!
 NextORM.Core.DataContextBuilder.UseEntityMetadataProvider(NextORM.Core.IEntityMetadataProvider! provider) -> NextORM.Core.DataContextBuilder!

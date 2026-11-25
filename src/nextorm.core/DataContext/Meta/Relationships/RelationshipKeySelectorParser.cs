@@ -38,11 +38,15 @@ internal static class RelationshipKeySelectorParser
         ArgumentNullException.ThrowIfNull(selector, selectorName);
         ArgumentNullException.ThrowIfNull(entityType);
 
+        var subject = $"'{selectorName}' selector of the relationship '{relationshipName}' on entity '{entityType.Name}'";
+        return ParseProperties(selector, selectorName, subject);
+    }
+
+    internal static PropertyInfo[] ParseProperties(LambdaExpression selector, string selectorName, string subject)
+    {
         var body = selector.Body
             ?? throw new ArgumentNullException(selectorName, "The key selector has no body.");
         body = UnwrapConversions(body);
-
-        var subject = $"'{selectorName}' selector of the relationship '{relationshipName}' on entity '{entityType.Name}'";
 
         if (body is NewExpression creation)
             return ParseCreation(creation, subject);
@@ -56,7 +60,7 @@ internal static class RelationshipKeySelectorParser
         throw Unsupported(subject, body, Describe(body));
     }
 
-    private static IReadOnlyList<PropertyInfo> ParseCreation(NewExpression creation, string subject)
+    private static PropertyInfo[] ParseCreation(NewExpression creation, string subject)
     {
         if (IsTupleType(creation.Type))
             throw Unsupported(subject, creation, "a tuple literal; select the component properties directly");

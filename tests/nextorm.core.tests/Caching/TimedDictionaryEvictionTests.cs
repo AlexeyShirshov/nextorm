@@ -34,6 +34,34 @@ public class TimedDictionaryEvictionTests
     /// <summary>Key marker for the untimed-semantics control; used by no other scenario.</summary>
     private sealed class UntimedEntryMarker;
 
+    private sealed class FluentShardKeyRow
+    {
+        public int TenantId { get; set; }
+    }
+
+    [Fact]
+    public void Expiration_ShouldNotDropAFluentShardKey()
+    {
+        var previous = WithWindow();
+        try
+        {
+            var router = new ShardRouter(new ShardTopology(8));
+            using var context = new InMemoryDataContext();
+            context.From<FluentShardKeyRow>(map => map.HasShardKey(x => x.TenantId));
+
+            DataContextCache.ExpireTimedEntriesForTesting();
+
+            router.IsSharded(typeof(FluentShardKeyRow)).Should().BeTrue();
+            router.GetShardKey(typeof(FluentShardKeyRow)).Select(property => property.Name)
+                .Should().Equal(nameof(FluentShardKeyRow.TenantId));
+        }
+        finally
+        {
+            DataContextCache.Metadata.Remove(typeof(FluentShardKeyRow));
+            DataContextCache.CacheSlidingExpiration = previous;
+        }
+    }
+
     private sealed record FiveCacheKeys(
         Type MetadataKey,
         Type TvpKey,

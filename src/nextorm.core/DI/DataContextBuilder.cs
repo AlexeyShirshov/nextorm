@@ -400,7 +400,7 @@ public class DataContextBuilder
     /// Enables sliding expiration for the process-wide caches: an entry that is not read within
     /// <paramref name="ttl"/> is evicted lazily. Pass <see cref="TimeSpan.Zero"/> to disable it (the
     /// default). The setting is process-wide because the caches are static, so it applies to every
-    /// context created afterwards as well.
+    /// context created afterwards as well. Entity mappings that declare a fluent shard key do not expire.
     /// </summary>
     /// <param name="ttl">The sliding window; <see cref="TimeSpan.Zero"/> disables expiration.</param>
     /// <returns>This builder, to allow chaining.</returns>

@@ -40,6 +40,8 @@ internal class EntityMetadata : IEntityMetadata
 
     public IReadOnlyList<IRelationshipMetadata> Relationships { get; }
 
+    internal IReadOnlyList<PropertyInfo>? ShardKey { get; init; }
+
     /// <summary>Looks up a mapped property by its CLR member; <see langword="null"/> when it is not mapped.</summary>
     internal IPropertyMetadata? FindProperty(PropertyInfo property)
     {

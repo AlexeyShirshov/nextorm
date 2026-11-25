@@ -17,6 +17,7 @@ public class EntityMetadataBuilder<T>
     private readonly List<RelationshipDeclaration> _relationships = new();
     private string? _tableName;
     private string? _schema;
+    private IReadOnlyList<PropertyInfo>? _shardKey;
 
     /// <summary>Sets the schema/owner for the mapped table.</summary>
     public EntityMetadataBuilder<T> Schema(string schema)
@@ -27,12 +28,32 @@ public class EntityMetadataBuilder<T>
     }
 
     /// <summary>
+    /// Declares the shard key for the default shard router, overriding <see cref="ShardKeyAttribute"/>
+    /// on this entity. Configure it as part of the entity's first mapping.
+    /// </summary>
+    /// <param name="keySelector">
+    /// A mapped property (<c>x =&gt; x.TenantId</c>) or an anonymous object of mapped properties in
+    /// key order (<c>x =&gt; new { x.TenantId, x.Region }</c>).
+    /// </param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="keySelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The selector does not select distinct, direct properties.</exception>
+    public EntityMetadataBuilder<T> HasShardKey(Expression<Func<T, object?>> keySelector)
+    {
+        ArgumentNullException.ThrowIfNull(keySelector);
+        _shardKey = Array.AsReadOnly(RelationshipKeySelectorParser.ParseProperties(
+            keySelector, nameof(keySelector), $"shard-key selector on entity '{typeof(T).Name}'"));
+        return this;
+    }
+
+    /// <summary>
     /// Builds the metadata from the mappings declared on this builder, auto-deriving the table name
     /// and, when no properties were declared, the property mappings from the CLR type. Declaring even
     /// one property fluently maps <b>only</b> the declared properties: the CLR attributes on the other
     /// properties are not auto-built (they would otherwise need merging with the fluent overrides).
     /// </summary>
     /// <returns>The resolved entity metadata.</returns>
+    /// <exception cref="InvalidOperationException">A declared shard-key property is not readable or not mapped.</exception>
     public IEntityMetadata Build()
     {
         var (tableName, isTableNameAuto) = string.IsNullOrEmpty(_tableName)
@@ -46,7 +67,7 @@ public class EntityMetadataBuilder<T>
             ? AutoBuildProperties(out var store, navigationProperties)
             : BuildDeclaredProperties(out store, navigationProperties);
 
-        return CreateMetadata(tableName, isTableNameAuto, properties, store, BuildFilters(includeFluent: true), relationships);
+        return CreateMetadata(tableName, isTableNameAuto, properties, store, BuildFilters(includeFluent: true), relationships, _shardKey);
     }
     /// <summary>
     /// Builds the metadata entirely by reflecting over the CLR type, ignoring any table or property
@@ -89,13 +110,26 @@ public class EntityMetadataBuilder<T>
         return list;
     }
 
-    private IEntityMetadata CreateMetadata(string? tableName, bool isTableNameAuto, List<IPropertyMetadata> properties, IPropertyMetadata? dynamicColumnsStore, IReadOnlyList<IQueryFilterMetadata> filters, IReadOnlyList<IRelationshipMetadata> relationships)
+    private IEntityMetadata CreateMetadata(string? tableName, bool isTableNameAuto, List<IPropertyMetadata> properties, IPropertyMetadata? dynamicColumnsStore, IReadOnlyList<IQueryFilterMetadata> filters, IReadOnlyList<IRelationshipMetadata> relationships, IReadOnlyList<PropertyInfo>? shardKey = null)
     {
         dynamicColumnsStore ??= FindAttributeStore(properties);
         if (dynamicColumnsStore is not null)
             ValidateDynamicColumnsStore(typeof(T), dynamicColumnsStore.PropertyInfo);
 
-        return new EntityMetadata(tableName, properties, isTableNameAuto, dynamicColumnsStore, filters, relationships, _schema);
+        var metadata = new EntityMetadata(tableName, properties, isTableNameAuto, dynamicColumnsStore, filters, relationships, _schema)
+        {
+            ShardKey = shardKey,
+        };
+        if (shardKey is not null)
+        {
+            foreach (var property in shardKey)
+            {
+                if (property.GetMethod is not { IsPublic: true } || metadata.FindProperty(property) is null)
+                    throw new InvalidOperationException($"Shard-key property '{typeof(T).Name}.{property.Name}' must be a readable, mapped property.");
+            }
+        }
+
+        return metadata;
     }
 
     private IReadOnlyList<IQueryFilterMetadata> BuildFilters(bool includeFluent)

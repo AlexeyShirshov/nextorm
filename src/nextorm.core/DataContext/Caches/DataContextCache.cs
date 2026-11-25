@@ -20,7 +20,9 @@ namespace NextORM.Core;
 /// </remarks>
 public static class DataContextCache
 {
-    private readonly static TimedDictionary<Type, IEntityMetadata> _metadata = new();
+    // An idle period must not cause queries and writes to route a fluently sharded type as unsharded.
+    private readonly static TimedDictionary<Type, IEntityMetadata> _metadata =
+        new(static metadata => metadata is EntityMetadata { ShardKey: not null });
     private readonly static ConcurrentDictionary<(Type Type, MappingVariant Scope), IEntityMetadata> _scopedMetadata = new();
     private readonly static TimedDictionary<Type, IEntityMetadata> _tvpMetadata = new();
     private readonly static ConcurrentDictionary<Type, byte> _autoPublishedJunctionMetadata = new();
@@ -100,6 +102,7 @@ public static class DataContextCache
     /// <summary>
     /// Sliding expiration applied to every process-wide cache this class owns. An entry that has not
     /// been read within the window is evicted lazily on the next access; every read refreshes it.
+    /// Entity mappings that declare a fluent shard key are retained until explicitly removed.
     /// <see cref="TimeSpan.Zero"/> (the default) disables expiration and adds no per-access cost.
     /// Set through <c>DataContextBuilder.UseCacheSlidingExpiration</c>.
     /// </summary>

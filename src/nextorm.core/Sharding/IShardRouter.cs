@@ -65,13 +65,13 @@ public sealed class ShardRouter : IShardRouter
 
     /// <summary>Creates a router for a topology and shard-key provider.</summary>
     /// <param name="topology">The shard topology used to select shard identifiers.</param>
-    /// <param name="keyProvider">The provider used to resolve shard-key properties; defaults to attributes.</param>
+    /// <param name="keyProvider">The provider used to resolve shard-key properties; defaults to fluent mappings followed by attributes.</param>
     /// <exception cref="ArgumentNullException"><paramref name="topology"/> is <see langword="null"/>.</exception>
     public ShardRouter(IShardTopology topology, IShardKeyProvider? keyProvider = null)
     {
         ArgumentNullException.ThrowIfNull(topology);
         _topology = topology;
-        _keyProvider = keyProvider ?? new AttributeShardKeyProvider();
+        _keyProvider = keyProvider ?? new MappedShardKeyProvider();
     }
 
     /// <inheritdoc />

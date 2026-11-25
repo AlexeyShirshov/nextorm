@@ -12,7 +12,7 @@ public static class ShardDataContextBuilderExtensions
     /// implementation is accepted, so a custom <see cref="ConsistentHashRing"/> with custom hash functions
     /// can be plugged in.
     /// </param>
-    /// <param name="keyProvider">The shard-key provider to use, or <see langword="null"/> for attribute-based keys.</param>
+    /// <param name="keyProvider">The shard-key provider to use, or <see langword="null"/> for fluent keys with attribute fallback.</param>
     /// <returns>The configured builder.</returns>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">A non-default scope resolver is already configured.</exception>
