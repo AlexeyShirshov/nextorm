@@ -29,6 +29,68 @@ public class BatchSqlGenerationTests
     }
 
     [Fact]
+    public void Batch_LambdaOverloads_ShouldRejectNullCallbacksAndResults()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var batch = ctx.CreateBatchBuilder();
+
+        FluentActions.Invoking(() => batch.Insert<ISimpleEntity>(configure: null!))
+            .Should().Throw<ArgumentNullException>().WithParameterName("configure");
+        FluentActions.Invoking(() => batch.Query<int>(buildQuery: null!))
+            .Should().Throw<ArgumentNullException>().WithParameterName("buildQuery");
+
+        // Null literals must still bind to the existing overloads.
+        FluentActions.Invoking(() => batch.Insert<ISimpleEntity>(null!))
+            .Should().Throw<ArgumentNullException>().WithParameterName("insert");
+        FluentActions.Invoking(() => batch.Query<int>(null!))
+            .Should().Throw<ArgumentNullException>().WithParameterName("query");
+
+        FluentActions.Invoking(() => batch.Insert<ISimpleEntity>(_ => null!))
+            .Should().Throw<ArgumentNullException>();
+        FluentActions.Invoking(() => batch.Query<int>(_ => null!))
+            .Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void Batch_LambdaOverloads_ShouldRejectStepsFromAnotherContext()
+    {
+        using var ctx = SqliteTestContext.Create();
+        using var other = SqliteTestContext.Create();
+        var batch = ctx.CreateBatchBuilder();
+
+        FluentActions.Invoking(() => batch.Insert<ISimpleEntity>(_ =>
+                other.CreateInsertBuilder<ISimpleEntity>().Value(x => x.Id, 42)))
+            .Should().Throw<ArgumentException>().WithMessage("*different data context*");
+        FluentActions.Invoking(() => batch.Query(_ => other.From<ISimpleEntity>().Select(x => x.Id)))
+            .Should().Throw<ArgumentException>().WithMessage("*different data context*");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Batch_LambdaOverloads_ShouldRejectStepsAfterResultWithoutInvokingCallbacks(bool terminal)
+    {
+        using var ctx = SqliteTestContext.Create();
+        var batch = ctx.CreateBatchBuilder();
+        var command = ctx.From<ISimpleEntity>().Select(x => x.Id);
+        if (terminal)
+        {
+            batch.Query(db => db.From<ISimpleEntity>().Select(x => x.Id));
+            FluentActions.Invoking(() => batch.AddQuery(command))
+                .Should().Throw<InvalidOperationException>().WithMessage("*ended with Query()*");
+        }
+        else
+        {
+            batch.AddQuery(command);
+        }
+
+        FluentActions.Invoking(() => batch.Insert<ISimpleEntity>(_ => throw new NotSupportedException()))
+            .Should().Throw<InvalidOperationException>().WithMessage("*result-bearing query*");
+        FluentActions.Invoking(() => batch.Query<int>(_ => throw new NotSupportedException()))
+            .Should().Throw<InvalidOperationException>().WithMessage("*result-bearing query*");
+    }
+
+    [Fact]
     public void Batch_MutationThenTwoAddQueries_ShouldRenderBothSelectsInOrder()
     {
         using var ctx = SqliteTestContext.Create();

@@ -165,6 +165,23 @@ select id, status
 * `Query<TResult>(query)` adds the single result-bearing query and returns the terminal; it must be the last statement. A second `Query`, or any statement after `Query`, throws `InvalidOperationException`. To carry several result sets use `AddQuery<TResult>` and `Execute`/`ExecuteAsync` instead (see [Multiple result sets](#multiple-result-sets)).
 * Every statement must be built from the batch's own context; a statement bound to a different `IDataContext` is rejected with `ArgumentException`.
 
+To build an insert or a final query inline, pass a lambda. `Insert<TEntity>` passes a typed
+insert builder to its lambda, and `Query` passes the batch's context. C# infers the result type
+from the query, even for an anonymous projection. The lambdas run when you add the steps, so
+return the configured builder or query rather than executing it. With the customer mapping and
+sample data from the [SQLite quickstart](../getting-started/02-quickstart.md), run this batch
+against an empty `customers` table:
+
+```csharp
+var rows = ctx.CreateBatchBuilder()
+    .Insert<ICustomer>(insert => insert
+        .Values(customers, customer => new { customer.Id, customer.Name }))
+    .Query(db => db.From<ICustomer>()
+        .OrderBy(customer => customer.Id)
+        .Select(customer => new { customer.Id, customer.Name }))
+    .ToList();
+```
+
 Parameters are numbered across the whole batch, and a captured variable used by more than one statement gets a per-statement prefix (`b0_`, `b1_`, …), so placeholder names never collide — including in the `;`-joined form. A captured variable referenced twice within the same statement keeps a single parameter entry.
 
 A capture step plus a composed query is the batch-native way to turn a mutation's `OUTPUT` into a query in the same round trip (SQL Server only — see [Batch-scoped capture](17-insert-statement.md#batch-scoped-capture-batchbuilderoutputintotablevariable)):

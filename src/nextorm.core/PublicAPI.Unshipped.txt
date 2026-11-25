@@ -3,9 +3,11 @@ NextORM.Core.CommonFunctions.not_in<T>(T column, NextORM.Core.QueryCommand<T>! c
 NextORM.Core.CommonFunctions.not_in<T>(T column, params T[]! values) -> bool
 NextORM.Core.CommonFunctions.not_in<T>(T column, System.Collections.Generic.IEnumerable<T>! values) -> bool
 static NextORM.Core.DataContextExtensions.ExecuteSql(this NextORM.Core.IRawCommandExecutor! executor, string! sql, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+NextORM.Core.BatchBuilder.Insert<TEntity>(System.Func<NextORM.Core.InsertBuilder<TEntity>!, NextORM.Core.InsertBuilder<TEntity>!>! configure) -> NextORM.Core.BatchBuilder!
 NextORM.Core.BatchBuilder.OutputInto(NextORM.Core.OutputIntoBuilder! mutation) -> NextORM.Core.BatchBuilder!
 NextORM.Core.BatchBuilder.OutputIntoTableVariable<TProjection, TResult>(NextORM.Core.DeleteJoinReturningBuilder<TProjection, TResult>! mutation, string! variableName, string! columnDefinitions) -> NextORM.Core.BatchBuilder!
 NextORM.Core.BatchBuilder.OutputIntoTableVariable<TProjection, TResult>(NextORM.Core.UpdateJoinReturningBuilder<TProjection, TResult>! mutation, string! variableName, string! columnDefinitions) -> NextORM.Core.BatchBuilder!
+NextORM.Core.BatchBuilder.Query<TResult>(System.Func<NextORM.Core.IDataContext!, NextORM.Core.QueryCommand<TResult>!>! buildQuery) -> NextORM.Core.BatchQuery<TResult>!
 NextORM.Core.WindowFunction<T>.IgnoreNulls() -> NextORM.Core.WindowFunction<T>!
 NextORM.Core.WindowFunction<T>.RespectNulls() -> NextORM.Core.WindowFunction<T>!
 NextORM.Core.FromOptions.UseVariant(NextORM.Core.MappingVariant variant) -> NextORM.Core.FromOptions!

@@ -868,7 +868,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// populated it (<c>DECLARE @t TABLE (...); DML OUTPUT ... INTO @t</c>). Rendering or executing a
     /// command that reads it on its own would emit a <c>select ... from @t</c> with no declaration, so
     /// the standalone path refuses it before any SQL is produced. The same command is legal when it is
-    /// composed into its owning batch through <see cref="BatchBuilder.Query{TResult}"/> or
+    /// composed into its owning batch through <see cref="BatchBuilder.Query{TResult}(QueryCommand{TResult})"/> or
     /// <see cref="BatchBuilder.AddQuery{TResult}"/>, which render it with the declaring statements.
     /// </summary>
     /// <param name="queryCommand">The command about to be prepared on its own.</param>

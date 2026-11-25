@@ -10,38 +10,52 @@ Create a .NET console project, then replace the contents of its `Program.cs` fil
 the entity interface declarations after the top-level statements, as shown; C# requires top-level
 statements to precede type declarations.
 
-The program creates `orders` and `customers` tables, adds three sample orders, and reads each order's
-ID and status. It uses an in-memory database, so it doesn't need a database server. Install `nextorm`
+The program creates `customers` and `orders`, inserts sample data, and reads each order's ID and
+status in one batch. SQLite runs in memory, so you don't need a database server. Install `nextorm`
 and `nextorm.sqlite` in the console project first:
 
 ```csharp
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using Microsoft.Data.Sqlite;
 using NextORM.Core;
 using NextORM.Sqlite;
 
-using var connection = new SqliteConnection("Data Source=:memory:");
-connection.Open();
+using var dataContext = new SqliteDataContext(
+    "Data Source=:memory:", new DataContextBuilder());
 
-using (var setup = connection.CreateCommand())
+var customers = new[] { (Id: 1, Name: "Amina"), (Id: 2, Name: "Ravi") };
+var sampleOrders = new[]
 {
-    setup.CommandText =
-        "create table customers (id integer primary key, name text not null);" +
-        "create table orders (id integer primary key, customer_id integer not null, " +
-        "status text not null, total_cents integer not null);" +
-        "insert into customers (id, name) values (1, 'Amina'), (2, 'Ravi');" +
-        "insert into orders (id, customer_id, status, total_cents) values " +
-        "(1, 1, 'Paid', 2550), (2, 2, 'Pending', 1800), (3, 1, 'Paid', 4250);";
-    setup.ExecuteNonQuery();
-}
+    (Id: 1, CustomerId: 1, Status: "Paid", TotalCents: 2550),
+    (Id: 2, CustomerId: 2, Status: "Pending", TotalCents: 1800),
+    (Id: 3, CustomerId: 1, Status: "Paid", TotalCents: 4250),
+};
 
-var builder = new DataContextBuilder().UseSqlite(connection);
-using var dataContext = builder.CreateDataContext();
-
-var orders = await dataContext.From<IOrder>()
-    .OrderBy(order => order.Id)
-    .Select(order => new { order.Id, order.Status })
+var orders = await dataContext.CreateBatchBuilder()
+    .Raw("""
+        create table customers (
+            id integer primary key,
+            name text not null
+        )
+        """)
+    .Raw("""
+        create table orders (
+            id integer primary key,
+            customer_id integer not null,
+            status text not null,
+            total_cents integer not null
+        )
+        """)
+    .Insert<ICustomer>(insert => insert
+        .Values(customers, customer => new { customer.Id, customer.Name }))
+    .Insert<IOrder>(insert => insert
+        .Values(sampleOrders, order => new
+        {
+            order.Id, order.CustomerId, order.Status, order.TotalCents
+        }))
+    .Query(db => db.From<IOrder>()
+        .OrderBy(order => order.Id)
+        .Select(order => new { order.Id, order.Status }))
     .ToListAsync();
 
 foreach (var order in orders)
@@ -102,36 +116,31 @@ select id, status
 
 ## Overview
 
-A query uses a mapped entity, a context, and a sequence of query operations. In this example,
-[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
-chooses the `orders` source, [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}}))
-chooses which values to return, and [`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[]))
-executes the query and returns a list.
+`CreateBatchBuilder()` collects the steps in execution order. `Raw` adds SQL to create the tables,
+and `Insert<TEntity>` supplies a typed insert builder to configure with `Values`. `Query` supplies
+the batch's context to build the final query. `ToListAsync()` runs the entire batch and returns the
+rows from that query. See [SQL batches](../guide/25-sql-batch.md) and
+[Inserting data](../guide/17-insert-statement.md).
 
+In the final query,
 [`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
-also registers the entity's metadata the first time it is used. The context is disposable. A context
-created from a connection string owns and closes its connection; a context created from a supplied
-`DbConnection` leaves that connection open. This example supplies a connection and disposes it
-separately.
+chooses the `orders` source, and
+[`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}}))
+chooses which columns to return.
 
 ## Using a connection string
 
-[`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions.UseSqlite(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) also accepts a file path (or an SQLite connection string fragment), and the context then
-creates and owns the connection:
+The context creates and owns the connection, so disposing the context closes it. To use a SQLite
+file instead of an in-memory database, set `Data Source` to the file path:
 
 ```csharp
-var builder = new DataContextBuilder().UseSqlite("app.db");
-using var dataContext = builder.CreateDataContext();
+using var dataContext = new SqliteDataContext(
+    "Data Source=app.db", new DataContextBuilder());
 ```
-
-> **Note:** in `DEBUG` builds `UseSqlite(string filepath)` throws `ArgumentException` when the file does
-> not exist. Pass `:memory:` or an existing path while developing; pass a `DbConnection` to keep full
-> control. `UseSqlServer(connectionString)` and `UsePostgres(connectionString)` have the corresponding
-> string overloads.
 
 ## Reading the data
 
-The example uses `ToListAsync` to collect the rows in a list. Use
+For a query outside a batch, you can also use `ToListAsync` to collect the rows in a list. Use
 [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[]))
 to stream results instead. Other common terminal methods include:
 
@@ -155,10 +164,3 @@ Every terminal has a synchronous and an async form; prefer the async form in app
   entity-free [`TableAlias`](xref:NextORM.Core.TableAlias) mode and fluent configuration.
 * [Dependency injection](04-dependency-injection.md) - register the context instead of constructing it
   by hand.
-
----
-
-The quickstart uses the documented SQLite connection and query APIs. See
-[`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions.UseSqlite(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection))
-and the query examples in [Filtering](../guide/03-filtering-where.md),
-[Projections](../guide/02-projections.md), and [Joins](../guide/04-joins.md).

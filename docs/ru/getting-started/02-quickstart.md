@@ -10,38 +10,52 @@
 объявления интерфейсов сущностей после операторов верхнего уровня, как в примере: в C# операторы
 верхнего уровня должны идти перед объявлениями типов.
 
-Программа создаёт таблицы `orders` и `customers`, добавляет три заказа и читает идентификатор и
-статус каждого заказа. Используется SQLite в памяти, поэтому сервер базы данных не нужен. Сначала
-установите в консольный проект пакеты `nextorm` и `nextorm.sqlite`:
+Программа одним батчем создаёт таблицы `customers` и `orders`, добавляет тестовые данные и читает
+идентификатор и статус каждого заказа. SQLite работает в памяти, поэтому сервер базы данных не
+нужен. Сначала установите в консольный проект пакеты `nextorm` и `nextorm.sqlite`:
 
 ```csharp
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using Microsoft.Data.Sqlite;
 using NextORM.Core;
 using NextORM.Sqlite;
 
-using var connection = new SqliteConnection("Data Source=:memory:");
-connection.Open();
+using var dataContext = new SqliteDataContext(
+    "Data Source=:memory:", new DataContextBuilder());
 
-using (var setup = connection.CreateCommand())
+var customers = new[] { (Id: 1, Name: "Amina"), (Id: 2, Name: "Ravi") };
+var sampleOrders = new[]
 {
-    setup.CommandText =
-        "create table customers (id integer primary key, name text not null);" +
-        "create table orders (id integer primary key, customer_id integer not null, " +
-        "status text not null, total_cents integer not null);" +
-        "insert into customers (id, name) values (1, 'Amina'), (2, 'Ravi');" +
-        "insert into orders (id, customer_id, status, total_cents) values " +
-        "(1, 1, 'Paid', 2550), (2, 2, 'Pending', 1800), (3, 1, 'Paid', 4250);";
-    setup.ExecuteNonQuery();
-}
+    (Id: 1, CustomerId: 1, Status: "Paid", TotalCents: 2550),
+    (Id: 2, CustomerId: 2, Status: "Pending", TotalCents: 1800),
+    (Id: 3, CustomerId: 1, Status: "Paid", TotalCents: 4250),
+};
 
-var builder = new DataContextBuilder().UseSqlite(connection);
-using var dataContext = builder.CreateDataContext();
-
-var orders = await dataContext.From<IOrder>()
-    .OrderBy(order => order.Id)
-    .Select(order => new { order.Id, order.Status })
+var orders = await dataContext.CreateBatchBuilder()
+    .Raw("""
+        create table customers (
+            id integer primary key,
+            name text not null
+        )
+        """)
+    .Raw("""
+        create table orders (
+            id integer primary key,
+            customer_id integer not null,
+            status text not null,
+            total_cents integer not null
+        )
+        """)
+    .Insert<ICustomer>(insert => insert
+        .Values(customers, customer => new { customer.Id, customer.Name }))
+    .Insert<IOrder>(insert => insert
+        .Values(sampleOrders, order => new
+        {
+            order.Id, order.CustomerId, order.Status, order.TotalCents
+        }))
+    .Query(db => db.From<IOrder>()
+        .OrderBy(order => order.Id)
+        .Select(order => new { order.Id, order.Status }))
     .ToListAsync();
 
 foreach (var order in orders)
@@ -102,37 +116,32 @@ select id, status
 
 ## Обзор
 
-Запрос использует сущность с сопоставлением, контекст и последовательность операций. В этом примере
-[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
-выбирает источник `orders`, [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}}))
-задаёт возвращаемые значения, а
-[`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[]))
-выполняет запрос и возвращает список.
+`CreateBatchBuilder()` собирает шаги в порядке выполнения. `Raw` добавляет SQL для создания таблиц,
+а `Insert<TEntity>` передаёт в лямбду типизированный билдер вставки для настройки через `Values`.
+`Query` передаёт в лямбду контекст батча для построения итогового запроса. `ToListAsync()` выполняет
+весь батч и возвращает строки итогового запроса. См. [Батчи](../guide/25-sql-batch.md) и
+[Вставка данных](../guide/17-insert-statement.md).
 
+В итоговом запросе
 [`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
-также регистрирует метаданные сущности при первом обращении. Контекст можно освободить. Контекст,
-созданный из строки подключения, владеет подключением и закрывает его; контекст, созданный из
-переданного `DbConnection`, оставляет подключение открытым. В этом примере подключение передаётся
-отдельно и освобождается отдельно.
+выбирает источник `orders`, а
+[`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}}))
+задаёт возвращаемые колонки.
 
 ## Использование строки подключения
 
-[`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions.UseSqlite(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) также принимает путь к файлу (или фрагмент строки подключения SQLite), и тогда контекст создаёт подключение и владеет им:
+Контекст сам создаёт подключение из строки подключения и закрывает его при освобождении. Чтобы
+работать с файлом SQLite вместо базы в памяти, укажите путь к нему в `Data Source`:
 
 ```csharp
-var builder = new DataContextBuilder().UseSqlite("app.db");
-using var dataContext = builder.CreateDataContext();
+using var dataContext = new SqliteDataContext(
+    "Data Source=app.db", new DataContextBuilder());
 ```
-
-> **Примечание:** в сборках `DEBUG` `UseSqlite(string filepath)` выбрасывает `ArgumentException`, когда файл
-> не существует. При разработке передавайте `:memory:` или существующий путь; передавайте `DbConnection`,
-> чтобы сохранить полный контроль. `UseSqlServer(connectionString)` и `UsePostgres(connectionString)` имеют
-> соответствующие строковые перегрузки.
 
 ## Чтение данных
 
-В примере используется `ToListAsync`, чтобы собрать строки в список. Чтобы читать результат
-потоком, используйте
+Для отдельного запроса, без батча, также используйте `ToListAsync`, чтобы собрать строки в список.
+Чтобы читать результат потоком, используйте
 [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])).
 Другие распространённые терминальные методы:
 
@@ -156,10 +165,3 @@ using var dataContext = builder.CreateDataContext();
   режим [`TableAlias`](xref:NextORM.Core.TableAlias) без сущностей и fluent-конфигурация.
 * [Внедрение зависимостей](04-dependency-injection.md) - зарегистрируйте контекст вместо его ручного
   создания.
-
----
-
-В быстром старте используются SQLite-подключение и API запросов. См.
-[`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions.UseSqlite(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection))
-и примеры в разделах [Фильтрация](../guide/03-filtering-where.md),
-[Проекции](../guide/02-projections.md) и [Соединения](../guide/04-joins.md).

@@ -58,7 +58,7 @@ public static class BatchExtensions
 /// <summary>
 /// Collects the statements of a batch: side-effecting statements (materialisations and DML) followed by
 /// one or more result-bearing queries. A single result can be added with the terminal
-/// <see cref="Query{TResult}"/>; several results can be added with <see cref="AddQuery{TResult}"/> and
+/// <see cref="Query{TResult}(QueryCommand{TResult})"/>; several results can be added with <see cref="AddQuery{TResult}"/> and
 /// then materialised together with <see cref="Execute"/> (one network round trip, every result set
 /// read eagerly). Every statement is rendered with one shared parameter sequence (captured variables are
 /// prefixed per statement), so placeholder names never collide.
@@ -149,6 +149,24 @@ public sealed class BatchBuilder
     }
 
     /// <summary>
+    /// Adds an <c>INSERT</c> configured with a builder from this batch's context. The callback runs
+    /// when the step is added; the statement runs only when the batch executes.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type written by the statement.</typeparam>
+    /// <param name="configure">The callback that returns the configured insert builder.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <see langword="null"/> or returns <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">A result-bearing query has already been added.</exception>
+    /// <exception cref="ArgumentException">The returned builder is bound to a different data context.</exception>
+    [OverloadResolutionPriority(-1)]
+    public BatchBuilder Insert<TEntity>(Func<InsertBuilder<TEntity>, InsertBuilder<TEntity>> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        RequireMutationSlot(_context, nameof(configure));
+        return Insert(configure(_context.CreateInsertBuilder<TEntity>()));
+    }
+
+    /// <summary>
     /// Adds a side-effecting <c>UPDATE</c> to the batch. It runs before the result-bearing query, on the
     /// same session, so the query can observe the updated rows.
     /// </summary>
@@ -232,7 +250,7 @@ public sealed class BatchBuilder
     /// <param name="sql">The statement text; it runs before the result-bearing queries.</param>
     /// <returns>This builder, for chaining.</returns>
     /// <exception cref="ArgumentException"><paramref name="sql"/> is <see langword="null"/>, empty or whitespace.</exception>
-    /// <exception cref="InvalidOperationException">A result-bearing query has already been added; add raw statements before <see cref="Query{TResult}"/>/<see cref="AddQuery{TResult}"/>.</exception>
+    /// <exception cref="InvalidOperationException">A result-bearing query has already been added; add raw statements before <see cref="Query{TResult}(QueryCommand{TResult})"/>/<see cref="AddQuery{TResult}"/>.</exception>
     /// <remarks>The batch must still end with at least one result-bearing query.</remarks>
     public BatchBuilder Raw(string sql)
     {
@@ -427,15 +445,31 @@ public sealed class BatchBuilder
     public BatchQuery<TResult> Query<TResult>(QueryCommand<TResult> query)
     {
         ArgumentNullException.ThrowIfNull(query);
-        if (_hasResult)
-            throw new InvalidOperationException("A batch already has a result-bearing query; Query() is the single-result terminal and cannot be combined with AddQuery(). Use AddQuery() for every result and Execute() to materialise them.");
-
+        RequireTerminalQuerySlot();
         RequireSameContext(query);
         RequireCapturedSources(query);
         _steps.Add(BatchStepSpec.ForResult(query));
         _hasResult = true;
         _terminalQueryUsed = true;
         return new BatchQuery<TResult>(_executor, _steps.ToArray());
+    }
+
+    /// <summary>
+    /// Builds the sole result-bearing query from this batch's context and returns the batch terminal.
+    /// The callback runs when the step is added; the query runs only when the batch executes.
+    /// </summary>
+    /// <typeparam name="TResult">The projected row type, inferred from the returned query.</typeparam>
+    /// <param name="buildQuery">The callback that builds a query from the batch's context.</param>
+    /// <returns>The batch terminal.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="buildQuery"/> is <see langword="null"/> or returns <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">A result-bearing query has already been added.</exception>
+    /// <exception cref="ArgumentException">The returned query is bound to a different data context.</exception>
+    [OverloadResolutionPriority(-1)]
+    public BatchQuery<TResult> Query<TResult>(Func<IDataContext, QueryCommand<TResult>> buildQuery)
+    {
+        ArgumentNullException.ThrowIfNull(buildQuery);
+        RequireTerminalQuerySlot();
+        return Query(buildQuery(_context));
     }
 
     /// <summary>
@@ -447,7 +481,7 @@ public sealed class BatchBuilder
     /// <param name="query">The query whose rows form the next result set.</param>
     /// <returns>This builder, for chaining.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="query"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidOperationException">The batch was ended with <see cref="Query{TResult}"/>; a single-result terminal cannot be combined with <see cref="AddQuery{TResult}"/>.</exception>
+    /// <exception cref="InvalidOperationException">The batch was ended with <see cref="Query{TResult}(QueryCommand{TResult})"/>; a single-result terminal cannot be combined with <see cref="AddQuery{TResult}"/>.</exception>
     /// <exception cref="ArgumentException">The query is bound to a different data context.</exception>
     public BatchBuilder AddQuery<TResult>(QueryCommand<TResult> query)
     {
@@ -474,7 +508,7 @@ public sealed class BatchBuilder
     /// <see cref="BatchQuery{TResult}.ToSql"/> for the single-result terminal.
     /// </summary>
     /// <returns>The rendered SQL text.</returns>
-    /// <exception cref="InvalidOperationException">No result-bearing query was added, or the batch was ended with <see cref="Query{TResult}"/>.</exception>
+    /// <exception cref="InvalidOperationException">No result-bearing query was added, or the batch was ended with <see cref="Query{TResult}(QueryCommand{TResult})"/>.</exception>
     /// <exception cref="NotSupportedException">The dialect cannot express the batch or one of its statements.</exception>
     public string ToSql()
     {
@@ -488,7 +522,7 @@ public sealed class BatchBuilder
     /// trip; the result sets are fully buffered before this method returns.
     /// </summary>
     /// <returns>The eagerly materialised result sets, readable in the order the queries were added.</returns>
-    /// <exception cref="InvalidOperationException">No result-bearing query was added, or the batch was ended with <see cref="Query{TResult}"/>.</exception>
+    /// <exception cref="InvalidOperationException">No result-bearing query was added, or the batch was ended with <see cref="Query{TResult}(QueryCommand{TResult})"/>.</exception>
     /// <exception cref="NotSupportedException">The dialect cannot express the batch or one of its statements.</exception>
     public BatchResult Execute()
     {
@@ -504,13 +538,19 @@ public sealed class BatchBuilder
     /// </summary>
     /// <param name="cancellationToken">Cancels execution.</param>
     /// <returns>A task producing the eagerly materialised result sets.</returns>
-    /// <exception cref="InvalidOperationException">No result-bearing query was added, or the batch was ended with <see cref="Query{TResult}"/>.</exception>
+    /// <exception cref="InvalidOperationException">No result-bearing query was added, or the batch was ended with <see cref="Query{TResult}(QueryCommand{TResult})"/>.</exception>
     /// <exception cref="NotSupportedException">The dialect cannot express the batch or one of its statements.</exception>
     public async Task<BatchResult> ExecuteAsync(CancellationToken cancellationToken = default)
     {
         RequireExecutable();
         var plan = _executor.RenderBatch(_steps);
         return await _executor.ExecuteBatchResultsAsync(plan, BuildMaterializers(plan), cancellationToken).ConfigureAwait(false);
+    }
+
+    private void RequireTerminalQuerySlot()
+    {
+        if (_hasResult)
+            throw new InvalidOperationException("A batch already has a result-bearing query; Query() is the single-result terminal and cannot be combined with AddQuery(). Use AddQuery() for every result and Execute() to materialise them.");
     }
 
     private void RequireExecutable()
