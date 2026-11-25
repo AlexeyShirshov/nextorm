@@ -7,7 +7,7 @@
 - cycle: `N=2` · revision: `r=1` · attempt: `n=2`
 - scope: весь результат #417 без изменения объёма · status path: `.pdca/status/issue-417-2.md`
 - goal: серверное чтение одного элемента массива PostgreSQL — §PLAN record и §Original task авторитетны
-- phase: `CHECK` · record: `open` · outcome: `not accepted` (целевой CHECK активен; возобновление заблокировано дрейфом; изолированная приёмка сохранена)
+- phase: `ACT` · record: `completed` · outcome: `accepted` (независимый целевой CHECK; ACT завершён)
 - source: исходный запрос через §Original task; состояние issue по сообщению пользователя: `In progress (category: started), open` (GitHub не проверялся) · context refs: §PLAN record r1; `.pdca/issue-417/rv1/attempts/N2`
 - criteria: `C01–C03` без изменений; точный текст в закреплённом PLAN N1, см. §PLAN record r1. Точный готовый PLAN N2 закреплён в §PLAN record r1.
 
@@ -90,6 +90,12 @@ Shell завершён, exit 1 (`.pdca/issue-417/rv1/attempts/N2/target-check-03
 
 HEAD совпал, но три значимых локальных входа отличаются даже без учёта CR-at-EOL: `RepositoryExtensions.cs` (+4), `PublicAPI.Unshipped.txt` (+1), `NotInSqliteTests.cs` (+23). Сборка/тесты не запущены; для продолжения нужны соответствующие коммиту входы либо разрешённый чистый снимок этого дерева. CHECK открыт, C02 live не подтверждён. Лог `.pdca/issue-417/rv1/attempts/N2/target-commit-preflight/preflight.log`; handoff {"path":".pdca/issue-417/rv1/attempts/N2/target-commit-preflight/check-e5811ddfc97d5b54d7a523cccf9bc728a5bd009e40f9d1489fe5da263348233f.md","sha256":"e5811ddfc97d5b54d7a523cccf9bc728a5bd009e40f9d1489fe5da263348233f"}.
 
+Возобновление: исходники/индекс чисты; `218624377d04c1419f748422bc4362d18e5367bc` непосредственно после ручного коммита #417. Дельта — два документа и один тест SQLite (добавлены закрытый вложенный helper и SQLite Fact, не изменены PG, общие fixtures или продукт). Годность переноса оценивает CHECK. Запущены последовательные проверки, `sh_2138d7fd4001YEbfZQA81a0Zso` (PID 1591504); не дублировать. Логи и итог: `.pdca/issue-417/rv1/attempts/N2/target-successor/receipt.json`.
+
+Новые целевые доказательства: общий exit 0, 2433 входа без дрейфа, 12 зависимостей, unit 4/4 и PostgreSQL 17.12 live 1/1 по native ID, сборки exit 0. HEAD в конце продвинулся только по docs/PDCA. `.pdca/issue-417/rv1/attempts/N2/target-successor/receipt.json`, `.pdca/issue-417/rv1/attempts/N2/target-successor/integration-live-01.json`. Вердикт остаётся за независимым CHECK; handoff {"path":".pdca/issue-417/rv1/attempts/N2/target-successor/check-d88ac2125b7921050207f02a52b5f632166326a07aece657661eacc8f46d409b.md","sha256":"d88ac2125b7921050207f02a52b5f632166326a07aece657661eacc8f46d409b"}.
+
+Финальный независимый целевой CHECK, полный неизменённый оригинал: {"path":".pdca/issue-417/rv1/attempts/N2/report-b84a2703c512a7b14c9d9965d79c9ba473660edd351d7343c0a9b7c307dbb8bb.md","sha256":"b84a2703c512a7b14c9d9965d79c9ba473660edd351d7343c0a9b7c307dbb8bb"}.
+
 ## ACT record
 
 Пользователь разрешил текущую базу цели (`1.0.12`, `500a53f1742cebb24524027f722cd8ee0f517c04`); предыдущий блокер несовпадения HEAD снят. Scout: {"path":".pdca/issue-417/rv1/attempts/N2/report-e7000873f2022c6ddd0559b3f37b31bfbea40313b3bea4e9a96aec5dd8bebd6a.md","sha256":"e7000873f2022c6ddd0559b3f37b31bfbea40313b3bea4e9a96aec5dd8bebd6a"}. SHA-256 принятого патча совпал; `git apply --check` exit 0. Перенос не выполнен: два файла `src/nextorm.core/PublicAPI.Unshipped.txt` и `src/nextorm.core/Visitors/Sql/NormSqlTranslator.cs` содержат сторонние hunks, которые требуется сохранить. Реестр также изменён новой базой. Сохранение этих изменений несовместимо с требуемой побайтовой идентичностью всех девяти полных файлов с изолированным снимком. Нужна явная привязка к совпадению только строк/дельты #417 (и отдельный CHECK цели) либо иная разрешённая цель; сторонние hunks не удалять. Целевой кандидат не создан, сборки/тесты и ACT не запускались. Диагностика: `.pdca/issue-417/rv1/attempts/N2/N2-target-apply-preflight-02.log`.
@@ -104,9 +110,13 @@ ACT не начат и не завершён. Применение патча, �
 
 `pending` — DO начат.
 
+Текущая запись CHECK → ACT: `accepted`, C01–C03 `met` по финальному оригиналу в §CHECK record. Целевой unit 4/4 и live PG17.12 1/1; доказательства, границы и эквивалентность входов — в оригинале CHECK. Ручной продуктовый коммит `544141eb33b489ce86c91dc511de76c794ca420b` и отдельный коммит docs/status `6ba3f7e15a0c6476da53567be1820677057bc691` сохранены. ACT открыт: обязательная ретроспектива ещё не получена. Handoff {"path":".pdca/issue-417/rv1/attempts/N2/target-successor/check-6eed6127c27aceeafe99b38f3c2c4272386a00d15086c6ff064fed349a1343c4.md","sha256":"6eed6127c27aceeafe99b38f3c2c4272386a00d15086c6ff064fed349a1343c4"}.
+
+ACT → EXIT: весь результат #417 принят финальным независимым CHECK; C01–C03 `met`, 4/4 unit и 1/1 live PostgreSQL 17.12 на проверенных релевантных входах. Ретроспектива закреплена ниже; статус сохраняется на диске и отслеживается. Для GitHub #417 отдельная сверка после ACT-коммита: `.pdca/issue-417/rv1/attempts/N2/target-successor/github-close-act.log`.
+
 ## Lessons learned
 
-`pending: retrospective not yet conducted` — ACT N2 не достигнут.
+Полный оригинал независимой ретроспективы: {"path":".pdca/issue-417/rv1/attempts/N2/report-0914ac044704e804836c6631f4a4607ddb074d996cc4cdcb1ee8653c2e7d85f9.md","sha256":"0914ac044704e804836c6631f4a4607ddb074d996cc4cdcb1ee8653c2e7d85f9"}. Сигнал источника: `retrospective: complete`.
 
 ## Revision history
 
@@ -116,11 +126,15 @@ ACT не начат и не завершён. Применение патча, �
 
 `issue417-integration-cs1929-receiver` | r1 n1; n2 | 1 fix | .pdca/issue-417/rv1/attempts/N2/isolated-check-01/integration-build-01.log; .pdca/issue-417/rv1/attempts/N2/report-aaa2e20a243defcef18af37b0a514084e6b26f24356e2a43bbe8ed094a78d618.md | CS1929 не повторился в n2; `.pdca/issue-417/rv1/attempts/N2/isolated-check-02/integration-build-01.log`
 
+`issue417-check-workspace-root`, `issue417-monolithic-build-budget` → `docs/specs/design/issue-417-pdca-process-defects.md` (история и доказательства по ссылке).
+
 ## Changed files
 
 Восемь подтверждённых путей N1 и 19 строк реестра #417; точный ledger `.pdca/issue-417/rv1/attempts/N2/N2-candidate-identity.json`.
 
 Целевая неиндексированная дельта #417: 9 путей, SHA-256 каждого в `.pdca/issue-417/rv1/attempts/N2/target-apply-03.json`.
+
+ACT bookkeeping: `.pdca/status/issue-417-2.md`, `docs/specs/design/issue-417-pdca-process-defects.md`. Продукт не изменён.
 
 ## Git state
 
@@ -129,6 +143,8 @@ status path: `.pdca/status/issue-417-2.md` — created this cycle · untracked (
 Целевой checkout `1.0.12` HEAD `49c9a9f67e6febfeccd97400957c0a178d41fcc1`, индекс без дельты; коммита не было.
 
 По новому явному указанию пользователя «комить» primary вручную записал в `1.0.12` коммит `544141eb33b489ce86c91dc511de76c794ca420b` (`#417 Add PostgreSQL array element access`), родитель `ecdc4548971b4d8cdb091560487fe2ca0044d820`. Только девять путей принятой task-only дельты #417. По отчёту primary рабочие файлы не перезаписаны, push и закрытия issue не было; read-only проверка подтвердила девять путей в коммите и пустую staged-дельту. Этот ручной Git-акт не является PASS, автокоммитом PDCA или завершением ACT. Целевой CHECK остаётся открыт: C02 live не подтверждён, предыдущие отчёты и доказательства сохранены.
+
+На момент записи статус уже отслеживается (добавлен внешним изменением HEAD); настоящая запись не индексировалась и не коммитилась executor.
 
 ## Progress log
 
@@ -160,3 +176,7 @@ unknown | DO | revision 1 | attempt 2 | Записано ограничение 
 2026-11-25T16:16:17Z | CHECK | revision 1 | attempt 2 | Закреплён независимый CHECK; возобновление заблокировано изменением входов целевого снимка | .pdca/issue-417/rv1/attempts/N2/target-recovery-04/preflight.json; .pdca/issue-417/rv1/attempts/N2/report-602ad8402fca246ba633d3b2497b4ae2de07283ebb00861937c349339b58dff0.md
 2026-11-25T16:19:42Z | CHECK | revision 1 | attempt 2 | Записан ручной коммит по явному указанию «комить»; CHECK/ACT не закрыты | §Git state; 544141eb33b489ce86c91dc511de76c794ca420b
 2026-11-25T16:21:29Z | CHECK | revision 1 | attempt 2 | Закреплён оригинал CHECK и дерево ручного коммита; запуск заблокирован тремя значимыми локальными отличиями | .pdca/issue-417/rv1/attempts/N2/target-commit-preflight/preflight.log
+2026-11-25T16:33:02Z | CHECK | revision 1 | attempt 2 | Начата проверка чистого преемника #417, sh_2138d7fd4001YEbfZQA81a0Zso | .pdca/issue-417/rv1/attempts/N2/target-successor/
+2026-11-25T16:38:23Z | CHECK | revision 1 | attempt 2 | Целевые unit 4/4 и PG live 1/1 переданы на независимый CHECK | .pdca/issue-417/rv1/attempts/N2/target-successor/check-d88ac2125b7921050207f02a52b5f632166326a07aece657661eacc8f46d409b.md
+2026-11-25T16:48:27Z | ACT | revision 1 | attempt 2 | CHECK → ACT: целевой CHECK accepted; обязательная ретроспектива ожидается | .pdca/issue-417/rv1/attempts/N2/report-b84a2703c512a7b14c9d9965d79c9ba473660edd351d7343c0a9b7c307dbb8bb.md; .pdca/issue-417/rv1/attempts/N2/target-successor/check-6eed6127c27aceeafe99b38f3c2c4272386a00d15086c6ff064fed349a1343c4.md
+2026-11-25T16:51:34Z | ACT | revision 1 | attempt 2 | Ретроспектива закреплена; ACT → EXIT, результат принят | .pdca/issue-417/rv1/attempts/N2/report-0914ac044704e804836c6631f4a4607ddb074d996cc4cdcb1ee8653c2e7d85f9.md
