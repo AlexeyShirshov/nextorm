@@ -523,6 +523,51 @@ select id
 допускает `NULL`, NextORM добавляет проверку `IS NOT NULL` вместо передачи `NULL` в списке.
 Для подзапроса действуют правила обработки `NULL` в `NOT IN` выбранной СУБД.
 
+### Коррелированные подзапросы с `IN` и `NOT IN`
+
+И `SqlFunctions.Sql.@in`, и `SqlFunctions.Sql.not_in` принимают подзапрос с одной
+колонкой, который может ссылаться на строку внешнего запроса. В этом примере
+корреляцию задаёт условие `s.Id == c.Id`: `s` — строка подзапроса, `c` — строка
+внешнего запроса.
+
+Используй `@in`, чтобы оставить идентификаторы, для которых есть совпадение
+в `ISimpleEntity`, и `not_in`, чтобы оставить идентификаторы без совпадения:
+
+```csharp
+var outer = dataContext.From<IComplexEntity>();
+var inner = dataContext.From<ISimpleEntity>();
+
+var matchingIds = await outer
+    .Where(c => SqlFunctions.Sql.@in(
+        (int)c.Id, inner.Where(s => s.Id == c.Id).Select(s => s.Id)))
+    .Select(c => c.Id)
+    .ToListAsync();
+
+var missingIds = await outer
+    .Where(c => SqlFunctions.Sql.not_in(
+        (int)c.Id, inner.Where(s => s.Id == c.Id).Select(s => s.Id)))
+    .Select(c => c.Id)
+    .ToListAsync();
+```
+
+NextORM генерирует `IN (SELECT ...)` или `NOT IN (SELECT ...)` и подставляет
+псевдоним внешней таблицы в подзапросе для ссылки на `c.Id`.
+
+#### Использование репозитория как источника подзапроса
+
+Если `app.SimpleEntity` — это `IRepository<ISimpleEntity>` из того же контекста
+данных, используй `app.SimpleEntity.Select(s => s.Id)` для подзапроса без
+фильтра. Чтобы связать его с внешним запросом, добавь условие перед `Select`:
+
+```csharp
+var missingIds = await outer
+    .Where(c => SqlFunctions.Sql.not_in((int)c.Id, app.SimpleEntity
+        .Where(s => s.Id == c.Id)
+        .Select(s => s.Id)))
+    .Select(c => c.Id)
+    .ToListAsync();
+```
+
 ### `GLOBAL IN` (ClickHouse)
 
 Распределённый предикат ClickHouse `column GLOBAL IN (subquery | values)` доступен через

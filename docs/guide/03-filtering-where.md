@@ -517,6 +517,50 @@ An empty collection excludes no rows. For a nullable column, a collection contai
 adds an `IS NOT NULL` check instead of binding `NULL` into the list. With a subquery, the
 database applies its own `NOT IN` null semantics.
 
+### Correlated subqueries with `IN` and `NOT IN`
+
+Both `SqlFunctions.Sql.@in` and `SqlFunctions.Sql.not_in` accept a single-column
+subquery that references the outer row. In this example, `s.Id == c.Id` is the
+correlation: `s` is the inner row and `c` is the outer row.
+
+Use `@in` to keep IDs that have a match in `ISimpleEntity`, and `not_in` to keep
+IDs that have no match:
+
+```csharp
+var outer = dataContext.From<IComplexEntity>();
+var inner = dataContext.From<ISimpleEntity>();
+
+var matchingIds = await outer
+    .Where(c => SqlFunctions.Sql.@in(
+        (int)c.Id, inner.Where(s => s.Id == c.Id).Select(s => s.Id)))
+    .Select(c => c.Id)
+    .ToListAsync();
+
+var missingIds = await outer
+    .Where(c => SqlFunctions.Sql.not_in(
+        (int)c.Id, inner.Where(s => s.Id == c.Id).Select(s => s.Id)))
+    .Select(c => c.Id)
+    .ToListAsync();
+```
+
+NextORM emits `IN (SELECT ...)` or `NOT IN (SELECT ...)` and uses the outer
+table's alias inside the subquery to reference `c.Id`.
+
+#### Use a repository as the subquery source
+
+If `app.SimpleEntity` is an `IRepository<ISimpleEntity>` on the same data
+context, call `app.SimpleEntity.Select(s => s.Id)` for an unfiltered subquery.
+To correlate it with the outer query, add a predicate before `Select`:
+
+```csharp
+var missingIds = await outer
+    .Where(c => SqlFunctions.Sql.not_in((int)c.Id, app.SimpleEntity
+        .Where(s => s.Id == c.Id)
+        .Select(s => s.Id)))
+    .Select(c => c.Id)
+    .ToListAsync();
+```
+
 ### `GLOBAL IN` (ClickHouse)
 
 ClickHouse's distributed predicate `column GLOBAL IN (subquery | values)` is exposed through

@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using NextORM.Core;
+using NextORM.Core.Repositories;
 using NextORM.Sqlite;
 
 namespace NextORM.Integration.Tests;
@@ -13,6 +14,11 @@ public sealed class NotInSqliteTests : IDisposable
     {
         public int Id { get; set; }
         public int? Value { get; set; }
+    }
+
+    private sealed class RowRepositories(IDataContext context) : RepositoryContext(context)
+    {
+        internal IRepository<Row> Rows => Repository<Row>();
     }
 
     private readonly SqliteConnection _connection = new("Data Source=:memory:");
@@ -70,6 +76,25 @@ public sealed class NotInSqliteTests : IDisposable
         source.Where(row => SqlFunctions.Sql.not_in((int?)row.Id, nullableValues))
             .Select(row => row.Id).ToList()
             .Should().BeEmpty();
+    }
+
+    [Fact]
+    public void RepositoryQueries_ShouldSupplyMembershipSubqueries()
+    {
+        var app = new RowRepositories(_context);
+        var ids = app.Rows.Select(row => row.Id);
+
+        _context.From<Row>()
+            .Where(row => SqlFunctions.Sql.@in(row.Id, ids))
+            .OrderBy(row => row.Id).Select(row => row.Id).ToList()
+            .Should().Equal(1, 2, 3, 4);
+
+        _context.From<Row>()
+            .Where(row => SqlFunctions.Sql.not_in(row.Id, app.Rows
+                .Where(candidate => candidate.Id == row.Id && candidate.Id > 2)
+                .Select(candidate => candidate.Id)))
+            .OrderBy(row => row.Id).Select(row => row.Id).ToList()
+            .Should().Equal(1, 2);
     }
 
     [Fact]
