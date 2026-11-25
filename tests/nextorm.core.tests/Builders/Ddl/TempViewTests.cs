@@ -76,7 +76,7 @@ public sealed class TempViewTests
     public void AsTempView_RejectsUnsupportedProviderBeforeOpeningConnection()
     {
         using var db = new SqlServerDataContext(
-            new Version(16, 0), "Server=127.0.0.1,1;Database=unused;Integrated Security=true");
+            "Server=127.0.0.1,1;Database=unused;Integrated Security=true", new DataContextBuilder());
         var view = db.From<Source>().AsTempView();
         var query = db.From(view).Select(t => t.GetInt32("id"));
 
