@@ -45,15 +45,17 @@ public partial class QueryCommand
     /// <returns>The plan key to look up or store.</returns>
     internal QueryPlan GetOrCreatePlanKey(string? sql)
     {
+        var rawParameterNames = sql is not null && CustomData is RawSqlOverride raw ? raw.ParameterNames : default;
         if (_planKey is { } plan
             && _planKeySql == sql
+            && plan.HasRawParameterNames(rawParameterNames)
             && _planKeyInValuesShapeHash == InValuesShapeHash
             && _planKeyPreWhereShapeHash == PreWhereShapeHash
             && Equals(_planKeyWhereValueListShape, Prep?.WhereValueListShape)
             && Equals(_planKeyPreWhereValueListShape, Prep?.PreWhereValueListShape))
             return plan;
 
-        var created = new QueryPlan(this, sql);
+        var created = new QueryPlan(this, sql, rawParameterNames);
         CacheStoredPlanKey(created, sql);
         return created;
     }

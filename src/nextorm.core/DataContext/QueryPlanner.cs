@@ -945,7 +945,8 @@ internal sealed class QueryPlanner : IQueryPlanner
             }
         }
 
-        object?[]? boundValues = null;
+        // A raw override's key verifies the ordered names. Only this invocation reads its bag.
+        object?[]? boundValues = planCache is not null ? ext?.ReadValues() : null;
         if (ext is null && planCache is DbPreparedQueryCommand<TRow> { NeedsParamRefresh: true } hit)
         {
             boundValues = ReadInvocationValues(queryCommand, hit);
@@ -1002,7 +1003,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             // (RawSqlOverride) has no planner-owned emission and therefore never gets a template.
             var (sql, @params, capture) = ext is null
                 ? MakeSelectInternal()
-                : (ext.ManualSql, ext.MakeParams?.Invoke(), null);
+                : (ext.ManualSql, ext.MakeParams(), null);
 
             // A streaming row projection needs a compiled mapper (it materializes the row, including
             // the streaming column); the single-column LOB terminals keep the map-less path below.
@@ -1031,9 +1032,9 @@ internal sealed class QueryPlanner : IQueryPlanner
                 }
             }
 
-            // A generated plan that refreshes parameters keeps layout only, even on the first
-            // invocation. Explicit preparation and caller-owned SQL keep their existing seed rules.
-            var requiresInvocationValues = generatedImplicitPlan && needsParamRefresh;
+            // A published plan keeps caller-owned values out of both its factory and diagnostics.
+            // Uncached preparation retains the values belonging to that particular prepared command.
+            var requiresInvocationValues = publish && (ext is null ? needsParamRefresh : !noParams);
             if (requiresInvocationValues)
             {
                 boundValues = new object?[@params!.Count];
@@ -1072,7 +1073,7 @@ internal sealed class QueryPlanner : IQueryPlanner
 
             // Build the immutable guarded refresh recipe once, on the miss. Unsupported shapes leave it
             // null and keep the original ExtractParams refresh on every hit.
-            if (needsParamRefresh)
+            if (ext is null && needsParamRefresh)
                 compiledQuery.SetParamRecipe(ParamRefreshRecipe.TryCreate(queryCommand, @params!));
 
             if (createEnumerator)

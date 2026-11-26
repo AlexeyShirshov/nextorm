@@ -13,6 +13,7 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
     /// </summary>
     public QueryCommand QueryCommand;
     private readonly string? _sql;
+    private readonly ReadOnlyMemory<string> _rawParameterNames;
     private QueryPlanEqualityComparer _comparer;
     // QueryPlan is used as a dictionary key (DataContext.QueryPlanCache, InMemoryDataContext._cmdIdx).
     // The hash is captured from the state at construction and then frozen: GetCacheVersion() swaps
@@ -44,9 +45,15 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
     /// <param name="cmd">The command to describe.</param>
     /// <param name="sql">The generated SQL, which participates in the hash when known.</param>
     public QueryPlan(QueryCommand cmd, string? sql)
+        : this(cmd, sql, default(ReadOnlyMemory<string>))
+    {
+    }
+
+    internal QueryPlan(QueryCommand cmd, string? sql, ReadOnlyMemory<string> rawParameterNames)
     {
         QueryCommand = cmd;
         _sql = sql;
+        _rawParameterNames = rawParameterNames;
         _comparer = cmd.GetQueryPlanEqualityComparer();
         _mapping = cmd.PlanMapping;
         _dialect = cmd.PlanDialect;
@@ -115,6 +122,10 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
                         hash.Add(component.GetHashCode());
                 }
                 hash.Add(sql);
+                foreach (var name in _rawParameterNames.Span)
+                {
+                    hash.Add(name);
+                }
                 return hash.ToHashCode();
             }
         }
@@ -152,6 +163,7 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
         if (obj is null) return false;
 
         return _sql == obj._sql
+            && HasRawParameterNames(obj._rawParameterNames)
             && _mapping == obj._mapping
             && Equals(_dialect, obj._dialect)
             && _eagerLoadMode == obj._eagerLoadMode
@@ -159,6 +171,9 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
             && _collectionSlotShape.Equals(obj._collectionSlotShape)
             && _comparer.Equals(QueryCommand, obj.QueryCommand);
     }
+
+    internal bool HasRawParameterNames(ReadOnlyMemory<string> names)
+        => _rawParameterNames.Equals(names) || _rawParameterNames.Span.SequenceEqual(names.Span);
 
     /// <summary>
     /// Replaces <see cref="QueryCommand"/> with an equal clone whose build-time state has been
