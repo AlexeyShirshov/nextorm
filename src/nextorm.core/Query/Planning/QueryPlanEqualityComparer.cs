@@ -218,7 +218,7 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (x.ResolvedQuoteIdentifiers != y.ResolvedQuoteIdentifiers) return false;
 
-        if (!ReferenceEquals(x.ResolvedNamingConvention, y.ResolvedNamingConvention)) return false;
+        if (!ReferenceEquals(x.PlanNamingIdentity, y.PlanNamingIdentity)) return false;
 
         if (x.ResolvedKeywordCase != y.ResolvedKeywordCase) return false;
 
@@ -631,7 +631,7 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
             hash.Add(obj.ResolvedQuoteIdentifiers);
 
-            hash.Add(obj.ResolvedNamingConvention);
+            hash.Add(obj.PlanNamingIdentity);
 
             hash.Add(obj.ResolvedKeywordCase);
 

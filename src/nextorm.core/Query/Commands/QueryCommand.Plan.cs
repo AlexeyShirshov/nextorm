@@ -33,6 +33,10 @@ public partial class QueryCommand
         ? PlanDialectIdentity.For(_dataContext)
         : _detachedPlanDialect;
 
+    private object? _detachedPlanNamingIdentity;
+    internal object? PlanNamingIdentity
+        => _detachedPlanNamingIdentity ?? PlanObjectIdentity.ForNamingConvention(ResolvedNamingConvention);
+
     /// <summary>
     /// Returns this command's plan-cache key, reusing the memoized one when the command is prepared
     /// and its value-list shape has not changed since the key was built.

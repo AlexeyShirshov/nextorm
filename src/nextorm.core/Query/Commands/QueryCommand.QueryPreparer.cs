@@ -4176,7 +4176,7 @@ public partial class QueryCommand
         // The seven raw settings whose Resolved* counterparts an apply overwrites (so the post-apply
         // key check cannot see a difference in them) — plus the raw indicator flags.
         internal bool? QuoteIdentifiers;
-        internal INamingConvention? NamingConvention;
+        internal object? NamingConventionIdentity;
         internal KeywordCase? KeywordCase;
         internal int? CommandTimeout;
         internal EagerLoadMode? EagerLoadMode;
@@ -4185,7 +4185,7 @@ public partial class QueryCommand
         // Effective (override ?? context) forms of the settings an apply overwrites via Resolved*:
         // two contexts of the same type with different defaults must never share a candidate.
         internal bool EffectiveQuoteIdentifiers;
-        internal INamingConvention? EffectiveNamingConvention;
+        internal object? EffectiveNamingConventionIdentity;
         internal KeywordCase EffectiveKeywordCase;
         internal int? EffectiveCommandTimeout;
         internal EagerLoadMode? ContextEagerLoadMode;
@@ -4292,7 +4292,7 @@ public partial class QueryCommand
 
             // The seven RawDescriptorDifferential settings.
             if (QuoteIdentifiers != other.QuoteIdentifiers) return false;
-            if (!ReferenceEquals(NamingConvention, other.NamingConvention)) return false;
+            if (!ReferenceEquals(NamingConventionIdentity, other.NamingConventionIdentity)) return false;
             if (KeywordCase != other.KeywordCase) return false;
             if (CommandTimeout != other.CommandTimeout) return false;
             if (EagerLoadMode != other.EagerLoadMode) return false;
@@ -4301,7 +4301,7 @@ public partial class QueryCommand
 
             // Effective (override ?? context) settings that an apply overwrites through Resolved*.
             if (EffectiveQuoteIdentifiers != other.EffectiveQuoteIdentifiers) return false;
-            if (!NamingConventionsEqual(EffectiveNamingConvention, other.EffectiveNamingConvention)) return false;
+            if (!ReferenceEquals(EffectiveNamingConventionIdentity, other.EffectiveNamingConventionIdentity)) return false;
             if (EffectiveKeywordCase != other.EffectiveKeywordCase) return false;
             if (EffectiveCommandTimeout != other.EffectiveCommandTimeout) return false;
             if (ContextEagerLoadMode != other.ContextEagerLoadMode) return false;
@@ -4312,7 +4312,7 @@ public partial class QueryCommand
             if (!exp.Equals(PreWhere, other.PreWhere) || !exp.Equals(PerParentPartition, other.PerParentPartition)) return false;
             if (!LambdaArraysEqual(ArrayJoins, other.ArrayJoins, exp)) return false;
 
-            if (!comparerSource.GetSortingExpressionPlanEqualityComparer().ValueEquals(Sorting, other.Sorting)) return false;
+            if (!RawSortingEqual(Sorting, other.Sorting, exp)) return false;
             if (!comparerSource.GetJoinExpressionPlanEqualityComparer().Equals(Joins, other.Joins)) return false;
             if (!comparerSource.GetFromExpressionPlanEqualityComparer().Equals(From, other.From)) return false;
             if (!string.Equals(FromTable, other.FromTable, StringComparison.Ordinal)) return false;
@@ -4326,6 +4326,26 @@ public partial class QueryCommand
 
         private static bool NestedEqual(RawShape? a, RawShape? b, QueryCommand src)
             => a is null ? b is null : b is not null && a.Matches(b, src);
+
+        private static bool RawSortingEqual(Sorting[]? a, Sorting[]? b, ExpressionPlanEqualityComparer exp)
+        {
+            // A fresh sort has no prepared expression. The normalized comparer would see only
+            // its direction and ordinal and could accept a different authored key in this bucket.
+            if (ReferenceEquals(a, b)) return true;
+            if (a is null || b is null || a.Length != b.Length) return false;
+            for (var i = 0; i < a.Length; i++)
+            {
+                ref readonly var left = ref a[i];
+                ref readonly var right = ref b[i];
+                if (left.Direction != right.Direction
+                    || left.NullsPosition != right.NullsPosition
+                    || left.ColumnIndex != right.ColumnIndex
+                    || !exp.Equals(left.SortExpression, right.SortExpression))
+                    return false;
+            }
+
+            return true;
+        }
 
         /// <summary>
         /// Exact receiver identity at each captured occurrence. Different instances (even with equal
@@ -4412,9 +4432,6 @@ public partial class QueryCommand
 
             return true;
         }
-
-        private static bool NamingConventionsEqual(INamingConvention? a, INamingConvention? b)
-            => a is null ? b is null : b is not null && a.Equals(b);
 
         private static bool FilterScopeEqual(QueryFilterScope? a, QueryFilterScope? b)
             => a is null ? b is null : b is not null && a.Equals(b);
@@ -4593,14 +4610,14 @@ public partial class QueryCommand
             Windows = cmd._windows,
             FilterScope = cmd._filterScope,
             QuoteIdentifiers = cmd.QuoteIdentifiers,
-            NamingConvention = cmd.NamingConvention,
+            NamingConventionIdentity = PlanObjectIdentity.For(cmd.NamingConvention),
             KeywordCase = cmd.KeywordCase,
             CommandTimeout = cmd.CommandTimeout,
             EagerLoadMode = cmd.EagerLoadMode,
             EagerLoadShape = cmd.EagerLoadShape,
             CollectionSlotShape = cmd.CollectionSlotShape,
             EffectiveQuoteIdentifiers = cmd.QuoteIdentifiers ?? cmd._dataContext?.QuoteIdentifiers ?? false,
-            EffectiveNamingConvention = cmd.NamingConvention ?? cmd._dataContext?.NamingConvention,
+            EffectiveNamingConventionIdentity = PlanObjectIdentity.ForNamingConvention(cmd.NamingConvention ?? cmd._dataContext?.NamingConvention),
             EffectiveKeywordCase = cmd.KeywordCase ?? cmd._dataContext?.KeywordCase ?? default,
             EffectiveCommandTimeout = cmd.CommandTimeout is int effectiveTimeout && effectiveTimeout > 0
                 ? effectiveTimeout
@@ -5200,14 +5217,14 @@ public partial class QueryCommand
             // Effective (override ?? context) forms of the settings preparation resolves: an apply
             // overwrites the resolved values, so two contexts with different defaults must not share.
             hash.Add(cmd.QuoteIdentifiers ?? cmd._dataContext?.QuoteIdentifiers ?? false);
-            hash.Add((cmd.NamingConvention ?? cmd._dataContext?.NamingConvention)?.GetHashCode() ?? 0);
+            hash.Add(PlanObjectIdentity.ForNamingConvention(cmd.NamingConvention ?? cmd._dataContext?.NamingConvention));
             hash.Add((int)(cmd.KeywordCase ?? cmd._dataContext?.KeywordCase ?? default));
             hash.Add(cmd.CommandTimeout is int effectiveTimeout && effectiveTimeout > 0
                 ? effectiveTimeout
                 : cmd._dataContext?.CommandTimeout is int contextTimeout && contextTimeout > 0 ? contextTimeout : int.MinValue);
             hash.Add(cmd._dataContext is null);
             hash.Add((int)(cmd._dataContext?.EagerLoadMode ?? default));
-            hash.Add(cmd.NamingConvention is null ? 0 : RuntimeHelpers.GetHashCode(cmd.NamingConvention));
+            hash.Add(PlanObjectIdentity.For(cmd.NamingConvention));
             cmd.EagerLoadShape.AddTo(ref hash);
             cmd.CollectionSlotShape.AddTo(ref hash);
             hash.Add(cmd.Tag);

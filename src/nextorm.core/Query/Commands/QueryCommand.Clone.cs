@@ -84,6 +84,7 @@ public partial class QueryCommand
         {
             dst._detachedPlanMapping = PlanMapping;
             dst._detachedPlanDialect = PlanDialect;
+            dst._detachedPlanNamingIdentity = _detachedPlanNamingIdentity;
         }
         dst.ColumnsPlanHash = ColumnsPlanHash;
         dst.JoinPlanHash = JoinPlanHash;
@@ -319,6 +320,17 @@ public partial class QueryCommand
 
     private void DetachSqlPlanKey(SqlKeyExpressionRewriter rewriter)
     {
+        if (NamingConvention is not null and not SnakeCaseNamingConvention
+            || ResolvedNamingConvention is not null and not SnakeCaseNamingConvention)
+        {
+            // Custom naming policy objects can carry request state. The key needs only identity;
+            // the live command (or the separate raw recipe) keeps the translator.
+            _detachedPlanNamingIdentity = PlanNamingIdentity;
+            NamingConvention = null;
+            ResolvedNamingConvention = null;
+            rewriter.Changed = true;
+        }
+
         if (OuterRegistry is not null)
         {
             // The prepared registry slots and precomputed hashes carry plan identity. Following this
@@ -347,8 +359,28 @@ public partial class QueryCommand
 
         DetachSource(_from);
         if (_joins is { } joins)
+        {
             foreach (var join in joins)
+            {
+                join.RewriteCacheExpressions(rewriter);
                 DetachSource(join.From);
+            }
+        }
+
+        if (_sorting is { } sorting)
+        {
+            for (var i = 0; i < sorting.Length; i++)
+            {
+                ref var sort = ref sorting[i];
+                var source = rewriter.Visit(sort.SortExpression);
+                var preparedSort = ReferenceEquals(sort.SortExpression, sort.PreparedExpression)
+                    ? source
+                    : rewriter.Visit(sort.PreparedExpression);
+                if (!ReferenceEquals(source, sort.SortExpression) || !ReferenceEquals(preparedSort, sort.PreparedExpression))
+                    sort = new Sorting(in sort, source, preparedSort);
+            }
+        }
+
         if (_ctes is { } ctes)
             foreach (var cte in ctes)
                 cte.Query.DetachSqlPlanKey(rewriter);

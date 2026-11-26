@@ -9,7 +9,7 @@ using NextORM.Sqlite;
 namespace NextORM.Integration.Tests;
 
 [Collection("Query plan cache")]
-public sealed class SqliteSharedPlanBindingTests
+public sealed partial class SqliteSharedPlanBindingTests
 {
     private const string TableName = "issue16_binding_rows";
 
