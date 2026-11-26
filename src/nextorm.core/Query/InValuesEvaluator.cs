@@ -1,100 +1,73 @@
-using System.Collections;
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace NextORM.Core;
 
 /// <summary>
-/// Evaluates the captured collection of an <c>in</c>/<c>Contains</c> predicate.
-/// <para>
-/// The old implementation compiled a fresh <c>Func&lt;object&gt;</c> delegate on every SQL build and
-/// every cached <c>ExtractParams</c> pass, which dominated the IN-list build cost. A compiled accessor
-/// is now cached per <em>shape</em> in <see cref="DataContextCache.InValuesCache"/> (keyed with the
-/// same <see cref="ExpressionKey"/> the other expression caches use).
-/// </para>
-/// <para>
-/// A captured collection is read through a closure instance that differs between query instances, so the
-/// cached accessor takes that instance as a parameter: the closure constant is replaced with a parameter
-/// and the current instance is passed on each invocation. Structural equality deliberately ignores the
-/// closure instance, which makes same-shape collections reuse the accessor while still reading the
-/// current values (grown/reassigned collections included).
-/// </para>
+/// Evaluates a value-list or lookup collection. A cached accessor reads the expression's constants
+/// from the current invocation; neither its key nor its compiled body embeds those constants.
 /// </summary>
 internal static class InValuesEvaluator
 {
+    private static readonly ParameterExpression Arguments = Expression.Parameter(typeof(object), "arguments");
+    private static readonly UnaryExpression ArgumentList = Expression.Convert(Arguments, typeof(List<object?>));
+    private static readonly MethodInfo ReadArgument = typeof(List<object?>).GetProperty("Item")!.GetMethod!;
+
     public static object? Evaluate(Expression valuesExp, IQueryRegistry queryProvider)
     {
-        // A directly embedded constant (as opposed to a captured field/local or an inline `new[]`)
-        // has no closure to parameterise on and could alias a mutable array, so it is evaluated
-        // without caching.
+        // A directly embedded value has no accessor shape worth caching.
         if (valuesExp is ConstantExpression)
-            return Expression.Lambda<Func<object>>(Expression.Convert(valuesExp, typeof(object))).Compile()();
+            return EvaluateUncached(valuesExp);
 
-        var captures = CaptureCollector.Collect(valuesExp);
+        var rewriter = new AccessorRewriter();
+        var body = rewriter.Visit(valuesExp)!;
+        if (!rewriter.CanCache)
+            return EvaluateUncached(valuesExp);
 
-        // More than one distinct closure cannot be represented by a single-parameter accessor, and a
-        // captured receiver that is itself null would fault on invocation; both fall back to the
-        // original per-build compile.
-        if (captures.Count > 1 || (captures.Count == 1 && captures[0].Value is null))
-            return Expression.Lambda<Func<object>>(Expression.Convert(valuesExp, typeof(object))).Compile()();
-
-        var capture = captures.Count == 1 ? captures[0] : null;
-        var key = new ExpressionKey(valuesExp, queryProvider);
-
-        if (!DataContextCache.InValuesCache.TryGetValue(key, out var accessor))
+        var key = new ExpressionKey(body, queryProvider);
+        var cache = DataContextCache.InValuesCache;
+        if (!cache.TryGetValue(key, out var accessor))
         {
-            accessor = BuildAccessor(valuesExp, capture);
-            DataContextCache.InValuesCache[key] = accessor;
+            accessor = Expression.Lambda<Func<object?, object?>>(Expression.Convert(body, typeof(object)), Arguments).Compile();
+            cache[key] = accessor;
         }
 
-        return accessor(capture?.Value);
+        return accessor(rewriter.Values);
     }
 
-    private static Func<object?, object?> BuildAccessor(Expression valuesExp, ConstantExpression? capture)
+    private static object? EvaluateUncached(Expression expression)
+        => Expression.Lambda<Func<object?>>(Expression.Convert(expression, typeof(object))).Compile()();
+
+    private sealed class AccessorRewriter : ExpressionVisitor
     {
-        var parameter = Expression.Parameter(typeof(object), "capture");
-        var body = valuesExp;
+        internal bool CanCache { get; private set; } = true;
+        internal List<object?>? Values { get; private set; }
 
-        if (capture is not null)
-            body = new ReplaceInstanceConstantVisitor(capture, Expression.Convert(parameter, capture.Type)).Visit(body);
-
-        return Expression.Lambda<Func<object?, object?>>(Expression.Convert(body, typeof(object)), parameter).Compile();
-    }
-
-    /// <summary>
-    /// Collects the distinct closure constants that a captured collection reads from (the receiver of a
-    /// member access), deduplicated by reference so repeated reads of the same closure count once.
-    /// </summary>
-    private sealed class CaptureCollector : ExpressionVisitor
-    {
-        private readonly List<ConstantExpression> _captures = [];
-
-        public static IReadOnlyList<ConstantExpression> Collect(Expression expression)
+        public override Expression? Visit(Expression? node)
         {
-            var collector = new CaptureCollector();
-            collector.Visit(expression);
-            return collector._captures;
+            if (node is null || !CanCache)
+                return node;
+
+            // Share only ordinary CLR expression nodes with structural equality. The only parameter
+            // in the rewritten body is Arguments; do not compare scopes, extensions, or registry
+            // indices using SQL-plan equality. Other expressions still evaluate on the uncached path.
+            if (node is ConstantExpression or MemberExpression or MethodCallExpression or BinaryExpression
+                or UnaryExpression or ConditionalExpression or NewExpression or NewArrayExpression
+                or ListInitExpression or MemberInitExpression or DefaultExpression or TypeBinaryExpression)
+                return base.Visit(node);
+
+            CanCache = false;
+            return node;
         }
 
-        protected override Expression VisitMember(MemberExpression node)
-        {
-            if (node.Expression is ConstantExpression capture && !Contains(capture))
-                _captures.Add(capture);
-
-            return base.VisitMember(node);
-        }
-
-        private bool Contains(ConstantExpression capture)
-        {
-            for (var i = 0; i < _captures.Count; i++)
-                if (ReferenceEquals(_captures[i], capture)) return true;
-
-            return false;
-        }
-    }
-
-    private sealed class ReplaceInstanceConstantVisitor(ConstantExpression target, Expression replacement) : ExpressionVisitor
-    {
         protected override Expression VisitConstant(ConstantExpression node)
-            => ReferenceEquals(node, target) ? replacement : base.VisitConstant(node);
+        {
+            // Use the same typed slot read in the key and in the compiled accessor. No receiver or
+            // other runtime value is left in the expression that enters the cache.
+            var values = Values ??= [];
+            var access = Expression.Call(ArgumentList, ReadArgument, Expression.Constant(values.Count));
+            values.Add(node.Value);
+            return Expression.Convert(access, node.Type);
+        }
     }
 }

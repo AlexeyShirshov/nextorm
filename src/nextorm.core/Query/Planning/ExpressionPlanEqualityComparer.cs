@@ -14,7 +14,7 @@ namespace NextORM.Core;
 /// </summary>
 public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
 {
-    private readonly static ConcurrentDictionary<QueryCommandKey, Func<object?, QueryCommand>> _cmdCache = new();
+    private readonly static ConcurrentDictionary<(Type ReceiverType, MemberInfo Member), Func<object?, QueryCommand>> _cmdCache = new();
 
     // Reuse scratch storage on this thread, not the last registry that used it. A registry can be a
     // live QueryCommand and must not stay rooted while the worker thread is idle.
@@ -427,9 +427,10 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
                 && Compare(a.Body, b.Body);
 
         private bool CompareMember(MemberExpression a, MemberExpression b)
-            => a.Expression is ConstantExpression ce1 && b.Expression is ConstantExpression ce2
-                ? Equals(a.Member.MemberType, b.Member.MemberType) && ce1.Type == ce2.Type && a.Member.Name == b.Member.Name
-                : Equals(a.Member, b.Member) && Compare(a.Expression, b.Expression);
+            => Equals(a.Member, b.Member)
+                && (a.Expression is ConstantExpression ce1 && b.Expression is ConstantExpression ce2
+                    ? ce1.Type == ce2.Type
+                    : Compare(a.Expression, b.Expression));
 
         private bool CompareMemberInit(MemberInitExpression a, MemberInitExpression b)
             => Compare(a.NewExpression, b.NewExpression)
@@ -684,46 +685,6 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
                 && Compare(a.Variable, b.Variable);
     }
 
-    private sealed class QueryCommandKey : IEquatable<QueryCommandKey>
-    {
-        private readonly Type _type;
-        private readonly string _name;
-        // _type/_name are readonly, so the hash is stable; compute it once up front
-        // instead of caching it in a mutable field (S2328 false positive).
-        private readonly int _hash;
-
-        public QueryCommandKey(Type type, string name)
-        {
-            _type = type;
-            _name = name;
-            _hash = ComputeHash(_type, _name);
-        }
-
-        private static int ComputeHash(Type type, string name)
-        {
-            unchecked
-            {
-                XxHash32 hash = new();
-
-                hash.Add(type);
-                hash.Add(name);
-
-                return hash.ToHashCode();
-            }
-        }
-
-        public override int GetHashCode() => _hash;
-        public override bool Equals(object? obj)
-        {
-            return Equals(obj as QueryCommandKey);
-        }
-        public bool Equals(QueryCommandKey? obj)
-        {
-            if (obj is null) return false;
-
-            return _type == obj._type && _name == obj._name;
-        }
-    }
     private sealed class Visitor : ExpressionVisitor
     {
         private ILogger? _logger;
@@ -874,9 +835,11 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
             VisitBase(node);
             if (node.Expression is ConstantExpression ce)
             {
+                _hash.Add(ce.Type);
+                _hash.Add(node.Member);
                 if (typeof(QueryCommand).IsAssignableFrom(node.Type))
                 {
-                    var key = new QueryCommandKey(ce.Type, node.Member.Name);
+                    var key = (ce.Type, node.Member);
                     if (!_cmdCache.TryGetValue(key, out var del))
                     {
                         var p = Expression.Parameter(typeof(object));
@@ -899,12 +862,6 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
 
                     // var cmd = Expression.Lambda<Func<QueryCommand>>(memberExpression).Compile()();
                     // hash.Add(cmd, new QueryPlanEqualityComparer(_cache));
-                }
-                else
-                {
-                    _hash.Add(ce.Type);
-                    _hash.Add(node.Type);
-                    _hash.Add(node.Member.Name);
                 }
             }
             else

@@ -50,6 +50,95 @@ public class ExpressionCacheShapeTests
         cache[equivalentKey]().Should().Be(42);
     }
 
+    [Fact]
+    public void InValuesAccessor_ReusesShapeWithoutRetainingTheFirstOwner()
+    {
+        using var context = new InMemoryDataContext();
+        var registry = context.From<SimpleEntity>().Select(row => row.Id);
+        var originalAccessors = DataContextCache.InValuesCache.Values.ToArray();
+        var firstOwner = WarmCollectionAccessor(registry);
+        var cachedAccessor = DataContextCache.InValuesCache.Values.Except(originalAccessors).Should().ContainSingle().Which;
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        firstOwner.IsAlive.Should().BeFalse("the cached accessor and its key need only the shape");
+        var currentOwner = new CollectionOwner([99]);
+        var read = Expression.Property(Expression.Constant(currentOwner), nameof(CollectionOwner.Values));
+        InValuesEvaluator.Evaluate(read, registry).Should().BeSameAs(currentOwner.Values);
+        DataContextCache.InValuesCache.Values.Except(originalAccessors).Should().ContainSingle().Which.Should().BeSameAs(cachedAccessor);
+    }
+
+    [Fact]
+    public void InValuesAccessor_UsesTheExactMemberWhenAPropertyIsHidden()
+    {
+        using var context = new InMemoryDataContext();
+        var registry = context.From<SimpleEntity>().Select(row => row.Id);
+        var owner = Expression.Constant(new DerivedCollection());
+        var baseMember = Expression.Property(owner, typeof(BaseCollection).GetProperty(nameof(BaseCollection.Values))!);
+        var derivedMember = Expression.Property(owner, typeof(DerivedCollection).GetProperty(nameof(DerivedCollection.Values))!);
+
+        ((int[])InValuesEvaluator.Evaluate(baseMember, registry)!).Should().Equal(41);
+        ((int[])InValuesEvaluator.Evaluate(derivedMember, registry)!).Should().Equal(99);
+    }
+
+    [Fact]
+    public void InValuesAccessor_UsesCurrentConstantsInTheirOriginalOrder()
+    {
+        using var context = new InMemoryDataContext();
+        var registry = context.From<SimpleEntity>().Select(row => row.Id);
+        var originalAccessors = DataContextCache.InValuesCache.Values.ToArray();
+
+        Read(41, 42).Should().Equal(41, 42);
+        var accessor = DataContextCache.InValuesCache.Values.Except(originalAccessors).Should().ContainSingle().Which;
+        Read(99, 98).Should().Equal(99, 98);
+        DataContextCache.InValuesCache.Values.Except(originalAccessors).Should().ContainSingle().Which.Should().BeSameAs(accessor);
+
+        int[] Read(int first, int second)
+        {
+            var array = Expression.NewArrayInit(typeof(int), Expression.Constant(first), Expression.Constant(second));
+            return (int[])InValuesEvaluator.Evaluate(array, registry)!;
+        }
+    }
+
+    [Fact]
+    public void InValuesAccessor_EvaluatesUnsupportedScopesWithoutPublishingThem()
+    {
+        using var context = new InMemoryDataContext();
+        var registry = context.From<SimpleEntity>().Select(row => row.Id);
+        var originalCount = DataContextCache.InValuesCache.Count;
+        int[] values = [1, 2, 3];
+        var threshold = 1;
+        Expression<Func<int[]>> expression = () => values.Where(value => value > threshold).ToArray();
+
+        ((int[])InValuesEvaluator.Evaluate(expression.Body, registry)!).Should().Equal(2, 3);
+        threshold = 2;
+        ((int[])InValuesEvaluator.Evaluate(expression.Body, registry)!).Should().Equal(3);
+        DataContextCache.InValuesCache.Count.Should().Be(originalCount);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static WeakReference WarmCollectionAccessor(IQueryRegistry registry)
+    {
+        var owner = new CollectionOwner([41]);
+        var read = Expression.Property(Expression.Constant(owner), nameof(CollectionOwner.Values));
+        InValuesEvaluator.Evaluate(read, registry).Should().BeSameAs(owner.Values);
+        return new WeakReference(owner);
+    }
+
+    private sealed record CollectionOwner(int[] Values);
+
+    private class BaseCollection
+    {
+        public int[] Values => [41];
+    }
+
+    private sealed class DerivedCollection : BaseCollection
+    {
+        public new int[] Values => [99];
+    }
+
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static (ExpressionKey Key, WeakReference Registry) BuildKey()
     {

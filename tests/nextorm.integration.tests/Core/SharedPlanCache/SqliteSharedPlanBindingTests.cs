@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Linq.Expressions;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Microsoft.Data.Sqlite;
@@ -176,6 +177,70 @@ public sealed class SqliteSharedPlanBindingTests
 
         static QueryCommand<int> Build(SqliteDataContext context, Dictionary<int, int> lookup)
             => context.From<BindingRow>().Where(row => lookup[row.Id] == 20).Select(row => row.Id);
+    }
+
+    [Fact]
+    public void CapturedInList_ReusesThePlanAndBindsEachCallersCollection()
+    {
+        using var firstConnection = OpenSeededConnection();
+        using var secondConnection = OpenSeededConnection();
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+
+        var token = TestContext.Current.CancellationToken;
+        var firstInvocation = first.GetPreparedQueryCommand(Build(first, [1]), false, true, token);
+        var secondInvocation = second.GetPreparedQueryCommand(Build(second, [2]), false, true, token);
+
+        firstInvocation.ToList(first).Should().Equal(1);
+        secondInvocation.ToList(second).Should().Equal(2);
+        firstTap.LastParameters.Should().Equal((0, "p0", 1));
+        secondTap.LastParameters.Should().Equal((0, "p0", 2));
+        BoundQueryInvocation<int>.GetPlan(secondInvocation).Should().BeSameAs(BoundQueryInvocation<int>.GetPlan(firstInvocation));
+
+        static QueryCommand<int> Build(SqliteDataContext context, int[] values)
+            => context.From<BindingRow>().Where(row => values.Contains(row.Id)).Select(row => row.Id);
+    }
+
+    [Fact]
+    public void ScalarCapture_WithHiddenProperty_BindsTheExactMember()
+    {
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        using var firstConnection = OpenSeededConnection();
+        using var secondConnection = OpenSeededConnection();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+        var owner = Expression.Constant(new DerivedTarget());
+        var token = TestContext.Current.CancellationToken;
+
+        var firstInvocation = first.GetPreparedQueryCommand(Build(first, typeof(BaseTarget)), false, true, token);
+        firstInvocation.ToList(first).Should().Equal(1);
+        var secondInvocation = second.GetPreparedQueryCommand(Build(second, typeof(DerivedTarget)), false, true, token);
+        secondInvocation.ToList(second).Should().Equal(2);
+
+        firstTap.LastParameters.Should().Equal((0, "Target", 1));
+        secondTap.LastParameters.Should().Equal((0, "Target", 2));
+
+        QueryCommand<int> Build(SqliteDataContext context, Type declaringType)
+        {
+            var row = Expression.Parameter(typeof(BindingRow), "row");
+            var id = Expression.Property(row, nameof(BindingRow.Id));
+            var target = Expression.Property(owner, declaringType.GetProperty(nameof(BaseTarget.Target))!);
+            var predicate = Expression.Lambda<Func<BindingRow, bool>>(Expression.Equal(id, target), row);
+            return context.From<BindingRow>().Where(predicate).OrderBy(item => item.Id).Select(item => item.Id);
+        }
+    }
+
+    private class BaseTarget
+    {
+        public int Target => 1;
+    }
+
+    private sealed class DerivedTarget : BaseTarget
+    {
+        public new int Target => 2;
     }
 
     [Fact]

@@ -83,8 +83,8 @@ public static class DataContextCache
     /// </summary>
     public static IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
     /// <summary>
-    /// Compiled accessors that read the captured collection of an <c>in</c>/<c>Contains</c> predicate,
-    /// keyed by the collection expression's shape. See <see cref="InValuesEvaluator"/>.
+    /// Compiled accessors that read a value-list or lookup collection, keyed by the parameterized
+    /// expression's shape. The accessor receives the current invocation's constants.
     /// </summary>
     public static IDictionary<ExpressionKey, Func<object?, object?>> InValuesCache => _inValuesCache;
     /// <summary>
