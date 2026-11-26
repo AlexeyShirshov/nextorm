@@ -88,8 +88,9 @@ public sealed class Cycle7MySqlDialectTests : ProviderTestSuite
 
     /// <summary>
     /// Database-qualifier arm: <c>WithDatabase</c> renders <c>database.table</c> and the live read hits a
-    /// different database (<c>information_schema</c>) than the connection default. The unknown-database
-    /// negative proves the qualifier is really emitted instead of being dropped.
+    /// different database (<c>information_schema</c>) than the connection default. The marker exists
+    /// in the default database but not in the readable catalog, so dropping the qualifier would
+    /// make the negative query succeed.
     /// </summary>
     [Fact]
     public void DatabaseQualifier_ShouldReadAnotherDatabase()
@@ -104,20 +105,18 @@ public sealed class Cycle7MySqlDialectTests : ProviderTestSuite
         rows[0].Name.Should().Be("my7_marker");
         rows[0].Kind.Should().Be("BASE TABLE");
 
-        const string missingDatabase = "my7_no_such_db";
-        var error = FluentActions.Invoking(() => Context.From<My7Catalog>()
-                .WithDatabase(missingDatabase)
-                .Select(x => x.Name)
+        var error = FluentActions.Invoking(() => Context.From<My7Marker>()
+                .WithDatabase("information_schema")
+                .Select(x => x.Id)
                 .ToList())
             .Should().Throw<MySqlException>().Which;
-        error.ErrorCode.Should().BeOneOf(MySqlErrorCode.UnknownDatabase, MySqlErrorCode.DatabaseAccessDenied);
-        error.Message.Should().Contain(missingDatabase);
+        error.ErrorCode.Should().Be(MySqlErrorCode.UnknownTable);
     }
 
     /// <summary>
     /// Schema-qualifier arm: MySQL treats the schema as the same single qualifier, so
-    /// <c>WithSchema("information_schema")</c> reads the identical catalog rows; an absent schema is
-    /// rejected by the server, which proves the qualifier reaches the SQL.
+    /// <c>WithSchema("information_schema")</c> reads the identical catalog rows and cannot resolve
+    /// the marker table from the default database.
     /// </summary>
     [Fact]
     public void SchemaQualifier_ShouldResolveToTheSameQualifier()
@@ -130,14 +129,12 @@ public sealed class Cycle7MySqlDialectTests : ProviderTestSuite
 
         names.Should().Equal("my7_marker");
 
-        const string missingSchema = "my7_no_such_schema";
-        var error = FluentActions.Invoking(() => Context.From<My7Catalog>()
-                .WithSchema(missingSchema)
-                .Select(x => x.Name)
+        var error = FluentActions.Invoking(() => Context.From<My7Marker>()
+                .WithSchema("information_schema")
+                .Select(x => x.Id)
                 .ToList())
             .Should().Throw<MySqlException>().Which;
-        error.ErrorCode.Should().BeOneOf(MySqlErrorCode.UnknownDatabase, MySqlErrorCode.DatabaseAccessDenied);
-        error.Message.Should().Contain(missingSchema);
+        error.ErrorCode.Should().Be(MySqlErrorCode.UnknownTable);
     }
 
     /// <summary>
