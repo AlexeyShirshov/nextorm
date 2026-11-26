@@ -299,26 +299,9 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 return ReplaceQueryCommand(node, outerCmd);
             }
 
-            QueryCommand cmd;
-
-            var keyCmd = new ExpressionKey(builderReceiver, _queryProvider);
-            if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
-            {
-                //var d = Expression.Lambda<Func<QueryCommand>>(Expression.Call(node.Object, ToCommandMI)).Compile();
-                var d = Expression.Lambda<Func<QueryCommand>>(AsCommandExpression(builderReceiver)).Compile();
-
-                DataContextCache.ExpressionsCache[keyCmd] = d;
-                cmd = d();
-
-                if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
-                {
-                    _logger.LogTrace("Subquery expression miss. hashcode: {hash}, value: {value}", keyCmd.GetHashCode(), d());
-                }
-                else if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Subquery expression miss");
-            }
-            else
-                cmd = ((Func<QueryCommand>)dCmd)();
-
+            // A captured builder belongs to this invocation. Share its accessor, not a compiled
+            // call that always reads the first expression's receiver.
+            var cmd = (QueryCommand)ValueExpressionAccessor.Evaluate(AsCommandExpression(builderReceiver), _queryProvider, _logger)!;
             return ReplaceQueryCommand(node, cmd);
         }
         else if (node.Object?.Type.IsAssignableTo(typeof(QueryCommand)) ?? false)

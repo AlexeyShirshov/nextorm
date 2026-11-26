@@ -5,33 +5,32 @@ using NextORM.Core;
 
 namespace NextORM.Core.Tests;
 
-/// <summary>
-/// Guards the shape of the shared <see cref="DataContextCache.ExpressionsCache"/>: the same
-/// <see cref="ExpressionKey"/> can hold compiled delegates of several delegate shapes, and a retrieval
-/// must never blind-cast an incompatible shape.
-/// </summary>
 public class ExpressionCacheShapeTests
 {
-    [Fact]
-    public void IncompatibleCachedShape_ShouldNotBeInvoked()
-    {
-        Delegate incompatible = (Func<object?, object, object>)((_, _) => 42);
-
-        var evaluated = BaseExpressionVisitor.TryEvaluateCachedExpression(incompatible, Expression.Constant(1), out var value);
-
-        evaluated.Should().BeFalse();
-        value.Should().BeNull();
-    }
+    private static int SharedAccessorValue => 42;
 
     [Fact]
-    public void PlainCachedShape_ShouldBeInvoked()
+    public void ValueAccessor_DoesNotInvokeAnIncompatibleCachedDelegate()
     {
-        Delegate compatible = (Func<object>)(() => 42);
-
-        var evaluated = BaseExpressionVisitor.TryEvaluateCachedExpression(compatible, Expression.Constant(1), out var value);
-
-        evaluated.Should().BeTrue();
-        value.Should().Be(42);
+        using var context = new InMemoryDataContext();
+        var registry = context.From<SimpleEntity>().Select(row => row.Id);
+        Expression<Func<int>> expression = () => SharedAccessorValue;
+        var key = new ExpressionKey(expression.Body, registry);
+        Func<object> incompatible = static () => 99;
+        var cache = DataContextCache.ExpressionsCache;
+        cache[key] = incompatible;
+        try
+        {
+            ValueExpressionAccessor.Evaluate(expression.Body, registry, null).Should().Be(42);
+            var accessor = cache[key];
+            accessor.Should().NotBeSameAs(incompatible);
+            ValueExpressionAccessor.Evaluate(expression.Body, registry, null).Should().Be(42);
+            cache[key].Should().BeSameAs(accessor);
+        }
+        finally
+        {
+            cache.Remove(key);
+        }
     }
 
     [Fact]

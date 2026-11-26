@@ -276,14 +276,7 @@ internal static class RangeColumnsSqlTranslator
 
     private static RangeOperand ResolveConstant(BaseExpressionVisitor visitor, Expression expression)
     {
-        var key = new ExpressionKey(expression, visitor.QueryProvider);
-        if (!DataContextCache.ExpressionsCache.TryGetValue(key, out var compiled))
-        {
-            compiled = Expression.Lambda<Func<object>>(Expression.Convert(expression, typeof(object))).Compile();
-            DataContextCache.ExpressionsCache[key] = compiled;
-        }
-
-        var value = ((Func<object>)compiled)();
+        var value = ValueExpressionAccessor.Evaluate(expression, visitor.QueryProvider, visitor.Logger)!;
         var accessors = Accessors.GetOrAdd(value.GetType(), static type => new RangeAccessors(type));
 
         if ((bool)accessors.IsEmpty.GetValue(value)!)

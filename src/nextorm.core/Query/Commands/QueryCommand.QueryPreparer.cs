@@ -4138,10 +4138,9 @@ public partial class QueryCommand
     // =============================================================================================
 
     /// <summary>
-    /// Immutable, value-free snapshot of one node of a command's <b>pre-preparation</b> graph, plus
-    /// the recursive snapshot of its nested command nodes. It retains raw user lambdas (safe: a shape
-    /// is only eligible when the graph is closure-free), never a command, closure, DataContext,
-    /// parameter value, token, reader or mutable command-owned collection.
+    /// Snapshot of one node of a command's <b>pre-preparation</b> graph, plus the recursive snapshot of
+    /// its nested command nodes. The descriptor still retains raw user lambdas; the receiver identities
+    /// used to verify them are separate tokens, not references to the receivers.
     /// </summary>
     internal sealed class RawShape
     {
@@ -4207,10 +4206,9 @@ public partial class QueryCommand
         // Query components, held as the command's allocation-free component state: none, one, or an
         // already-immutable list. Captured by reference — nothing is copied or reallocated per capture.
         internal ComponentSet Components;
-        // Identity of every captured closure the raw expressions read, in first-appearance order. A
-        // recipe can be reused only for the very same closure instances: the captured members are then
-        // read live at execution, which rebinds a changed value into the same prepared statement.
-        internal object[]? Closures;
+        // Receiver identity at each captured-member occurrence, in traversal order. The same set of
+        // owners is not enough: all occurrences must read the same owners as the staged expressions.
+        internal object?[]? Closures;
 
         /// <summary>Structural fingerprint used only to partition candidates into buckets.</summary>
         internal int Fingerprint;
@@ -4330,11 +4328,10 @@ public partial class QueryCommand
             => a is null ? b is null : b is not null && a.Matches(b, src);
 
         /// <summary>
-        /// Reference identity of the captured closures, in first-appearance order. A different instance
-        /// (even with equal members) must not share a raw recipe: its captured members are read live, so
-        /// only the same instance proves the prepared statement still describes it.
+        /// Exact receiver identity at each captured occurrence. Different instances (even with equal
+        /// members) cannot share a raw recipe, because its prepared expressions read their owners live.
         /// </summary>
-        private static bool ClosureIdentitiesEqual(object[]? a, object[]? b)
+        private static bool ClosureIdentitiesEqual(object?[]? a, object?[]? b)
         {
             if (a is null || a.Length == 0) return b is null || b.Length == 0;
             if (b is null || b.Length != a.Length) return false;
@@ -4854,7 +4851,7 @@ public partial class QueryCommand
         => entityType is null || QueryFilterResolver.GetFilters(entityType, scope, dataContext).Count != 0;
 
     /// <summary>
-    /// Collects the identity of every captured closure the raw shape reads (a member access whose
+    /// Collects the receiver identity at every captured access the raw shape reads (a member access whose
     /// receiver is a constant, i.e. a compiler closure or a captured instance) and rejects a captured
     /// <see cref="QueryCommand"/>, which can change the rendered statement without changing this shape.
     /// The identities are compared by reference on every raw-candidate match; the captured members are
@@ -4867,7 +4864,7 @@ public partial class QueryCommand
     [ThreadStatic]
     private static ClosureKeyScan? _tlsClosureScan;
 
-    private static bool TryCollectClosureKey(QueryCommand cmd, out object[]? closures)
+    private static bool TryCollectClosureKey(QueryCommand cmd, out object?[]? closures)
     {
         var scan = _tlsClosureScan ??= new ClosureKeyScan();
         scan.Reset();
@@ -4884,15 +4881,14 @@ public partial class QueryCommand
     }
 
     /// <summary>
-    /// Records the receiver constant of every captured member access and flags a captured command.
-    /// Distinct receivers collapse by reference identity, in first-appearance order, so the raw shape
-    /// carries a stable list for the same closure instances.
+    /// Records each captured member's receiver identity and flags a captured command. Repeated
+    /// occurrences matter: A, B, A must not stage the expressions for A, B, B.
     /// </summary>
     private sealed class ClosureKeyScan : ExpressionVisitor
     {
         private enum ScanMember { Other, Condition, Projection, Group }
 
-        private readonly List<object> _closures = new();
+        private readonly List<object?> _closures = new();
         private ScanMember _member;
         internal bool HasCapturedCommand { get; private set; }
 
@@ -4903,8 +4899,8 @@ public partial class QueryCommand
         internal bool HasUnpublishableValueList { get; private set; }
 
         /// <summary>
-        /// Order-independent-with-the-list hash of the closure identities added so far, so a caller
-        /// that only needs the identity (the raw fingerprint) does not have to materialize the array.
+        /// Ordered hash of the receiver identities added so far, so hashing the raw fingerprint does
+        /// not have to materialize the array.
         /// </summary>
         internal int IdentitiesHash { get; private set; }
 
@@ -4917,7 +4913,7 @@ public partial class QueryCommand
             _member = ScanMember.Other;
         }
 
-        internal object[]? Snapshot() => _closures.Count == 0 ? null : _closures.ToArray();
+        internal object?[]? Snapshot() => _closures.Count == 0 ? null : _closures.ToArray();
 
         internal void Scan(Expression? expression)
         {
@@ -4942,6 +4938,11 @@ public partial class QueryCommand
             Scan(cmd._having);
             Scan(cmd._preWhere);
             Scan(cmd.PerParentPartition);
+            Scan(cmd.LimitBy?.Expression);
+            Scan(cmd.DistinctOn?.Expression);
+            Scan(cmd.ExtremeRow?.ValueSelector);
+            Scan(cmd.ExtremeRow?.GroupBy);
+            Scan(cmd.ExtremeRow?.Projection);
 
             if (cmd._arrayJoins is { Length: > 0 } arrayJoins)
             {
@@ -5051,14 +5052,9 @@ public partial class QueryCommand
 
         private void Add(object? value)
         {
-            if (value is null) return;
-            for (var i = 0; i < _closures.Count; i++)
-            {
-                if (ReferenceEquals(_closures[i], value)) return;
-            }
-
-            _closures.Add(value);
-            IdentitiesHash = HashCode.Combine(IdentitiesHash, RuntimeHelpers.GetHashCode(value));
+            var token = PlanObjectIdentity.For(value);
+            _closures.Add(token);
+            IdentitiesHash = HashCode.Combine(IdentitiesHash, token is null ? 0 : RuntimeHelpers.GetHashCode(token));
         }
     }
 

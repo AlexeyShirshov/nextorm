@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Microsoft.Data.Sqlite;
@@ -230,6 +231,124 @@ public sealed class SqliteSharedPlanBindingTests
             var target = Expression.Property(owner, declaringType.GetProperty(nameof(BaseTarget.Target))!);
             var predicate = Expression.Lambda<Func<BindingRow, bool>>(Expression.Equal(id, target), row);
             return context.From<BindingRow>().Where(predicate).OrderBy(item => item.Id).Select(item => item.Id);
+        }
+    }
+
+    [Fact]
+    public void CapturedScalarAccessor_ReusesItsShapeWithoutRetainingTheFirstOwner()
+    {
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        using var firstConnection = OpenSeededConnection();
+        using var secondConnection = OpenSeededConnection();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+        var previousAccessors = DataContextCache.ExpressionsCache.Values.ToArray();
+
+        var firstOwner = Execute(first, 1);
+        var accessor = DataContextCache.ExpressionsCache.Values.Except(previousAccessors).Should().ContainSingle().Which;
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        firstOwner.IsAlive.Should().BeFalse("the compiled accessor cache must not own the first request");
+
+        Execute(second, 2);
+        DataContextCache.ExpressionsCache.Values.Except(previousAccessors).Should().ContainSingle().Which.Should().BeSameAs(accessor);
+        firstTap.LastParameters.Should().Equal((0, "Value", 1));
+        secondTap.LastParameters.Should().Equal((0, "Value", 2));
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static WeakReference Execute(SqliteDataContext context, int value)
+        {
+            var owner = new ScalarAccessorOwner(value);
+            var row = Expression.Parameter(typeof(BindingRow), "row");
+            var id = Expression.Property(row, nameof(BindingRow.Id));
+            var target = Expression.Property(Expression.Constant(owner), nameof(ScalarAccessorOwner.Value));
+            var predicate = Expression.Lambda<Func<BindingRow, bool>>(Expression.Equal(id, target), row);
+            var query = context.From<BindingRow>().Where(predicate).OrderBy(item => item.Id).Select(item => item.Id);
+            // Isolate the process-wide accessor cache from both plan indices.
+            context.GetPreparedQueryCommand(query, false, false, TestContext.Current.CancellationToken)
+                .ToList(context).Should().Equal(value);
+            return new WeakReference(owner);
+        }
+    }
+
+    private sealed record ScalarAccessorOwner(int Value);
+
+    [Fact]
+    public void RawRecipe_RejectsADifferentReceiverAtALaterOccurrence()
+    {
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        using var firstConnection = OpenSeededConnection();
+        using var secondConnection = OpenSeededConnection();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+        var a = new RawRecipeOwner(0, 3, 1);
+        var b = new RawRecipeOwner(0, 3, 2);
+        var token = TestContext.Current.CancellationToken;
+        var firstInvocation = first.GetPreparedQueryCommand(Build(first, a), false, true, token);
+        firstInvocation.ToList(first).Should().Equal(1);
+
+        var equivalent = Build(second, a);
+        var changed = Build(second, b);
+        var equivalentShape = QueryCommand.CaptureRawShape(equivalent)!;
+        var changedShape = QueryCommand.CaptureRawShape(changed)!;
+        QueryPlanStore.TryGetRaw(second.GetType(), equivalentShape, equivalent, out _).Should().BeTrue();
+
+        // A repeated receiver at a different occurrence must not match even inside the same bucket.
+        changedShape.Fingerprint = equivalentShape.Fingerprint;
+        QueryPlanStore.TryGetRaw(second.GetType(), changedShape, changed, out _).Should().BeFalse();
+
+        var secondInvocation = second.GetPreparedQueryCommand(changed, false, true, token);
+        secondInvocation.ToList(second).Should().Equal(2);
+        firstTap.LastParameters.Should().Equal((0, "Low", 0), (1, "High", 3), (2, "Target", 1));
+        secondTap.LastParameters.Should().Equal((0, "Low", 0), (1, "High", 3), (2, "Target", 2));
+        BoundQueryInvocation<int>.GetPlan(secondInvocation).Should().BeSameAs(BoundQueryInvocation<int>.GetPlan(firstInvocation));
+
+        QueryCommand<int> Build(SqliteDataContext context, RawRecipeOwner target)
+        {
+            var row = Expression.Parameter(typeof(BindingRow), "row");
+            var id = Expression.Property(row, nameof(BindingRow.Id));
+            var low = Expression.Property(Expression.Constant(a), nameof(RawRecipeOwner.Low));
+            var high = Expression.Property(Expression.Constant(b), nameof(RawRecipeOwner.High));
+            var match = Expression.Property(Expression.Constant(target), nameof(RawRecipeOwner.Target));
+            var range = Expression.AndAlso(Expression.GreaterThan(id, low), Expression.LessThan(id, high));
+            var predicate = Expression.Lambda<Func<BindingRow, bool>>(
+                Expression.AndAlso(range, Expression.Equal(id, match)), row);
+            return context.From<BindingRow>().Where(predicate).OrderBy(item => item.Id).Select(item => item.Id);
+        }
+    }
+
+    private sealed record RawRecipeOwner(int Low, int High, int Target);
+
+    [Fact]
+    public void CapturedBuilderSubquery_BindsTheCurrentBuilderWithoutRetainingTheFirst()
+    {
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        using var firstConnection = OpenSeededConnection();
+        using var secondConnection = OpenSeededConnection();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+
+        var firstBuilder = Execute(first, 1, [1, 2]);
+        Execute(second, 3, []);
+        firstTap.LastParameters.Should().Equal((0, "target", 1));
+        secondTap.LastParameters.Should().Equal((0, "target", 3));
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        firstBuilder.IsAlive.Should().BeFalse("the cached getter must not hold the first builder");
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static WeakReference Execute(SqliteDataContext context, int target, int[] expected)
+        {
+            var subquery = Filter(context, target);
+            var query = context.From<BindingRow>().Where(row => subquery.Any()).OrderBy(row => row.Id).Select(row => row.Id);
+            query.Cache = false;
+            query.ToList().Should().Equal(expected);
+            return new WeakReference(subquery);
         }
     }
 

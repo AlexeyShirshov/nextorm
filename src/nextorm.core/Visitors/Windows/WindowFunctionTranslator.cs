@@ -393,19 +393,7 @@ internal static class WindowFunctionTranslator
     /// </summary>
     private static WindowFrame? EvaluateWindowFrame(BaseExpressionVisitor visitor, Expression? expression)
     {
-        if (expression is null or ConstantExpression { Value: null })
-            return null;
-
-        if (expression is ConstantExpression { Value: WindowFrame constant })
-            return constant;
-
-        var key = new ExpressionKey(expression, visitor.QueryProvider);
-        if (!DataContextCache.ExpressionsCache.TryGetValue(key, out var del))
-        {
-            del = Expression.Lambda<Func<WindowFrame>>(expression).Compile();
-            DataContextCache.ExpressionsCache[key] = del;
-        }
-
-        return ((Func<WindowFrame>)del)();
+        return expression is null ? null
+            : (WindowFrame?)ValueExpressionAccessor.Evaluate(expression, visitor.QueryProvider, visitor.Logger);
     }
 }
