@@ -361,8 +361,8 @@ public partial class QueryCommand
 
                 if (cmd.PreparedCondition is not null)
                 {
-                    cmd.InValuesShapeHash = InValues.ComputeShapeHash(cmd.PreparedCondition, cmd, out var wherePartitions, out var hasWhere, out var whereStable);
-                    cmd.HasTopLevelInValues = hasWhere;
+                    cmd.InValuesShapeHash = InValues.ComputeShapeHash(cmd.PreparedCondition, cmd, out var wherePartitions, out cmd.Prepared.WhereValueListShape, out var whereStable);
+                    cmd.HasTopLevelInValues = cmd.Prepared.WhereValueListShape is not null;
                     stable &= whereStable;
                     initial = wherePartitions;
                     unchecked
@@ -373,8 +373,8 @@ public partial class QueryCommand
 
                 if (cmd.PreparedPreWhere is not null)
                 {
-                    cmd.PreWhereShapeHash = InValues.ComputeShapeHash(cmd.PreparedPreWhere, cmd, out var preWherePartitions, out var hasPreWhere, out var preStable);
-                    cmd.HasPreWhereInValues = hasPreWhere;
+                    cmd.PreWhereShapeHash = InValues.ComputeShapeHash(cmd.PreparedPreWhere, cmd, out var preWherePartitions, out cmd.Prepared.PreWhereValueListShape, out var preStable);
+                    cmd.HasPreWhereInValues = cmd.Prepared.PreWhereValueListShape is not null;
                     stable &= preStable;
 
                     if (preWherePartitions is { Count: > 0 })
@@ -403,7 +403,7 @@ public partial class QueryCommand
 
             if (cmd.HasTopLevelInValues && cmd.PreparedCondition is not null)
             {
-                cmd.InValuesShapeHash = InValues.ComputeShapeHash(cmd.PreparedCondition, cmd, out var wherePartitions, out _, out _);
+                cmd.InValuesShapeHash = InValues.ComputeShapeHash(cmd.PreparedCondition, cmd, out var wherePartitions, out cmd.Prepared.WhereValueListShape, out _);
                 merged = wherePartitions;
                 unchecked
                 {
@@ -413,7 +413,7 @@ public partial class QueryCommand
 
             if (cmd.HasPreWhereInValues && cmd.PreparedPreWhere is not null)
             {
-                cmd.PreWhereShapeHash = InValues.ComputeShapeHash(cmd.PreparedPreWhere, cmd, out var preWherePartitions, out _, out _);
+                cmd.PreWhereShapeHash = InValues.ComputeShapeHash(cmd.PreparedPreWhere, cmd, out var preWherePartitions, out cmd.Prepared.PreWhereValueListShape, out _);
 
                 if (preWherePartitions is { Count: > 0 })
                 {
@@ -1236,6 +1236,9 @@ public partial class QueryCommand
                                                 selectList[i].PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selectList[i]);
                                                 columnsPlanHash = columnsPlanHash * 13 + selectList[i].PlanHashCode;
                                             }
+
+                                    if (selectList.Length > 0)
+                                        DataContextCache.SelectListCache[srcType] = selectList;
                                 }
 
                                 // Additive fallback: a metadata-less derived source read without a projection
@@ -1309,8 +1312,6 @@ public partial class QueryCommand
                                         ? "Cannot materialize this derived source without an explicit outer Select: its projected columns cannot be reused safely (row-member expressions require re-translation). Add an outer Select, for example Select(x => x.Id). This restriction applies to anonymous types and DTOs alike."
                                         : "Cannot materialize this source because it has no mapped columns or reusable projection. Use a mapped source or specify an explicit Select with named columns.");
                                 }
-
-                                DataContextCache.SelectListCache[srcType] = selectList;
                             }
                             else if (!cmd._dontCache && !noHash)
                             {
@@ -3818,9 +3819,9 @@ public partial class QueryCommand
                         // evaluated value-list and lookup shape in as well; otherwise a plan built for one
                         // list length (or dictionary size) would be reused for another. The renderer
                         // reuses the evaluated partitions.
-                        cmd.InValuesShapeHash = InValues.ComputeShapeHash(cmd.PreparedCondition, cmd, out var partitions, out var hasMatch, out var valuesStable);
+                        cmd.InValuesShapeHash = InValues.ComputeShapeHash(cmd.PreparedCondition, cmd, out var partitions, out cmd.Prepared.WhereValueListShape, out var valuesStable);
                         cmd.InValuesPartitions = partitions;
-                        cmd.HasTopLevelInValues = hasMatch;
+                        cmd.HasTopLevelInValues = cmd.Prepared.WhereValueListShape is not null;
                         cmd.ShapeValuesStable &= valuesStable;
                         if (cmd.HasTopLevelInValues)
                             wherePlanHash = wherePlanHash * 13 + cmd.InValuesShapeHash;
@@ -3844,8 +3845,8 @@ public partial class QueryCommand
 
             if (!cmd._dontCache && !noHash)
             {
-                cmd.PreWhereShapeHash = InValues.ComputeShapeHash(cmd.PreparedPreWhere, cmd, out var partitions, out var hasMatch, out var valuesStable);
-                cmd.HasPreWhereInValues = hasMatch;
+                cmd.PreWhereShapeHash = InValues.ComputeShapeHash(cmd.PreparedPreWhere, cmd, out var partitions, out cmd.Prepared.PreWhereValueListShape, out var valuesStable);
+                cmd.HasPreWhereInValues = cmd.Prepared.PreWhereValueListShape is not null;
                 cmd.ShapeValuesStable &= valuesStable;
 
                 if (partitions is { Count: > 0 })
@@ -4896,9 +4897,8 @@ public partial class QueryCommand
         internal bool HasCapturedCommand { get; private set; }
 
         /// <summary>
-        /// Whether the scanned graph carries a value list the raw-recipe publish gate refuses: a filter
-        /// list (top-level) or a captured/tuple list in the projection/grouping (unkeyed). Set during the
-        /// existing scan, so no second expression walk is needed.
+        /// Whether the scanned graph carries a collection shape that needs fresh preparation:
+        /// a row-dependent lookup, a top-level filter list, or an unkeyed list in projection/grouping.
         /// </summary>
         internal bool HasUnpublishableValueList { get; private set; }
 
@@ -4992,9 +4992,31 @@ public partial class QueryCommand
                 else if ((_member == ScanMember.Projection || _member == ScanMember.Group)
                     && InValues.IsUnkeyedValueListSource(node))
                     HasUnpublishableValueList = true;
+                else if (node.Method.Name == "get_Item")
+                    CheckRowDependentLookup(node);
             }
 
             return base.VisitMethodCall(node);
+        }
+
+        protected override Expression VisitIndex(IndexExpression node)
+        {
+            CheckRowDependentLookup(node);
+            return base.VisitIndex(node);
+        }
+
+        protected override Expression VisitBinary(BinaryExpression node)
+        {
+            if (node.NodeType == ExpressionType.ArrayIndex)
+                CheckRowDependentLookup(node);
+            return base.VisitBinary(node);
+        }
+
+        private void CheckRowDependentLookup(Expression node)
+        {
+            if (!HasUnpublishableValueList && DictionaryLookup.TryGetLookup(node, out _, out var key)
+                && key.Has<ParameterExpression>())
+                HasUnpublishableValueList = true;
         }
 
         protected override Expression VisitMember(MemberExpression node)

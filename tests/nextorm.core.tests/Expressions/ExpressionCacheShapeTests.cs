@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -31,5 +32,29 @@ public class ExpressionCacheShapeTests
 
         evaluated.Should().BeTrue();
         value.Should().Be(42);
+    }
+
+    [Fact]
+    public void ExpressionKey_DoesNotRootRegistryAfterHashing()
+    {
+        var (key, registry) = BuildKey();
+        var cache = new ExpressionCache<Func<int>> { [key] = static () => 42 };
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        registry.IsAlive.Should().BeFalse("the constant in a cached expression key does not need the command registry");
+        using var context = new InMemoryDataContext();
+        var equivalentKey = new ExpressionKey(Expression.Constant(42), context.From<SimpleEntity>().Select(row => row.Id));
+        cache[equivalentKey]().Should().Be(42);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (ExpressionKey Key, WeakReference Registry) BuildKey()
+    {
+        using var context = new InMemoryDataContext();
+        var registry = context.From<SimpleEntity>().Select(row => row.Id);
+        return (new ExpressionKey(Expression.Constant(42), registry), new WeakReference(registry));
     }
 }

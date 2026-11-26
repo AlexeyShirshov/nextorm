@@ -558,6 +558,34 @@ public class PlanKeyUniquenessTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ValueListHashCollision_DoesNotMatchAnotherShape(bool preWhere)
+    {
+        using var context = SqliteTestContext.Create();
+        int?[] values = [1, 2];
+        QueryCommand Build() => Row(preWhere
+            ? E(context).PreWhere(row => values.Contains(row.Int))
+            : E(context).Where(row => values.Contains(row.Int)));
+
+        var first = Build();
+        first.PrepareCommand(false, CancellationToken.None);
+        var published = new QueryPlan(first, null, 17).GetCacheVersion();
+        var memoized = first.GetOrCreatePlanKey(null);
+
+        values = [1, 2, null];
+        var other = Build();
+        other.PrepareCommand(false, CancellationToken.None);
+        first.RefreshInValuesShape();
+        // Simulate a collision at both levels: the per-clause hash and the enclosing plan hash.
+        other.InValuesShapeHash = first.InValuesShapeHash = published.QueryCommand.InValuesShapeHash;
+        other.PreWhereShapeHash = first.PreWhereShapeHash = published.QueryCommand.PreWhereShapeHash;
+
+        published.Equals(new QueryPlan(other, null, 17)).Should().BeFalse();
+        first.GetOrCreatePlanKey(null).Should().NotBeSameAs(memoized);
+    }
+
     [Fact]
     public void CacheKeyAndStagedRecipe_DoNotShareMutableQueryParts()
     {

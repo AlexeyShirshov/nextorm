@@ -137,6 +137,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (x.PreWhereShapeHash != y.PreWhereShapeHash) return false;
 
+        if (!object.Equals(x.Prep?.PreWhereValueListShape, y.Prep?.PreWhereValueListShape)) return false;
+
         if (x.ArrayJoinKind != y.ArrayJoinKind) return false;
 
         if (x.BindArrayJoinElement != y.BindArrayJoinElement) return false;
@@ -195,6 +197,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
         // (the closure access is shape independent), so the evaluated value-list shape is compared
         // explicitly to keep a shorter/longer list from reusing a stale plan.
         if (x.InValuesShapeHash != y.InValuesShapeHash) return false;
+
+        if (!object.Equals(x.Prep?.WhereValueListShape, y.Prep?.WhereValueListShape)) return false;
 
         if (!_joinComparer.Equals(x.Joins, y.Joins)) return false;
 

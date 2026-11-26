@@ -76,6 +76,10 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
 
     /// <inheritdoc />
     public bool Equals(Expression? left, Expression? right)
+        => AreEqual(left, right);
+
+    // Registry resolution is only needed during hashing, not during structural equality.
+    internal static bool AreEqual(Expression? left, Expression? right)
     {
         if (left == right)
         {

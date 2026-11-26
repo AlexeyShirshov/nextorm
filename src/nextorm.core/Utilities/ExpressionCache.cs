@@ -13,18 +13,12 @@ public class ExpressionCache<T> : ConcurrentDictionary<ExpressionKey, T>
 }
 
 /// <summary>
-/// Equality wrapper around an <see cref="Expression"/> that uses the query registry's
-/// <c>ExpressionPlanEqualityComparer</c>. Structurally equivalent expressions compare equal even when
-/// they are different object instances. The hash is computed once at construction because both inputs
-/// are immutable.
+/// Structural key for an <see cref="Expression"/>. The query registry is used to compute the hash
+/// once at construction, but it isn't retained for equality comparisons.
 /// </summary>
 public sealed class ExpressionKey : IEquatable<ExpressionKey>
 {
     private readonly Expression _exp;
-    private readonly ExpressionPlanEqualityComparer _equalityComparer;
-    // Both inputs are readonly, so the hash is stable for the lifetime of the key.
-    // Computing it once up front avoids caching it in a mutable field (S2328 false
-    // positive) and any lazy-initialization race when the key is shared.
     private readonly int _hash;
 
     /// <summary>
@@ -36,8 +30,7 @@ public sealed class ExpressionKey : IEquatable<ExpressionKey>
     public ExpressionKey(Expression exp, IQueryRegistry queryProvider)
     {
         _exp = exp;
-        _equalityComparer = queryProvider.GetExpressionPlanEqualityComparer();
-        _hash = _equalityComparer.GetHashCode(_exp);
+        _hash = queryProvider.GetExpressionPlanEqualityComparer().GetHashCode(exp);
     }
 
     /// <inheritdoc/>
@@ -48,15 +41,14 @@ public sealed class ExpressionKey : IEquatable<ExpressionKey>
         return Equals(obj as ExpressionKey);
     }
     /// <summary>
-    /// Determines whether <paramref name="obj"/> describes the same query plan as this key, using the
-    /// registry's plan equality comparer.
+    /// Determines whether <paramref name="obj"/> describes a plan-equivalent expression.
     /// </summary>
     /// <param name="obj">The other key to compare with, or <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when both keys hold plan-equivalent expressions.</returns>
     public bool Equals(ExpressionKey? obj)
     {
         if (obj is null) return false;
-        return _equalityComparer.Equals(_exp, obj._exp);
+        return ExpressionPlanEqualityComparer.AreEqual(_exp, obj._exp);
     }
     //public static implicit operator ExpressionKey(Expression exp) => new ExpressionKey(exp);
 }

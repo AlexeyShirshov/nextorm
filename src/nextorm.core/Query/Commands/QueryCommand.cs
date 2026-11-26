@@ -1638,6 +1638,8 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
             preparedState.PreparedHaving = null;
             preparedState.PreparedPreWhere = null;
             preparedState.PreWhereShapeHash = 0;
+            preparedState.WhereValueListShape = null;
+            preparedState.PreWhereValueListShape = null;
             preparedState.HasPreWhereInValues = false;
             preparedState.InValuesPartitions = null;
             preparedState.HasTopLevelInValues = false;

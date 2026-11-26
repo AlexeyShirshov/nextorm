@@ -52,8 +52,12 @@ public partial class QueryCommand
             preparedTarget.PreparedHaving = prepared.PreparedHaving;
             preparedTarget.PreparedPreWhere = prepared.PreparedPreWhere;
             preparedTarget.PreWhereShapeHash = prepared.PreWhereShapeHash;
+            preparedTarget.WhereValueListShape = prepared.WhereValueListShape;
+            preparedTarget.PreWhereValueListShape = prepared.PreWhereValueListShape;
+            preparedTarget.HasTopLevelInValues = prepared.HasTopLevelInValues;
             preparedTarget.HasPreWhereInValues = prepared.HasPreWhereInValues;
-            preparedTarget.LookupPartitions = prepared.LookupPartitions;
+            // The normalized key needs the shape tokens, not the entries evaluated for execution.
+            preparedTarget.LookupPartitions = copyAll ? prepared.LookupPartitions : null;
             preparedTarget.ShapeScanned = prepared.ShapeScanned;
             preparedTarget.HasUnkeyedTupleInValues = prepared.HasUnkeyedTupleInValues;
             preparedTarget.HasUnkeyedScalarInValues = prepared.HasUnkeyedScalarInValues;

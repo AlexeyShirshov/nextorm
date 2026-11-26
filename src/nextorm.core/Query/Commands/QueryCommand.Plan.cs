@@ -20,6 +20,8 @@ public partial class QueryCommand
     private string? _planKeySql;
     private int _planKeyInValuesShapeHash;
     private int _planKeyPreWhereShapeHash;
+    private InValuesShape? _planKeyWhereValueListShape;
+    private InValuesShape? _planKeyPreWhereValueListShape;
 
     private PlanMappingIdentity _detachedPlanMapping;
     internal PlanMappingIdentity PlanMapping => _dataContext is not null
@@ -42,14 +44,13 @@ public partial class QueryCommand
         if (_planKey is { } plan
             && _planKeySql == sql
             && _planKeyInValuesShapeHash == InValuesShapeHash
-            && _planKeyPreWhereShapeHash == PreWhereShapeHash)
+            && _planKeyPreWhereShapeHash == PreWhereShapeHash
+            && Equals(_planKeyWhereValueListShape, Prep?.WhereValueListShape)
+            && Equals(_planKeyPreWhereValueListShape, Prep?.PreWhereValueListShape))
             return plan;
 
         var created = new QueryPlan(this, sql);
-        _planKey = created;
-        _planKeySql = sql;
-        _planKeyInValuesShapeHash = InValuesShapeHash;
-        _planKeyPreWhereShapeHash = PreWhereShapeHash;
+        CacheStoredPlanKey(created, sql);
         return created;
     }
 
@@ -65,6 +66,8 @@ public partial class QueryCommand
         _planKeySql = sql;
         _planKeyInValuesShapeHash = InValuesShapeHash;
         _planKeyPreWhereShapeHash = PreWhereShapeHash;
+        _planKeyWhereValueListShape = Prep?.WhereValueListShape;
+        _planKeyPreWhereValueListShape = Prep?.PreWhereValueListShape;
     }
 
     /// <summary>
@@ -75,6 +78,8 @@ public partial class QueryCommand
     {
         _planKey = null;
         _planKeySql = null;
+        _planKeyWhereValueListShape = null;
+        _planKeyPreWhereValueListShape = null;
         // #362: a prepared component descriptor belongs to the key it was computed under, so it is
         // dropped with that key. The component list itself stays attached; the next preparation
         // rebuilds the descriptors, and until then the plan key falls back to the raw component list.

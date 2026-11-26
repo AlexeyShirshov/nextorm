@@ -77,20 +77,22 @@ public class DataContextCacheClearTests
             ctx.PurgeQueryCache();
 
             var threshold = 0;
-            var first = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(
+            var first = (BoundQueryInvocation<int>)ctx.GetPreparedQueryCommand(
                 ctx.From<ISimpleEntity>().Where(x => x.Id > threshold).Select(x => x.Id),
                 createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
-            first.DbCommandParams[0].Value.Should().Be(0);
+            first.Values.Should().Equal(0);
+            ctx.ToList(first).Should().Equal(42);
 
             DataContextCache.Clear();
 
             threshold = 100;
-            var second = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(
+            var second = (BoundQueryInvocation<int>)ctx.GetPreparedQueryCommand(
                 ctx.From<ISimpleEntity>().Where(x => x.Id > threshold).Select(x => x.Id),
                 createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
 
-            second.Should().NotBeSameAs(first, "the cleared plan must be rebuilt");
-            second.DbCommandParams[0].Value.Should().Be(100, "the rebuilt plan binds the current capture");
+            second.Plan.Should().NotBeSameAs(first.Plan, "the cleared plan must be rebuilt");
+            second.Values.Should().Equal(100);
+            ctx.ToList(second).Should().BeEmpty("the rebuilt plan binds the current capture");
         }
         finally
         {

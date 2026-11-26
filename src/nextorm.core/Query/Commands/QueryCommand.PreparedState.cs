@@ -39,6 +39,9 @@ internal sealed class QueryCommandPreparedState
     public Expression? PreparedPreWhere;
     /// <summary>Shape hash of any captured value-list in <see cref="PreparedPreWhere"/>.</summary>
     public int PreWhereShapeHash;
+    // Immutable shapes can travel to the cache key; the evaluated partitions below are for rendering.
+    public InValuesShape? WhereValueListShape;
+    public InValuesShape? PreWhereValueListShape;
     /// <summary>Whether <see cref="PreparedPreWhere"/> carries a top-level value list.</summary>
     public bool HasPreWhereInValues;
     /// <summary>The evaluated value-list partitions keyed by collection expression.</summary>

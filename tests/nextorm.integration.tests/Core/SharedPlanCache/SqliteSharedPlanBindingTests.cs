@@ -129,6 +129,56 @@ public sealed class SqliteSharedPlanBindingTests
     }
 
     [Fact]
+    public void DerivedProjection_DoesNotPublishItsColumnsAsEntityMetadata()
+    {
+        using var connection = OpenSeededConnection();
+        using var context = new SqliteDataContext(connection, new DataContextBuilder());
+        var inner = context.From(TableName).Select(row => new
+        {
+            Id = SqlFunctions.Column<int>(row, "Id"),
+            DerivedValue = SqlFunctions.Column<int>(row, "Id") + 10
+        });
+        var source = context.From(inner);
+
+        var values = context.From(source).OrderBy(row => row.Id).Select(row => row.DerivedValue).ToList();
+
+        values.Should().Equal(11, 12);
+        DataContextCache.SelectListCache.ContainsKey(inner.ResultType!).Should().BeFalse(
+            "a derived column shape belongs to its defining query, not to the shared CLR type");
+    }
+
+    [Fact]
+    public void DictionaryLookup_RebindsWithoutKeepingTheEvaluatedEntriesOnTheKey()
+    {
+        using var firstConnection = OpenSeededConnection();
+        using var secondConnection = OpenSeededConnection();
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+
+        var firstQuery = Build(first, new Dictionary<int, int> { [1] = 10, [2] = 20 });
+        var secondQuery = Build(second, new Dictionary<int, int> { [1] = 20, [2] = 10 });
+        QueryCommand.CaptureRawShape(firstQuery).Should().BeNull("lookup entries must be evaluated from the current command");
+        var token = TestContext.Current.CancellationToken;
+        var firstInvocation = first.GetPreparedQueryCommand(firstQuery, false, true, token);
+        var secondInvocation = second.GetPreparedQueryCommand(secondQuery, false, true, token);
+
+        firstInvocation.ToList(first).Should().Equal(2);
+        secondInvocation.ToList(second).Should().Equal(1);
+        firstTap.LastParameters.Should().Equal((0, "p0", 1), (1, "p1", 10), (2, "p2", 2), (3, "p3", 20));
+        secondTap.LastParameters.Should().Equal((0, "p0", 1), (1, "p1", 20), (2, "p2", 2), (3, "p3", 10));
+        BoundQueryInvocation<int>.GetPlan(secondInvocation).Should().BeSameAs(BoundQueryInvocation<int>.GetPlan(firstInvocation));
+        firstQuery.LookupPartitions.Should().NotBeNull();
+        var key = firstQuery.GetOrCreatePlanKey(null);
+        key.QueryCommand.Should().NotBeSameAs(firstQuery);
+        key.QueryCommand.LookupPartitions.Should().BeNull("the published key only needs the lookup's entry count");
+
+        static QueryCommand<int> Build(SqliteDataContext context, Dictionary<int, int> lookup)
+            => context.From<BindingRow>().Where(row => lookup[row.Id] == 20).Select(row => row.Id);
+    }
+
+    [Fact]
     public void NativeList_DifferentContextTimeouts_UseTheirOwnPlan()
     {
         var firstTap = new BindingTap();
