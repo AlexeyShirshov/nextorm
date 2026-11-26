@@ -36,15 +36,15 @@ internal static class QueryPlanStore
 
     /// <summary>
     /// One published pre-preparation candidate: the raw descriptor captured before ordinary
-    /// preparation, the normalized plan key that the holder was stored under, and the holder itself.
-    /// It owns no command, no closure, no current parameter value and no mutable command collection;
-    /// the preparation data is read from the stored plan key (the existing Entry) at apply time.
+    /// preparation, the normalized plan key, the holder, and the prepared graph to stage. The graph
+    /// must be separate when the normalized key uses comparison-only expressions.
     /// </summary>
-    internal sealed class RawCandidate(QueryPlan plan, IDbCommandHolder holder, QueryCommand.RawShape shape)
+    internal sealed class RawCandidate(QueryPlan plan, IDbCommandHolder holder, QueryCommand.RawShape shape, QueryCommand recipe)
     {
         internal QueryPlan Plan { get; } = plan;
         internal IDbCommandHolder Holder { get; } = holder;
         internal QueryCommand.RawShape Shape { get; } = shape;
+        internal QueryCommand Recipe { get; } = recipe;
     }
 
     /// <summary>
@@ -272,9 +272,9 @@ internal static class QueryPlanStore
     /// generation before reporting a hit. <paramref name="comparerSource"/> supplies the expression
     /// comparers used for raw structural verification.
     /// </summary>
-    internal static bool TryGetRaw(Type contextType, QueryCommand.RawShape shape, QueryCommand comparerSource, out QueryPlan? plan)
+    internal static bool TryGetRaw(Type contextType, QueryCommand.RawShape shape, QueryCommand comparerSource, out RawCandidate? match)
     {
-        plan = null;
+        match = null;
 
         var generation = Volatile.Read(ref _generation);
         var cache = Cache; // performs the shared generation transition for both indexes
@@ -301,7 +301,7 @@ internal static class QueryPlanStore
             if (Volatile.Read(ref _generation) != generation)
                 return false;
 
-            plan = candidate.Plan;
+            match = candidate;
             return true;
         }
 
@@ -316,6 +316,8 @@ internal static class QueryPlanStore
     internal static void SetRaw(Type contextType, QueryPlan plan, IDbCommandHolder holder, QueryCommand.RawShape shape, QueryCommand comparerSource)
     {
         _ = contextType;
+        var recipe = plan.NeedsSeparateRawRecipe ? comparerSource.CloneForCache() : plan.QueryCommand;
+        var candidate = new RawCandidate(plan, holder, shape, recipe);
         var index = RawIndex;
         if (!index.TryGetValue(shape.Fingerprint, out var bucket))
         {
@@ -327,12 +329,12 @@ internal static class QueryPlanStore
         {
             if (bucket[i].Shape.Matches(shape, comparerSource))
             {
-                bucket[i] = new RawCandidate(plan, holder, shape);
+                bucket[i] = candidate;
                 return;
             }
         }
 
-        bucket.Add(new RawCandidate(plan, holder, shape));
+        bucket.Add(candidate);
     }
 
     /// <summary>

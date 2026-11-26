@@ -9,7 +9,7 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
 {
     /// <summary>
     /// The query command this plan describes. Replaced by an equal clone when
-    /// <see cref="GetCacheVersion"/> is called.
+    /// <see cref="GetCacheVersion()"/> is called.
     /// </summary>
     public QueryCommand QueryCommand;
     private readonly string? _sql;
@@ -35,6 +35,7 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
     // forced collision; production plans leave it null and hash structurally as before.
     private readonly int? _forcedHash;
     private bool _isCacheVersion;
+    internal bool NeedsSeparateRawRecipe { get; private set; }
 
     /// <summary>
     /// Captures a canonical, hashable description of <paramref name="cmd"/> and computes its stable
@@ -122,7 +123,7 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
 
     /// <summary>
     /// Returns the hash captured when the plan was constructed, keeping plan identity stable even
-    /// after <see cref="GetCacheVersion"/> swaps in an equal command clone.
+    /// after <see cref="GetCacheVersion()"/> swaps in an equal command clone.
     /// </summary>
     /// <returns>The stable plan hash.</returns>
     public override int GetHashCode() => _hashPlan;
@@ -165,7 +166,11 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
     /// The plan's hash is unchanged, preserving its identity as a dictionary key.
     /// </summary>
     /// <returns>This plan, after the command has been swapped for its cache clone.</returns>
-    public QueryPlan GetCacheVersion()
+    public QueryPlan GetCacheVersion() => GetCacheVersion(detachSqlExpressions: false);
+
+    internal QueryPlan GetSqlCacheVersion() => GetCacheVersion(detachSqlExpressions: true);
+
+    private QueryPlan GetCacheVersion(bool detachSqlExpressions)
     {
         // The same plan key can be stored more than once (the per-thread store is cleared and a
         // reused command repopulates it), and after the first call the command is already the
@@ -174,6 +179,7 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
             return this;
 
         var newCmd = QueryCommand.CloneForCache();
+        NeedsSeparateRawRecipe = detachSqlExpressions && newCmd.DetachSqlPlanKey();
         // Plan identity is behavioural: identical frozen hash and structural command equality (below), not comparer instance sharing.
         Debug.Assert(_hashPlan == ComputeHash(newCmd, _sql, _comparer), "Hash must be equals, if not see QueryCommand.CopyTo function");
         Debug.Assert(_comparer.Equals(newCmd, QueryCommand), "QueryCommands must be equals, if not see QueryCommand.CopyTo function");

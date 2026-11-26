@@ -871,13 +871,14 @@ internal sealed class QueryPlanner : IQueryPlanner
             {
                 Interlocked.Increment(ref _recipeRejections);
             }
-            else if (QueryPlanStore.TryGetRaw(_contextType, recipeShape, queryCommand, out var recipePlan))
+            else if (QueryPlanStore.TryGetRaw(_contextType, recipeShape, queryCommand, out var rawCandidate))
             {
                 // Transactional apply: stage the owner's preparation data into this command, validate
                 // that the resulting key still describes the published owner, and on mismatch discard
                 // the staged state and run ordinary preparation of the input.
                 var rawGraph = queryCommand.CaptureRawGraph();
-                queryCommand.ApplyPreparationFrom(recipePlan!.QueryCommand);
+                queryCommand.ApplyPreparationFrom(rawCandidate!.Recipe);
+                var recipePlan = rawCandidate.Plan;
                 var stagedKey = queryCommand.GetOrCreatePlanKey(null);
                 if (recipePlan.Equals(stagedKey) || stagedKey.Equals(recipePlan))
                 {
@@ -1072,7 +1073,7 @@ internal sealed class QueryPlanner : IQueryPlanner
 
             if (publish)
             {
-                QueryPlanStore.Set(_contextType, queryPlan!.GetCacheVersion(), compiledQuery);
+                QueryPlanStore.Set(_contextType, queryPlan!.GetSqlCacheVersion(), compiledQuery);
 
                 // Publication happens ONLY after ordinary preparation succeeded, the normalized key
                 // was constructed and the cacheable holder was stored through Set. A value-independent

@@ -1,3 +1,5 @@
+using System.Linq.Expressions;
+
 namespace NextORM.Core;
 
 /// <summary>
@@ -305,6 +307,89 @@ public partial class QueryCommand
         cmd.CopyPreparedColumns();
         return cmd;
     }
+
+    // SQL keys are compared, not rendered. Keep the legacy cache clone executable for raw recipe
+    // adoption and for the in-memory route. Walk only command edges owned by the cache clone.
+    internal bool DetachSqlPlanKey()
+    {
+        var rewriter = new SqlKeyExpressionRewriter();
+        DetachSqlPlanKey(rewriter);
+        return rewriter.Changed;
+    }
+
+    private void DetachSqlPlanKey(SqlKeyExpressionRewriter rewriter)
+    {
+        if (OuterRegistry is not null)
+        {
+            // The prepared registry slots and precomputed hashes carry plan identity. Following this
+            // reverse link would keep the live outer command (and potentially its context) alive.
+            OuterRegistry = null;
+            rewriter.Changed = true;
+        }
+
+        _having = (LambdaExpression?)rewriter.Visit(_having);
+        RewriteColumns(_selectList);
+        if (_preparedState is { } prepared)
+        {
+            prepared.PreparedCondition = rewriter.Visit(prepared.PreparedCondition);
+            prepared.PreparedHaving = rewriter.Visit(prepared.PreparedHaving);
+            prepared.PreparedPreWhere = rewriter.Visit(prepared.PreparedPreWhere);
+            RewriteColumns(prepared.GroupingList);
+            RewriteColumns(prepared.LimitByColumns);
+            RewriteColumns(prepared.DistinctOnColumns);
+            RewriteColumns(prepared.ExtremeRowColumns);
+            RewriteColumns(prepared.ExtremeRowGroupByColumns);
+            RewriteColumns(prepared.PerParentPartitionColumns);
+            if (prepared.ReferencedQueries is { } referenced)
+                foreach (var command in referenced)
+                    command.DetachSqlPlanKey(rewriter);
+        }
+
+        DetachSource(_from);
+        if (_joins is { } joins)
+            foreach (var join in joins)
+                DetachSource(join.From);
+        if (_ctes is { } ctes)
+            foreach (var cte in ctes)
+                cte.Query.DetachSqlPlanKey(rewriter);
+        _union?.DetachSqlPlanKey(rewriter);
+
+        void RewriteColumns(SelectExpression[]? columns)
+        {
+            if (columns is not null)
+                foreach (var column in columns)
+                    column.Expression = rewriter.Visit(column.Expression);
+        }
+
+        void DetachSource(FromExpression? source)
+        {
+            while (source?.Pivot is { } pivot)
+                source = pivot.Inner;
+            source?.SubQuery?.DetachSqlPlanKey(rewriter);
+        }
+    }
+
+    private sealed class SqlKeyExpressionRewriter : ExpressionVisitor
+    {
+        internal bool Changed { get; set; }
+
+        protected override Expression VisitMember(MemberExpression node)
+        {
+            // Plan equality compares the member and declared receiver type, not the receiver.
+            // QueryCommand-valued members are different: their hash resolves the referenced query.
+            if (node.Expression is ConstantExpression { Value: not null and not string } receiver
+                && !receiver.Type.IsValueType && !typeof(QueryCommand).IsAssignableFrom(node.Type))
+            {
+                Changed = true;
+                return node.Update(Expression.Constant(null, receiver.Type));
+            }
+
+            return base.VisitMember(node);
+        }
+
+        protected override Expression VisitExtension(Expression node) => node;
+    }
+
     /// <summary>Returns a deep, independently mutable copy of this command.</summary>
     /// <returns>The cloned command.</returns>
     public QueryCommand Clone()

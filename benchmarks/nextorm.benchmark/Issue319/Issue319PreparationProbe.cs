@@ -114,7 +114,7 @@ internal static class Issue319PreparationProbe
         if (!QueryPlanStore.TryGetRaw(command.DataContext!.GetType(), shape, command, out var plan) || plan is null) return false;
 
         _ = command.CaptureRawGraph();
-        command.ApplyPreparationFrom(plan.QueryCommand);
+        command.ApplyPreparationFrom(plan.Recipe);
         return true;
     }
 

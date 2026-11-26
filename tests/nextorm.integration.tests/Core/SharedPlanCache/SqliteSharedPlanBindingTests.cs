@@ -294,7 +294,12 @@ public sealed class SqliteSharedPlanBindingTests
         var changed = Build(second, b);
         var equivalentShape = QueryCommand.CaptureRawShape(equivalent)!;
         var changedShape = QueryCommand.CaptureRawShape(changed)!;
-        QueryPlanStore.TryGetRaw(second.GetType(), equivalentShape, equivalent, out _).Should().BeTrue();
+        QueryPlanStore.TryGetRaw(second.GetType(), equivalentShape, equivalent, out var candidate).Should().BeTrue();
+        candidate!.Recipe.Should().NotBeSameAs(candidate.Plan.QueryCommand,
+            "the comparison-only key must not be used as a prepared recipe");
+        var previousReuses = QueryPlanner.RecipeReuses;
+        second.GetPreparedQueryCommand(equivalent, false, true, token).ToList(second).Should().Equal(1);
+        QueryPlanner.RecipeReuses.Should().BeGreaterThan(previousReuses);
 
         // A repeated receiver at a different occurrence must not match even inside the same bucket.
         changedShape.Fingerprint = equivalentShape.Fingerprint;
@@ -321,6 +326,77 @@ public sealed class SqliteSharedPlanBindingTests
     }
 
     private sealed record RawRecipeOwner(int Low, int High, int Target);
+
+    [Fact]
+    public void DerivedSqlPlan_RebindsWithoutRetainingTheFirstPredicateOwner()
+    {
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        using var firstConnection = OpenSeededConnection();
+        using var secondConnection = OpenSeededConnection();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+
+        var (firstOwner, plan) = Execute(first, 1);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        firstOwner.IsAlive.Should().BeFalse("the normalized key must not keep the first derived predicate owner");
+
+        var (_, secondPlan) = Execute(second, 2);
+        secondPlan.Should().BeSameAs(plan);
+        firstTap.LastParameters.Should().Equal((0, "NestedTarget", 1));
+        secondTap.LastParameters.Should().Equal((0, "NestedTarget", 2));
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (WeakReference Owner, DbPreparedQueryCommand<int>? Plan) Execute(SqliteDataContext context, int target)
+        {
+            var owner = new NestedPredicateOwner(target);
+            var inner = context.From<BindingRow>().Where(row => row.Id == owner.NestedTarget)
+                .Select(row => new { row.Id });
+            var outer = context.From(inner).OrderBy(row => row.Id).Select(row => row.Id);
+            QueryCommand.CaptureRawShape(outer).Should().BeNull("a derived source bypasses raw staging");
+            var invocation = context.GetPreparedQueryCommand(outer, false, true, TestContext.Current.CancellationToken);
+            invocation.ToList(context).Should().Equal(target);
+            return (new WeakReference(owner), BoundQueryInvocation<int>.GetPlan(invocation));
+        }
+    }
+
+    private sealed record NestedPredicateOwner(int NestedTarget);
+
+    [Fact]
+    public void CorrelatedSqlPlan_DoesNotKeepTheLiveOuterRegistry()
+    {
+        using var connection = OpenSeededConnection();
+        using var context = new SqliteDataContext(connection, new DataContextBuilder());
+        var (registry, storedPlan) = Execute(context);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        registry.IsAlive.Should().BeFalse("the normalized plan must not point back to the planning registry");
+        storedPlan.QueryCommand.ReferencedQueries.Should().NotBeEmpty();
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (WeakReference Registry, QueryPlan Plan) Execute(SqliteDataContext context)
+        {
+            var innerSource = context.From<CorrelationRow>();
+            var command = context.From<BindingRow>()
+                .Where(row => SqlFunctions.Sql.exists(innerSource.Where(inner => inner.Id == row.Id)))
+                .OrderBy(row => row.Id).Select(row => row.Id);
+            // The streaming-rows entry point skips raw recipes but still caches this scalar plan.
+            var invocation = context.GetStreamingRowsQueryCommand(command, TestContext.Current.CancellationToken);
+            invocation.ToList(context).Should().Equal(1, 2);
+            var plan = command.GetOrCreatePlanKey(null);
+            plan.QueryCommand.Should().NotBeSameAs(command, "the assertion concerns a published key");
+            return (new WeakReference(command), plan);
+        }
+    }
+
+    [SqlTable(TableName)]
+    public sealed class CorrelationRow
+    {
+        public int Id { get; set; }
+    }
 
     [Fact]
     public void CapturedBuilderSubquery_BindsTheCurrentBuilderWithoutRetainingTheFirst()
