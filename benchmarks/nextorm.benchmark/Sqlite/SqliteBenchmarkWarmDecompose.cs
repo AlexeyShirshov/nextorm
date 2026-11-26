@@ -801,7 +801,7 @@ public class SqliteBenchmarkWarmDecompose
         if (!QueryPlanStore.TryGetRaw(dbType, shape, command, out var plan)) return false;
 
         _ = command.CaptureRawGraph();
-        command.ApplyPreparationFrom(plan!.Recipe);
+        plan!.ApplyTo(command);
         recipe = plan.Plan;
         return true;
     }

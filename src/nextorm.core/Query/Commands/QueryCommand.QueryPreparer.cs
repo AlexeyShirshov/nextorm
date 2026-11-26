@@ -4213,6 +4213,13 @@ public partial class QueryCommand
         /// <summary>Structural fingerprint used only to partition candidates into buckets.</summary>
         internal int Fingerprint;
 
+        internal RawShape WithComparisonCondition(LambdaExpression condition)
+        {
+            var copy = (RawShape)MemberwiseClone();
+            copy.Condition = condition;
+            return copy;
+        }
+
         internal sealed class CteShape
         {
             internal string Name = string.Empty;
@@ -5402,7 +5409,7 @@ public partial class QueryCommand
     /// <c>joins</c>, <c>ctes</c>, <c>union</c>) and the sort keys, whose prepared form preparation fills
     /// in place; the caller restores all of them on discard.
     /// </summary>
-    internal void ApplyPreparationFrom(QueryCommand clone)
+    internal void ApplyPreparationFrom(QueryCommand clone, bool useCurrentWhere = false)
     {
         // Adopt the stored cache-side state through the same copy path the cache clone itself uses, so
         // the staged command is exactly what a normalized lookup compares against. The raw graph is
@@ -5423,6 +5430,8 @@ public partial class QueryCommand
         var applied = Prepared;
         applied.WhereBasePlanHash = clone.Prep?.WhereBasePlanHash ?? 0;
         applied.PreparedArrayJoin = clone.Prep?.PreparedArrayJoin;
+        if (useCurrentWhere)
+            applied.PreparedCondition = _condition;
     }
 
     /// <summary>The transformed raw edges an apply overwrites, so a rejected fast path can be undone.</summary>

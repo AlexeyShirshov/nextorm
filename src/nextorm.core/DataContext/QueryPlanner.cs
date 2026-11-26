@@ -877,7 +877,7 @@ internal sealed class QueryPlanner : IQueryPlanner
                 // that the resulting key still describes the published owner, and on mismatch discard
                 // the staged state and run ordinary preparation of the input.
                 var rawGraph = queryCommand.CaptureRawGraph();
-                queryCommand.ApplyPreparationFrom(rawCandidate!.Recipe);
+                rawCandidate!.ApplyTo(queryCommand);
                 var recipePlan = rawCandidate.Plan;
                 var stagedKey = queryCommand.GetOrCreatePlanKey(null);
                 if (recipePlan.Equals(stagedKey) || stagedKey.Equals(recipePlan))

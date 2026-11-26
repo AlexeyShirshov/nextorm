@@ -108,7 +108,7 @@ internal static class T245PreparationRemainderProbe
                 if (shape is not null && QueryPlanStore.TryGetRaw(context.GetType(), shape, cmd, out var plan) && plan is not null)
                 {
                     var raw = cmd.CaptureRawGraph();
-                    cmd.ApplyPreparationFrom(plan.Recipe);
+                    plan.ApplyTo(cmd);
                     GC.KeepAlive(raw);
                 }
                 GC.KeepAlive(cmd);
@@ -123,7 +123,7 @@ internal static class T245PreparationRemainderProbe
                 if (shape is not null && QueryPlanStore.TryGetRaw(context.GetType(), shape, cmd, out var plan) && plan is not null)
                 {
                     var raw = cmd.CaptureRawGraph();
-                    cmd.ApplyPreparationFrom(plan.Recipe);
+                    plan.ApplyTo(cmd);
                     var key = cmd.GetOrCreatePlanKey(null);
                     GC.KeepAlive(key);
                     GC.KeepAlive(raw);

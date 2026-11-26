@@ -39,12 +39,14 @@ internal static class QueryPlanStore
     /// preparation, the normalized plan key, the holder, and the prepared graph to stage. The graph
     /// must be separate when the normalized key uses comparison-only expressions.
     /// </summary>
-    internal sealed class RawCandidate(QueryPlan plan, IDbCommandHolder holder, QueryCommand.RawShape shape, QueryCommand recipe)
+    internal sealed class RawCandidate(QueryPlan plan, IDbCommandHolder holder, QueryCommand.RawShape shape,
+        QueryCommand recipe, bool useCurrentWhere)
     {
         internal QueryPlan Plan { get; } = plan;
         internal IDbCommandHolder Holder { get; } = holder;
         internal QueryCommand.RawShape Shape { get; } = shape;
         internal QueryCommand Recipe { get; } = recipe;
+        internal void ApplyTo(QueryCommand command) => command.ApplyPreparationFrom(Recipe, useCurrentWhere);
     }
 
     /// <summary>
@@ -316,8 +318,12 @@ internal static class QueryPlanStore
     internal static void SetRaw(Type contextType, QueryPlan plan, IDbCommandHolder holder, QueryCommand.RawShape shape, QueryCommand comparerSource)
     {
         _ = contextType;
-        var recipe = plan.NeedsSeparateRawRecipe ? comparerSource.CloneForCache() : plan.QueryCommand;
-        var candidate = new RawCandidate(plan, holder, shape, recipe);
+        var detachedShape = comparerSource.TryDetachRawWhere(shape);
+        var recipe = plan.NeedsSeparateRawRecipe || detachedShape is not null ? comparerSource.CloneForCache() : plan.QueryCommand;
+        if (detachedShape is not null)
+            recipe.PreparedCondition = null;
+
+        var candidate = new RawCandidate(plan, holder, detachedShape ?? shape, recipe, detachedShape is not null);
         var index = RawIndex;
         if (!index.TryGetValue(shape.Fingerprint, out var bucket))
         {

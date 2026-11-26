@@ -79,4 +79,52 @@ public sealed partial class SqliteSharedPlanBindingTests
     }
 
     private sealed record ClauseOwner(int JoinTarget, int SortDirection);
+
+    [Fact]
+    public void RawRecipe_UsesTheFreshWhereWithoutRetainingItsFirstOwner()
+    {
+        var tap = new BindingTap();
+        using var connection = OpenSeededConnection();
+        using var context = new SqliteDataContext(connection, new DataContextBuilder().AddInterceptor(tap));
+
+        var (owner, holder, usedFreshWhere) = Warm(context, tap);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        owner.IsAlive.Should().BeFalse("the live raw recipe and descriptor must not keep the first WHERE owner");
+        usedFreshWhere.Should().BeTrue("staging should install the current command's own predicate");
+        QueryPlanStore.Values.Should().Contain(holder);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (WeakReference Owner, DbPreparedQueryCommand<int> Holder, bool UsedFreshWhere) Warm(
+            SqliteDataContext context, BindingTap tap)
+        {
+            var owner = new WhereOwner { Target = 1 };
+            QueryCommand<int> Build() => context.From<BindingRow>().WithTag("raw where ownership")
+                .Where(row => row.Id == owner.Target).OrderBy(row => row.Id).Select(row => row.Id);
+
+            var token = TestContext.Current.CancellationToken;
+            var first = context.GetPreparedQueryCommand(Build(), false, true, token);
+            first.ToList(context).Should().Equal(1);
+            tap.LastParameters.Should().Equal((0, "Target", 1));
+
+            owner.Target = 2;
+            var fresh = Build();
+            var shape = QueryCommand.CaptureRawShape(fresh)!;
+            QueryPlanStore.TryGetRaw(context.GetType(), shape, fresh, out _).Should().BeTrue();
+            var reuses = QueryPlanner.RecipeReuses;
+            var repeated = context.GetPreparedQueryCommand(fresh, false, true, token);
+            repeated.ToList(context).Should().Equal(2);
+            tap.LastParameters.Should().Equal((0, "Target", 2));
+            QueryPlanner.RecipeReuses.Should().BeGreaterThan(reuses, "the existing raw fast path must still be used");
+            var holder = BoundQueryInvocation<int>.GetPlan(first)!;
+            BoundQueryInvocation<int>.GetPlan(repeated).Should().BeSameAs(holder);
+            return (new WeakReference(owner), holder, ReferenceEquals(fresh.PreparedCondition, shape.Condition));
+        }
+    }
+
+    private sealed class WhereOwner
+    {
+        public int Target { get; set; }
+    }
 }
