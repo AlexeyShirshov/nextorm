@@ -4213,10 +4213,11 @@ public partial class QueryCommand
         /// <summary>Structural fingerprint used only to partition candidates into buckets.</summary>
         internal int Fingerprint;
 
-        internal RawShape WithComparisonCondition(LambdaExpression condition)
+        internal RawShape WithComparisonClauses(LambdaExpression? condition, Sorting[]? sorting)
         {
             var copy = (RawShape)MemberwiseClone();
             copy.Condition = condition;
+            copy.Sorting = sorting;
             return copy;
         }
 
@@ -5409,7 +5410,7 @@ public partial class QueryCommand
     /// <c>joins</c>, <c>ctes</c>, <c>union</c>) and the sort keys, whose prepared form preparation fills
     /// in place; the caller restores all of them on discard.
     /// </summary>
-    internal void ApplyPreparationFrom(QueryCommand clone, bool useCurrentWhere = false)
+    internal void ApplyPreparationFrom(QueryCommand clone, bool useCurrentWhere = false, bool useCurrentSorting = false)
     {
         // Adopt the stored cache-side state through the same copy path the cache clone itself uses, so
         // the staged command is exactly what a normalized lookup compares against. The raw graph is
@@ -5426,7 +5427,12 @@ public partial class QueryCommand
         // query differ from the stored one and reject the candidate on every call. The stored array is
         // the same shape the raw description already proved, so copying it is what makes the staged
         // command comparable; the caller's own raw array is restored by DiscardStagedPreparation.
-        _sorting = CloneJoinArray(clone._sorting);
+        _sorting = CloneJoinArray(useCurrentSorting ? _sorting : clone._sorting);
+        if (useCurrentSorting && _sorting is { } sorting)
+        {
+            for (var i = 0; i < sorting.Length; i++)
+                sorting[i].PreparedExpression = sorting[i].SortExpression;
+        }
         var applied = Prepared;
         applied.WhereBasePlanHash = clone.Prep?.WhereBasePlanHash ?? 0;
         applied.PreparedArrayJoin = clone.Prep?.PreparedArrayJoin;

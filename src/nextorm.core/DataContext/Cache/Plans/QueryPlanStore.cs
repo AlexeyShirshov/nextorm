@@ -40,13 +40,13 @@ internal static class QueryPlanStore
     /// must be separate when the normalized key uses comparison-only expressions.
     /// </summary>
     internal sealed class RawCandidate(QueryPlan plan, IDbCommandHolder holder, QueryCommand.RawShape shape,
-        QueryCommand recipe, bool useCurrentWhere)
+        QueryCommand recipe, bool useCurrentWhere, bool useCurrentSorting)
     {
         internal QueryPlan Plan { get; } = plan;
         internal IDbCommandHolder Holder { get; } = holder;
         internal QueryCommand.RawShape Shape { get; } = shape;
         internal QueryCommand Recipe { get; } = recipe;
-        internal void ApplyTo(QueryCommand command) => command.ApplyPreparationFrom(Recipe, useCurrentWhere);
+        internal void ApplyTo(QueryCommand command) => command.ApplyPreparationFrom(Recipe, useCurrentWhere, useCurrentSorting);
     }
 
     /// <summary>
@@ -318,12 +318,11 @@ internal static class QueryPlanStore
     internal static void SetRaw(Type contextType, QueryPlan plan, IDbCommandHolder holder, QueryCommand.RawShape shape, QueryCommand comparerSource)
     {
         _ = contextType;
-        var detachedShape = comparerSource.TryDetachRawWhere(shape);
-        var recipe = plan.NeedsSeparateRawRecipe || detachedShape is not null ? comparerSource.CloneForCache() : plan.QueryCommand;
-        if (detachedShape is not null)
-            recipe.PreparedCondition = null;
-
-        var candidate = new RawCandidate(plan, holder, detachedShape ?? shape, recipe, detachedShape is not null);
+        var detached = comparerSource.TryDetachRawClauses(shape);
+        var candidate = detached is { } replay
+            ? new RawCandidate(plan, holder, replay.Shape, replay.Recipe, replay.UseCurrentWhere, replay.UseCurrentSorting)
+            : new RawCandidate(plan, holder, shape,
+                plan.NeedsSeparateRawRecipe ? comparerSource.CloneForCache() : plan.QueryCommand, false, false);
         var index = RawIndex;
         if (!index.TryGetValue(shape.Fingerprint, out var bucket))
         {

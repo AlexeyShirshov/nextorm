@@ -4,20 +4,21 @@ namespace NextORM.Core;
 
 public partial class QueryCommand
 {
-    // If preparation left the authored WHERE body intact, the next matching command already owns
-    // exactly the predicate it needs. Store comparison syntax in the descriptor and no predicate
-    // in the recipe. More complex preparations keep the existing executable snapshot for now.
-    internal RawShape? TryDetachRawWhere(RawShape shape)
+    // If preparation left an authored clause intact, the next matching command already owns
+    // its executable form. Keep only comparison syntax for that clause in the descriptor.
+    // More complex preparations keep the existing executable snapshot for now.
+    internal (RawShape Shape, QueryCommand Recipe, bool UseCurrentWhere, bool UseCurrentSorting)? TryDetachRawClauses(RawShape shape)
     {
-        if (shape.Condition is not { } condition || shape.Closures is not { Length: > 0 }
-            || !ReferenceEquals(condition, _condition) || !HasUnchangedWhereBody(condition)
-            || !SupportsRawWhereReplay(shape))
+        if (shape.Closures is not { Length: > 0 } || !SupportsRawWhereReplay(shape))
             return null;
 
-        var visitor = new RawWhereCaptureVisitor();
-        visitor.Visit(shape.Exp);
-        if (!visitor.CheckSorts(shape.Sorting) || !visitor.CheckSorts(_sorting))
+        var condition = shape.Condition;
+        if (!ReferenceEquals(condition, _condition)
+            || (condition is not null && !HasUnchangedClause(condition, PreparedCondition)))
             return null;
+
+        var visitor = new RawClauseCaptureVisitor();
+        visitor.Visit(shape.Exp);
 
         if (_selectList is { } columns)
         {
@@ -33,25 +34,81 @@ public partial class QueryCommand
             return null;
 
         visitor.RemoveReceivers = true;
-        var detached = (LambdaExpression)visitor.Visit(condition)!;
-        return visitor.Supported && !ReferenceEquals(detached, condition)
-            ? shape.WithComparisonCondition(detached)
-            : null;
+        var comparisonCondition = (LambdaExpression?)visitor.Visit(condition);
+        var useCurrentWhere = !ReferenceEquals(comparisonCondition, condition);
+        var comparisonSorting = shape.Sorting;
+        var useCurrentSorting = false;
+        if (shape.Sorting is { } authored && _sorting is { } prepared && authored.Length == prepared.Length)
+        {
+            for (var i = 0; i < authored.Length && visitor.Supported; i++)
+            {
+                ref readonly var sort = ref authored[i];
+                var expression = visitor.Visit(sort.SortExpression);
+                if (ReferenceEquals(expression, sort.SortExpression))
+                    continue;
+
+                comparisonSorting = useCurrentSorting ? comparisonSorting! : (Sorting[])authored.Clone();
+                comparisonSorting[i] = new Sorting(in sort, expression, null);
+                useCurrentSorting = true;
+            }
+
+            if (useCurrentSorting)
+            {
+                // Applying a replay uses the whole fresh sort array. Every key must therefore be
+                // unchanged, including siblings that didn't contain captures and ordinal keys.
+                for (var i = 0; i < authored.Length; i++)
+                {
+                    var sort = authored[i].SortExpression;
+                    if (authored[i].PreparedExpression is not null
+                        || authored[i].Direction != prepared[i].Direction
+                        || authored[i].NullsPosition != prepared[i].NullsPosition
+                        || authored[i].ColumnIndex != prepared[i].ColumnIndex
+                        || !ReferenceEquals(sort, prepared[i].SortExpression)
+                        || !HasUnchangedClause(sort, prepared[i].PreparedExpression))
+                        return null;
+                }
+            }
+        }
+        if (!useCurrentSorting)
+        {
+            visitor.RemoveReceivers = false;
+            visitor.CheckSorts(shape.Sorting);
+            visitor.CheckSorts(_sorting);
+        }
+
+        if (!visitor.Supported || (!useCurrentWhere && !useCurrentSorting))
+            return null;
+
+        var recipe = CloneForCache();
+        if (useCurrentWhere)
+            recipe.PreparedCondition = null;
+        if (useCurrentSorting)
+            recipe._sorting = null;
+
+        return (shape.WithComparisonClauses(comparisonCondition, comparisonSorting), recipe, useCurrentWhere, useCurrentSorting);
     }
 
-    private bool HasUnchangedWhereBody(LambdaExpression condition)
+    private static bool HasUnchangedClause(Expression? authored, Expression? prepared)
         // The correlated visitor recreates the lambda wrapper even for an unchanged body. Require
         // the same binder and original leaves, not structural equality with another expression tree.
-        => condition.Parameters is [var parameter]
-            && PreparedCondition is LambdaExpression { Parameters: [var preparedParameter] } prepared
-            && ReferenceEquals(parameter, preparedParameter)
-            && condition.Type == prepared.Type
-            && HasUnchangedPredicate(condition.Body, prepared.Body);
+        => ReferenceEquals(authored, prepared)
+            || (authored is LambdaExpression { Parameters: [var parameter] } original
+                && prepared is LambdaExpression { Parameters: [var preparedParameter] } normalized
+                && ReferenceEquals(parameter, preparedParameter)
+                && original.Type == normalized.Type
+                && HasUnchangedClauseBody(original.Body, normalized.Body));
 
-    private static bool HasUnchangedPredicate(Expression authored, Expression prepared)
+    private static bool HasUnchangedClauseBody(Expression authored, Expression prepared)
     {
         if (ReferenceEquals(authored, prepared))
             return true;
+
+        // ORDER BY boxes a value key and the visitor recreates that built-in conversion.
+        if (authored is UnaryExpression { NodeType: ExpressionType.Convert, Method: null, Type: var type } box
+            && type == typeof(object)
+            && prepared is UnaryExpression { NodeType: ExpressionType.Convert, Method: null } preparedBox
+            && preparedBox.Type == type)
+            return HasUnchangedClauseBody(box.Operand, preparedBox.Operand);
 
         // Normalization also recreates ordinary && and || nodes. Only ignore that rebuilding for
         // built-in bool operators; a lifted or user-defined operator, or any rewritten leaf, falls
@@ -61,8 +118,8 @@ public partial class QueryCommand
             && prepared is BinaryExpression { Method: null, IsLifted: false } right
             && right.Type == typeof(bool)
             && left.NodeType == right.NodeType
-            && HasUnchangedPredicate(left.Left, right.Left)
-            && HasUnchangedPredicate(left.Right, right.Right);
+            && HasUnchangedClauseBody(left.Left, right.Left)
+            && HasUnchangedClauseBody(left.Right, right.Right);
     }
 
     private bool SupportsRawWhereReplay(RawShape shape)
@@ -94,7 +151,7 @@ public partial class QueryCommand
         => IsPlainTableSource(from)
             && from?.LinqSource is null && from?.DerivedFragment is null && from?.SourceBinding is null;
 
-    private sealed class RawWhereCaptureVisitor : ExpressionVisitor
+    private sealed class RawClauseCaptureVisitor : ExpressionVisitor
     {
         internal bool Supported { get; private set; } = true;
         internal bool RemoveReceivers { get; set; }

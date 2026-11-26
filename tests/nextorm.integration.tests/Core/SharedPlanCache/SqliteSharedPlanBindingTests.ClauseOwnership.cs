@@ -135,4 +135,54 @@ public sealed partial class SqliteSharedPlanBindingTests
     {
         public int Target { get; set; }
     }
+
+    [Fact]
+    public void RawRecipe_RebindsSortWithoutRetainingTheFirstOwner()
+    {
+        var tap = new BindingTap();
+        using var connection = OpenSeededConnection();
+        using var context = new SqliteDataContext(connection, new DataContextBuilder().AddInterceptor(tap));
+
+        var (firstOwner, holder, usesFreshSort) = Warm(context, tap);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        QueryPlanStore.Values.Should().Contain(holder);
+        usesFreshSort.Should().BeTrue("staging should use the fresh sort expression");
+        firstOwner.IsAlive.Should().BeFalse("the raw ORDER BY descriptor and recipe must not own the capture");
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (WeakReference Owner, DbPreparedQueryCommand<int> Holder, bool UsesFreshSort) Warm(
+            SqliteDataContext context, BindingTap tap)
+        {
+            var owner = new SortOwner { Direction = 1 };
+            QueryCommand<int> Build() => context.From<BindingRow>().WithTag("raw sort ownership")
+                .OrderBy(row => row.Id * owner.Direction).Select(row => row.Id);
+
+            var token = TestContext.Current.CancellationToken;
+            var first = context.GetPreparedQueryCommand(Build(), false, true, token);
+            first.ToList(context).Should().Equal(1, 2);
+            tap.LastParameters.Should().Equal((0, "Direction", 1));
+
+            owner.Direction = -1;
+            var reuses = QueryPlanner.RecipeReuses;
+            var fresh = Build();
+            var sort = fresh.Sorting![0].SortExpression;
+            var raw = QueryCommand.CaptureRawShape(fresh)!;
+            QueryPlanStore.TryGetRaw(context.GetType(), raw, fresh, out var rawCandidate).Should().BeTrue();
+            rawCandidate!.Recipe.Sorting.Should().BeNull("a replayable key must not be stored as executable syntax");
+            var second = context.GetPreparedQueryCommand(fresh, false, true, token);
+            second.ToList(context).Should().Equal(2, 1);
+            tap.LastParameters.Should().Equal((0, "Direction", -1));
+            QueryPlanner.RecipeReuses.Should().BeGreaterThan(reuses, "the check must keep the raw fast path active");
+            var holder = BoundQueryInvocation<int>.GetPlan(first)!;
+            BoundQueryInvocation<int>.GetPlan(second).Should().BeSameAs(holder);
+            return (new WeakReference(owner), holder, ReferenceEquals(fresh.Sorting![0].PreparedExpression, sort));
+        }
+    }
+
+    private sealed class SortOwner
+    {
+        public int Direction { get; set; }
+    }
 }
