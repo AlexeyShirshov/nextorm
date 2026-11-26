@@ -428,6 +428,37 @@ public sealed partial class SqliteSharedPlanBindingTests
         }
     }
 
+    [Fact]
+    public void CapturedScalarSubquery_BindsTheCurrentCommandWithoutRetainingTheFirst()
+    {
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        using var firstConnection = OpenSeededConnection();
+        using var secondConnection = OpenSeededConnection();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+
+        var firstCommand = Execute(first, 1);
+        Execute(second, 2);
+        firstTap.LastParameters.Should().Equal((0, "target", 1));
+        secondTap.LastParameters.Should().Equal((0, "target", 2));
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        firstCommand.IsAlive.Should().BeFalse("the cached accessor must not hold the first scalar subquery command");
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static WeakReference Execute(SqliteDataContext context, int target)
+        {
+            var subquery = Query(context, target);
+            var query = context.From<BindingRow>().OrderBy(row => row.Id)
+                .Select(row => new { row.Id, Match = subquery.First() });
+            query.Cache = false;
+            query.ToList().Select(row => (row.Id, row.Match)).Should().Equal([(1, target), (2, target)]);
+            return new WeakReference(subquery);
+        }
+    }
+
     private class BaseTarget
     {
         public int Target => 1;

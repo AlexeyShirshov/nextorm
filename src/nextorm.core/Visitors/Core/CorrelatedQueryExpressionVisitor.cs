@@ -304,7 +304,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             var cmd = (QueryCommand)ValueExpressionAccessor.Evaluate(AsCommandExpression(builderReceiver), _queryProvider, _logger)!;
             return ReplaceQueryCommand(node, cmd);
         }
-        else if (node.Object?.Type.IsAssignableTo(typeof(QueryCommand)) ?? false)
+        else if (node.Object is { } receiver && receiver.Type.IsAssignableTo(typeof(QueryCommand)))
         {
             // A correlated scalar subquery: the inner query references a member of an outer parameter
             // (the immediate one, or - at correlation depth greater than one - a marker an ancestor
@@ -312,44 +312,17 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             // with an OuterRefMarker and registered on the root command; the non-correlated closure path
             // below would either leave the outer parameter free and fail at Compile(), or rewrite the
             // marker's index constant as a closure value and corrupt the marker.
-            if (_forPrepare && (IsCorrelatedWithEnclosing(node.Object) || ContainsOuterRefMarker(node.Object)))
+            if (_forPrepare && (IsCorrelatedWithEnclosing(receiver) || ContainsOuterRefMarker(receiver)))
             {
-                var outerCmd = GetQueryCommand(node.Object);
+                var outerCmd = GetQueryCommand(receiver);
                 return ReplaceQueryCommand(node, outerCmd);
             }
 
             var tv = new TypeExpressionVisitor<ParameterExpression, ConstantExpression>();
-            tv.Visit(node.Object);
-            if (tv.Has1)
-            {
-                //throw new NotImplementedException();
-            }
-
+            tv.Visit(receiver);
             if (tv.Has2)
             {
-                QueryCommand cmd;
-
-                var keyCmd = new ExpressionKey(node.Object, _queryProvider);
-                if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
-                {
-                    var p = Expression.Parameter(typeof(object));
-                    var replace = new ReplaceConstantExpressionVisitor(Expression.Convert(p, tv.Target2!.Type));
-                    var body = replace.Visit(node.Object);
-
-                    var d = Expression.Lambda<Func<object?, QueryCommand>>(body, p).Compile();
-
-                    DataContextCache.ExpressionsCache[keyCmd] = d;
-                    cmd = d(tv.Target2!.Value);
-
-                    if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
-                    {
-                        _logger.LogTrace("Subquery expression miss. hashcode: {hash}, value: {value}", keyCmd.GetHashCode(), d(tv.Target2!.Value));
-                    }
-                    else if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Subquery expression miss");
-                }
-                else
-                    cmd = ((Func<object?, QueryCommand>)dCmd)(tv.Target2!.Value);
-
+                var cmd = (QueryCommand)ValueExpressionAccessor.Evaluate(receiver, _queryProvider, _logger)!;
                 return ReplaceQueryCommand(node, cmd);
             }
         }
