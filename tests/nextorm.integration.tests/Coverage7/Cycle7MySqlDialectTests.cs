@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.RegularExpressions;
 using FluentAssertions;
+using MySqlConnector;
 using NextORM.Core;
 
 namespace NextORM.Integration.Tests;
@@ -103,12 +104,14 @@ public sealed class Cycle7MySqlDialectTests : ProviderTestSuite
         rows[0].Name.Should().Be("my7_marker");
         rows[0].Kind.Should().Be("BASE TABLE");
 
-        FluentActions.Invoking(() => Context.From<My7Catalog>()
-                .WithDatabase("my7_no_such_db")
+        const string missingDatabase = "my7_no_such_db";
+        var error = FluentActions.Invoking(() => Context.From<My7Catalog>()
+                .WithDatabase(missingDatabase)
                 .Select(x => x.Name)
                 .ToList())
-            .Should().Throw<MySqlConnector.MySqlException>()
-            .WithMessage("*denied*", "an unknown database yields no grant, which still proves the qualifier was emitted");
+            .Should().Throw<MySqlException>().Which;
+        error.ErrorCode.Should().BeOneOf(MySqlErrorCode.UnknownDatabase, MySqlErrorCode.DatabaseAccessDenied);
+        error.Message.Should().Contain(missingDatabase);
     }
 
     /// <summary>
@@ -127,12 +130,14 @@ public sealed class Cycle7MySqlDialectTests : ProviderTestSuite
 
         names.Should().Equal("my7_marker");
 
-        FluentActions.Invoking(() => Context.From<My7Catalog>()
-                .WithSchema("my7_no_such_schema")
+        const string missingSchema = "my7_no_such_schema";
+        var error = FluentActions.Invoking(() => Context.From<My7Catalog>()
+                .WithSchema(missingSchema)
                 .Select(x => x.Name)
                 .ToList())
-            .Should().Throw<MySqlConnector.MySqlException>()
-            .WithMessage("*denied*", "an unknown schema yields no grant, which still proves the qualifier was emitted");
+            .Should().Throw<MySqlException>().Which;
+        error.ErrorCode.Should().BeOneOf(MySqlErrorCode.UnknownDatabase, MySqlErrorCode.DatabaseAccessDenied);
+        error.Message.Should().Contain(missingSchema);
     }
 
     /// <summary>

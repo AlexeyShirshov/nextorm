@@ -2339,11 +2339,10 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         cc.NextMultixactId.Should().BePositive();
         cc.OldestXid.Should().BePositive();
         cc.OldestXidDbId.Should().MatchRegex(@"^\d+$", "the oid column is read as its text form");
-        cc.OldestActiveXid.Should().BeLessThan(
-            uint.Parse(cc.NextXid!.Split(':')[1], System.Globalization.CultureInfo.InvariantCulture),
-            "the oldest active xid, 0 when none was active, precedes the next transaction id");
-        cc.OldestXid.Should().BeLessThan(
-            uint.Parse(cc.NextXid!.Split(':')[1], System.Globalization.CultureInfo.InvariantCulture));
+        var nextXid = uint.Parse(cc.NextXid!.Split(':')[1], System.Globalization.CultureInfo.InvariantCulture);
+        cc.OldestActiveXid.Should().BeLessThanOrEqualTo(nextXid,
+            "an online checkpoint can record the next xid when no transaction has an active xid");
+        cc.OldestXid.Should().BeLessThan(nextXid);
         cc.OldestMultiXid.Should().BePositive();
         // track_commit_timestamp is off on the pinned server, so no xid carries a commit timestamp.
         cc.OldestCommitTsXid.Should().Be(0);
