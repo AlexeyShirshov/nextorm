@@ -1046,7 +1046,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             {
                 SequentialAccess = sequentialAccess,
                 Cache = cache,
-            })
+            }, trackConnectionLifetime: publish)
             {
                 MappingVariant = queryCommand.MappingVariant,
                 RouteEntityType = queryCommand.RouteEntityType,

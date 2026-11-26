@@ -384,10 +384,7 @@ internal sealed class DbConnectionManager : IConnectionManager
             _transaction = null;
             _transactionOwnedByMe = false;
 
-            foreach (var cached in QueryPlanStore.Values)
-            {
-                cached.ResetConnection(conn, _owner);
-            }
+            ImplicitCommandConnectionIndex.Forget(conn, _owner);
         }
     }
 
@@ -410,10 +407,7 @@ internal sealed class DbConnectionManager : IConnectionManager
         // caller-supplied one is only unbound (the caller owns its lifetime).
         DisposeTransaction();
 
-        foreach (var cached in QueryPlanStore.Values)
-        {
-            cached.ResetConnection(_conn, _owner);
-        }
+        ImplicitCommandConnectionIndex.Forget(_conn, _owner);
 
         if (_connWasCreatedByMe)
         {

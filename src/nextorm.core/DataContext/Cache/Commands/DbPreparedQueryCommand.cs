@@ -175,16 +175,18 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     /// <param name="planParameters">The connection-free plan parameter descriptors.</param>
     /// <param name="mapDelegate">Maps each <see cref="IDataRecord"/> to a result, or <see langword="null"/> when no projection is needed.</param>
     /// <param name="options">Prepared-command options such as the SQL text and parameter flags.</param>
+    /// <param name="trackConnectionLifetime">Whether this plan is published in the implicit store and needs connection cleanup.</param>
     internal DbPreparedQueryCommand(
         PreparedCommandFactory factory,
         DbParameter[] planParameters,
         Func<IDataRecord, TResult>? mapDelegate,
-        PreparedCommandOptions options)
+        PreparedCommandOptions options,
+        bool trackConnectionLifetime = false)
         : base(mapDelegate)
     {
         _factory = factory;
         _cachePolicy = options.Cache;
-        _createState = static _ => new CommandState();
+        _createState = trackConnectionLifetime ? CreateTrackedState : static _ => new CommandState();
         _planCommand = new PlanCommand(factory.CommandText, factory.CommandTimeout, planParameters);
 
         if (options.SingleRow)
@@ -479,6 +481,12 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
         var state = _states.GetValue(connection, _createState);
         Volatile.Write(ref _memo, new Memo(connection, state));
         return state;
+    }
+
+    private CommandState CreateTrackedState(DbConnection connection)
+    {
+        ImplicitCommandConnectionIndex.Register(connection, this);
+        return new CommandState();
     }
 
     private static int NextLeaseToken(CommandState state)
