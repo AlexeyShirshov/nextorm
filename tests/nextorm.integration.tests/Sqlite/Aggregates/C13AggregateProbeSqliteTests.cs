@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using NextORM.Core;
+using NextORM.Core.Repositories;
 using NextORM.Sqlite;
 
 namespace NextORM.Integration.Tests;
@@ -42,6 +43,31 @@ public sealed class C13AggregateProbeSqliteTests : IDisposable
         _db.From<C13Sale>().Min(x => x.Amount).Should().Be(10.0);
         _db.From<C13Sale>().Max(x => x.Amount).Should().Be(40.0);
         _db.From<C13Sale>().Avg(x => x.Amount).Should().Be(25.0);
+    }
+
+    [Fact]
+    public async Task RepositoryAggregatesExecuteDirectlyAgainstSqlite()
+    {
+        var sales = new SalesContext(_db).Sales;
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        sales.Count().Should().Be(4);
+        (await sales.LongCountAsync(cancellationToken)).Should().Be(4L);
+        sales.Min(sale => sale.Amount).Should().Be(10d);
+        (await sales.MaxAsync(sale => sale.Amount, cancellationToken)).Should().Be(40d);
+        sales.Sum(sale => sale.Amount).Should().Be(100d);
+        sales.Avg(sale => sale.Id).Should().Be(2.5d);
+        (await sales.AvgAsync(sale => sale.Amount, cancellationToken)).Should().Be(25d);
+
+        const double tolerance = 1e-10;
+        var sampleDeviation = sales.Stdev(sale => sale.Amount);
+        var populationDeviation = await sales.StdevpAsync(sale => (double?)sale.Amount, cancellationToken);
+        var sampleVariance = await sales.VarAsync(sale => sale.Amount, cancellationToken);
+        var populationVariance = sales.Varp(sale => (double?)sale.Amount);
+        sampleDeviation.GetValueOrDefault().Should().BeApproximately(Math.Sqrt(500d / 3), tolerance);
+        populationDeviation.GetValueOrDefault().Should().BeApproximately(Math.Sqrt(125d), tolerance);
+        sampleVariance.GetValueOrDefault().Should().BeApproximately(500d / 3, tolerance);
+        populationVariance.GetValueOrDefault().Should().BeApproximately(125d, tolerance);
     }
 
     /// <summary>Count and LongCount over filtered sets.</summary>
@@ -114,6 +140,11 @@ public sealed class C13AggregateProbeSqliteTests : IDisposable
         {
             // Locked temporary files are left to the OS; the test outcome is unaffected.
         }
+    }
+
+    private sealed class SalesContext(IDataContext provider) : RepositoryContext(provider)
+    {
+        public IRepository<C13Sale> Sales => Repository<C13Sale>();
     }
 
     /// <summary>The seeded sale row.</summary>

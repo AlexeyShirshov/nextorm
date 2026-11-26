@@ -106,6 +106,20 @@ var orderIds = await app.Orders.Select(order => order.Id)
     .ToListAsync(cancellationToken);
 ```
 
+You can also run aggregate queries directly on the repository. This example
+assumes that `Order.Id` is numeric:
+
+```csharp
+var count = app.Orders.Count();
+var highestId = app.Orders.Max(order => order.Id);
+var averageId = await app.Orders.AvgAsync(order => order.Id, cancellationToken);
+```
+
+`LongCount`, `Min`, `Sum`, `Stdev`, `Stdevp`, `Var`, and `Varp` also work
+directly, with synchronous and asynchronous forms. See
+[Grouping and aggregates](05-grouping-and-aggregates.md) for result types and
+provider support.
+
 You can also start with `GroupBy`, `OrderBy`, `Page`, or `LeftJoin`, and
 execute a query directly with methods such as `AnyAsync` or `ToArrayAsync`.
 Each call starts a fresh query: the context caches the repository, not the

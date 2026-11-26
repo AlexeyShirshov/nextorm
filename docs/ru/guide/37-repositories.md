@@ -109,6 +109,19 @@ var orderIds = await app.Orders.Select(order => order.Id)
     .ToListAsync(cancellationToken);
 ```
 
+Агрегатные запросы также можно выполнять прямо на репозитории. В этом примере
+`Order.Id` имеет числовой тип:
+
+```csharp
+var count = app.Orders.Count();
+var highestId = app.Orders.Max(order => order.Id);
+var averageId = await app.Orders.AvgAsync(order => order.Id, cancellationToken);
+```
+
+Для `LongCount`, `Min`, `Sum`, `Stdev`, `Stdevp`, `Var` и `Varp` тоже доступны
+синхронные и асинхронные вызовы прямо на репозитории. Типы результатов и поддержку
+провайдеров см. в разделе [Группировка и агрегаты](05-grouping-and-aggregates.md).
+
 Запрос можно также начать с `GroupBy`, `OrderBy`, `Page` или `LeftJoin`.
 Методы вроде `AnyAsync` и `ToArrayAsync` сразу выполняют запрос. Каждый вызов
 начинает независимый запрос: контекст кеширует репозиторий, а не построитель.

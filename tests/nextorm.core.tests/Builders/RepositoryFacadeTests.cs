@@ -65,6 +65,31 @@ public sealed class RepositoryFacadeTests
     }
 
     [Fact]
+    public async Task RepositoryAverageKeepsTheBuilderResultTypesAndNullSemantics()
+    {
+        using var provider = new InMemoryDataContext();
+        provider.Data[typeof(Row)] = new[]
+        {
+            new Row { Id = 1, Price = 1m },
+            new Row { Id = 2, Price = 2m, OptionalScore = 3.5f }
+        };
+        var rows = new ApplicationContext(provider).Rows;
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        double? average = rows.Avg(row => row.Id);
+        decimal? averagePrice = await rows.AvgAsync(row => row.Price, cancellationToken);
+        float? averageScore = rows.Avg(row => row.OptionalScore);
+        average.Should().Be(1.5d);
+        averagePrice.Should().Be(1.5m);
+        averageScore.Should().Be(3.5f);
+
+        using var emptyProvider = new InMemoryDataContext();
+        emptyProvider.Data[typeof(Row)] = Array.Empty<Row>();
+        var emptyRows = new ApplicationContext(emptyProvider).Rows;
+        (await emptyRows.AvgAsync(row => row.Id, cancellationToken)).Should().BeNull();
+    }
+
+    [Fact]
     public async Task AsyncStreamForwardsCancellationToTheProvider()
     {
         // Check forwarding on a fresh plan: the in-memory cache can reuse the first call's enumerator and token.
@@ -145,6 +170,8 @@ public sealed class RepositoryFacadeTests
     private sealed class Row
     {
         public int Id { get; set; }
+        public decimal Price { get; set; }
+        public float? OptionalScore { get; set; }
     }
 
     private sealed class RelatedRow
