@@ -104,14 +104,14 @@ internal static class Issue319PreparationProbe
 
     private static void FingerprintAndLookup<T>(QueryCommand<T> command)
     {
-        if (QueryCommand.ComputeRawFingerprint(command) is int fingerprint)
-            _sink += QueryPlanStore.TryGetRawFingerprint(command.DataContext!.GetType(), fingerprint, out _) ? 1 : 0;
+        if (QueryCommand.CaptureRawShape(command) is { } shape)
+            _sink += QueryPlanStore.TryGetRaw(command.DataContext!.GetType(), shape, command, out _) ? 1 : 0;
     }
 
     private static bool TryApply<T>(QueryCommand<T> command)
     {
-        if (QueryCommand.ComputeRawFingerprint(command) is not int fingerprint) return false;
-        if (!QueryPlanStore.TryGetRawFingerprint(command.DataContext!.GetType(), fingerprint, out var plan) || plan is null) return false;
+        if (QueryCommand.CaptureRawShape(command) is not { } shape) return false;
+        if (!QueryPlanStore.TryGetRaw(command.DataContext!.GetType(), shape, command, out var plan) || plan is null) return false;
 
         _ = command.CaptureRawGraph();
         command.ApplyPreparationFrom(plan.QueryCommand);

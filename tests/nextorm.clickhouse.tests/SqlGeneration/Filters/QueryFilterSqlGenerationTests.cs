@@ -283,20 +283,18 @@ public class QueryFilterSqlGenerationTests
         ctx.Properties[FuncTenantKey] = 1;
         ctx.From<QfFuncEntity>(b => b.HasQueryFilter((eb, c) => eb.Where(e => e.TenantId == (int)c.Properties[FuncTenantKey])));
 
-        // First execution stores the plan with the tenant-1 value.
-        var first = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(
+        var first = (BoundQueryInvocation<int>)ctx.GetPreparedQueryCommand(
             ctx.From<QfFuncEntity>().Select(x => x.Id), false, true, CancellationToken.None);
-        first.DbCommand.Parameters.Count.Should().Be(1);
-        first.DbCommand.Parameters[0].Value.Should().Be(1);
+        first.Plan.DbCommand.Parameters.Count.Should().Be(1);
+        first.Values.Should().Equal([1]);
 
         // The same shape executes on the cached plan after the property changed: the value is re-bound per
         // execution, so an implementation that inlined the first literal would fail the assertion below.
         ctx.Properties[FuncTenantKey] = 2;
-        var second = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(
+        var second = (BoundQueryInvocation<int>)ctx.GetPreparedQueryCommand(
             ctx.From<QfFuncEntity>().Select(x => x.Id), false, true, CancellationToken.None);
-        ReferenceEquals(first, second).Should().BeTrue("the second execution must hit the cached plan, so the changed value is observed on it");
-        second.DbCommand.Parameters.Count.Should().Be(1);
-        second.DbCommand.Parameters[0].Value.Should().Be(2, "the cached plan re-reads the context value and binds the second one");
+        second.Plan.Should().BeSameAs(first.Plan, "the second invocation must hit the cached plan");
+        second.Values.Should().Equal([2], "the second invocation binds the current context value");
     }
 
     // --- #123: ClickHouse has no engine-level DML upsert at all, so a filtered key upsert is refused

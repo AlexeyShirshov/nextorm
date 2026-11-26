@@ -92,12 +92,14 @@ public class T304QueryCommandIsolationTests
 
         // The cached path rebinds the fresh closure value on the hit. The isolated pair above stays
         // untouched by it - a refresh is scoped to the command being prepared.
-        var cached = Prepare(ctx, ReferenceHopCommand(ctx, "gamma"), storeInCache: true);
-        var refreshed = Prepare(ctx, ReferenceHopCommand(ctx, "delta"), storeInCache: true);
+        var cached = (BoundQueryInvocation<int>)ctx.GetPreparedQueryCommand(
+            ReferenceHopCommand(ctx, "gamma"), false, true, CancellationToken.None);
+        var refreshed = (BoundQueryInvocation<int>)ctx.GetPreparedQueryCommand(
+            ReferenceHopCommand(ctx, "delta"), false, true, CancellationToken.None);
 
-        SingleParameter(cached).Should().Be("delta",
-            "a cache hit refreshes the parameter from the fresh closure of the command being prepared");
-        SingleParameter(refreshed).Should().Be("delta");
+        refreshed.Plan.Should().BeSameAs(cached.Plan);
+        cached.Values.Should().Equal(["gamma"], "a cache hit doesn't change the original preparation");
+        refreshed.Values.Should().Equal(["delta"], "the second invocation gets its own value");
         SingleParameter(first).Should().Be("alpha", "the isolated pair keeps its own bound values");
         SingleParameter(second).Should().Be("beta");
     }

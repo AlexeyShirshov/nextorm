@@ -48,7 +48,10 @@ public class D199ScalarInPlanCacheTests
     }
 
     private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> cmd)
-        => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, true, Ct);
+        => BoundQueryInvocation<T>.GetPlan(PrepareInvocation(ctx, cmd))!;
+
+    private static IPreparedQueryCommand<T> PrepareInvocation<T>(IDataContext ctx, QueryCommand<T> cmd)
+        => ctx.GetPreparedQueryCommand(cmd, false, true, Ct);
 
     private static int ParamCount<T>(DbPreparedQueryCommand<T> command)
         => command.DbCommandParams.Cast<DbParameter>().Count();
@@ -286,28 +289,31 @@ public class D199ScalarInPlanCacheTests
 
             _values = [1, 3];
             var list1 = Prepare(ctx, WhereFieldScalar(e));
-            var list2 = Prepare(ctx, WhereFieldScalar(e));
-            ReferenceEquals(list1, list2).Should().BeTrue(
+            var list2 = PrepareInvocation(ctx, WhereFieldScalar(e));
+            var list2Plan = BoundQueryInvocation<long>.GetPlan(list2);
+            list2Plan.Should().BeSameAs(list1,
                 "a captured scalar list in WHERE is shape-keyed and cacheable");
             ctx.ToList(list2).OrderBy(x => x).Should().Equal(1L, 3L);
 
             _array = [2L, 3L];
             var array1 = Prepare(ctx, WhereFieldArray(e));
-            var array2 = Prepare(ctx, WhereFieldArray(e));
-            ReferenceEquals(array1, array2).Should().BeTrue(
+            var array2 = PrepareInvocation(ctx, WhereFieldArray(e));
+            var array2Plan = BoundQueryInvocation<long>.GetPlan(array2);
+            array2Plan.Should().BeSameAs(array1,
                 "a captured scalar array in WHERE is shape-keyed and cacheable");
             ctx.ToList(array2).OrderBy(x => x).Should().Equal(2L, 3L);
 
             _values = [2];
-            var list3 = Prepare(ctx, WhereFieldScalar(e));
-            ReferenceEquals(list2, list3).Should().BeFalse(
+            var list3 = PrepareInvocation(ctx, WhereFieldScalar(e));
+            var list3Plan = BoundQueryInvocation<long>.GetPlan(list3)!;
+            ReferenceEquals(list2Plan, list3Plan).Should().BeFalse(
                 "a changed captured scalar WHERE shape re-keys the plan");
-            list3.DbCommand.CommandText.Replace("\r\n", "\n").Should().Contain(" in (");
+            list3Plan.CommandText.Replace("\r\n", "\n").Should().Contain(" in (");
             ctx.ToList(list3).Should().Equal(2L);
 
             _array = [2L, 3L, 99L];
-            var array3 = Prepare(ctx, WhereFieldArray(e));
-            ReferenceEquals(array2, array3).Should().BeFalse(
+            var array3 = PrepareInvocation(ctx, WhereFieldArray(e));
+            ReferenceEquals(array2Plan, BoundQueryInvocation<long>.GetPlan(array3)).Should().BeFalse(
                 "a changed captured scalar array shape re-keys the plan");
             ctx.ToList(array3).OrderBy(x => x).Should().Equal(2L, 3L);
         }

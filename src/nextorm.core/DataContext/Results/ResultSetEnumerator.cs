@@ -33,6 +33,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     private Action<DbCommand>? _onCommandCreated;
     private CancellationToken _cancellationToken;
     private object[]? _params;
+    private object?[]? _boundValues;
     private readonly Func<IDataRecord, TResult>? _map;
     private readonly ObjectPool<StringBuilder> _sbPool;
     private ILogger? _logger;
@@ -118,6 +119,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
         var reader = _reader;
         _reader = null;
         _conn = null;
+        _boundValues = null;
 
         var command = _ownedCommand;
         _ownedCommand = null;
@@ -247,10 +249,11 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
 
         return false;
     }
-    internal void InitEnumerator(IConnectionManager connectionManager, Func<DbCommand, string, object?, DbParameter> createParam, object[]? @params, CancellationToken cancellationToken, Func<IConnectionManager, DbTransaction?> currentTransaction, InterceptorHooks interceptors, IDataContext context)
+    internal void InitEnumerator(IConnectionManager connectionManager, Func<DbCommand, string, object?, DbParameter> createParam, object[]? @params, CancellationToken cancellationToken, Func<IConnectionManager, DbTransaction?> currentTransaction, InterceptorHooks interceptors, IDataContext context, object?[]? boundValues = null)
     {
         _cancellationToken = cancellationToken;
         _params = @params;
+        _boundValues = boundValues;
         _connectionManager = connectionManager;
         _createParam = createParam;
         _currentTransaction = currentTransaction;
@@ -339,7 +342,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
         // DataContext.EnsureConnectionOpen.
         _connectionManager.EnsureConnectionOpen();
 
-        var lease = _compiledQuery.Acquire(_conn, _createParam!, @params, _currentTransaction?.Invoke(_connectionManager!), _onCommandCreated);
+        var lease = _compiledQuery.Acquire(_conn, _createParam!, @params, _currentTransaction?.Invoke(_connectionManager!), _onCommandCreated, _boundValues);
         DbDataReader reader;
         try
         {
@@ -375,7 +378,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
 
         await _connectionManager.EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
 
-        var lease = _compiledQuery.Acquire(_conn, _createParam!, @params, _currentTransaction?.Invoke(_connectionManager!), _onCommandCreated);
+        var lease = _compiledQuery.Acquire(_conn, _createParam!, @params, _currentTransaction?.Invoke(_connectionManager!), _onCommandCreated, _boundValues);
         DbDataReader reader;
         try
         {
@@ -465,6 +468,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
 
     private void Dispose(bool disposing)
     {
+        _boundValues = null;
         Reset();
 
         if (!_disposed)

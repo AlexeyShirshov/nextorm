@@ -799,7 +799,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <summary>
     /// Prepares <paramref name="queryCommand"/> against the current dialect, optionally building a
     /// streaming enumerator and storing the plan in the cache. When <paramref name="storeInCache"/> is
-    /// set, later calls return the cached plan instead of re-planning.
+    /// set, later calls can reuse the cached plan with separate parameter values for each invocation.
     /// </summary>
     /// <typeparam name="TResult">The projected result type.</typeparam>
     /// <param name="queryCommand">The command to prepare.</param>

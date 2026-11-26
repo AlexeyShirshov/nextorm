@@ -36,8 +36,8 @@ public sealed class ShardParityTests
     {
         var minimum = 5;
         var query = context.From<UnshardedRow>().Where(row => row.Id > minimum).Select(row => row.Id);
-        var prepared = (DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
-            query, false, true, CancellationToken.None);
+        var prepared = BoundQueryInvocation<int>.GetPlan(context.GetPreparedQueryCommand(
+            query, false, true, CancellationToken.None))!;
         return (prepared.DbCommand.CommandText,
             prepared.DbCommand.Parameters.Cast<System.Data.Common.DbParameter>()
                 .Select(parameter => parameter.ParameterName).ToArray());

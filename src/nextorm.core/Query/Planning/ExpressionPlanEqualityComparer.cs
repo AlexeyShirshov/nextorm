@@ -16,13 +16,9 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
 {
     private readonly static ConcurrentDictionary<QueryCommandKey, Func<object?, QueryCommand>> _cmdCache = new();
 
-    // The visitor accumulates the XxHash32 being built, so one instance cannot serve two threads
-    // at once: comparers are cached on QueryCommand instances (including the shared AnyCommand),
-    // and two threads hashing different expressions would interleave writes into the same XxHash32
-    // and return a hash that does not match Equals. One visitor per (thread, comparer) keeps the
-    // zero-allocation design while making GetHashCode thread-safe.
+    // Reuse scratch storage on this thread, not the last registry that used it. A registry can be a
+    // live QueryCommand and must not stay rooted while the worker thread is idle.
     [ThreadStatic] private static Visitor? _tlsVisitor;
-    [ThreadStatic] private static ExpressionPlanEqualityComparer? _tlsVisitorOwner;
 
     // Cached-path diagnostic counters. They are process-wide (static) but updated with Interlocked
     // and read with Volatile, so the increment path is lock-free and allocation-free. Tests reach
@@ -75,21 +71,7 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
             return 0;
         }
 
-        var visitor = _tlsVisitor;
-        if (visitor is null || !ReferenceEquals(_tlsVisitorOwner, this))
-        {
-            visitor = new Visitor(_logger, _queryProvider);
-            _tlsVisitor = visitor;
-            _tlsVisitorOwner = this;
-        }
-
-        unchecked
-        {
-            visitor._hash = new();
-            visitor.Visit(obj);
-
-            return visitor._hash.ToHashCode();
-        }
+        return (_tlsVisitor ??= new Visitor()).ComputeHash(obj, _queryProvider, _logger);
     }
 
     /// <inheritdoc />
@@ -738,11 +720,35 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
             return _type == obj._type && _name == obj._name;
         }
     }
-    private sealed class Visitor(ILogger? logger, IQueryRegistry queryProvider) : ExpressionVisitor
+    private sealed class Visitor : ExpressionVisitor
     {
-        private readonly ILogger? _logger = logger;
-        private readonly IQueryRegistry _queryProvider = queryProvider;
-        internal XxHash32 _hash;
+        private ILogger? _logger;
+        private IQueryRegistry? _queryProvider;
+        private XxHash32 _hash;
+
+        internal int ComputeHash(Expression expression, IQueryRegistry queryProvider, ILogger? logger)
+        {
+            // Hashing a referenced query can re-enter on this thread. It needs its own accumulator.
+            if (_queryProvider is not null)
+            {
+                return new Visitor().ComputeHash(expression, queryProvider, logger);
+            }
+
+            _queryProvider = queryProvider;
+            _logger = logger;
+            _hash = new();
+            try
+            {
+                Visit(expression);
+                return _hash.ToHashCode();
+            }
+            finally
+            {
+                _logger = null;
+                _queryProvider = null;
+            }
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void VisitBase(Expression? node)
         {
@@ -809,7 +815,7 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
             {
                 // Nested commands share the root registry, so a reference index baked into a nested
                 // command's projection must be resolved there (matching the renderer).
-                var registry = (_queryProvider as QueryCommand)?.RootRegistry ?? _queryProvider;
+                var registry = (_queryProvider as QueryCommand)?.RootRegistry ?? _queryProvider!;
                 var cmd = registry.ReferencedQueries[idx];
                 _hash.Add(cmd, registry.GetQueryPlanEqualityComparer());
             }
@@ -885,7 +891,7 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
 
                     var cmd = del(ce!.Value);
 
-                    _hash.Add(cmd, _queryProvider.GetQueryPlanEqualityComparer());
+                    _hash.Add(cmd, _queryProvider!.GetQueryPlanEqualityComparer());
 
                     // var cmd = Expression.Lambda<Func<QueryCommand>>(memberExpression).Compile()();
                     // hash.Add(cmd, new QueryPlanEqualityComparer(_cache));

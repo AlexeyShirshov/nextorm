@@ -55,8 +55,8 @@ public class PostgresDialect : SqlDialectBase
     /// <see cref="PostgresDialect"/>.
     /// </remarks>
     public PostgresDialect()
+        : this(null)
     {
-        _uuidGenerators = PostgresUuidGenerators.Instance;
     }
 
     /// <summary>
@@ -73,6 +73,8 @@ public class PostgresDialect : SqlDialectBase
     public PostgresDialect(Version? serverVersion)
     {
         _version = serverVersion;
+        if (GetType() == typeof(PostgresDialect))
+            PlanDialectIdentity.Register(this, (typeof(PostgresDialect), serverVersion));
         _uuidGenerators = serverVersion is null
             ? PostgresUuidGenerators.Instance
             : new PostgresUuidGenerators(serverVersion);

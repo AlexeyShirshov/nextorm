@@ -4147,6 +4147,8 @@ public partial class QueryCommand
         internal Type? EntityType;
         internal Type? ResultType;
         internal Type? ProjectionType;
+        internal PlanMappingIdentity Mapping;
+        internal object? Dialect;
         internal bool IdentitySlotAliases;
         internal bool SingleRow, IsDistinct, GroupByWithTotals, Final, DocumentMode, IgnoreColumns;
         internal bool PerParentPaging, PerParentPagingEmbedded, DefaultOnEmpty, SingleScalar;
@@ -4263,6 +4265,8 @@ public partial class QueryCommand
             if (other is null) return false;
 
             if (EntityType != other.EntityType || ResultType != other.ResultType || ProjectionType != other.ProjectionType) return false;
+            if (Mapping != other.Mapping) return false;
+            if (!Equals(Dialect, other.Dialect)) return false;
             if (IdentitySlotAliases != other.IdentitySlotAliases) return false;
             if (SingleRow != other.SingleRow || IsDistinct != other.IsDistinct || GroupByWithTotals != other.GroupByWithTotals) return false;
             if (Final != other.Final || DocumentMode != other.DocumentMode || IgnoreColumns != other.IgnoreColumns) return false;
@@ -4551,6 +4555,8 @@ public partial class QueryCommand
             EntityType = cmd._srcType,
             ResultType = cmd.ResultType,
             ProjectionType = cmd.ProjectionType,
+            Mapping = cmd.PlanMapping,
+            Dialect = cmd.PlanDialect,
             IdentitySlotAliases = cmd.IdentitySlotAliases,
             SingleRow = cmd.SingleRow,
             IsDistinct = cmd.IsDistinct,
@@ -4864,9 +4870,16 @@ public partial class QueryCommand
     {
         var scan = _tlsClosureScan ??= new ClosureKeyScan();
         scan.Reset();
-        scan.ScanCommand(cmd);
-        closures = scan.Snapshot();
-        return !scan.HasCapturedCommand;
+        try
+        {
+            scan.ScanCommand(cmd);
+            closures = scan.Snapshot();
+            return !scan.HasCapturedCommand;
+        }
+        finally
+        {
+            scan.Reset();
+        }
     }
 
     /// <summary>
@@ -5041,9 +5054,8 @@ public partial class QueryCommand
     /// ineligible (a captured command, a derived source, an injected filter) are not all part of the
     /// normalized plan key, so the post-apply key check alone cannot reject them.
     /// <para>
-    /// The hash must cover every member the descriptor comparison reads. Missing a dimension only costs
-    /// a rejected apply (the staged normalized key still guards correctness), but it wastes a full
-    /// preparation attempt, so new descriptor members belong here as well.
+    /// The fingerprint identifies a bucket, not a verified candidate. The descriptor comparison
+    /// establishes equivalence before any prepared state is adopted.
     /// </para>
     /// </remarks>
     internal static int? ComputeRawFingerprint(QueryCommand cmd)
@@ -5126,9 +5138,17 @@ public partial class QueryCommand
         // command makes the graph ineligible. The scan is allocation-free (thread-static scanner).
         var scan = _tlsClosureScan ??= new ClosureKeyScan();
         scan.Reset();
-        scan.ScanCommand(cmd);
-        if (scan.HasCapturedCommand) return null;
-        if (scan.HasUnpublishableValueList) return null;
+        int closureHash;
+        try
+        {
+            scan.ScanCommand(cmd);
+            if (scan.HasCapturedCommand || scan.HasUnpublishableValueList) return null;
+            closureHash = scan.IdentitiesHash;
+        }
+        finally
+        {
+            scan.Reset();
+        }
 
         var exp = comparers.Expression;
         XxHash32 hash = new();
@@ -5328,7 +5348,7 @@ public partial class QueryCommand
 
             // Closure identity partitions the bucket, so a graph captured from one closure instance is
             // never matched against (or published over) another instance's recipe.
-            hash.Add(scan.IdentitiesHash);
+            hash.Add(closureHash);
 
             return hash.ToHashCode();
         }
@@ -5353,17 +5373,18 @@ public partial class QueryCommand
         // the staged command is exactly what a normalized lookup compares against. The raw graph is
         // verified separately by the descriptor, which is what makes adopting these members sound.
         clone.CopyTo(this, copyAll: true);
+        CopyPreparedColumns();
 
         // Members CopyTo never carries: the clone's joins come from its Definition, so they must be
-        // adopted explicitly, together with the value-list base hash and the prepared ARRAY JOIN list.
-        _joins = clone._joins;
+        // copied explicitly so later edits to this command cannot change the stored key.
+        _joins = CloneForCache(clone._joins);
         // Preparation fills Sorting.PreparedExpression in place, and that field is what the plan key
         // compares (SortingExpressionPlanEqualityComparer). A fresh command's sort keys are still raw
         // (null PreparedExpression), so leaving them in place would make every staged key of a sorted
         // query differ from the stored one and reject the candidate on every call. The stored array is
-        // the same shape the raw description already proved, so adopting it is what makes the staged
+        // the same shape the raw description already proved, so copying it is what makes the staged
         // command comparable; the caller's own raw array is restored by DiscardStagedPreparation.
-        _sorting = clone._sorting;
+        _sorting = CloneJoinArray(clone._sorting);
         var applied = Prepared;
         applied.WhereBasePlanHash = clone.Prep?.WhereBasePlanHash ?? 0;
         applied.PreparedArrayJoin = clone.Prep?.PreparedArrayJoin;

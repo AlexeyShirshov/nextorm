@@ -4,17 +4,12 @@ using System.Runtime.CompilerServices;
 namespace NextORM.Core;
 
 /// <summary>
-/// Key for the compiled row-mapper cache: provider type + result type + generated SQL text + a
-/// cheap column signature. The SQL text is already produced when <c>GetMap</c> is called (see
-/// <c>GetPreparedQueryCommand</c>), so building the key is ~0.1 us, unlike an expression-tree key
-/// that walks the whole expression. The provider is part of the key because the reader accessor
-/// depends on the provider's column mapping policy (see <c>DataContext.MapColumnExpression</c>),
-/// and two providers can generate identical SQL for the same result type (for example
-/// <c>select * from t</c>). <see cref="Streaming"/> is the streaming discriminator: a projection
-/// that contains a streaming LOB accessor must never reuse the buffered mapper compiled for the
-/// same SQL shape, and vice versa.
+/// Identifies the compiled row mapper by provider policy, SQL, result type and the exact ordered
+/// column shape. Identical SQL can require different reader accessors or materializer members.
 /// </summary>
-internal readonly record struct MapperCacheKey(Type ProviderType, Type ResultType, string Sql, int ColumnsSignature, bool OneColumn, bool Streaming, bool Boxed = false);
+internal readonly record struct MapperCacheKey(
+    Type ProviderType, Type ResultType, string Sql, MapperColumnShape Columns, bool OneColumn, bool Streaming,
+    bool Boxed = false, Type? EntityType = null, object? Dialect = null, PlanMappingIdentity Mapping = default);
 
 /// <summary>
 /// The record/composite shape a raw mapper was built for. <see cref="None"/> is every ordinary

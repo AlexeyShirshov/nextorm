@@ -302,8 +302,8 @@ INSERT INTO FloatEntity VALUES
         var cmd = (QueryCommand<SemEntity>)ctx.From<SemEntity>()
             .Where(x => x.Score > threshold)
             .ExternalSelectWhereMin(x => x.Score, ExtremeRowTies.All);
-        var prepared = (DbPreparedQueryCommand<SemEntity>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
-        var sql = prepared.SqlStmt!.Replace("\r\n", "\n");
+        var prepared = ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
+        var sql = NextORM.Tests.PreparedPlanObservation.GetPlan(prepared).SqlStmt!.Replace("\r\n", "\n");
         var rows = ctx.ToList(prepared);
 
         Ids(rows, x => x.Id).Should().Equal(3, 5);
@@ -340,8 +340,8 @@ INSERT INTO FloatEntity VALUES
         var cmd = (QueryCommand<SemEntity>)ctx.From<SemEntity>()
             .Where(x => x.Score > threshold)
             .ExternalSelectWhereMin(x => x.Score, ExtremeRowTies.All, x => x.GroupKey2);
-        var prepared = (DbPreparedQueryCommand<SemEntity>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
-        var sql = prepared.SqlStmt!.Replace("\r\n", "\n");
+        var prepared = ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
+        var sql = NextORM.Tests.PreparedPlanObservation.GetPlan(prepared).SqlStmt!.Replace("\r\n", "\n");
         var rows = ctx.ToList(prepared);
 
         // Above 15: (3, 20, y), (5, 20, y), (6, 30, z); group y ties at 20, group z wins at 30.
@@ -360,8 +360,8 @@ INSERT INTO FloatEntity VALUES
         var cmd = (QueryCommand<SemEntity>)ctx.From<SemEntity>()
             .Where(x => x.Score > threshold)
             .ExternalSelectWhereMin(x => new { x.Score, x.Name }, ExtremeRowTies.All);
-        var prepared = (DbPreparedQueryCommand<SemEntity>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
-        var sql = prepared.SqlStmt!.Replace("\r\n", "\n");
+        var prepared = ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
+        var sql = NextORM.Tests.PreparedPlanObservation.GetPlan(prepared).SqlStmt!.Replace("\r\n", "\n");
         var rows = ctx.ToList(prepared);
 
         rows.Should().ContainSingle().Which.Id.Should().Be(3);
@@ -382,8 +382,8 @@ INSERT INTO FloatEntity VALUES
         var cmd = (QueryCommand<SemEntity>)ctx.From<SemEntity>()
             .Where(x => x.Score > threshold)
             .ExternalSelectWhereMin(x => new { x.Score, x.Name }, ExtremeRowTies.All, x => x.GroupKey);
-        var prepared = (DbPreparedQueryCommand<SemEntity>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
-        var sql = prepared.SqlStmt!.Replace("\r\n", "\n");
+        var prepared = ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
+        var sql = NextORM.Tests.PreparedPlanObservation.GetPlan(prepared).SqlStmt!.Replace("\r\n", "\n");
         var rows = ctx.ToList(prepared);
 
         Ids(rows, x => x.Id).Should().Equal(3, 6);

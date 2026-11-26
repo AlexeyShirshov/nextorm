@@ -9,6 +9,9 @@ public sealed class SqliteDialect : SqlDialectBase
     /// <summary>Gets the shared SQLite dialect instance.</summary>
     public static readonly SqliteDialect Instance = new();
 
+    /// <summary>Creates the SQLite dialect.</summary>
+    public SqliteDialect() => PlanDialectIdentity.Register(this, typeof(SqliteDialect));
+
     internal override string TemporaryViewSchema => "temp";
 
     internal override bool SupportsEmptyTempTables => true;

@@ -12,8 +12,8 @@ namespace NextORM.Core;
 /// preparation is staged into the fresh command, the normalized plan key is rebuilt and the store is
 /// interrogated. On a parameter-free shape that is the entire remaining overage. This route derives a
 /// value-agnostic shape from the command's own graphs instead, finds the compiled holder the miss
-/// published, binds the current closure values into its parameters and executes it — no fingerprint,
-/// no staging, no key, no lookup.
+/// published, binds the current closure values for the invocation and executes it without the
+/// ordinary preparation path.
 /// </para>
 /// <para>
 /// Fail closed: the command must carry nothing beyond a source, a filter, a grouping key and a
@@ -55,13 +55,14 @@ internal static class NativeProjectionRoute
                 return;
             }
 
-            if (!ShapeIdentity.TryBind(candidate.Shape, header, candidate.Binder, holder.DbCommandParams, condition, group, projection))
+            var values = candidate.Binder.ParameterCount == 0 ? [] : new object?[candidate.Binder.ParameterCount];
+            if (values.Length != 0 && !ShapeIdentity.TryBind(candidate.Shape, header, candidate.Binder, values, condition, group, projection))
             {
                 probe = default;
                 return;
             }
 
-            probe = new Probe<TResult>(command.DataContext!.ToList<TResult>(holder, @params));
+            probe = new Probe<TResult>(command.DataContext!.ToList(BoundQueryInvocation<TResult>.Create(holder, values), @params));
             return;
         }
 
@@ -111,13 +112,14 @@ internal static class NativeProjectionRoute
                 return;
             }
 
-            if (!ShapeIdentity.TryBind(candidate.Shape, header, candidate.Binder, holder.DbCommandParams, condition, group, projection))
+            var values = candidate.Binder.ParameterCount == 0 ? [] : new object?[candidate.Binder.ParameterCount];
+            if (values.Length != 0 && !ShapeIdentity.TryBind(candidate.Shape, header, candidate.Binder, values, condition, group, projection))
             {
                 probe = default;
                 return;
             }
 
-            probe = new Probe<TResult>(command.DataContext!.ToListAsync<TResult>(holder, @params, cancellationToken));
+            probe = new Probe<TResult>(command.DataContext!.ToListAsync(BoundQueryInvocation<TResult>.Create(holder, values), @params, cancellationToken));
             return;
         }
 
@@ -359,7 +361,7 @@ internal static class NativeProjectionRoute
         /// <param name="prepared">The holder the legacy route compiled.</param>
         internal void Publish(QueryCommand<TResult> command, IPreparedQueryCommand<TResult> prepared)
         {
-            if (_shape is null || prepared is not DbPreparedQueryCommand<TResult> holder)
+            if (_shape is null || BoundQueryInvocation<TResult>.GetPlan(prepared) is not { } holder)
                 return;
 
             // A value list rendered in a clause whose shape is not part of the key (IN/PREWHERE at any

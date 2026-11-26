@@ -20,6 +20,8 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
     // and therefore the hash — must not change. Keeping it in a readonly field makes GetHashCode
     // stable even after GetCacheVersion() mutates the plan, which a dictionary key requires.
     private readonly int _hashPlan;
+    private readonly PlanMappingIdentity _mapping;
+    private readonly object? _dialect;
     // The resolved eager-load strategy and the structural eager-load graph are captured here (not only
     // read back from the command) so plan identity stays stable after GetCacheVersion swaps in an equal
     // clone, exactly like _hashPlan.
@@ -45,6 +47,8 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
         QueryCommand = cmd;
         _sql = sql;
         _comparer = cmd.GetQueryPlanEqualityComparer();
+        _mapping = cmd.PlanMapping;
+        _dialect = cmd.PlanDialect;
         _eagerLoadMode = cmd.ResolvedEagerLoadMode;
         _eagerLoadShape = cmd.EagerLoadShape;
         _collectionSlotShape = cmd.CollectionSlotShape;
@@ -67,6 +71,8 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
         QueryCommand = cmd;
         _sql = sql;
         _comparer = cmd.GetQueryPlanEqualityComparer();
+        _mapping = cmd.PlanMapping;
+        _dialect = cmd.PlanDialect;
         _forcedHash = forcedHash;
         _eagerLoadMode = cmd.ResolvedEagerLoadMode;
         _eagerLoadShape = cmd.EagerLoadShape;
@@ -145,6 +151,8 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
         if (obj is null) return false;
 
         return _sql == obj._sql
+            && _mapping == obj._mapping
+            && Equals(_dialect, obj._dialect)
             && _eagerLoadMode == obj._eagerLoadMode
             && _eagerLoadShape.Equals(obj._eagerLoadShape)
             && _collectionSlotShape.Equals(obj._collectionSlotShape)

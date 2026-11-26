@@ -421,10 +421,10 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         // rewrite a source's or sibling's joins. The cache clone deep-clones instead.
         _joins = forCache ? CloneForCache(source._joins) : CloneJoinArray(source._joins);
         Paging = source.Paging;
-        _sorting = source._sorting;
+        _sorting = forCache ? CloneJoinArray(source._sorting) : source._sorting;
         _groupExp = forCache ? null : source._groupExp;
         _having = source._having;
-        Logger = source.Logger;
+        Logger = forCache ? null : source.Logger;
         IsDistinct = source.IsDistinct;
         // Effective preparation state travels with both clones (it is preparation-derived identity,
         // not raw source state), so a cache clone keeps the packaged component's effective shape.

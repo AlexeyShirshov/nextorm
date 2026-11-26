@@ -184,6 +184,26 @@ public class ShapeIdentityTests
         key.Tokens.Should().HaveCountGreaterThan(1, "the header tokens are always present");
     }
 
+    [Fact]
+    public void Matches_ShouldVerifyThePhysicalSourceAndCommandTimeout()
+    {
+        var firstSource = NativeSourceStamp.For(new FromExpression("items", "first", false, false));
+        var render = new NativeContextStamp(false, null, KeywordCase.Lower, 7);
+        var header = new ShapeHeader(typeof(ShapeEntity), typeof(int), typeof(object), 2, render, firstSource);
+        var key = ShapeIdentity.TryCreate(header, (LambdaExpression?)null)!;
+
+        var otherSource = new ShapeHeader(typeof(ShapeEntity), typeof(int), typeof(object), 2, render,
+            NativeSourceStamp.For(new FromExpression("items", "second", false, false)));
+        var otherTimeout = new ShapeHeader(typeof(ShapeEntity), typeof(int), typeof(object), 2,
+            render with { CommandTimeout = 19 }, firstSource);
+
+        // Match is the equality check inside a hash bucket. It must reject these headers without
+        // looking at their hashes, even though their expression graphs are identical.
+        ShapeIdentity.Matches(key, otherSource, (LambdaExpression?)null).Should().BeFalse();
+        ShapeIdentity.Matches(key, otherTimeout, (LambdaExpression?)null).Should().BeFalse();
+        ShapeIdentity.Matches(key, header, (LambdaExpression?)null).Should().BeTrue();
+    }
+
     private sealed class ShapeDto
     {
         public int First { get; set; }

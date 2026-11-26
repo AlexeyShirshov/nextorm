@@ -16,6 +16,13 @@ public class MySqlDialect : SqlDialectBase
     /// <summary>Gets the shared MySQL dialect instance.</summary>
     public static readonly MySqlDialect Instance = new();
 
+    /// <summary>Creates the MySQL dialect.</summary>
+    public MySqlDialect()
+    {
+        if (GetType() == typeof(MySqlDialect))
+            PlanDialectIdentity.Register(this, typeof(MySqlDialect));
+    }
+
     internal override bool SupportsBoundedDelete => true;
 
     /// <summary>

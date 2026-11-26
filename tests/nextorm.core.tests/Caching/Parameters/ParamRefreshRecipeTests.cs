@@ -68,16 +68,23 @@ public class ParamRefreshRecipeTests
     }
 
     private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> cmd, bool cache = true)
-        => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, cache, CancellationToken.None);
+        => Prepare(ctx, cmd, out _, cache);
+
+    private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> cmd, out object?[]? values, bool cache = true)
+    {
+        var prepared = ctx.GetPreparedQueryCommand(cmd, false, cache, CancellationToken.None);
+        values = (prepared as BoundQueryInvocation<T>)?.Values;
+        return BoundQueryInvocation<T>.GetPlan(prepared)!;
+    }
 
     // The exact production route of the shared Any terminal: the parent command is prepared, the
     // context-owned EXISTS wrapper takes it as a referenced query, and the wrapper's plan is prepared.
-    private static DbPreparedQueryCommand<bool> PrepareAny(RecipeTestContext ctx, EntityBuilder<RecipeEntity> e, int value)
+    private static DbPreparedQueryCommand<bool> PrepareAny(RecipeTestContext ctx, EntityBuilder<RecipeEntity> e, int value, out object?[]? values)
     {
         var parent = e.Where(x => x.Id > value).ToParentCommand();
         parent.IgnoreColumns = true;
         var wrapper = EntityBuilderExtensions.GetAnyCommand(ctx, parent);
-        return (DbPreparedQueryCommand<bool>)ctx.GetPreparedQueryCommand(wrapper, false, true, CancellationToken.None);
+        return Prepare(ctx, wrapper, out values);
     }
 
     // Same source site, so the captured value (not its shape) changes between calls and the second
@@ -147,19 +154,20 @@ public class ParamRefreshRecipeTests
         var a = new CountingProbe { Value = 1 };
         var b = new CountingProbe { Value = 2 };
 
-        var first = Prepare(ctx, ProjectionOnlyCaptured(e, a));
+        var first = Prepare(ctx, ProjectionOnlyCaptured(e, a), out var firstValues);
         first.ParamRecipe.Should().NotBeNull("a projection-only captured scalar is part of the supported recipe subset");
         first.DbCommandParams.Cast<DbParameter>().Should().ContainSingle();
-        first.DbCommandParams[0].Value.Should().Be(1);
+        firstValues.Should().Equal([1]);
 
         ExpressionPlanEqualityComparer.ResetCounters();
         a.Reads = 0;
         b.Reads = 0;
 
-        var second = Prepare(ctx, ProjectionOnlyCaptured(e, b));
+        var second = Prepare(ctx, ProjectionOnlyCaptured(e, b), out var values);
 
         ReferenceEquals(first, second).Should().BeTrue("the captured value is not part of the plan key");
-        second.DbCommandParams[0].Value.Should().Be(2, "the recipe navigates the projection root for a projection-only capture");
+        values.Should().Equal([2], "the recipe navigates the projection root for a projection-only capture");
+        first.DbCommandParams[0].Value.Should().BeNull("neither invocation updates the plan descriptor");
         b.Reads.Should().Be(1, "the fresh projection closure is read exactly once");
         a.Reads.Should().Be(0, "the stale closure is never read");
         QueryPlanner.FallbackRefreshes.Should().Be(0, "a resolved projection path takes the fast path");
@@ -178,21 +186,22 @@ public class ParamRefreshRecipeTests
         ctx.PurgeQueryCache();
         var e = ctx.From<RecipeEntity>();
 
-        var first = PrepareAny(ctx, e, 1);
+        var first = PrepareAny(ctx, e, 1, out var firstValues);
         first.ParamRecipe.Should().NotBeNull(
             "a capture rendered inside the referenced subquery is part of the supported recipe subset");
         first.DbCommandParams.Cast<DbParameter>().Should().ContainSingle();
-        first.DbCommandParams[0].Value.Should().Be(1);
+        firstValues.Should().Equal([1]);
 
         ExpressionPlanEqualityComparer.ResetCounters();
 
-        var second = PrepareAny(ctx, e, 2);
+        var second = PrepareAny(ctx, e, 2, out var values);
 
         ParamRefreshRecipe.FastBindHits.Should().Be(1);
         ParamRefreshRecipe.BindRejected.Should().Be(0);
         QueryPlanner.FallbackRefreshes.Should().Be(0,
             "a resolved referenced-query path must not fall back to the full ExtractParams re-render");
-        second.DbCommandParams[0].Value.Should().Be(2, "the recipe binds the fresh subquery closure value");
+        second.Should().BeSameAs(first);
+        values.Should().Equal([2], "the recipe binds the fresh subquery closure value");
     }
 
     [Fact]
@@ -207,13 +216,13 @@ public class ParamRefreshRecipeTests
 
         ExpressionPlanEqualityComparer.ResetCounters();
 
-        var second = Prepare(ctx, WhereCaptured(e, 2));
+        var second = Prepare(ctx, WhereCaptured(e, 2), out var values);
 
         ReferenceEquals(first, second).Should().BeTrue("the captured value is not part of the plan key");
         ParamRefreshRecipe.FastBindHits.Should().Be(1);
         ParamRefreshRecipe.BindRejected.Should().Be(0);
         QueryPlanner.FallbackRefreshes.Should().Be(0);
-        second.DbCommandParams[0].Value.Should().Be(2, "the positional recipe binds the fresh closure's value");
+        values.Should().Equal([2], "the positional recipe binds the fresh closure's value");
     }
 
     [Fact]
@@ -237,13 +246,13 @@ public class ParamRefreshRecipeTests
         b.Reads = 0;
         ExpressionPlanEqualityComparer.ResetCounters();
 
-        var countHit = Prepare(ctx, WhereProbe(e, b));
+        var countHit = Prepare(ctx, WhereProbe(e, b), out var countValues);
 
         ReferenceEquals(target, countHit).Should().BeTrue("the second WhereProbe hits the cached plan");
         QueryPlanner.FallbackRefreshes.Should().Be(1);
         ParamRefreshRecipe.FastBindHits.Should().Be(0);
         ParamRefreshRecipe.BindRejected.Should().Be(1);
-        countHit.DbCommandParams[0].Value.Should().Be(2, "the fallback extracts the current closure value");
+        countValues.Should().Equal([2], "the fallback extracts the current closure value");
         b.Reads.Should().Be(1, "the original extraction path evaluates the current closure exactly once");
         a.Reads.Should().Be(0, "the incompatible recipe never evaluates the stale closure");
 
@@ -256,13 +265,13 @@ public class ParamRefreshRecipeTests
         b.Reads = 0;
         ExpressionPlanEqualityComparer.ResetCounters();
 
-        var nameHit = Prepare(ctx, WhereProbe(e, b));
+        var nameHit = Prepare(ctx, WhereProbe(e, b), out var nameValues);
 
         ReferenceEquals(target, nameHit).Should().BeTrue();
         QueryPlanner.FallbackRefreshes.Should().Be(1);
         ParamRefreshRecipe.FastBindHits.Should().Be(0);
         ParamRefreshRecipe.BindRejected.Should().Be(1);
-        nameHit.DbCommandParams[0].Value.Should().Be(2);
+        nameValues.Should().Equal([2]);
         b.Reads.Should().Be(1);
         a.Reads.Should().Be(0);
     }
@@ -281,12 +290,12 @@ public class ParamRefreshRecipeTests
         target.SetParamRecipe(null);
 
         ExpressionPlanEqualityComparer.ResetCounters();
-        var hit = Prepare(ctx, WhereCaptured(e, 7));
+        var hit = Prepare(ctx, WhereCaptured(e, 7), out var values);
 
         ReferenceEquals(target, hit).Should().BeTrue();
         ParamRefreshRecipe.FastBindHits.Should().Be(0);
         QueryPlanner.FallbackRefreshes.Should().Be(1);
-        hit.DbCommandParams[0].Value.Should().Be(7);
+        values.Should().Equal([7]);
     }
 
     [Fact]
@@ -309,13 +318,14 @@ public class ParamRefreshRecipeTests
         ExpressionPlanEqualityComparer.ResetCounters();
         probe.Value = 7;
 
-        Func<DbPreparedQueryCommand<int>> act = () => Prepare(ctx, WhereProbe(e, probe));
+        object?[]? values = null;
+        Func<DbPreparedQueryCommand<int>> act = () => Prepare(ctx, WhereProbe(e, probe), out values);
         var hit = act.Should().NotThrow().Subject;
 
         ReferenceEquals(first, hit).Should().BeTrue("the second WhereProbe hits the cached plan");
         ParamRefreshRecipe.BindRejected.Should().Be(1);
         QueryPlanner.FallbackRefreshes.Should().Be(1);
-        hit.DbCommandParams[0].Value.Should().Be(7, "the fallback binds positionally even when the cached name differs");
+        values.Should().Equal([7], "the fallback binds positionally even when the cached name differs");
     }
 
     [Fact]
@@ -341,27 +351,28 @@ public class ParamRefreshRecipeTests
         var b2 = new CountingProbe { Value = 22 };
 
         ExpressionPlanEqualityComparer.ResetCounters();
-        Func<DbPreparedQueryCommand<int>> act = () => Prepare(ctx, WhereTwo(e, a2, b2));
+        object?[]? values = null;
+        Func<DbPreparedQueryCommand<int>> act = () => Prepare(ctx, WhereTwo(e, a2, b2), out values);
         var hit = act.Should().NotThrow().Subject;
 
         ReferenceEquals(first, hit).Should().BeTrue("the second WhereTwo hits the cached plan");
         ParamRefreshRecipe.BindRejected.Should().Be(1);
         QueryPlanner.FallbackRefreshes.Should().Be(1);
-        hit.DbCommandParams[0].Value.Should().Be(11, "the first slot keeps the first captured value");
-        hit.DbCommandParams[1].Value.Should().Be(22, "the second slot keeps the second captured value");
+        values.Should().Equal([11, 22], "the fallback preserves placeholder order");
     }
 
     [Fact]
-    public void Fallback_CountMismatch_ShouldNotPartiallyBindAndShouldInvalidateTheRecipe()
+    public void Fallback_CountMismatch_ShouldReplanWithoutMutatingTheCachedCandidate()
     {
         using var ctx = new RecipeTestContext();
         ctx.PurgeQueryCache();
         var e = ctx.From<RecipeEntity>();
         var probe = new CountingProbe { Value = 4 };
 
-        var first = Prepare(ctx, WhereProbe(e, probe));
-        first.ParamRecipe.Should().NotBeNull();
-        first.DbCommandParams[0].Value.Should().Be(4);
+        var first = Prepare(ctx, WhereProbe(e, probe), out var firstValues);
+        var recipe = first.ParamRecipe;
+        recipe.Should().NotBeNull();
+        firstValues.Should().Equal([4]);
 
         // Give the cached statement one more placeholder than the fresh command produces. A matched plan
         // key should not produce this, but the fallback must stay safe: the stale trailing slot must not
@@ -373,11 +384,13 @@ public class ParamRefreshRecipeTests
 
         var hit = Prepare(ctx, WhereProbe(e, probe));
 
-        ReferenceEquals(first, hit).Should().BeTrue();
+        hit.Should().NotBeSameAs(first);
         ParamRefreshRecipe.BindRejected.Should().Be(1);
         QueryPlanner.FallbackRefreshes.Should().Be(1);
-        hit.ParamRecipe.Should().BeNull("the count-mismatched recipe is invalidated so the next hit re-plans");
-        hit.DbCommandParams[0].Value.Should().Be(4, "no partial bind writes the prefix on a count mismatch");
+        first.ParamRecipe.Should().BeSameAs(recipe);
+        first.DbCommandParams[0].Value.Should().BeNull("no partial bind writes into the plan on a count mismatch");
+        firstValues.Should().Equal([4], "the first invocation remains unchanged");
+        hit.DbCommandParams[0].Value.Should().Be(9, "the execution-local plan comes from the current command");
     }
 
     [Fact]
@@ -477,12 +490,12 @@ public class ParamRefreshRecipeTests
         miss.ParamRecipe.Should().NotBeNull("a member chain through a captured object is a supported path");
 
         ExpressionPlanEqualityComparer.ResetCounters();
-        var hit = Prepare(ctx, WhereNestedProbe(e, second));
+        var hit = Prepare(ctx, WhereNestedProbe(e, second), out var values);
 
         ReferenceEquals(miss, hit).Should().BeTrue("the wrapper value is not part of the plan key");
         ParamRefreshRecipe.FastBindHits.Should().Be(1);
         QueryPlanner.FallbackRefreshes.Should().Be(0);
-        hit.DbCommandParams[0].Value.Should().Be(2, "the nested path resolves and reads the fresh wrapper member");
+        values.Should().Equal([2], "the nested path resolves and reads the fresh wrapper member");
     }
 
     [Fact]
@@ -613,17 +626,16 @@ public class ParamRefreshRecipeTests
 
         const int threads = 8;
         var fresh = new QueryCommand<int>[threads];
-        var prepared = new DbPreparedQueryCommand<int>[threads];
         for (var i = 0; i < threads; i++)
         {
             fresh[i] = WhereProbe(e, new CountingProbe { Value = i + 1 });
-            prepared[i] = Prepare(ctx, fresh[i], cache: false);
+            _ = Prepare(ctx, fresh[i], cache: false);
         }
 
         ExpressionPlanEqualityComparer.ResetCounters();
 
-        var barrier = new Barrier(threads);
-        var results = new bool[threads];
+        using var barrier = new Barrier(threads);
+        var results = new object?[threads][];
         var failures = new List<Exception>();
         var tasks = new Task[threads];
         for (var i = 0; i < threads; i++)
@@ -635,7 +647,9 @@ public class ParamRefreshRecipeTests
                     try
                     {
                         barrier.SignalAndWait();
-                        results[index] = recipe.TryBind(fresh[index], prepared[index].DbCommandParams);
+                        var values = new object?[1];
+                        if (recipe.TryReadValues(fresh[index], recipeCommand.DbCommandParams, values))
+                            results[index] = values;
                     }
                     catch (Exception ex)
                     {
@@ -649,9 +663,8 @@ public class ParamRefreshRecipeTests
         await Task.WhenAll(tasks);
 
         failures.Should().BeEmpty("the immutable recipe must be safe to bind concurrently");
-        results.Should().OnlyContain(bound => bound, "every distinct command must resolve its own fresh closure");
         for (var i = 0; i < threads; i++)
-            prepared[i].DbCommandParams[0].Value.Should().Be(i + 1, "each command keeps its own closure's value");
+            results[i].Should().Equal([i + 1], "each invocation gets its own closure's value");
 
         ParamRefreshRecipe.FastBindHits.Should().Be(threads, "every concurrent bind counted exactly once");
         ParamRefreshRecipe.BindRejected.Should().Be(0);
@@ -700,19 +713,20 @@ public class ParamRefreshRecipeTests
 
         var recipe = first.ParamRecipe!;
         var dbParams = second.DbCommandParams;
+        var values = new object?[dbParams.Count];
 
         for (var i = 0; i < 100; i++)
-            recipe.TryBind(secondCommand, dbParams);
+            recipe.TryReadValues(secondCommand, dbParams, values);
 
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var i = 0; i < 10_000; i++)
-            recipe.TryBind(secondCommand, dbParams);
+            recipe.TryReadValues(secondCommand, dbParams, values);
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
-        // The fast bind is allocation-free; the tiny fixed slack only absorbs runtime noise (GC
+        // The recipe writes into the supplied invocation storage. The fixed slack absorbs runtime noise (GC
         // bookkeeping, tiered-JIT call-site updates) and is far below one per-hit allocation.
         allocated.Should().BeLessThanOrEqualTo(AllocationSlackBytes,
-            "a positional fast bind allocates no dictionary/collector/value array");
+            "a positional fast bind uses the caller's storage rather than allocating a dictionary or collector");
     }
 
     [Fact]
@@ -731,14 +745,15 @@ public class ParamRefreshRecipeTests
 
         var recipe = first.ParamRecipe!;
         var dbParams = second.DbCommandParams;
+        var values = new object?[dbParams.Count];
 
         for (var i = 0; i < 100; i++)
-            recipe.TryBind(secondCommand, dbParams);
+            recipe.TryReadValues(secondCommand, dbParams, values);
 
         const int iterations = 10_000;
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var i = 0; i < iterations; i++)
-            recipe.TryBind(secondCommand, dbParams);
+            recipe.TryReadValues(secondCommand, dbParams, values);
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         // A boxed int is one 24-byte allocation on x64 (8-byte object header + 8-byte method-table
@@ -746,7 +761,7 @@ public class ParamRefreshRecipeTests
         // iterations*24 plus the fixed noise slack; a dictionary/collector would exceed it by far.
         const int upperBound = iterations * BoxedIntBytes + AllocationSlackBytes;
         allocated.Should().BeGreaterThan(0).And.BeLessThanOrEqualTo(upperBound,
-            "the typed writer boxes the value-type parameter exactly once per fast bind");
+            "the typed reader boxes the value-type parameter exactly once per fast bind");
     }
 
     // ------------------------------------------------------------------------------------------------

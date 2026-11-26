@@ -101,7 +101,7 @@ public class DictionaryLookupSqlGenerationTests
         var second = ctx.GetPreparedQueryCommand(
             e.Where(x => CapturedLookup[x.Int!.Value] < x.Datetime).Select(x => x.Id), false, true, CancellationToken.None);
 
-        ReferenceEquals(first, second).Should().BeTrue();
+        BoundQueryInvocation<long>.GetPlan(second).Should().BeSameAs(BoundQueryInvocation<long>.GetPlan(first));
     }
 
     [Fact]
@@ -114,18 +114,14 @@ public class DictionaryLookupSqlGenerationTests
         var bias = 0;
 
         var cmd = e.Where(x => lookup[x.Int!.Value + bias] == 20).Select(x => x.Id);
-        var first = (DbPreparedQueryCommand<long>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
-        var second = (DbPreparedQueryCommand<long>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
+        var first = (BoundQueryInvocation<long>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
+        var second = (BoundQueryInvocation<long>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
 
         // The cache hit re-extracts parameters in parameter mode; the captured `bias` inside the key must
         // be collected there too or every parameter after it shifts (Debug.Assert in QueryPlanner).
-        ReferenceEquals(first, second).Should().BeTrue();
-        second.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName).Should().Equal("bias", "p0", "p1", "p2", "p3");
-        second.DbCommandParams[0].Value.Should().Be(0);
-        second.DbCommandParams[1].Value.Should().Be(1);
-        second.DbCommandParams[2].Value.Should().Be(10);
-        second.DbCommandParams[3].Value.Should().Be(2);
-        second.DbCommandParams[4].Value.Should().Be(20);
+        second.Plan.Should().BeSameAs(first.Plan);
+        second.Plan.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName).Should().Equal("bias", "p0", "p1", "p2", "p3");
+        second.Values.Should().Equal([0, 1, 10, 2, 20]);
     }
 
     [Fact]
@@ -165,8 +161,9 @@ public class DictionaryLookupSqlGenerationTests
         var second = ctx.GetPreparedQueryCommand(
             e.Where(x => CapturedLookup[x.Int!.Value] < x.Datetime).Select(x => x.Id), false, true, CancellationToken.None);
 
-        ReferenceEquals(first, second).Should().BeFalse();
-        ((DbPreparedQueryCommand<long>)second).DbCommandParams.Count.Should().Be(4);
+        var secondPlan = BoundQueryInvocation<long>.GetPlan(second)!;
+        secondPlan.Should().NotBeSameAs(BoundQueryInvocation<long>.GetPlan(first));
+        secondPlan.DbCommandParams.Count.Should().Be(4);
     }
 
     [Fact]

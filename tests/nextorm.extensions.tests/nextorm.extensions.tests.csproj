@@ -8,6 +8,7 @@
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3" />
+    <Compile Include="..\nextorm.test.shared\PreparedPlanObservation.cs" Link="Support\PreparedPlanObservation.cs" />
     <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
     <ProjectReference Include="..\..\src\nextorm.extensions\nextorm.extensions.csproj" />
     <ProjectReference Include="..\..\src\nextorm.clickhouse\nextorm.clickhouse.csproj" />

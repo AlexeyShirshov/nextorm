@@ -74,6 +74,11 @@ public partial class QueryCommand
         dst._dontCache = _dontCache;
         dst._filterScope = _filterScope;
         dst.MappingVariant = MappingVariant;
+        if (!copyAll)
+        {
+            dst._detachedPlanMapping = PlanMapping;
+            dst._detachedPlanDialect = PlanDialect;
+        }
         dst.ColumnsPlanHash = ColumnsPlanHash;
         dst.JoinPlanHash = JoinPlanHash;
         dst.WherePlanHash = WherePlanHash;
@@ -219,6 +224,25 @@ public partial class QueryCommand
         }
     }
 
+    // Call on a cache key or on a command adopting a cached recipe, never on an ordinary live clone.
+    // The descriptors are mutable even when the expression nodes they point at are shared.
+    private void CopyPreparedColumns()
+    {
+        _selectList = CopyColumns(_selectList);
+        if (_preparedState is { } prepared)
+        {
+            prepared.GroupingList = CopyColumns(prepared.GroupingList);
+            prepared.LimitByColumns = CopyColumns(prepared.LimitByColumns);
+            prepared.DistinctOnColumns = CopyColumns(prepared.DistinctOnColumns);
+            prepared.ExtremeRowColumns = CopyColumns(prepared.ExtremeRowColumns);
+            prepared.ExtremeRowGroupByColumns = CopyColumns(prepared.ExtremeRowGroupByColumns);
+            prepared.PerParentPartitionColumns = CopyColumns(prepared.PerParentPartitionColumns);
+        }
+
+        static SelectExpression[]? CopyColumns(SelectExpression[]? columns)
+            => columns is { Length: > 0 } ? Array.ConvertAll(columns, static column => column.Copy()) : columns;
+    }
+
     /// <summary>Creates an empty command of the same concrete type for a live clone.</summary>
     /// <returns>A new command bound to this command's data context.</returns>
     protected virtual QueryCommand CreateSelf()
@@ -274,6 +298,7 @@ public partial class QueryCommand
     {
         var cmd = CreateSelfForClone();
         CopyTo(cmd, false);
+        cmd.CopyPreparedColumns();
         return cmd;
     }
     /// <summary>Returns a deep, independently mutable copy of this command.</summary>

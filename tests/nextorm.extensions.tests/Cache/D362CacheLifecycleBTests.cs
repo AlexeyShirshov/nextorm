@@ -26,7 +26,7 @@ public class D362CacheLifecycleBTests
     }
 
     private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> cmd)
-        => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
+        => NextORM.Tests.PreparedPlanObservation.GetPlan(ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None));
 
     private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
 
@@ -61,10 +61,11 @@ public class D362CacheLifecycleBTests
                 x => new GrpRow { Category = x.Category, Total = SqlFunctions.Sql.count(x.Id) },
                 r => r.Total > 0);
 
-        var preparedOriginal = Prepare(ctx, original);
-        var sql = Normalize(preparedOriginal.SqlStmt!);
-        preparedOriginal.NoParams.Should().BeFalse();
-        preparedOriginal.NeedsParamRefresh.Should().BeTrue("the captured value refreshes per execution");
+        var preparedOriginal = ctx.GetPreparedQueryCommand(original, false, true, CancellationToken.None);
+        var originalPlan = NextORM.Tests.PreparedPlanObservation.GetPlan(preparedOriginal);
+        var sql = Normalize(originalPlan.SqlStmt!);
+        originalPlan.NoParams.Should().BeFalse();
+        originalPlan.NeedsParamRefresh.Should().BeTrue("the captured value refreshes per execution");
         ctx.ToList(preparedOriginal).Should().BeEquivalentTo(new[]
         {
             new { Category = (string?)"a", Total = 2 },
@@ -74,8 +75,9 @@ public class D362CacheLifecycleBTests
         var clone = (QueryCommand<GrpRow>)original.CloneForCache();
         min = 0;
 
-        var preparedClone = Prepare(ctx, clone);
-        Normalize(preparedClone.SqlStmt!).Should().Be(sql, "the clone derives the identical statement");
+        var preparedClone = ctx.GetPreparedQueryCommand(clone, false, true, CancellationToken.None);
+        var clonePlan = NextORM.Tests.PreparedPlanObservation.GetPlan(preparedClone);
+        Normalize(clonePlan.SqlStmt!).Should().Be(sql, "the clone derives the identical statement");
         CountOf(sql, "group by").Should().Be(1, "grouping survives the clone once");
         CountOf(sql, "having").Should().Be(1, "HAVING survives the clone once");
         Regex.Matches(sql, @"\bdistinct\b", RegexOptions.IgnoreCase).Count.Should().Be(0);
@@ -234,7 +236,8 @@ public class D362CacheLifecycleBTests
         var first = ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
         var second = ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
 
-        second.Should().BeSameAs(first, "one raw shape means one prepared plan");
+        NextORM.Tests.PreparedPlanObservation.GetPlan(second).Should().BeSameAs(NextORM.Tests.PreparedPlanObservation.GetPlan(first),
+            "one raw shape means one prepared plan");
         SelectGroupDiagnostics.AnalyzeCalls.Should().Be(1, "the same shape and closure run inference once");
     }
 

@@ -22,8 +22,8 @@ public class ClickHouseFunctionGapSqlGenerationTests
     /// walks the query tree without emitting SQL.
     /// </summary>
     private static string SqlOfCached<T>(IDataContext ctx, QueryCommand<T> cmd)
-        => ((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None))
-            .DbCommand.CommandText.Replace("\r\n", "\n");
+        => BoundQueryInvocation<T>.GetPlan(ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None))!
+            .CommandText.Replace("\r\n", "\n");
 
     [Fact]
     public void Utf8StringFunctions_ShouldUseClickHouseNames()

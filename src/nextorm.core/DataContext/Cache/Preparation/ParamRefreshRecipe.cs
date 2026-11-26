@@ -12,10 +12,9 @@ namespace NextORM.Core;
 /// <remarks>
 /// The positional binding plan is computed once, when the recipe is built on a cache miss: per
 /// parameter it stores the navigation path from the prepared expression root to the captured closure
-/// constant, plus a compiled writer that reads the captured member at its natural type and assigns it
-/// to the cached <see cref="DbParameter"/> (one boxing conversion at most). A cache hit therefore does
-/// no expression visit, allocates no <see cref="Dictionary{TKey,TValue}"/>/collector and no value
-/// array, and never retains the miss-time closure, a mutable <see cref="DbCommand"/> or an enumerator.
+/// constant, plus a compiled reader that reads the captured member at its natural type (one boxing
+/// conversion at most). The reader fills invocation-owned storage, without an expression collector
+/// or writes to the cached parameter descriptors.
 /// <para>
 /// Only the provably-equivalent scalar subset is supported: every refreshed parameter must come from a
 /// captured member access whose root is a constant (typically a compiler-generated) closure, the member
@@ -45,7 +44,7 @@ internal sealed class ParamRefreshRecipe
     // The miss-time constant (display-class) type of each path, validated before any value is written.
     private readonly Type[] _closureTypes;
     private readonly Func<Expression, Expression>[][] _paths;
-    private readonly Action<object?, DbParameter>[] _writers;
+    private readonly Func<object?, object?>[] _readers;
 
     // Cached-path diagnostic counters. Process-wide but updated with Interlocked and read with
     // Volatile, so the increment path is lock-free and allocation-free. Tests reach them through the
@@ -72,14 +71,14 @@ internal sealed class ParamRefreshRecipe
         int[] rootIndices,
         Type[] closureTypes,
         Func<Expression, Expression>[][] paths,
-        Action<object?, DbParameter>[] writers)
+        Func<object?, object?>[] readers)
     {
         _names = names;
         _rootKinds = rootKinds;
         _rootIndices = rootIndices;
         _closureTypes = closureTypes;
         _paths = paths;
-        _writers = writers;
+        _readers = readers;
     }
 
     /// <summary>The expression of the fresh command a captured path is walked from.</summary>
@@ -166,7 +165,7 @@ internal sealed class ParamRefreshRecipe
         var rootIndices = new int[parameters.Count];
         var closureTypes = new Type[parameters.Count];
         var paths = new Func<Expression, Expression>[parameters.Count][];
-        var writers = new Action<object?, DbParameter>[parameters.Count];
+        var readers = new Func<object?, object?>[parameters.Count];
         for (var i = 0; i < parameters.Count; i++)
         {
             var name = parameters[i].Name;
@@ -185,23 +184,22 @@ internal sealed class ParamRefreshRecipe
             rootKinds[i] = capture.RootKind;
             rootIndices[i] = capture.RootIndex;
             closureTypes[i] = capture.ClosureType;
-            writers[i] = CompileWriter(capture.Node, capture.ClosureType);
+            readers[i] = CompileReader(capture.Node, capture.ClosureType);
         }
 
-        return new ParamRefreshRecipe(names, rootKinds, rootIndices, closureTypes, paths, writers);
+        return new ParamRefreshRecipe(names, rootKinds, rootIndices, closureTypes, paths, readers);
     }
 
     /// <summary>
-    /// Re-binds the cached command's parameters from the fresh closures of <paramref name="queryCommand"/>.
-    /// Returns <see langword="false"/> (after evaluating nothing) when any compatibility check fails, so
-    /// the caller can run the original extraction path.
+    /// Reads the current closure values after validating the slots against the cached statement.
     /// </summary>
     /// <param name="queryCommand">The freshly built command matching the cached plan.</param>
     /// <param name="dbCommandParams">The cached command's parameter collection, in placeholder order.</param>
-    /// <returns><see langword="true"/> when the parameters were refreshed; otherwise <see langword="false"/>.</returns>
-    internal bool TryBind(QueryCommand queryCommand, DbParameterCollection dbCommandParams)
+    /// <param name="values">The invocation-owned destination, in placeholder order.</param>
+    /// <returns><see langword="true"/> on success, or <see langword="false"/> on a mismatch before reading any capture.</returns>
+    internal bool TryReadValues(QueryCommand queryCommand, DbParameterCollection dbCommandParams, Span<object?> values)
     {
-        if (TryBindCore(queryCommand, dbCommandParams))
+        if (TryReadValuesCore(queryCommand, dbCommandParams, values))
         {
             Interlocked.Increment(ref _fastBindHits);
             return true;
@@ -211,10 +209,10 @@ internal sealed class ParamRefreshRecipe
         return false;
     }
 
-    private bool TryBindCore(QueryCommand queryCommand, DbParameterCollection dbCommandParams)
+    private bool TryReadValuesCore(QueryCommand queryCommand, DbParameterCollection dbCommandParams, Span<object?> values)
     {
         // Validate the bound shape against the cached collection before touching any captured value.
-        if (dbCommandParams.Count != _names.Length)
+        if (dbCommandParams.Count != _names.Length || values.Length != _names.Length)
             return false;
 
         for (var i = 0; i < _names.Length; i++)
@@ -234,12 +232,12 @@ internal sealed class ParamRefreshRecipe
             }
         }
 
-        // Pass 2: read each captured member exactly once and assign it to the cached parameter.
+        // Pass 2: read each captured member exactly once into storage owned by this invocation.
         for (var i = 0; i < _names.Length; i++)
         {
             _ = TryRoot(queryCommand, i, out var root);
             _ = TryResolveClosure(root, _paths[i], _closureTypes[i], out var closure);
-            _writers[i](closure, dbCommandParams[i]);
+            values[i] = _readers[i](closure) ?? DBNull.Value;
         }
 
         return true;
@@ -497,23 +495,16 @@ internal sealed class ParamRefreshRecipe
         }
     }
 
-    // A compiled writer that reads the captured member from the closure instance at its natural type
-    // and assigns it to the cached parameter through a single boxing conversion (null normalizes to
-    // DBNull, matching the original extraction path). It closes over no query state and does not retain
-    // the miss-time closure.
-    private static Action<object?, DbParameter> CompileWriter(MemberExpression node, Type closureType)
+    // Replaces the miss-time closure with an argument before compiling the accessor.
+    private static Func<object?, object?> CompileReader(MemberExpression node, Type closureType)
     {
         var closureParameter = Expression.Parameter(typeof(object), "closure");
-        var dbParameter = Expression.Parameter(typeof(DbParameter), "parameter");
 
         var replace = new ReplaceConstantExpressionVisitor(Expression.Convert(closureParameter, closureType));
         var value = replace.Visit(node)!;
 
         var boxed = Expression.Convert(value, typeof(object));
-        var normalized = Expression.Coalesce(boxed, Expression.Constant(DBNull.Value, typeof(object)));
-        var valueProperty = typeof(DbParameter).GetProperty(nameof(DbParameter.Value))!;
-        var assign = Expression.Assign(Expression.Property(dbParameter, valueProperty), normalized);
-        return Expression.Lambda<Action<object?, DbParameter>>(assign, closureParameter, dbParameter).Compile();
+        return Expression.Lambda<Func<object?, object?>>(boxed, closureParameter).Compile();
     }
 
     /// <summary>

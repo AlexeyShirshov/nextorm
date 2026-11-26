@@ -7,8 +7,7 @@ namespace NextORM.Core.Tests.PreparedCommands;
 /// <summary>
 /// AC07 — the parameterless <c>Prepare()</c> and the explicit <c>Prepare(default)</c> must produce an
 /// equivalent prepared command: the same SQL, the same reader behavior, the same buffered execution and
-/// the same rows. A buffered preparation must not build a streaming enumerator (the removed
-/// <c>nonStreamUsing</c> boolean used to be inverted; the option now has one positive meaning).
+/// the same rows. A buffered preparation must not support streaming, which is requested explicitly.
 /// </summary>
 [Trait("PDCA", "T333")]
 public class PrepareEquivalenceTests
@@ -33,12 +32,12 @@ public class PrepareEquivalenceTests
             byDefault.CachePolicy.Should().Be(PreparedCommandCache.Connection);
             explicitDefault.CachePolicy.Should().Be(PreparedCommandCache.Connection);
 
-            byDefault.StreamingEnabled.Should().BeFalse("a buffered preparation never builds a streaming enumerator");
+            byDefault.StreamingEnabled.Should().BeFalse();
             explicitDefault.StreamingEnabled.Should().BeFalse();
-            byDefault.EnumeratorFactory.Should().BeNull("Prepare() must not create the row enumerator");
-            explicitDefault.EnumeratorFactory.Should().BeNull();
 
             var executor = PreparedCommandHarness.CreateExecutor(new ProbeHarnessContext(), new ProbeConnectionManager(connection));
+            FluentActions.Invoking(() => executor.CreateAsyncEnumerator(byDefault, null, cancellationToken))
+                .Should().Throw<InvalidOperationException>().WithMessage("*PrepareOptions.Streaming = false*");
             ExecuteIds(executor, byDefault).Should().Equal(new[] { 1, 2 });
             ExecuteIds(executor, explicitDefault).Should().Equal(new[] { 1, 2 });
         }
@@ -49,7 +48,7 @@ public class PrepareEquivalenceTests
     }
 
     [Fact]
-    public void StreamingPrepare_IsTheOnlyFormThatBuildsAnEnumerator()
+    public async Task StreamingPrepare_EnablesFreshEnumeratorsForEachExecution()
     {
         var path = PreparedCommandHarness.CreateSeededFile();
         try
@@ -58,12 +57,12 @@ public class PrepareEquivalenceTests
             using var ctx = new SqliteDataContext(connection, new DataContextBuilder());
             var command = ctx.From<PreparedCommandHarness.PreparedProbeRow>().OrderBy(x => x.Id).Select(x => x.Id);
 
-            var streaming = (DbPreparedQueryCommand<int>)command.Prepare(
-                new PrepareOptions { Streaming = true },
-                TestContext.Current.CancellationToken);
-
-            streaming.StreamingEnabled.Should().BeTrue("the positive Streaming option requests the enumerator");
-            streaming.EnumeratorFactory.Should().NotBeNull();
+            var cancellationToken = TestContext.Current.CancellationToken;
+            var streaming = command.Prepare(new PrepareOptions { Streaming = true }, cancellationToken);
+            var executor = PreparedCommandHarness.CreateExecutor(new ProbeHarnessContext(), new ProbeConnectionManager(connection));
+            await using var first = executor.CreateAsyncEnumerator(streaming, null, cancellationToken);
+            await using var second = executor.CreateAsyncEnumerator(streaming, null, cancellationToken);
+            first.Should().NotBeSameAs(second);
         }
         finally
         {

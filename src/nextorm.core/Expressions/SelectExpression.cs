@@ -28,6 +28,8 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     public Type PropertyType { get; set; }
     internal PropertyInfo? PropertyInfo { get; set; }
 
+    internal SelectExpression Copy() => (SelectExpression)MemberwiseClone();
+
     /// <summary>
     /// The CLR member the row materializer binds this column to when the projection has to be assembled
     /// member by member. It is populated by the projector from the projection expression (an anonymous

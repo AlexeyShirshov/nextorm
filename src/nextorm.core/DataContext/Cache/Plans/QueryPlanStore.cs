@@ -76,8 +76,9 @@ internal static class QueryPlanStore
             {
                 _cache = [];
                 _cacheGeneration = generation;
-                // Same transition drops the raw candidate index: Clear must not leave a usable alias.
+                // Neither auxiliary index can keep a usable alias after the primary generation changes.
                 _rawIndex = null;
+                _nativeIndex = null;
             }
 
             return _cache;
@@ -261,52 +262,6 @@ internal static class QueryPlanStore
     {
         var key = new Key(contextType, plan);
         Cache[key] = new Entry(key, holder);
-    }
-
-    /// <summary>
-    /// Looks up a published raw candidate by its descriptor-free fingerprint. The warm probe reads the
-    /// live command (no descriptor is materialized), so the candidate is selected by structural
-    /// fingerprint alone; the caller's staged normalized-key check remains the correctness gate against
-    /// a collision.
-    /// </summary>
-    /// <param name="contextType">The provider context type the plan belongs to.</param>
-    /// <param name="fingerprint">The structural fingerprint of the fresh command graph.</param>
-    /// <param name="plan">The stored normalized key of the matched candidate.</param>
-    /// <returns><see langword="true"/> when a published candidate with a live owner was found.</returns>
-    internal static bool TryGetRawFingerprint(Type contextType, int fingerprint, out QueryPlan? plan)
-    {
-        plan = null;
-
-        var generation = Volatile.Read(ref _generation);
-        var cache = Cache; // performs the shared generation transition for both indexes
-        if (cache.Count == 0)
-            return false;
-
-        if (!RawIndex.TryGetValue(fingerprint, out var bucket) || bucket.Count == 0)
-            return false;
-
-        for (var i = 0; i < bucket.Count; i++)
-        {
-            var candidate = bucket[i];
-            if (candidate.Shape.Fingerprint != fingerprint)
-                continue;
-
-            // The owner must still be live under the historical normalized key and hold the published holder.
-            if (!cache.TryGetValue(new Key(contextType, candidate.Plan), out var entry))
-                continue;
-
-            if (!ReferenceEquals(entry.Holder, candidate.Holder))
-                continue;
-
-            // Generation recheck before the fast path commits: a Clear observed here rejects the candidate.
-            if (Volatile.Read(ref _generation) != generation)
-                return false;
-
-            plan = candidate.Plan;
-            return true;
-        }
-
-        return false;
     }
 
     /// <summary>

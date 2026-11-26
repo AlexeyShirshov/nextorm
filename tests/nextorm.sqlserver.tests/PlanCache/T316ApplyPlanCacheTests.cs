@@ -170,18 +170,17 @@ public class T316ApplyPlanCacheTests
 
         var min = 0;
         var firstCommand = ctx.From<T316Marker>().Where(m => m.Grp > min).Select(m => m.Id);
-        var first = Prepare(ctx, firstCommand, storeInCache: true);
+        var first = (BoundQueryInvocation<int>)ctx.GetPreparedQueryCommand(firstCommand, false, true, CancellationToken.None);
         firstCommand.Cache.Should().BeTrue();
-        first.DbCommand.Parameters.Count.Should().Be(1);
-        first.DbCommand.Parameters[0].Value.Should().Be(0);
+        first.Plan.DbCommand.Parameters.Count.Should().Be(1);
+        first.Values.Should().Equal([0]);
 
         min = 2;
         var secondCommand = ctx.From<T316Marker>().Where(m => m.Grp > min).Select(m => m.Id);
-        var second = Prepare(ctx, secondCommand, storeInCache: true);
+        var second = (BoundQueryInvocation<int>)ctx.GetPreparedQueryCommand(secondCommand, false, true, CancellationToken.None);
 
-        second.Should().BeSameAs(first, "the captured value is not part of the plan key");
-        second.DbCommand.Parameters.Count.Should().Be(1);
-        second.DbCommand.Parameters[0].Value.Should().Be(2, "the cached holder re-reads the current closure value");
+        second.Plan.Should().BeSameAs(first.Plan, "the captured value is not part of the plan key");
+        second.Values.Should().Equal([2], "the invocation binds the current closure value");
         secondCommand.Cache.Should().BeTrue("patch/reuse never mutates the sticky command cache flag");
     }
 

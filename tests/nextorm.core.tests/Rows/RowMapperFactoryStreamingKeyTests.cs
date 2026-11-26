@@ -35,8 +35,9 @@ public class RowMapperFactoryStreamingKeyTests
     public void MapperCacheKey_StreamingFlag_ShouldSeparateCacheEntries()
     {
         // Same provider/result/SQL/signature/one-column shape, only the streaming flag differs.
-        var bufferedKey = new MapperCacheKey(typeof(object), typeof(byte[]), "select data from t", 42, true, Streaming: false);
-        var streamingKey = new MapperCacheKey(typeof(object), typeof(byte[]), "select data from t", 42, true, Streaming: true);
+        var columnShape = MapperColumnShape.Create([new SelectExpression(typeof(byte[]))]);
+        var bufferedKey = new MapperCacheKey(typeof(object), typeof(byte[]), "select data from t", columnShape, true, Streaming: false);
+        var streamingKey = bufferedKey with { Streaming = true };
 
         bufferedKey.Should().NotBe(streamingKey);
 
@@ -52,6 +53,21 @@ public class RowMapperFactoryStreamingKeyTests
         {
             MapperCache.Clear();
         }
+    }
+
+    [Fact]
+    public void BufferedMapper_DoesNotHideAStreamingColumnWithTheSameSql()
+    {
+        const string sql = "select shared_mapper_streaming_shape";
+        var column = new SelectExpression(typeof(Stream)) { Index = 0, PropertyName = "Data" };
+        RowMapperFactory.GetOrBuild<Stream>(
+            sql, typeof(RowMapperFactoryStreamingKeyTests), [column], true, static (_, _) => Expression.Constant(Stream.Null, typeof(Stream)));
+
+        column.IsLobStreaming = true;
+
+        var act = () => RowMapperFactory.GetOrBuild<Stream>(
+            sql, typeof(RowMapperFactoryStreamingKeyTests), [column], true, static (_, _) => Expression.Constant(Stream.Null, typeof(Stream)));
+        act.Should().Throw<NotSupportedException>().WithMessage("*streaming LOB column*");
     }
 
     [Fact]
@@ -118,6 +134,19 @@ public class RowMapperFactoryStreamingKeyTests
     }
 
     [Fact]
+    public void BuildSignature_ShouldPreserveProjectionGroupMembershipWithoutRetainingGroups()
+    {
+        var shared = new ProjectionEntityItem(0, typeof(PlanEqualityEntity), null);
+        var sameShape = new ProjectionEntityItem(0, typeof(PlanEqualityEntity), null);
+        var separate = new ProjectionEntityItem(0, typeof(PlanEqualityEntity), null);
+
+        var key = BuildSignature(Column(shared), Column(shared));
+
+        key.Should().Be(BuildSignature(Column(sameShape), Column(sameShape)));
+        key.Should().NotBe(BuildSignature(Column(sameShape), Column(separate)));
+    }
+
+    [Fact]
     public void BuildSignature_ShouldDistinguishScalarColumnFromProjectionItem()
     {
         // Guard: the `ProjectionItem == null` short-circuit (RowMapperFactory.cs:475,478) must keep a
@@ -177,11 +206,8 @@ public class RowMapperFactoryStreamingKeyTests
             PropertyName = "Id",
         };
 
-    private static int BuildSignature(params SelectExpression[] selectList)
-    {
-        var method = typeof(RowMapperFactory).GetMethod("BuildSignature", BindingFlags.NonPublic | BindingFlags.Static)!;
-        return (int)method.Invoke(null, [selectList])!;
-    }
+    private static MapperColumnShape BuildSignature(params SelectExpression[] selectList)
+        => MapperColumnShape.Create(selectList);
 
     private static MapperCacheKey BuildKey<TResult>(QueryCommand<TResult> command, string? sql)
     {

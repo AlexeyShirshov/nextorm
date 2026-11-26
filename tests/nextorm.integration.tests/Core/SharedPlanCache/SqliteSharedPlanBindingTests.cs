@@ -1,0 +1,236 @@
+using System.Data.Common;
+using FluentAssertions;
+using FluentAssertions.Execution;
+using Microsoft.Data.Sqlite;
+using NextORM.Sqlite;
+
+namespace NextORM.Integration.Tests;
+
+[Collection("Query plan cache")]
+public sealed class SqliteSharedPlanBindingTests
+{
+    private const string TableName = "issue16_binding_rows";
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task NativeList_BindsEachInvocationWhenCheckoutReenters(bool asynchronous)
+    {
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        var token = TestContext.Current.CancellationToken;
+        using var firstConnection = OpenSeededConnection();
+        using var secondConnection = OpenSeededConnection();
+        using var warmConnection = OpenSeededConnection();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+        using var warm = new SqliteDataContext(warmConnection, new DataContextBuilder());
+
+        List(warm, 1).Should().Equal(1);
+        List(warm, 1).Should().Equal(1);
+        var previousHits = QueryPlanStore.NativeHits;
+        firstTap.OnInitialized = () => List(second, 2).Should().Equal(2);
+
+        var rows = asynchronous ? await ListAsync(first, 1, token) : List(first, 1);
+
+        using var assertions = new AssertionScope();
+        rows.Should().Equal(1);
+        QueryPlanStore.NativeHits.Should().BeGreaterThanOrEqualTo(previousHits + 2,
+            "both executions must select the warm native plan");
+        firstTap.LastParameters.Should().Equal((0, "target", 1));
+        secondTap.LastParameters.Should().Equal((0, "target", 2));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task NativeAny_BindsEachInvocationWhenCheckoutReenters(bool asynchronous)
+    {
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        var token = TestContext.Current.CancellationToken;
+        using var firstConnection = OpenSeededConnection();
+        using var secondConnection = OpenSeededConnection();
+        using var warmConnection = OpenSeededConnection();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+        using var warm = new SqliteDataContext(warmConnection, new DataContextBuilder());
+
+        // Build each context's Any wrapper without minting a command for the native statement.
+        Filter(first, 1).OrderBy(row => row.Id).Any().Should().BeTrue();
+        Filter(second, 1).OrderBy(row => row.Id).Any().Should().BeTrue();
+        Filter(warm, 1).Any().Should().BeTrue();
+        var previousHits = QueryPlanStore.NativeHits;
+        firstTap.OnInitialized = () => Filter(second, 3).Any().Should().BeFalse();
+
+        var builder = Filter(first, 1);
+        var found = asynchronous ? await builder.AnyAsync(token) : builder.Any();
+
+        using var assertions = new AssertionScope();
+        found.Should().BeTrue();
+        QueryPlanStore.NativeHits.Should().BeGreaterThanOrEqualTo(previousHits + 2,
+            "both executions must select the warm native plan");
+        firstTap.LastParameters.Should().Equal((0, "target", 1));
+        secondTap.LastParameters.Should().Equal((0, "target", 3));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OrdinaryStreams_BindTheirOwnValuesAfterBothArePrepared(bool forceFallback)
+    {
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        var token = TestContext.Current.CancellationToken;
+        using var firstConnection = OpenSeededConnection();
+        using var secondConnection = OpenSeededConnection();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+
+        var beforeRecipe = ParamRefreshRecipe.FastBindHits;
+        var beforeFallback = QueryPlanner.FallbackRefreshes;
+        await using var stream1 = OrdinaryStream(first, 1, forceFallback, token);
+        await using var stream2 = OrdinaryStream(second, 2, forceFallback, token);
+
+        (await stream1.MoveNextAsync()).Should().BeTrue();
+        (await stream2.MoveNextAsync()).Should().BeTrue();
+
+        using var assertions = new AssertionScope();
+        stream1.Current.Should().Be(1);
+        stream2.Current.Should().Be(2);
+        firstTap.LastParameters.Should().Equal((0, "target", 1));
+        secondTap.LastParameters.Should().Equal((0, "target", 2));
+        if (forceFallback)
+            QueryPlanner.FallbackRefreshes.Should().BeGreaterThan(beforeFallback);
+        else
+            ParamRefreshRecipe.FastBindHits.Should().BeGreaterThan(beforeRecipe);
+        (await stream1.MoveNextAsync()).Should().BeFalse();
+        (await stream2.MoveNextAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public void FirstOrdinaryInvocation_BindsItsValueWithoutKeepingItInThePlan()
+    {
+        var tap = new BindingTap();
+        using var connection = OpenSeededConnection();
+        using var context = new SqliteDataContext(connection, new DataContextBuilder().AddInterceptor(tap));
+
+        // Change the shape, so prior binding tests can't have populated this entry.
+        var query = Filter(context, 2).OrderByDescending(row => row.Id).Select(row => row.Id);
+        var invocation = context.GetPreparedQueryCommand(query, false, true, TestContext.Current.CancellationToken);
+        var plan = BoundQueryInvocation<int>.GetPlan(invocation)!;
+
+        invocation.ToList(context).Should().Equal(2);
+        tap.LastParameters.Should().Equal((0, "target", 2));
+        using var assertions = new AssertionScope();
+        plan.ParamSeeds.Single().Value.Should().BeNull("a cached factory must not retain the first capture");
+        plan.DbCommandParams[0].Value.Should().Be(DBNull.Value, "the diagnostic descriptor has no invocation value");
+        QueryPlanStore.Values.Should().Contain(plan, "the assertion concerns a published plan");
+    }
+
+    [Fact]
+    public void NativeList_DifferentContextTimeouts_UseTheirOwnPlan()
+    {
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        using var firstConnection = OpenSeededConnection();
+        using var secondConnection = OpenSeededConnection();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().UseCommandTimeout(7).AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().UseCommandTimeout(19).AddInterceptor(secondTap));
+
+        static List<int> ReadRows(SqliteDataContext context) => context.From<BindingRow>().Select(row => row.Id).ToList();
+
+        ReadRows(first).Should().BeEquivalentTo([1, 2]);
+        ReadRows(second).Should().BeEquivalentTo([1, 2]);
+        firstTap.LastTimeout.Should().Be(7);
+        secondTap.LastTimeout.Should().Be(19);
+
+        var previousHits = QueryPlanStore.NativeHits;
+        ReadRows(second).Should().BeEquivalentTo([1, 2]);
+        secondTap.LastTimeout.Should().Be(19);
+        QueryPlanStore.NativeHits.Should().BeGreaterThan(previousHits, "a compatible call still takes the native route");
+    }
+
+    [Fact]
+    public void NativeList_ClearThenReadPrimaryStore_DoesNotReuseTheOldNativeEntry()
+    {
+        using var connection = OpenSeededConnection();
+        using var context = new SqliteDataContext(connection, new DataContextBuilder());
+        List(context, 1).Should().Equal(1);
+        var previousHits = QueryPlanStore.NativeHits;
+        List(context, 2).Should().Equal(2);
+        QueryPlanStore.NativeHits.Should().BeGreaterThan(previousHits);
+
+        context.PurgeQueryCache();
+        QueryPlanStore.Values.Should().BeEmpty("reading the primary store advances the thread's generation");
+        previousHits = QueryPlanStore.NativeHits;
+        var previousPublishes = QueryPlanStore.NativePublishes;
+
+        List(context, 2).Should().Equal(2);
+        QueryPlanStore.NativeHits.Should().Be(previousHits, "the previous generation's native entry must not serve the query");
+        QueryPlanStore.NativePublishes.Should().BeGreaterThan(previousPublishes, "the first call after clear publishes a replacement");
+        List(context, 1).Should().Equal(1);
+        QueryPlanStore.NativeHits.Should().BeGreaterThan(previousHits, "the replacement is available to the next call");
+    }
+
+    private static IAsyncEnumerator<int> OrdinaryStream(SqliteDataContext context, int target, bool forceFallback, CancellationToken cancellationToken)
+    {
+        var builder = Filter(context, target);
+        if (forceFallback)
+            builder = builder.OrderBy(row => row.Id);
+
+        return builder.Select(row => row.Id).CreateAsyncEnumerator(cancellationToken);
+    }
+
+    private static EntityBuilder<BindingRow> Filter(SqliteDataContext context, int target)
+        => context.From<BindingRow>().Where(row => row.Id == target);
+
+    private static QueryCommand<int> Query(SqliteDataContext context, int target)
+        => context.From<BindingRow>().Where(row => row.Id == target).Select(row => row.Id);
+
+    private static List<int> List(SqliteDataContext context, int target) => Query(context, target).ToList();
+
+    private static Task<List<int>> ListAsync(SqliteDataContext context, int target, CancellationToken cancellationToken)
+        => Query(context, target).ToListAsync(cancellationToken);
+
+    private static SqliteConnection OpenSeededConnection()
+    {
+        var connection = new SqliteConnection("Data Source=:memory:");
+        try
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = $"create table {TableName} (Id integer not null); insert into {TableName} values (1), (2);";
+            command.ExecuteNonQuery();
+            return connection;
+        }
+        catch
+        {
+            connection.Dispose();
+            throw;
+        }
+    }
+
+    private sealed class BindingTap : IQueryInterceptor
+    {
+        internal Action? OnInitialized { get; set; }
+        internal (int Ordinal, string Name, int Value)[]? LastParameters { get; private set; }
+        internal int LastTimeout { get; private set; }
+
+        public void CommandInitialized(CommandEventData eventData, DbCommand command) => OnInitialized?.Invoke();
+
+        public void CommandExecuting(CommandEventData eventData, DbCommand command)
+        {
+            LastTimeout = command.CommandTimeout;
+            LastParameters = command.Parameters.Cast<DbParameter>()
+                .Select((parameter, ordinal) => (ordinal, parameter.ParameterName, (int)parameter.Value!))
+                .ToArray();
+        }
+    }
+
+    [SqlTable(TableName)]
+    public sealed class BindingRow
+    {
+        public int Id { get; set; }
+    }
+}

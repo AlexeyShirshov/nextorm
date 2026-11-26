@@ -195,7 +195,7 @@ public class ClickHouseArrayReturnTypeSqlGenerationTests
         QueryCommand<int?[]> Build() => e.Select(x => SqlFunctions.ClickHouse.top_k(k, x.Int));
 
         var first = (DbPreparedQueryCommand<int?[]>)ctx.GetPreparedQueryCommand(Build(), false, false, CancellationToken.None);
-        var second = (DbPreparedQueryCommand<int?[]>)ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+        var second = BoundQueryInvocation<int?[]>.GetPlan(ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None))!;
 
         var firstSql = first.DbCommand.CommandText.Replace("\r\n", "\n");
         var secondSql = second.DbCommand.CommandText.Replace("\r\n", "\n");

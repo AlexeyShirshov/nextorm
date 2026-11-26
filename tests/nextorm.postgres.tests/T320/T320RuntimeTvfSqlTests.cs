@@ -62,10 +62,18 @@ public class T320RuntimeTvfSqlTests
     private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
 
     private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> command, bool storeInCache)
-        => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None);
+        => Prepare(ctx, command, storeInCache, out _);
 
-    private static List<string> ParametersOf<T>(DbPreparedQueryCommand<T> prepared)
-        => [.. prepared.DbCommandParams.Cast<DbParameter>().Select(p => $"{p.ParameterName}={p.Value ?? "null"}")];
+    private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> command, bool storeInCache, out object?[]? values)
+    {
+        var invocation = ctx.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None);
+        values = (invocation as BoundQueryInvocation<T>)?.Values;
+        return BoundQueryInvocation<T>.GetPlan(invocation)!;
+    }
+
+    private static List<string> ParametersOf<T>(DbPreparedQueryCommand<T> prepared, object?[]? values = null)
+        => [.. prepared.DbCommandParams.Cast<DbParameter>()
+            .Select((p, i) => $"{p.ParameterName}={(values is null ? p.Value : values[i]) ?? "null"}")];
 
     [Fact]
     public void CorrelatedRuntimeTvfApply_ShouldRenderLateralWithTheOuterColumnAndAParameter()
@@ -102,18 +110,18 @@ public class T320RuntimeTvfSqlTests
             .CrossApply(row => T320PgTvf.EchoPair(row.Id, extra))
             .Select(p => p.Item1.Id);
 
-        var first = Prepare(ctx, Build(), storeInCache: true);
+        var first = Prepare(ctx, Build(), true, out var firstValues);
         var firstSql = Normalize(first.DbCommand.CommandText);
-        ParametersOf(first).Should().Equal("extra=7");
+        ParametersOf(first, firstValues).Should().Equal("extra=7");
         firstSql.Should().Contain("t1.id");
 
         extra = 8;
-        var second = Prepare(ctx, Build(), storeInCache: true);
+        var second = Prepare(ctx, Build(), true, out var secondValues);
 
         ReferenceEquals(first, second).Should().BeTrue(
             "the same correlated shape must reuse the cached plan so the refresh path is exercised");
         Normalize(second.DbCommand.CommandText).Should().Be(firstSql, "a capture change must not re-render the statement");
-        ParametersOf(second).Should().Equal(new[] { "extra=8" }, "the cache hit must bind the new capture");
+        ParametersOf(second, secondValues).Should().Equal(new[] { "extra=8" }, "the cache hit must bind the new capture");
         Normalize(second.DbCommand.CommandText).Should().Contain(
             "t1.id",
             "the correlated column stays a column reference, never an evaluated value");
@@ -397,12 +405,12 @@ public class T320RuntimeTvfSqlTests
         // Equivalent: two factory shapes with identical metadata and an identical capture render one
         // statement and one parameter list — at the SQL level, not only in the plan-key comparer.
         var id = 5;
-        var one = Prepare(ctx, ctx.From(() => T320PgTvf.EquivalentOne(id)).Select(r => r.Id), true);
-        var two = Prepare(ctx, ctx.From(() => T320PgTvf.EquivalentTwo(id)).Select(r => r.Id), true);
+        var one = Prepare(ctx, ctx.From(() => T320PgTvf.EquivalentOne(id)).Select(r => r.Id), true, out var oneValues);
+        var two = Prepare(ctx, ctx.From(() => T320PgTvf.EquivalentTwo(id)).Select(r => r.Id), true, out var twoValues);
         Normalize(two.DbCommand.CommandText).Should().Be(
             Normalize(one.DbCommand.CommandText),
             "equivalent runtime metadata and argument shapes render the same statement");
-        ParametersOf(two).Should().Equal(ParametersOf(one));
-        ParametersOf(two).Should().Equal(new[] { "id=5" });
+        ParametersOf(two, twoValues).Should().Equal(ParametersOf(one, oneValues));
+        ParametersOf(two, twoValues).Should().Equal(new[] { "id=5" });
     }
 }

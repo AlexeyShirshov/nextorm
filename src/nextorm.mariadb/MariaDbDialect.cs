@@ -40,6 +40,7 @@ public sealed class MariaDbDialect : MySqlDialect
     public MariaDbDialect(Version? serverVersion)
     {
         _version = serverVersion;
+        PlanDialectIdentity.Register(this, (typeof(MariaDbDialect), serverVersion));
         _mySqlFunctions = serverVersion is null
             ? MariaDbNativeFunctions.Instance
             : new MariaDbNativeFunctions(serverVersion);

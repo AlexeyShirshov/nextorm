@@ -196,31 +196,28 @@ public class CommandTemplateReuseTests
         var command = ctx.From<LiteralEntity>().Where(x => x.Name == captured).Select(x => x.Id);
         command.Cache.Should().BeTrue("the command starts with the default caching policy");
 
-        var prepared = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(
-            command, createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
+        var prepared = BoundQueryInvocation<int>.GetPlan(ctx.GetPreparedQueryCommand(
+            command, createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken))!;
         var canonicalText = prepared.DbCommand.CommandText;
         canonicalText.Should().Contain("@captured", "a captured value uses the planner-owned placeholder");
 
-        void CachedCheckout(string current)
+        DbCommand CachedCheckout(string current)
         {
             captured = current;
-            var hit = ctx.GetPreparedQueryCommand(
+            var hit = (BoundQueryInvocation<int>)ctx.GetPreparedQueryCommand(
                 command, createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
-            hit.Should().BeSameAs(prepared, "every subsequent execution is a cache hit");
-            prepared.DbCommandParams[0].Value.Should().Be(current, "the cached-hit refresh writes the current value");
-
-            CheckoutWithoutRuntimeParameters(prepared, connection);
+            hit.Plan.Should().BeSameAs(prepared, "every subsequent execution uses the cached plan");
+            hit.Values.Should().Equal([current], "the hit carries the invocation value");
+            return CheckoutWithoutRuntimeParameters(hit, connection);
         }
 
-        CachedCheckout("safe");
-        prepared.DbCommand.CommandText.Should().Contain(HexLiteral("safe"));
-        prepared.DbCommand.Parameters.Count.Should().Be(0, "the lowered binding is absent from the driver collection");
+        var safe = CachedCheckout("safe");
+        safe.CommandText.Should().Contain(HexLiteral("safe"));
+        safe.Parameters.Count.Should().Be(0, "the lowered binding is absent from the driver collection");
 
-        CachedCheckout("it's; --");
-        prepared.DbCommand.CommandText.Should().Contain(HexLiteral("it's; --"));
+        CachedCheckout("it's; --").CommandText.Should().Contain(HexLiteral("it's; --"));
 
-        CachedCheckout("safe");
-        prepared.DbCommand.CommandText.Should().Contain(HexLiteral("safe"));
+        CachedCheckout("safe").CommandText.Should().Contain(HexLiteral("safe"));
 
         command.Cache.Should().BeTrue("specializing a parameter must never mutate the sticky cache flag");
         prepared.DbCommandParams.Count.Should().Be(1);
@@ -236,23 +233,21 @@ public class CommandTemplateReuseTests
         var command = ctx.From<LiteralEntity>().Where(x => x.Name == captured).Select(x => x.Id);
         command.Cache.Should().BeTrue();
 
-        var prepared = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(
-            command, createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
+        var prepared = BoundQueryInvocation<int>.GetPlan(ctx.GetPreparedQueryCommand(
+            command, createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken))!;
         var canonicalText = prepared.DbCommand.CommandText;
         canonicalText.Should().Contain("@captured");
 
         void CachedCheckout(string current)
         {
             captured = current;
-            var hit = ctx.GetPreparedQueryCommand(
+            var hit = (BoundQueryInvocation<int>)ctx.GetPreparedQueryCommand(
                 command, createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
-            hit.Should().BeSameAs(prepared, "every subsequent execution is a cache hit");
-            prepared.DbCommandParams[0].Value.Should().Be(current);
-
-            CheckoutWithoutRuntimeParameters(prepared, connection);
-            prepared.DbCommand.CommandText.Should().Be(canonicalText, "PostgreSQL never specializes the statement");
-            prepared.DbCommand.Parameters.Count.Should().Be(1);
-            prepared.DbCommand.Parameters[0].Value.Should().Be(current);
+            hit.Plan.Should().BeSameAs(prepared, "every subsequent execution uses the cached plan");
+            var dbCommand = CheckoutWithoutRuntimeParameters(hit, connection);
+            dbCommand.CommandText.Should().Be(canonicalText, "PostgreSQL never specializes the statement");
+            dbCommand.Parameters.Count.Should().Be(1);
+            dbCommand.Parameters[0].Value.Should().Be(current);
         }
 
         CachedCheckout("safe");
@@ -301,12 +296,24 @@ public class CommandTemplateReuseTests
             static (name, value) => new StubParameter(name, value ?? DBNull.Value),
             new StubConnection());
 
-    private static void CheckoutWithoutRuntimeParameters(DbPreparedQueryCommand<int> prepared, DbConnection connection) =>
-        prepared.GetDbCommand(
-            ReadOnlySpan<object?>.Empty,
-            static (command, name, parameterValue) => command.CreateParameter(),
-            connection,
-            transaction: null);
+    private static DbCommand CheckoutWithoutRuntimeParameters(BoundQueryInvocation<int> invocation, DbConnection connection)
+    {
+        var lease = invocation.Plan.Acquire(connection, static (command, name, value) =>
+        {
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = name;
+            parameter.Value = value;
+            return parameter;
+        }, ReadOnlySpan<object?>.Empty, null, null, invocation.Values);
+        try
+        {
+            return lease.Command;
+        }
+        finally
+        {
+            lease.Dispose();
+        }
+    }
 
     private static string HexLiteral(string value) =>
         "_utf8mb4 X'" + Convert.ToHexString(Encoding.UTF8.GetBytes(value)).ToLower(CultureInfo.InvariantCulture) + "'";

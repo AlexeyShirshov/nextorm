@@ -19,7 +19,7 @@ public class D362InferenceMatrixTests
     }
 
     private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> cmd)
-        => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
+        => NextORM.Tests.PreparedPlanObservation.GetPlan(ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None));
 
     private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
 

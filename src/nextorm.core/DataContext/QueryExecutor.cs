@@ -23,6 +23,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     private readonly Func<string, object?, DbParameter> _createParamSimple;
     private readonly Func<DbCommand, ProcedureParameter, DbParameter> _createProcedureParam;
     private readonly ILogger? _logger;
+    private readonly ILogger? _resultSetEnumeratorLogger;
     private readonly bool _logParams;
     private readonly bool _logSensitiveData;
     private readonly Func<bool> _isDisposed;
@@ -56,6 +57,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         _createParamSimple = createParamSimple;
         _createProcedureParam = createProcedureParam;
         _logger = logging.Logger;
+        _resultSetEnumeratorLogger = logging.ResultSetEnumeratorLogger;
         _logParams = logging.LogParams;
         _logSensitiveData = logging.LogSensitiveData;
         _isDisposed = isDisposed;
@@ -263,32 +265,32 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     /// mutated, so an overlapping execution of the same prepared command on the same connection fails
     /// promptly instead of interleaving.
     /// </summary>
-    private CommandLease AcquireLease<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, ReadOnlySpan<object?> @params)
+    private CommandLease AcquireLease<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, ReadOnlySpan<object?> @params, object?[]? boundValues = null)
     {
         var connectionManager = _managerFor(compiledQuery.MappingVariant, compiledQuery.RouteSources, CommandKind.Read);
         connectionManager.EnsureConnectionOpen();
         var conn = connectionManager.GetConnection();
 
-        var lease = compiledQuery.Acquire(conn, _createParam, @params, _currentTransaction(connectionManager), _raiseCommandInitialized);
+        var lease = compiledQuery.Acquire(conn, _createParam, @params, _currentTransaction(connectionManager), _raiseCommandInitialized, boundValues);
 
         if (_logParams) LogParams(lease.Command);
 
         return lease;
     }
 
-    /// <inheritdoc cref="AcquireLease{TResult}(DbPreparedQueryCommand{TResult}, ReadOnlySpan{object?})"/>
+    /// <inheritdoc cref="AcquireLease{TResult}(DbPreparedQueryCommand{TResult}, ReadOnlySpan{object?}, object?[])"/>
     private CommandLease AcquireLease<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, object[]? @params)
         => AcquireLease(compiledQuery, @params is null ? ReadOnlySpan<object?>.Empty : @params);
 
-    /// <inheritdoc cref="AcquireLease{TResult}(DbPreparedQueryCommand{TResult}, ReadOnlySpan{object?})"/>
+    /// <inheritdoc cref="AcquireLease{TResult}(DbPreparedQueryCommand{TResult}, ReadOnlySpan{object?}, object?[])"/>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Bug", "S2583:Conditionally executed code should be reachable", Justification = "A pooled connection may be open or closed depending on prior use, so the connection-state check is reachable on both sides; the analyzer cannot assume state across the pool.")]
-    private async ValueTask<CommandLease> AcquireLeaseAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, object[]? @params, CancellationToken cancellationToken)
+    private async ValueTask<CommandLease> AcquireLeaseAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, object[]? @params, CancellationToken cancellationToken, object?[]? boundValues = null)
     {
         var connectionManager = _managerFor(compiledQuery.MappingVariant, compiledQuery.RouteSources, CommandKind.Read);
         await connectionManager.EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
         var conn = connectionManager.GetConnection();
 
-        var lease = compiledQuery.Acquire(conn, _createParam, @params, _currentTransaction(connectionManager), _raiseCommandInitialized);
+        var lease = compiledQuery.Acquire(conn, _createParam, @params, _currentTransaction(connectionManager), _raiseCommandInitialized, boundValues);
 
         if (_logParams) LogParams(lease.Command);
 
@@ -707,19 +709,31 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     /// representation it produces itself (mixing storage backends is not supported). Foreign
     /// implementations are rejected here, once, instead of in every overload.
     /// </summary>
-    private static DbPreparedQueryCommand<TResult> AsDbCommand<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand)
-        => preparedQueryCommand as DbPreparedQueryCommand<TResult>
-           ?? throw new ArgumentException($"Expected {nameof(DbPreparedQueryCommand<TResult>)}, got {preparedQueryCommand.GetType().Name}", nameof(preparedQueryCommand));
+    private static DbPreparedQueryCommand<TResult> AsDbCommand<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, out object?[]? boundValues)
+    {
+        if (preparedQueryCommand is BoundQueryInvocation<TResult> invocation)
+        {
+            boundValues = invocation.Values;
+            return invocation.Plan;
+        }
+
+        boundValues = null;
+        return preparedQueryCommand as DbPreparedQueryCommand<TResult>
+            ?? throw new ArgumentException($"Expected {nameof(DbPreparedQueryCommand<TResult>)}, got {preparedQueryCommand.GetType().Name}", nameof(preparedQueryCommand));
+    }
 
     /// <summary>
-    /// Creates a fresh execution-local enumerator for a streaming terminal. A command prepared without
-    /// streaming intent is optimised for buffered/scalar results and never gets one, so fail with an
-    /// actionable message instead of a NullReferenceException — before any command is created or leased.
+    /// Creates a fresh enumerator with the executing context's logging options. Rejects a command
+    /// prepared for buffered use before creating or leasing a database command.
     /// </summary>
-    private static ResultSetEnumerator<TResult> RequireEnumerator<TResult>(DbPreparedQueryCommand<TResult> compiledQuery)
+    private ResultSetEnumerator<TResult> RequireEnumerator<TResult>(DbPreparedQueryCommand<TResult> compiledQuery)
     {
-        if (compiledQuery.StreamingEnabled && compiledQuery.EnumeratorFactory is { } factory)
-            return factory();
+        if (compiledQuery.StreamingEnabled)
+        {
+            var enumerator = new ResultSetEnumerator<TResult>(compiledQuery);
+            enumerator.InitEnvironment(_resultSetEnumeratorLogger, _logSensitiveData);
+            return enumerator;
+        }
 
         throw new InvalidOperationException(
             "This prepared command has no enumerator because it was prepared as buffered "
@@ -730,27 +744,27 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
     public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        var compiledQuery = AsDbCommand(preparedQueryCommand);
+        var compiledQuery = AsDbCommand(preparedQueryCommand, out var boundValues);
 
         if (compiledQuery.PendingBatch is { } batch)
             return _batchRunner.RunStream(batch, BeginBatch(compiledQuery, @params), cancellationToken, BatchManager(batch)).GetAsyncEnumerator(cancellationToken);
 
         var sqlEnumerator = RequireEnumerator(compiledQuery);
         var connectionManager = _managerFor(compiledQuery.MappingVariant, compiledQuery.RouteSources, CommandKind.Read);
-        sqlEnumerator.InitEnumerator(connectionManager, _createParam, @params, cancellationToken, _currentTransaction, _interceptors, _context);
+        sqlEnumerator.InitEnumerator(connectionManager, _createParam, @params, cancellationToken, _currentTransaction, _interceptors, _context, boundValues);
         return sqlEnumerator;
     }
 
     public IEnumerator<TResult> CreateEnumerator<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params)
     {
-        var compiledQuery = AsDbCommand(preparedQueryCommand);
+        var compiledQuery = AsDbCommand(preparedQueryCommand, out var boundValues);
 
         if (compiledQuery.PendingBatch is { } batch)
             return _batchRunner.Run(batch, BeginBatch(compiledQuery, @params), BatchManager(batch)).GetEnumerator();
 
         var sqlEnumerator = RequireEnumerator(compiledQuery);
         var connectionManager = _managerFor(compiledQuery.MappingVariant, compiledQuery.RouteSources, CommandKind.Read);
-        sqlEnumerator.InitEnumerator(connectionManager, _createParam, @params, CancellationToken.None, _currentTransaction, _interceptors, _context);
+        sqlEnumerator.InitEnumerator(connectionManager, _createParam, @params, CancellationToken.None, _currentTransaction, _interceptors, _context, boundValues);
         sqlEnumerator.InitReader(@params);
 
         return sqlEnumerator;
@@ -758,7 +772,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
     async Task<IEnumerator<TResult>> IRowReaderFactory.CreateEnumeratorAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        var compiledQuery = AsDbCommand(preparedQueryCommand);
+        var compiledQuery = AsDbCommand(preparedQueryCommand, out _);
 
         if (compiledQuery.PendingBatch is { } batch)
         {
@@ -803,7 +817,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
     public async Task<List<TResult>> ToListAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        var compiledQuery = AsDbCommand(preparedQueryCommand);
+        var compiledQuery = AsDbCommand(preparedQueryCommand, out var boundValues);
 
         if (compiledQuery.PendingBatch is { } batch)
         {
@@ -811,7 +825,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return rows;
         }
 
-        var lease = await AcquireLeaseAsync(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+        var lease = await AcquireLeaseAsync(compiledQuery, @params, cancellationToken, boundValues).ConfigureAwait(false);
         try
         {
             var reader = await RunReaderAsync(lease.Command, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
@@ -841,7 +855,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
     public List<TResult> ToList<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params)
     {
-        var compiledQuery = AsDbCommand(preparedQueryCommand);
+        var compiledQuery = AsDbCommand(preparedQueryCommand, out var boundValues);
 
         if (compiledQuery.PendingBatch is { } batch)
         {
@@ -849,7 +863,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return rows;
         }
 
-        var lease = AcquireLease(compiledQuery, @params);
+        var lease = AcquireLease(compiledQuery, @params, boundValues);
         try
         {
             var reader = RunReader(lease.Command, compiledQuery.Behavior);
@@ -984,7 +998,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     {
         ThrowIfTimeOnlyProjectionRefused<TResult>();
 
-        var compiledQuery = AsDbCommand(preparedQueryCommand);
+        var compiledQuery = AsDbCommand(preparedQueryCommand, out var boundValues);
 
         object? r;
         if (compiledQuery.PendingBatch is { } batch)
@@ -993,7 +1007,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         }
         else
         {
-            var lease = AcquireLease(compiledQuery, @params);
+            var lease = AcquireLease(compiledQuery, @params, boundValues);
             try
             {
                 r = RunScalar(lease.Command);
@@ -1023,7 +1037,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     {
         CheckDisposed();
         ThrowIfTimeOnlyProjectionRefused<TResult>();
-        var compiledQuery = AsDbCommand(preparedQueryCommand);
+        var compiledQuery = AsDbCommand(preparedQueryCommand, out var boundValues);
 
         object? r;
         if (compiledQuery.PendingBatch is { } batch)
@@ -1032,7 +1046,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         }
         else
         {
-            var lease = await AcquireLeaseAsync(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+            var lease = await AcquireLeaseAsync(compiledQuery, @params, cancellationToken, boundValues).ConfigureAwait(false);
             try
             {
                 r = await RunScalarAsync(lease.Command, cancellationToken).ConfigureAwait(false);
@@ -1067,9 +1081,9 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     // The buffered first/single terminals share one lease lifecycle: acquire before binding, fail (which
     // evicts a poisoned Connection command) on any error, and always release exactly once.
 
-    private TResult ReadFirst<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, ReadOnlySpan<object?> @params, bool throwWhenEmpty)
+    private TResult ReadFirst<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, ReadOnlySpan<object?> @params, object?[]? boundValues, bool throwWhenEmpty)
     {
-        var lease = AcquireLease(compiledQuery, @params);
+        var lease = AcquireLease(compiledQuery, @params, boundValues);
         try
         {
             var reader = RunReader(lease.Command, compiledQuery.Behavior);
@@ -1096,9 +1110,9 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         }
     }
 
-    private async Task<TResult> ReadFirstAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, object[]? @params, bool throwWhenEmpty, CancellationToken cancellationToken)
+    private async Task<TResult> ReadFirstAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, object[]? @params, object?[]? boundValues, bool throwWhenEmpty, CancellationToken cancellationToken)
     {
-        var lease = await AcquireLeaseAsync(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+        var lease = await AcquireLeaseAsync(compiledQuery, @params, cancellationToken, boundValues).ConfigureAwait(false);
         try
         {
             var reader = await RunReaderAsync(lease.Command, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
@@ -1125,9 +1139,9 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         }
     }
 
-    private TResult ReadSingle<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, ReadOnlySpan<object?> @params, bool throwWhenEmpty)
+    private TResult ReadSingle<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, ReadOnlySpan<object?> @params, object?[]? boundValues, bool throwWhenEmpty)
     {
-        var lease = AcquireLease(compiledQuery, @params);
+        var lease = AcquireLease(compiledQuery, @params, boundValues);
         try
         {
             var reader = RunReader(lease.Command, compiledQuery.Behavior);
@@ -1162,9 +1176,9 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         }
     }
 
-    private async Task<TResult> ReadSingleAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, object[]? @params, bool throwWhenEmpty, CancellationToken cancellationToken)
+    private async Task<TResult> ReadSingleAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, object[]? @params, object?[]? boundValues, bool throwWhenEmpty, CancellationToken cancellationToken)
     {
-        var lease = await AcquireLeaseAsync(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+        var lease = await AcquireLeaseAsync(compiledQuery, @params, cancellationToken, boundValues).ConfigureAwait(false);
         try
         {
             var reader = await RunReaderAsync(lease.Command, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
@@ -1201,7 +1215,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
     public TResult First<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params)
     {
-        var compiledQuery = AsDbCommand(preparedQueryCommand);
+        var compiledQuery = AsDbCommand(preparedQueryCommand, out var boundValues);
 
         // Scalar mode: no row mapper was compiled, read the value directly.
         if (compiledQuery.MapDelegate is null)
@@ -1216,12 +1230,12 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             throw new InvalidOperationException();
         }
 
-        return ReadFirst(compiledQuery, @params, throwWhenEmpty: true);
+        return ReadFirst(compiledQuery, @params, boundValues, throwWhenEmpty: true);
     }
 
     public async Task<TResult> FirstAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        var compiledQuery = AsDbCommand(preparedQueryCommand);
+        var compiledQuery = AsDbCommand(preparedQueryCommand, out var boundValues);
 
         // Scalar mode: no row mapper was compiled, read the value directly.
         if (compiledQuery.MapDelegate is null)
@@ -1236,12 +1250,12 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             throw new InvalidOperationException();
         }
 
-        return await ReadFirstAsync(compiledQuery, @params, throwWhenEmpty: true, cancellationToken).ConfigureAwait(false);
+        return await ReadFirstAsync(compiledQuery, @params, boundValues, throwWhenEmpty: true, cancellationToken).ConfigureAwait(false);
     }
 
     public TResult? FirstOrDefault<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params)
     {
-        var compiledQuery = AsDbCommand(preparedQueryCommand);
+        var compiledQuery = AsDbCommand(preparedQueryCommand, out var boundValues);
 
         // Scalar mode: no row mapper was compiled, read the value directly.
         if (compiledQuery.MapDelegate is null)
@@ -1253,12 +1267,12 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return rows.Count > 0 ? rows[0] : default;
         }
 
-        return ReadFirst(compiledQuery, @params, throwWhenEmpty: false);
+        return ReadFirst(compiledQuery, @params, boundValues, throwWhenEmpty: false);
     }
 
     public async Task<TResult?> FirstOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        var compiledQuery = AsDbCommand(preparedQueryCommand);
+        var compiledQuery = AsDbCommand(preparedQueryCommand, out var boundValues);
 
         // Scalar mode: no row mapper was compiled, read the value directly.
         if (compiledQuery.MapDelegate is null)
@@ -1270,12 +1284,12 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return rows.Count > 0 ? rows[0] : default;
         }
 
-        return await ReadFirstAsync(compiledQuery, @params, throwWhenEmpty: false, cancellationToken).ConfigureAwait(false);
+        return await ReadFirstAsync(compiledQuery, @params, boundValues, throwWhenEmpty: false, cancellationToken).ConfigureAwait(false);
     }
 
     public TResult Single<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params)
     {
-        var compiledQuery = AsDbCommand(preparedQueryCommand);
+        var compiledQuery = AsDbCommand(preparedQueryCommand, out var boundValues);
 
         if (compiledQuery.PendingBatch is { } batch)
         {
@@ -1286,12 +1300,12 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return rows[0];
         }
 
-        return ReadSingle(compiledQuery, @params, throwWhenEmpty: true);
+        return ReadSingle(compiledQuery, @params, boundValues, throwWhenEmpty: true);
     }
 
     public async Task<TResult> SingleAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        var compiledQuery = AsDbCommand(preparedQueryCommand);
+        var compiledQuery = AsDbCommand(preparedQueryCommand, out var boundValues);
 
         if (compiledQuery.PendingBatch is { } batch)
         {
@@ -1302,12 +1316,12 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return rows[0];
         }
 
-        return await ReadSingleAsync(compiledQuery, @params, throwWhenEmpty: true, cancellationToken).ConfigureAwait(false);
+        return await ReadSingleAsync(compiledQuery, @params, boundValues, throwWhenEmpty: true, cancellationToken).ConfigureAwait(false);
     }
 
     public TResult? SingleOrDefault<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params)
     {
-        var compiledQuery = AsDbCommand(preparedQueryCommand);
+        var compiledQuery = AsDbCommand(preparedQueryCommand, out var boundValues);
 
         if (compiledQuery.PendingBatch is { } batch)
         {
@@ -1318,12 +1332,12 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return rows.Count == 1 ? rows[0] : default;
         }
 
-        return ReadSingle(compiledQuery, @params, throwWhenEmpty: false);
+        return ReadSingle(compiledQuery, @params, boundValues, throwWhenEmpty: false);
     }
 
     public async Task<TResult?> SingleOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        var compiledQuery = AsDbCommand(preparedQueryCommand);
+        var compiledQuery = AsDbCommand(preparedQueryCommand, out var boundValues);
 
         if (compiledQuery.PendingBatch is { } batch)
         {
@@ -1334,7 +1348,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return rows.Count == 1 ? rows[0] : default;
         }
 
-        return await ReadSingleAsync(compiledQuery, @params, throwWhenEmpty: false, cancellationToken).ConfigureAwait(false);
+        return await ReadSingleAsync(compiledQuery, @params, boundValues, throwWhenEmpty: false, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

@@ -21,6 +21,16 @@ public partial class QueryCommand
     private int _planKeyInValuesShapeHash;
     private int _planKeyPreWhereShapeHash;
 
+    private PlanMappingIdentity _detachedPlanMapping;
+    internal PlanMappingIdentity PlanMapping => _dataContext is not null
+        ? PlanMappingIdentity.For(_dataContext)
+        : _detachedPlanMapping;
+
+    private object? _detachedPlanDialect;
+    internal object? PlanDialect => _dataContext is not null
+        ? PlanDialectIdentity.For(_dataContext)
+        : _detachedPlanDialect;
+
     /// <summary>
     /// Returns this command's plan-cache key, reusing the memoized one when the command is prepared
     /// and its value-list shape has not changed since the key was built.

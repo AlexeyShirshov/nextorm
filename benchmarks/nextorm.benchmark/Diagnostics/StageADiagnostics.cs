@@ -168,7 +168,7 @@ internal static class StageADiagnostics
         var sw = Stopwatch.StartNew();
         for (var i = 0; i < iterations; i++)
         {
-            var prep = (DbPreparedQueryCommand<int>)db.GetPreparedQueryCommand(build(i), false, true, Ct);
+            var prep = BoundQueryInvocation<int>.GetPlan(db.GetPreparedQueryCommand(build(i), false, true, Ct))!;
             if (cached is null || !ReferenceEquals(cached, prep))
             {
                 cached = prep;
@@ -254,7 +254,8 @@ internal static class StageADiagnostics
 
         for (var i = 0; i < iterations; i++)
         {
-            var prep = (DbPreparedQueryCommand<T>)db.GetPreparedQueryCommand(build(i), false, true, Ct);
+            var invocation = db.GetPreparedQueryCommand(build(i), false, true, Ct);
+            var prep = BoundQueryInvocation<T>.GetPlan(invocation)!;
 
             if (cached is null || !ReferenceEquals(cached, prep))
             {
@@ -270,7 +271,7 @@ internal static class StageADiagnostics
             paramCounts.Add(prep.DbCommandParams.Count);
             if (prep.DbCommandParams.Count > 0)
             {
-                var value = prep.DbCommandParams[0].Value;
+                var value = invocation is BoundQueryInvocation<T> bound ? bound.Values[0] : prep.DbCommandParams[0].Value;
                 paramValues.Add(value);
                 if (!Equals(value, i)) paramValueMismatches++;
             }
@@ -423,7 +424,11 @@ internal static class StageADiagnostics
     private static long WhereCachedPlanOnly(IDataContext db, TestDataRepository repo, int value)
     {
         var command = repo.SimpleEntity.Where(it => it.Id == value).Select(it => it.Id);
-        var prepared = (DbPreparedQueryCommand<int>)db.GetPreparedQueryCommand(command, false, true, Ct);
+        var invocation = db.GetPreparedQueryCommand(command, false, true, Ct);
+        if (invocation is BoundQueryInvocation<int> bound)
+            return Convert.ToInt64(bound.Values[0] ?? 0);
+
+        var prepared = BoundQueryInvocation<int>.GetPlan(invocation)!;
         return prepared.DbCommandParams.Count == 0 ? 0 : Convert.ToInt64(prepared.DbCommandParams[0].Value ?? 0);
     }
 }

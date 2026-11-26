@@ -1431,7 +1431,7 @@ public class SqlGenerationTests
         QueryCommand<long[]> Build() => e.Select(x => SqlFunctions.ClickHouse.top_k(k, x.Id));
 
         _ = ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
-        var second = (DbPreparedQueryCommand<long[]>)ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+        var second = BoundQueryInvocation<long[]>.GetPlan(ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None))!;
 
         Normalize(second.DbCommand.CommandText).Should().Contain("cast(topK(@k)(id) as Array(Int64))");
     }
@@ -1448,7 +1448,7 @@ public class SqlGenerationTests
             .Select(x => SqlFunctions.ClickHouse.quantiles(new[] { 0.5 }, x.Id));
 
         _ = ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
-        var second = (DbPreparedQueryCommand<double[]>)ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+        var second = BoundQueryInvocation<double[]>.GetPlan(ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None))!;
 
         Normalize(second.DbCommand.CommandText).Should().Contain("quantiles(0.5)(id)");
     }
@@ -1690,11 +1690,11 @@ public class SqlGenerationTests
 
         _ = ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
         dict = "dict2";
-        var second = (DbPreparedQueryCommand<ulong[]>)ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+        var second = (BoundQueryInvocation<ulong[]>)ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
 
-        Normalize(second.DbCommand.CommandText).Should().Contain("dictGetHierarchy(@dict, id)");
-        second.DbCommand.Parameters.Count.Should().Be(1);
-        second.DbCommand.Parameters["dict"].Value.Should().Be("dict2");
+        Normalize(second.Plan.CommandText).Should().Contain("dictGetHierarchy(@dict, id)");
+        second.Plan.DbCommandParams[0].ParameterName.Should().Be("dict");
+        second.Values.Should().Equal(["dict2"]);
     }
 
     [Fact]
@@ -2608,7 +2608,7 @@ public class SqlGenerationTests
         QueryCommand<Tuple<int, int>> Build() => e.Select(x => Tuple.Create(x.Id, extra));
 
         _ = ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
-        var second = (DbPreparedQueryCommand<Tuple<int, int>>)ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+        var second = BoundQueryInvocation<Tuple<int, int>>.GetPlan(ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None))!;
 
         Normalize(second.DbCommand.CommandText).Should().Contain("tuple(id, @extra)");
     }
@@ -2623,7 +2623,7 @@ public class SqlGenerationTests
         QueryCommand<int> Build() => e.Where(x => x.Id > min).Select(x => x.Pair.Item1);
 
         _ = ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
-        var second = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+        var second = BoundQueryInvocation<int>.GetPlan(ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None))!;
 
         Normalize(second.DbCommand.CommandText).Should().Contain("tupleElement(pair, 1)");
     }
