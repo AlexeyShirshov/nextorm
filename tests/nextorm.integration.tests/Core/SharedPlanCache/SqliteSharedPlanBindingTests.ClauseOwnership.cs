@@ -80,14 +80,16 @@ public sealed partial class SqliteSharedPlanBindingTests
 
     private sealed record ClauseOwner(int JoinTarget, int SortDirection);
 
-    [Fact]
-    public void RawRecipe_UsesTheFreshWhereWithoutRetainingItsFirstOwner()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RawRecipe_UsesTheFreshWhereWithoutRetainingItsFirstOwner(bool compound)
     {
         var tap = new BindingTap();
         using var connection = OpenSeededConnection();
         using var context = new SqliteDataContext(connection, new DataContextBuilder().AddInterceptor(tap));
 
-        var (owner, holder, usedFreshWhere) = Warm(context, tap);
+        var (owner, holder, usedFreshWhere) = Warm(context, tap, compound);
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
@@ -97,11 +99,17 @@ public sealed partial class SqliteSharedPlanBindingTests
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         static (WeakReference Owner, DbPreparedQueryCommand<int> Holder, bool UsedFreshWhere) Warm(
-            SqliteDataContext context, BindingTap tap)
+            SqliteDataContext context, BindingTap tap, bool compound)
         {
             var owner = new WhereOwner { Target = 1 };
-            QueryCommand<int> Build() => context.From<BindingRow>().WithTag("raw where ownership")
-                .Where(row => row.Id == owner.Target).OrderBy(row => row.Id).Select(row => row.Id);
+            QueryCommand<int> Build()
+            {
+                var source = context.From<BindingRow>().WithTag("raw where ownership");
+                var filtered = compound
+                    ? source.Where(row => row.Id > 0 && (row.Id < 0 || row.Id == owner.Target))
+                    : source.Where(row => row.Id == owner.Target);
+                return filtered.OrderBy(row => row.Id).Select(row => row.Id);
+            }
 
             var token = TestContext.Current.CancellationToken;
             var first = context.GetPreparedQueryCommand(Build(), false, true, token);

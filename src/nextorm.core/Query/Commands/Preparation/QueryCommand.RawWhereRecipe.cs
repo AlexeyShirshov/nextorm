@@ -41,12 +41,29 @@ public partial class QueryCommand
 
     private bool HasUnchangedWhereBody(LambdaExpression condition)
         // The correlated visitor recreates the lambda wrapper even for an unchanged body. Require
-        // the exact body and binder, not merely structural equality with an independently built tree.
+        // the same binder and original leaves, not structural equality with another expression tree.
         => condition.Parameters is [var parameter]
             && PreparedCondition is LambdaExpression { Parameters: [var preparedParameter] } prepared
             && ReferenceEquals(parameter, preparedParameter)
-            && ReferenceEquals(condition.Body, prepared.Body)
-            && condition.Type == prepared.Type;
+            && condition.Type == prepared.Type
+            && HasUnchangedPredicate(condition.Body, prepared.Body);
+
+    private static bool HasUnchangedPredicate(Expression authored, Expression prepared)
+    {
+        if (ReferenceEquals(authored, prepared))
+            return true;
+
+        // Normalization also recreates ordinary && and || nodes. Only ignore that rebuilding for
+        // built-in bool operators; a lifted or user-defined operator, or any rewritten leaf, falls
+        // back to the existing recipe rather than substituting a different computation.
+        return authored is BinaryExpression { NodeType: ExpressionType.AndAlso or ExpressionType.OrElse, Method: null, IsLifted: false } left
+            && left.Type == typeof(bool)
+            && prepared is BinaryExpression { Method: null, IsLifted: false } right
+            && right.Type == typeof(bool)
+            && left.NodeType == right.NodeType
+            && HasUnchangedPredicate(left.Left, right.Left)
+            && HasUnchangedPredicate(left.Right, right.Right);
+    }
 
     private bool SupportsRawWhereReplay(RawShape shape)
         => shape.Joins is null && shape.Ctes is null && shape.Union is null && shape.Components.IsEmpty
