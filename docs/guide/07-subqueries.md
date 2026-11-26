@@ -118,6 +118,19 @@ var rows = dataContext.From<ISimpleEntity>()
     .ToList();
 ```
 
+In the SQLite SQL, the `JOIN` is inside the derived table aliased as `t3`, and the outer `WHERE`
+references its `OrderId` column:
+
+```sql
+select OrderId, CustomerName
+from (
+    select t1.id as 'OrderId', t2.somestring as 'CustomerName'
+    from simple_entity as 't1'
+    join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
+) as 't3'
+where (t3.OrderId > 100)
+```
+
 Only the projected members remain visible after `As`, and the in-memory provider rejects a `Join`
 on the derived table with `NotSupportedException`. See [Joins](04-joins.md#naming-an-intermediate-projection-as)
 for the full operator.
@@ -180,6 +193,21 @@ var row = await dataContext.From<IComplexEntity>()
     .FirstOrDefaultAsync();
 ```
 
+In the SQLite query, the inner `LIMIT 1` comes from `First()` and the outer one comes from
+`FirstOrDefaultAsync()`:
+
+```sql
+select id
+from complex_entity
+where id = (
+    select id
+    from simple_entity
+    order by id
+    limit 1
+)
+limit 1
+```
+
 Output:
 
 | Id |
@@ -197,6 +225,20 @@ var rows = dataContext.From<IComplexEntity>()
     .OrderBy(it => it.Id)
     .Select(it => new { it.Id })
     .ToList();
+```
+
+In the SQLite query, `ORDER BY` uses the subquery result first and then `id`.
+Nextorm binds `$Value` to `1`:
+
+```sql
+select id
+from complex_entity
+order by (
+    select id
+    from simple_entity
+    where id = $Value
+    limit 1
+), id
 ```
 
 Output:

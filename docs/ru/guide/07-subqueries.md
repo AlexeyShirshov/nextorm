@@ -122,6 +122,19 @@ var rows = dataContext.From<ISimpleEntity>()
     .ToList();
 ```
 
+В SQL для SQLite `JOIN` находится внутри производной таблицы с псевдонимом `t3`, а `WHERE`
+ссылается на её столбец `OrderId` во внешнем запросе:
+
+```sql
+select OrderId, CustomerName
+from (
+    select t1.id as 'OrderId', t2.somestring as 'CustomerName'
+    from simple_entity as 't1'
+    join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
+) as 't3'
+where (t3.OrderId > 100)
+```
+
 После `As` видны только спроецированные члены, а in-memory-провайдер отклоняет `Join` по
 производной таблице с `NotSupportedException`. Полный оператор описан в разделе
 [Соединения](04-joins.md#именование-промежуточной-проекции-as).
@@ -185,6 +198,20 @@ var row = await dataContext.From<IComplexEntity>()
     .FirstOrDefaultAsync();
 ```
 
+В SQL для SQLite внутренний `LIMIT 1` соответствует `First()`, а внешний — `FirstOrDefaultAsync()`:
+
+```sql
+select id
+from complex_entity
+where id = (
+    select id
+    from simple_entity
+    order by id
+    limit 1
+)
+limit 1
+```
+
 Вывод:
 
 | Id |
@@ -202,6 +229,20 @@ var rows = dataContext.From<IComplexEntity>()
     .OrderBy(it => it.Id)
     .Select(it => new { it.Id })
     .ToList();
+```
+
+В SQL для SQLite `ORDER BY` сначала использует результат подзапроса, затем `id`.
+Nextorm передаёт `1` в параметре `$Value`:
+
+```sql
+select id
+from complex_entity
+order by (
+    select id
+    from simple_entity
+    where id = $Value
+    limit 1
+), id
 ```
 
 Вывод:
