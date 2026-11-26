@@ -56,6 +56,16 @@ public sealed class TableFunctionExpression
         ResultSchema = resultSchema;
     }
 
+    private TableFunctionExpression(TableFunctionExpression source, MethodCallExpression call,
+        IReadOnlyList<Expression>? arguments, Expression? topK)
+        : this(source.Name, source.Schema, source.WithClause, source.CallClause, source.VerbatimArguments, call,
+            source.ResultType, source.ResultSchema)
+    {
+        _arguments = arguments;
+        ArgumentNames = source.ArgumentNames;
+        ApproximateTopK = topK;
+    }
+
     /// <summary>SQL function name of the runtime descriptor (<see cref="TvfEntityBuilder{T}.Name"/>).</summary>
     public string Name { get; }
 
@@ -107,6 +117,27 @@ public sealed class TableFunctionExpression
 
     /// <summary>True when this source is the SQL Server approximate VECTOR_SEARCH table construct.</summary>
     internal bool IsApproximateVectorSearch => ApproximateTopK is not null;
+
+    internal TableFunctionExpression ForSqlPlanKey(ExpressionVisitor rewriter)
+    {
+        // The descriptor already resolved factory metadata. Comparison needs the call's method for
+        // built-in classification and its argument shape, never an executable receiver.
+        var call = Call;
+        var receiver = call.Object is { } instance ? Expression.Default(instance.Type) : null;
+        call = call.Update(receiver, rewriter.Visit(call.Arguments));
+        var topK = rewriter.Visit(ApproximateTopK);
+        Expression[]? arguments = null;
+        if (_arguments is { } overrides)
+        {
+            arguments = new Expression[overrides.Count];
+            for (var i = 0; i < overrides.Count; i++)
+                arguments[i] = rewriter.Visit(overrides[i])!;
+        }
+
+        return ReferenceEquals(call, Call) && arguments is null && ReferenceEquals(topK, ApproximateTopK)
+            ? this
+            : new TableFunctionExpression(this, call, arguments, topK);
+    }
 
     /// <summary>Creates the internal SQL Server VECTOR_SEARCH source with its four named arguments.</summary>
     internal static TableFunctionExpression CreateApproximateVectorSearch(

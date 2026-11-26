@@ -357,13 +357,13 @@ public partial class QueryCommand
                     command.DetachSqlPlanKey(rewriter);
         }
 
-        DetachSource(_from);
+        _from = DetachSource(_from);
         if (_joins is { } joins)
         {
             foreach (var join in joins)
             {
                 join.RewriteCacheExpressions(rewriter);
-                DetachSource(join.From);
+                join.SetFrom(DetachSource(join.From)!);
             }
         }
 
@@ -393,11 +393,19 @@ public partial class QueryCommand
                     column.Expression = rewriter.Visit(column.Expression);
         }
 
-        void DetachSource(FromExpression? source)
+        FromExpression? DetachSource(FromExpression? source)
         {
-            while (source?.Pivot is { } pivot)
-                source = pivot.Inner;
-            source?.SubQuery?.DetachSqlPlanKey(rewriter);
+            if (source is null) return null;
+
+            var leaf = source;
+            while (leaf.Pivot is { } pivot)
+                leaf = pivot.Inner;
+            leaf.SubQuery?.DetachSqlPlanKey(rewriter);
+
+            var key = source.ForSqlPlanKey(rewriter);
+            if (!ReferenceEquals(key, source))
+                rewriter.Changed = true;
+            return key;
         }
     }
 

@@ -163,8 +163,10 @@ public sealed class PivotExpression
     /// <see cref="FromExpression.CloneForCache"/>).
     /// </summary>
     internal PivotExpression CloneForCache()
+        => WithInner(Inner.CloneForCache()!);
+
+    internal PivotExpression WithInner(FromExpression inner)
     {
-        var inner = Inner.CloneForCache()!;
         if (ReferenceEquals(inner, Inner))
             return this;
 

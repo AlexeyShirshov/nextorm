@@ -69,7 +69,7 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         // this branch the fallback below compared the two null subqueries and treated every raw source as
         // equal, letting unrelated FromSql queries share a cached plan.
         if (x.RawSqlSource is not null || y.RawSqlSource is not null)
-            return ReferenceEquals(x.RawSqlSource, y.RawSqlSource);
+            return ReferenceEquals(x.RawSqlSource?.PlanIdentity, y.RawSqlSource?.PlanIdentity);
 
         // An opaque derived fragment is identified by reference only: its render delegate is not
         // comparable and the fragment never enters a keyed command's source identity.
@@ -358,7 +358,7 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         if (obj.RawSqlSource is not null)
         {
             var rawHash = new System.HashCode();
-            rawHash.Add(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj.RawSqlSource));
+            rawHash.Add(obj.RawSqlSource.PlanIdentity);
             AddBindingHash(ref rawHash, obj.SourceBinding);
             return rawHash.ToHashCode();
         }

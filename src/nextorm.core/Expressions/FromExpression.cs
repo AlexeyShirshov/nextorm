@@ -1,3 +1,5 @@
+using System.Linq.Expressions;
+
 namespace NextORM.Core;
 
 /// <summary>
@@ -268,6 +270,14 @@ public sealed class FromExpression
           BindOccurrenceByParameter = source.BindOccurrenceByParameter;
      }
 
+     private FromExpression(FromExpression source, RawSqlSourceExpression? raw, TableFunctionExpression? function, PivotExpression? pivot)
+          : this(source, null, null, null, null, null)
+     {
+          RawSqlSource = raw;
+          TableFunction = function;
+          Pivot = pivot;
+     }
+
      /// <summary>
      /// Creates a named source whose readable columns come from the recursive anchor's shape
      /// (<paramref name="reference"/>'s <see cref="CteReference.AnchorShape"/>) and which is bound to
@@ -326,8 +336,8 @@ public sealed class FromExpression
      // }
      internal FromExpression? CloneForCache()
      {
-          // A table function's call expression is immutable and never mutated during preparation,
-          // so it can be shared with the cached plan (like Table/SourceType) instead of cloned.
+          // This clone still supports raw preparation. SQL comparison removes runtime source state
+          // separately, after cloning the graph that owns the derived commands.
           if (Pivot is not null)
           {
                var pivot = Pivot.CloneForCache();
@@ -337,5 +347,15 @@ public sealed class FromExpression
           if (!string.IsNullOrEmpty(Table) || SourceType is not null || TableFunction is not null || LinqSource is not null || RawSqlSource is not null || XmlNodes is not null || DerivedFragment is not null) return this;
 
           return new FromExpression(SubQuery!.CloneForCache()) { SubQueryHint = SubQueryHint, SourceBinding = SourceBinding, SourceLock = SourceLock, BindOccurrenceByParameter = BindOccurrenceByParameter };// { TableAlias = TableAlias };
+     }
+
+     internal FromExpression ForSqlPlanKey(ExpressionVisitor rewriter)
+     {
+          var raw = RawSqlSource?.ForSqlPlanKey();
+          var function = TableFunction?.ForSqlPlanKey(rewriter);
+          var pivot = Pivot?.WithInner(Pivot.Inner.ForSqlPlanKey(rewriter));
+          return ReferenceEquals(raw, RawSqlSource) && ReferenceEquals(function, TableFunction) && ReferenceEquals(pivot, Pivot)
+               ? this
+               : new FromExpression(this, raw, function, pivot);
      }
 }
