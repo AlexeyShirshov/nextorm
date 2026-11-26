@@ -1492,6 +1492,14 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
     private QueryCommand GetQueryCommand(Expression exp)
     {
+        // A constant or a member chain rooted in a constant cannot reference an outer row.
+        // Read the current operand instead of caching its authored expression (and its owner).
+        var receiver = exp;
+        while (receiver is MemberExpression { Expression: { } owner })
+            receiver = owner;
+        if (receiver is ConstantExpression)
+            return (QueryCommand)ValueExpressionAccessor.Evaluate(exp, _queryProvider, _logger)!;
+
         // Nested commands resolve ReferencedQueries/OuterReferences against the root registry, so a
         // marker registered by an ancestor scope (correlation depth > 1) is looked up there too. A
         // marker that is already baked into `exp` is left in place; it stays valid because every
