@@ -119,6 +119,11 @@ internal sealed class QueryPlanner : IQueryPlanner
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsRuntimeParam(string name) => NormParam.IsName(name);
 
+    // A stable expression can still produce mutable data, for example an inline IN element
+    // converted to a byte array. Only an immutable provider value can be a shared seed.
+    private static bool CanRetainPlanSeed(Parameter parameter)
+        => parameter.Stable && PreparedCommandFactory.IsShareableSeedValue(parameter.Value);
+
     /// <summary>
     /// Whether a plan that needs parameter refresh may join the raw recipe store: only when the raw
     /// shape carries a captured-closure identity and every refreshed parameter is a captured member.
@@ -134,7 +139,7 @@ internal sealed class QueryPlanner : IQueryPlanner
         for (var i = 0; i < parameters.Count; i++)
         {
             var parameter = parameters[i];
-            if (IsRuntimeParam(parameter.Name) || parameter.Stable) continue;
+            if (IsRuntimeParam(parameter.Name) || CanRetainPlanSeed(parameter)) continue;
             if (parameter.CapturedKey is null) return false;
         }
 
@@ -1007,6 +1012,8 @@ internal sealed class QueryPlanner : IQueryPlanner
                     ? null
                     : BuildMap<TRow>(queryCommand, sql, false, boxed, boxedResultType);
 
+            var publish = storeInCache && queryCommand.Cache;
+            var generatedImplicitPlan = publish && ext is null;
             var noParams = !(@params?.Count > 0);
             var needsParamRefresh = false;
             if (!noParams)
@@ -1015,7 +1022,8 @@ internal sealed class QueryPlanner : IQueryPlanner
                 for (var i = 0; i < parameterList.Count; i++)
                 {
                     var parameter = parameterList[i];
-                    if (!IsRuntimeParam(parameter.Name) && !parameter.Stable)
+                    if (!IsRuntimeParam(parameter.Name)
+                        && !(generatedImplicitPlan ? CanRetainPlanSeed(parameter) : parameter.Stable))
                     {
                         needsParamRefresh = true;
                         break;
@@ -1025,8 +1033,7 @@ internal sealed class QueryPlanner : IQueryPlanner
 
             // A generated plan that refreshes parameters keeps layout only, even on the first
             // invocation. Explicit preparation and caller-owned SQL keep their existing seed rules.
-            var publish = storeInCache && queryCommand.Cache;
-            var requiresInvocationValues = publish && needsParamRefresh && ext is null;
+            var requiresInvocationValues = generatedImplicitPlan && needsParamRefresh;
             if (requiresInvocationValues)
             {
                 boundValues = new object?[@params!.Count];

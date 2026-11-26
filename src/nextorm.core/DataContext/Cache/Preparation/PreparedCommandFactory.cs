@@ -48,6 +48,18 @@ internal readonly struct PreparedCommandFactory
 
     internal readonly record struct Seed(string Name, object? Value, System.Data.DbType? DbType, byte? Precision, byte? Scale);
 
+    internal static bool IsShareableSeedValue(object? value)
+    {
+        if (value is null or DBNull or string or decimal or DateTime or DateTimeOffset or TimeSpan
+            or DateOnly or TimeOnly or Guid or Half or Int128 or UInt128)
+        {
+            return true;
+        }
+
+        var type = value.GetType();
+        return type.IsPrimitive || type.IsEnum;
+    }
+
     /// <summary>
     /// Creates a command on <paramref name="connection"/> and seeds its parameters. The caller owns the
     /// returned command and must dispose it when it is not transferred to a state or a reader owner.
