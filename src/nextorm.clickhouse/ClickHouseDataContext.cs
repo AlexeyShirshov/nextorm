@@ -247,6 +247,7 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
     /// <param name="column">The projected column being read.</param>
     /// <param name="param">The data-reader expression the accessor is built from.</param>
     /// <returns>An expression that reads the column value.</returns>
+    [ContextIndependentColumnMapping]
     public override Expression MapColumnExpression(SelectExpression column, Expression param)
     {
         var realType = Nullable.GetUnderlyingType(column.PropertyType) ?? column.PropertyType;

@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Microsoft.Data.Sqlite;
+using NextORM.QueryComponents;
 using NextORM.Sqlite;
 
 namespace NextORM.Integration.Tests;
@@ -12,6 +13,38 @@ namespace NextORM.Integration.Tests;
 public sealed partial class SqliteSharedPlanBindingTests
 {
     private const string TableName = "issue16_binding_rows";
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task NativeAny_DoesNotUseThePlainAliasForAComponent(bool asynchronous)
+    {
+        using var connection = OpenSeededConnection();
+        using var context = new SqliteDataContext(connection, new DataContextBuilder());
+        var plain = Filter(context, 1);
+        plain.Any().Should().BeTrue();
+        var hits = QueryPlanStore.NativeHits;
+        plain.Any().Should().BeTrue();
+        QueryPlanStore.NativeHits.Should().Be(hits + 1);
+
+        var filtered = plain.WithComponent(new AdditivePredicateComponent<BindingRow>(BeyondSeededRows));
+        var found = asynchronous ? await filtered.AnyAsync(TestContext.Current.CancellationToken) : filtered.Any();
+        found.Should().BeFalse("the component excludes both rows from the EXISTS subquery");
+        QueryPlanStore.NativeHits.Should().Be(hits + 1);
+    }
+
+    [Fact]
+    public void ScalarCount_DoesNotUseThePlainArtifactForAComponent()
+    {
+        using var connection = OpenSeededConnection();
+        using var context = new SqliteDataContext(connection, new DataContextBuilder());
+        var plain = context.From<BindingRow>();
+        plain.Count().Should().Be(2);
+        plain.WithComponent(new AdditivePredicateComponent<BindingRow>(BeyondSeededRows)).Count().Should().Be(0);
+        plain.Count().Should().Be(2);
+    }
+
+    private static readonly Expression<Func<BindingRow, bool>> BeyondSeededRows = row => row.Id > 2;
 
     [Theory]
     [InlineData(false)]

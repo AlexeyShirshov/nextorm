@@ -37,6 +37,7 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
     private readonly int? _forcedHash;
     private bool _isCacheVersion;
     internal bool NeedsSeparateRawRecipe { get; private set; }
+    internal bool HasOpaqueComponentDescriptors { get; private set; }
 
     /// <summary>
     /// Captures a canonical, hashable description of <paramref name="cmd"/> and computes its stable
@@ -194,7 +195,11 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
             return this;
 
         var newCmd = QueryCommand.CloneForCache();
-        NeedsSeparateRawRecipe = detachSqlExpressions && newCmd.DetachSqlPlanKey();
+        if (detachSqlExpressions)
+        {
+            NeedsSeparateRawRecipe = newCmd.DetachSqlPlanKey(out var hasOpaqueDescriptors);
+            HasOpaqueComponentDescriptors = hasOpaqueDescriptors;
+        }
         // Plan identity is behavioural: identical frozen hash and structural command equality (below), not comparer instance sharing.
         Debug.Assert(_hashPlan == ComputeHash(newCmd, _sql, _comparer), "Hash must be equals, if not see QueryCommand.CopyTo function");
         Debug.Assert(_comparer.Equals(newCmd, QueryCommand), "QueryCommands must be equals, if not see QueryCommand.CopyTo function");

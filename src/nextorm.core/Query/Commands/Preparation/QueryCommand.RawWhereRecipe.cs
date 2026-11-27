@@ -81,7 +81,14 @@ public partial class QueryCommand
             visitor.CheckSorts(_sorting);
         }
 
-        if (!visitor.Supported || (!useCurrentWhere && !useCurrentSorting && comparisonProjection is null))
+        // Preparation hashes named windows but does not rewrite their authored selectors.
+        if (!ReferenceEquals(shape.Windows, _windows))
+            return null;
+        visitor.RemoveReceivers = true;
+        var comparisonWindows = _windows is { Count: > 0 } windows ? RewriteWindowExpressions(windows, visitor) : null;
+
+        if (!visitor.Supported
+            || (!useCurrentWhere && !useCurrentSorting && comparisonProjection is null && comparisonWindows is null))
             return null;
 
         var recipe = CloneForCache();
@@ -91,8 +98,10 @@ public partial class QueryCommand
             recipe._sorting = null;
         if (comparisonProjection is not null)
             recipe._selectList![0].Expression = null;
+        if (comparisonWindows is not null)
+            recipe._windows = null;
 
-        return (shape.WithComparisonClauses(comparisonCondition, comparisonSorting, comparisonProjection),
+        return (shape.WithComparisonClauses(comparisonCondition, comparisonSorting, comparisonProjection, comparisonWindows),
             recipe, useCurrentWhere, useCurrentSorting);
     }
 
@@ -101,6 +110,7 @@ public partial class QueryCommand
     private LambdaExpression[]? TryGetRawGroupingSelectors(RawShape shape, LambdaExpression[] selectors)
     {
         if (shape.Closures is not { Length: > 0 } || !SupportsSimpleRawReplay(shape)
+            || shape.Windows is not null || _windows is not null
             || shape.Components.Count != 1 || shape.Components[0] is not IRawGroupingComponent
             || shape.Exp is null || !ReferenceEquals(shape.Exp, _exp)
             || shape.Sorting is not null || _sorting is not null
@@ -188,14 +198,14 @@ public partial class QueryCommand
     private bool SupportsSimpleRawReplay(RawShape shape)
         => shape.Joins is null && shape.Ctes is null && shape.Union is null
             && shape.Group is null && shape.Having is null && shape.PreWhere is null
-            && shape.PerParentPartition is null && shape.ArrayJoins is null && shape.Windows is null
+            && shape.PerParentPartition is null && shape.ArrayJoins is null
             && shape.LimitBy is null && shape.DistinctOn is null && shape.ExtremeRow is null
             && IsPlainRecipeSource(shape.From) && IsPlainRecipeSource(_from)
             && _joins is null && _ctes is null && _union is null
             && OuterRegistry is null
             && NavigationPaths is null && NavigationChain is null && JunctionChildFilter is null
             && _groupExp is null && _having is null && _preWhere is null && PerParentPartition is null
-            && _arrayJoins is null && _windows is null && LimitBy is null && DistinctOn is null && ExtremeRow is null
+            && _arrayJoins is null && LimitBy is null && DistinctOn is null && ExtremeRow is null
             && (NamingConvention is null or SnakeCaseNamingConvention)
             && (ResolvedNamingConvention is null or SnakeCaseNamingConvention)
             && Prep is

@@ -4213,6 +4213,7 @@ public partial class QueryCommand
         internal bool HasCteComponents { get; private set; }
         internal bool RebindGrouping { get; private set; }
         internal bool UseCurrentScalarProjection { get; private set; }
+        internal bool UseCurrentWindows { get; private set; }
         // Receiver identity at each captured-member occurrence, in traversal order. The same set of
         // owners is not enough: all occurrences must read the same owners as the staged expressions.
         internal object?[]? Closures;
@@ -4220,7 +4221,8 @@ public partial class QueryCommand
         /// <summary>Structural fingerprint used only to partition candidates into buckets.</summary>
         internal int Fingerprint;
 
-        internal RawShape WithComparisonClauses(LambdaExpression? condition, Sorting[]? sorting, LambdaExpression? projection)
+        internal RawShape WithComparisonClauses(LambdaExpression? condition, Sorting[]? sorting, LambdaExpression? projection,
+            WindowDefinition[]? windows)
         {
             var copy = (RawShape)MemberwiseClone();
             copy.Condition = condition;
@@ -4229,6 +4231,11 @@ public partial class QueryCommand
             {
                 copy.Exp = projection;
                 copy.UseCurrentScalarProjection = true;
+            }
+            if (windows is not null)
+            {
+                copy.Windows = windows;
+                copy.UseCurrentWindows = true;
             }
             return copy;
         }
@@ -5510,11 +5517,14 @@ public partial class QueryCommand
         var componentsView = _componentsView;
         var currentUnion = _union;
         var currentCtes = _ctes;
+        var currentWindows = _windows;
         clone.CopyTo(this, copyAll: true);
         // Shape verification covers the component contract; BuildQuery must run on the caller's
         // own component when a parameter refresh needs to render.
         _components = components;
         _componentsView = componentsView;
+        if (componentShape?.UseCurrentWindows == true)
+            _windows = currentWindows;
         if (componentShape?.UnionWithComponents is { } unionShape)
             _union = StageNestedPreparation(currentUnion!, clone._union!, unionShape);
         if (componentShape is { HasCteComponents: true } && _ctes is { } ctes)

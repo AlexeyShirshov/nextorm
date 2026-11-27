@@ -199,11 +199,15 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
         // The planning axis gets the provider hooks as delegates and invokes them lazily: calling the
         // abstract/virtual members here would run derived code before the derived constructor.
+        Func<SelectExpression, Expression, Expression> mapColumn = MapColumnExpression;
+        var mapperMethod = mapColumn.Method;
+        UsesContextBoundColumnMapping = mapperMethod.DeclaringType != typeof(DataContext)
+            && !mapperMethod.IsDefined(typeof(ContextIndependentColumnMappingAttribute), inherit: false);
         _planner = new QueryPlanner(
             this,
             GetDialect,
             GetType(),
-            new ProviderHooks(MapColumn, _createParam, _createParamSimple),
+            new ProviderHooks(mapColumn, _createParam, _createParamSimple),
             new LoggingOptions(_environment.Logger, _environment.ResultSetEnumeratorLogger, _environment.LogSensitiveData, QueryFilterLogger: _environment.QueryFilterLogger),
             EntityMetadataProvider,
             EntityVariantResolver);
@@ -237,7 +241,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     // Late-bound provider hooks: only the delegates are created in the constructor, never the values.
     private ISqlDialect GetDialect() => Dialect;
 
-    private Expression MapColumn(SelectExpression column, Expression param) => MapColumnExpression(column, param);
+    internal bool UsesContextBoundColumnMapping { get; }
 
     /// <summary>
     /// SQL dialect used to render queries. Supplied by the provider; SQL generation depends on this

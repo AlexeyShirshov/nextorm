@@ -191,6 +191,7 @@ public class ComponentContractTests
         var comparer = c1.GetQueryPlanEqualityComparer();
         comparer.GetHashCode(c1).Should().Be(comparer.GetHashCode(c2));
         comparer.Equals(c1, c2).Should().BeFalse();
+        Prepare(ctx, c1).Should().NotBeSameAs(Prepare(ctx, c2));
     }
 
     [Fact]
@@ -207,6 +208,7 @@ public class ComponentContractTests
 
         var comparer = c1.GetQueryPlanEqualityComparer();
         comparer.Equals(c1, c2).Should().BeTrue();
+        Prepare(ctx, c1).Should().BeSameAs(Prepare(ctx, c2));
     }
 
     // B5: clones carry components and prepared state

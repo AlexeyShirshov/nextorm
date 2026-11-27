@@ -1,11 +1,109 @@
+using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using FluentAssertions;
+using FluentAssertions.Execution;
+using Microsoft.Data.Sqlite;
 using NextORM.Sqlite;
 
 namespace NextORM.Integration.Tests;
 
 public sealed partial class SqliteSharedPlanBindingTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ProviderMapper_BindsTheExecutingContextWithoutRetainingTheFirst(bool cachePlan)
+    {
+        var token = TestContext.Current.CancellationToken;
+        var (firstRows, firstContext, firstPlan) = ReadRows(40, cachePlan, token);
+        var (secondRows, _, secondPlan) = ReadRows(98, cachePlan, token);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        using var assertions = new AssertionScope();
+        firstRows.Should().Equal(41, 42);
+        secondRows.Should().Equal([99, 100], "the mapper must use the executing provider's own accessor");
+        firstContext.IsAlive.Should().BeFalse("the compiled mapper must not own a disposed provider context");
+        if (cachePlan)
+        {
+            firstPlan.Should().NotBeNull();
+            secondPlan.Should().BeSameAs(firstPlan, "the SQL plan is compatible even though its row mapper is context-bound");
+            QueryPlanStore.Values.Should().Contain(firstPlan!);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (List<int> Rows, WeakReference Context, DbPreparedQueryCommand<int>? Plan) ReadRows(
+            int offset, bool cachePlan, CancellationToken token)
+        {
+            using var connection = OpenSeededConnection();
+            using var context = new InstanceMapperContext(connection, offset);
+            var query = context.From<BindingRow>().WithTag(cachePlan ? "implicit provider mapper" : "uncached provider mapper")
+                .OrderBy(row => row.Id).Select(row => row.Id);
+            var invocation = context.GetPreparedQueryCommand(query, false, cachePlan, token);
+            var rows = invocation.ToList(context);
+            var mapperBuilds = context.MapperBuilds;
+            var repeated = context.GetPreparedQueryCommand(query, false, cachePlan, token);
+            repeated.ToList(context).Should().Equal(rows);
+            context.MapperBuilds.Should().Be(mapperBuilds, "one live provider should reuse its compiled mapper");
+            return (rows, new WeakReference(context), cachePlan ? BoundQueryInvocation<int>.GetPlan(invocation) : null);
+        }
+    }
+
+    [Fact]
+    public void ProviderMapper_NativeListDoesNotReuseAnEarlierContextsAccessor()
+    {
+        using var firstConnection = OpenSeededConnection();
+        using var secondConnection = OpenSeededConnection();
+        using var first = new InstanceMapperContext(firstConnection, 40);
+        using var second = new InstanceMapperContext(secondConnection, 98);
+        var publishes = QueryPlanStore.NativePublishes;
+
+        Query(first, 1).ToList().Should().Equal(41);
+        Query(second, 2).ToList().Should().Equal(100);
+        QueryPlanStore.NativePublishes.Should().Be(publishes, "a native hit cannot supply the executing context's mapper");
+    }
+
+    [Fact]
+    public void RawProviderMapper_BindsTheExecutingContextWithoutRetainingTheFirst()
+    {
+        var (firstIds, firstContext) = ReadRows(40);
+        var (secondIds, _) = ReadRows(98);
+        firstIds.Should().Equal(41, 42);
+        secondIds.Should().Equal(99, 100);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        firstContext.IsAlive.Should().BeFalse("the raw mapper must not keep its context alive");
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (int[] Ids, WeakReference Context) ReadRows(int offset)
+        {
+            using var connection = OpenSeededConnection();
+            using var context = new InstanceMapperContext(connection, offset);
+            using var result = context.ExecuteRaw("select Id from issue16_binding_rows order by Id");
+            return (result.Read<BindingRow>().Select(row => row.Id).ToArray(), new WeakReference(context));
+        }
+    }
+
+    private sealed class InstanceMapperContext(SqliteConnection connection, int offset)
+        : SqliteDataContext(connection, new DataContextBuilder())
+    {
+        public int Offset { get; } = offset;
+        internal int MapperBuilds { get; private set; }
+
+        public override Expression MapColumnExpression(SelectExpression column, Expression record)
+        {
+            MapperBuilds++;
+            var read = base.MapColumnExpression(column, record);
+            return read.Type == typeof(int)
+                ? Expression.Add(read, Expression.Property(Expression.Constant(this), nameof(Offset)))
+                : read;
+        }
+    }
+
     [Fact]
     public void SqlPlanKey_DoesNotOwnTheColumnConverter()
     {

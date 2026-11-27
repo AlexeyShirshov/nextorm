@@ -44,7 +44,7 @@ public class RowMapperFactoryStreamingKeyTests
         MapperCache.Clear();
         try
         {
-            var cache = MapperCache.ForColumns(null);
+            var cache = MapperCache.ForColumns(null, context: null);
             cache.Add(bufferedKey, (Func<IDataRecord, byte[]>)(_ => []));
 
             cache.TryGet(bufferedKey, out _).Should().BeTrue();

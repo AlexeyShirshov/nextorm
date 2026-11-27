@@ -327,7 +327,7 @@ public static class EntityBuilderExtensions
         cmd.IgnoreColumns = true;
         var queryCommand = GetAnyCommand(builder.DataProvider, cmd);
         var preparedCommand = builder.DataProvider.GetPreparedQueryCommand(queryCommand, false, true, CancellationToken.None);
-        NativeAnyRoute.Publish(builder, preparedCommand);
+        NativeAnyRoute.Publish(builder, queryCommand, preparedCommand);
         return builder.DataProvider.ExecuteScalar<bool>(preparedCommand, @params, true);
     }
     /// <summary>
@@ -361,7 +361,7 @@ public static class EntityBuilderExtensions
         cmd.IgnoreColumns = true;
         var queryCommand = GetAnyCommand(builder.DataProvider, cmd);
         var preparedCommand = builder.DataProvider.GetPreparedQueryCommand(queryCommand, false, true, cancellationToken);
-        NativeAnyRoute.Publish(builder, preparedCommand);
+        NativeAnyRoute.Publish(builder, queryCommand, preparedCommand);
         return await builder.DataProvider.ExecuteScalar<bool>(preparedCommand, @params, true, cancellationToken).ConfigureAwait(false);
     }
 

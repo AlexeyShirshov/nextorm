@@ -383,7 +383,7 @@ internal static class NativeProjectionRoute
             if (binder is null)
                 return;
 
-            QueryPlanStore.SetNative(_shape, holder, binder);
+            QueryPlanStore.SetNative(_header.ContextType!, command.GetOrCreatePlanKey(null), _shape, holder, binder);
         }
 
         /// <summary>Re-reads the header this probe used (diagnostics only).</summary>

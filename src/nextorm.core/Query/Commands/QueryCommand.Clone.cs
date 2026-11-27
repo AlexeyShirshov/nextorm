@@ -334,10 +334,11 @@ public partial class QueryCommand
 
     // SQL keys are compared, not rendered. Keep the legacy cache clone executable for raw recipe
     // adoption and for the in-memory route. Walk only command edges owned by the cache clone.
-    internal bool DetachSqlPlanKey()
+    internal bool DetachSqlPlanKey(out bool hasOpaqueDescriptors)
     {
         var rewriter = new SqlKeyExpressionRewriter();
         DetachSqlPlanKey(rewriter);
+        hasOpaqueDescriptors = rewriter.HasOpaqueDescriptors;
         return rewriter.Changed;
     }
 
@@ -363,6 +364,11 @@ public partial class QueryCommand
         }
 
         _having = (LambdaExpression?)rewriter.Visit(_having);
+        if (_windows is { Count: > 0 } windows)
+        {
+            _windows = RewriteWindowExpressions(windows, rewriter);
+            rewriter.Changed = true;
+        }
         RewriteColumns(_selectList);
         if (_preparedState is { } prepared)
         {
@@ -388,9 +394,15 @@ public partial class QueryCommand
                 for (var i = 0; i < comparison.Length; i++)
                 {
                     var descriptor = descriptors[i];
-                    comparison[i] = descriptor is ISqlPlanComponentDescriptor detachable
-                        ? detachable.ToSqlPlanKey(rewriter)
-                        : descriptor;
+                    if (descriptor is ISqlPlanComponentDescriptor detachable)
+                    {
+                        comparison[i] = detachable.ToSqlPlanKey(rewriter);
+                    }
+                    else
+                    {
+                        comparison[i] = descriptor;
+                        rewriter.HasOpaqueDescriptors = true;
+                    }
                 }
                 prepared.PreparedComponents = comparison;
                 prepared.PreparedComponentsView = Array.AsReadOnly(comparison);
@@ -474,9 +486,35 @@ public partial class QueryCommand
         }
     }
 
+    // Both SQL keys and raw descriptors compare the authored window syntax. Neither snapshot
+    // needs to execute the selectors or borrow the live collections of partition and order keys.
+    private static WindowDefinition[] RewriteWindowExpressions(IReadOnlyList<WindowDefinition> windows, ExpressionVisitor rewriter)
+    {
+        var result = new WindowDefinition[windows.Count];
+        for (var i = 0; i < result.Length; i++)
+        {
+            var window = windows[i];
+            var partitions = new LambdaExpression[window.PartitionBy.Count];
+            for (var p = 0; p < partitions.Length; p++)
+                partitions[p] = (LambdaExpression)rewriter.Visit(window.PartitionBy[p]);
+
+            var orders = new NamedWindowOrderKey[window.OrderBy.Count];
+            for (var o = 0; o < orders.Length; o++)
+            {
+                var key = window.OrderBy[o];
+                orders[o] = new NamedWindowOrderKey((LambdaExpression)rewriter.Visit(key.Expression), key.Direction);
+            }
+
+            result[i] = new WindowDefinition(window.Name, partitions, orders, window.Frame);
+        }
+
+        return result;
+    }
+
     private sealed class SqlKeyExpressionRewriter : ExpressionVisitor
     {
         internal bool Changed { get; set; }
+        internal bool HasOpaqueDescriptors { get; set; }
 
         protected override Expression VisitMember(MemberExpression node)
         {

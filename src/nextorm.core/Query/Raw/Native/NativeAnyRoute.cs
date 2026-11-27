@@ -87,8 +87,9 @@ internal static class NativeAnyRoute
     /// </summary>
     /// <typeparam name="TEntity">The queried entity type.</typeparam>
     /// <param name="builder">The builder the terminal was called on.</param>
+    /// <param name="command">The normalized command the ordinary route prepared.</param>
     /// <param name="prepared">The holder the legacy route compiled.</param>
-    internal static void Publish<TEntity>(EntityBuilder<TEntity> builder, IPreparedQueryCommand<bool> prepared)
+    internal static void Publish<TEntity>(EntityBuilder<TEntity> builder, QueryCommand<bool> command, IPreparedQueryCommand<bool> prepared)
     {
         if (BoundQueryInvocation<bool>.GetPlan(prepared) is not { } holder)
             return;
@@ -104,7 +105,7 @@ internal static class NativeAnyRoute
         if (binder is null)
             return;
 
-        QueryPlanStore.SetNative(shape, holder, binder);
+        QueryPlanStore.SetNative(shapeHeader.ContextType!, command.GetOrCreatePlanKey(null), shape, holder, binder);
     }
 
     /// <summary>
@@ -137,6 +138,7 @@ internal static class NativeAnyRoute
         // Only a plain entity source with a predicate: every other SQL-affecting member keeps the
         // legacy route. The list mirrors the ones the parent command transfer carries.
         if (builder.MappingVariant != MappingVariant.Default
+            || builder.HasComponents
             || builder.SourceFrom is not null
             || builder.Table is not null
             || builder.Sorting is { Count: > 0 }

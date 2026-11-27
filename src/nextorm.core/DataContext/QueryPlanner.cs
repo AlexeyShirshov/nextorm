@@ -1016,8 +1016,9 @@ internal sealed class QueryPlanner : IQueryPlanner
             var publish = storeInCache && queryCommand.Cache;
             var convertedProjection = publish && queryCommand.SelectList is { } columns
                 && Array.Exists(columns, static column => column.Converter is not null);
-            var invocationMapper = convertedProjection ? map : null;
-            var planMapper = convertedProjection ? null : map;
+            var useInvocationMapper = publish && (convertedProjection || _context is DataContext { UsesContextBoundColumnMapping: true });
+            var invocationMapper = useInvocationMapper ? map : null;
+            var planMapper = useInvocationMapper ? null : map;
             var generatedImplicitPlan = publish && ext is null;
             var noParams = !(@params?.Count > 0);
             var needsParamRefresh = false;
@@ -1086,7 +1087,26 @@ internal sealed class QueryPlanner : IQueryPlanner
 
             if (publish)
             {
-                QueryPlanStore.Set(_contextType, queryPlan!.GetSqlCacheVersion(), compiledQuery);
+                var (storedKey, holder) = QueryPlanStore.Set(_contextType, queryPlan!.GetSqlCacheVersion(), compiledQuery);
+                queryCommand.CacheStoredPlanKey(storedKey, ext?.ManualSql);
+                if (!ReferenceEquals(holder, compiledQuery))
+                {
+                    // This invocation already rendered its own values. Reuse them with the winning
+                    // holder only if the two render layouts agree, without evaluating the inputs again.
+                    if (holder is not DbPreparedQueryCommand<TRow> winner
+                        || winner.CommandText != compiledQuery.CommandText
+                        || winner.Behavior != compiledQuery.Behavior
+                        || winner.NeedsParamRefresh != compiledQuery.NeedsParamRefresh
+                        || winner.RequiresInvocationMapper != compiledQuery.RequiresInvocationMapper
+                        || !winner.ParamSeeds.SequenceEqual(compiledQuery.ParamSeeds))
+                    {
+                        return BoundQueryInvocation<TRow>.Create(compiledQuery, boundValues, invocationMapper);
+                    }
+
+                    compiledQuery = winner;
+                    if (createEnumerator)
+                        compiledQuery.EnableStreaming();
+                }
 
                 // Publication happens ONLY after ordinary preparation succeeded, the normalized key
                 // was constructed and the cacheable holder was stored through Set. Staging must not
@@ -1103,7 +1123,7 @@ internal sealed class QueryPlanner : IQueryPlanner
                     && !queryCommand.HasUnkeyedTupleInValues
                     && !queryCommand.HasUnkeyedScalarInValues)
                 {
-                    QueryPlanStore.SetRaw(_contextType, queryPlan!, compiledQuery, recipeShape, queryCommand);
+                    QueryPlanStore.SetRaw(_contextType, storedKey, compiledQuery, recipeShape, queryCommand);
                     Interlocked.Increment(ref _recipePublishes);
                 }
             }

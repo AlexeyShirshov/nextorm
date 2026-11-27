@@ -254,7 +254,7 @@ internal static class RowMapperFactory
         bool streaming = false)
     {
         var key = BuildKey(queryCommand, typeof(TResult), sql, providerType, streaming);
-        var cache = MapperCache.ForColumns(queryCommand.SelectList);
+        var cache = MapperCache.ForColumns(queryCommand.SelectList, mapColumn.Target as DataContext);
         if (cache.TryGet(key, out var cached))
             return (Func<IDataRecord, TResult>)cached;
 
@@ -288,7 +288,7 @@ internal static class RowMapperFactory
         bool streaming = false)
     {
         var key = BuildKey(queryCommand, resultType, sql, providerType, streaming, boxed: true);
-        var cache = MapperCache.ForColumns(queryCommand.SelectList);
+        var cache = MapperCache.ForColumns(queryCommand.SelectList, mapColumn.Target as DataContext);
         if (cache.TryGet(key, out var cached))
             return (Func<IDataRecord, object?>)cached;
 
@@ -320,7 +320,7 @@ internal static class RowMapperFactory
         var context = mapColumn.Target as DataContext;
         var key = new MapperCacheKey(providerType, typeof(TResult), sql, MapperColumnShape.Create(selectList), oneColumn, Streaming: false,
             Dialect: PlanDialectIdentity.For(context), Mapping: PlanMappingIdentity.For(context));
-        var cache = MapperCache.ForColumns(selectList);
+        var cache = MapperCache.ForColumns(selectList, context);
         if (cache.TryGet(key, out var cached))
             return (Func<IDataRecord, TResult>)cached;
 
@@ -365,11 +365,12 @@ internal static class RowMapperFactory
         string? recordSignature = null)
     {
         var key = new RawMapperCacheKey(providerType, resultType, oneColumn, columns, namingConventionType, recordKind, recordSignature);
-        if (MapperCache.TryGetRaw(key, out var cached))
+        var context = mapColumn.Target as DataContext;
+        if (MapperCache.TryGetRaw(key, context, out var cached))
             return (Func<IDataRecord, TResult>)cached;
 
         var map = Build<TResult>(buildSelectList(), oneColumn, null, mapColumn, streaming: false);
-        MapperCache.AddRaw(key, map);
+        MapperCache.AddRaw(key, map, context);
         return map;
     }
 
@@ -478,7 +479,8 @@ internal static class RowMapperFactory
         // A compile-time materializer for this shape wins over building and compiling a tree. The
         // one-column scalar path is left alone: its accessor carries provider-specific widening that
         // a generated factory would have to duplicate first.
-        if (!oneColumn && RowMaterializerRegistry.TryCreate(resultType, selectList, out var provided)
+        if (!oneColumn && mapColumn.Target is not DataContext { UsesContextBoundColumnMapping: true }
+            && RowMaterializerRegistry.TryCreate(resultType, selectList, out var provided)
             && provided is Func<IDataRecord, TResult> materializer)
         {
             return materializer;

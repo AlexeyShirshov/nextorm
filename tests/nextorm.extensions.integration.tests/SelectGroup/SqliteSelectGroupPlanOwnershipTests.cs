@@ -6,6 +6,7 @@ using FluentAssertions;
 using FluentAssertions.Execution;
 using Microsoft.Data.Sqlite;
 using NextORM.Extensions;
+using NextORM.QueryComponents;
 using NextORM.Sqlite;
 using NextORM.Tests;
 
@@ -14,6 +15,56 @@ namespace NextORM.Integration.Tests;
 [Collection("Query plan cache")]
 public sealed class SqliteSelectGroupPlanOwnershipTests
 {
+    [Fact]
+    public void NormalizedPlan_DoesNotRetainAnExternalExtremaComponent()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        Seed(connection);
+        var tap = new BindingTap();
+        using var context = new SqliteDataContext(connection, new DataContextBuilder().AddInterceptor(tap));
+
+        var (plan, liveQuery, firstComponent, firstContext) = ExecuteAcrossContexts(context);
+        tap.Parameters.Should().Equal((0, "target", 2));
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        using var assertions = new AssertionScope();
+        firstComponent.IsAlive.Should().BeFalse("the normalized key must not own the external component");
+        firstContext.IsAlive.Should().BeFalse("a matching command must not keep the earlier descriptor and context alive");
+
+        var (_, warm) = Execute(context, 1);
+        warm.Should().BeSameAs(plan, "the live second command can still verify descriptor equality");
+        tap.Parameters.Should().Equal((0, "target", 1));
+        GC.KeepAlive(liveQuery);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (DbPreparedQueryCommand<int> Plan, QueryCommand<int> LiveQuery, WeakReference Component, WeakReference Context)
+            ExecuteAcrossContexts(SqliteDataContext second)
+        {
+            using var firstConnection = new SqliteConnection("Data Source=:memory:");
+            Seed(firstConnection);
+            var firstTap = new BindingTap();
+            using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+            var (firstQuery, firstPlan) = Execute(first, 1);
+            var (secondQuery, secondPlan) = Execute(second, 2);
+            secondPlan.Should().BeSameAs(firstPlan, "equivalent live descriptors describe one plan");
+            firstTap.Parameters.Should().Equal((0, "target", 1));
+            return (firstPlan, secondQuery, new WeakReference(firstQuery.Components!.Single()), new WeakReference(first));
+        }
+
+        static (QueryCommand<int> Query, DbPreparedQueryCommand<int> Plan) Execute(SqliteDataContext ctx, int target)
+        {
+            var query = ctx.From<GroupRow>().WithTag("external extrema ownership")
+                .Where(row => row.Id >= target).ExternalSelectWhereMin(row => row.Id, row => row.Id);
+            var token = TestContext.Current.CancellationToken;
+            query.PrepareCommand(token);
+            var invocation = ctx.GetPreparedQueryCommand(query, false, true, token);
+            invocation.ToList(ctx).Should().Equal(target);
+            return (query, PreparedPlanObservation.GetPlan(invocation));
+        }
+    }
+
     [Fact]
     public void NormalizedPlan_RebindsHavingWithoutRetainingTheFirstComponent()
     {

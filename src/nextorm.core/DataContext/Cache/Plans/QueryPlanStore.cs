@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace NextORM.Core;
 
 /// <summary>
@@ -34,6 +36,21 @@ internal static class QueryPlanStore
     [ThreadStatic]
     private static long _cacheGeneration;
 
+    // An opaque descriptor can close over its live command. A prepared command keeps its own
+    // memoized key alive; the store may compare against it but must not root it independently.
+    private sealed class OpaqueEntry(Key key, IDbCommandHolder holder)
+    {
+        internal Key Key { get; } = key;
+        internal IDbCommandHolder Holder { get; set; } = holder;
+        internal RawCandidate? Raw { get; set; }
+    }
+
+    [ThreadStatic]
+    private static ConditionalWeakTable<QueryPlan, OpaqueEntry>? _opaqueOwners;
+
+    [ThreadStatic]
+    private static Dictionary<(Type ContextType, int Hash), List<WeakReference<OpaqueEntry>>>? _opaqueIndex;
+
     /// <summary>
     /// One published pre-preparation candidate: the raw descriptor captured before ordinary
     /// preparation, the normalized plan key, the holder, and the prepared graph to stage. The graph
@@ -50,13 +67,34 @@ internal static class QueryPlanStore
             command.ApplyPreparationFrom(Recipe, useCurrentWhere, useCurrentSorting, Shape);
     }
 
+    private readonly struct RawIndexEntry
+    {
+        private readonly RawCandidate? _candidate;
+        private readonly WeakReference<RawCandidate>? _opaqueCandidate;
+
+        internal RawIndexEntry(RawCandidate candidate)
+        {
+            if (candidate.Plan.HasOpaqueComponentDescriptors)
+                _opaqueCandidate = new WeakReference<RawCandidate>(candidate);
+            else
+                _candidate = candidate;
+        }
+
+        internal RawCandidate? GetCandidate()
+        {
+            if (_opaqueCandidate is null)
+                return _candidate;
+            return _opaqueCandidate.TryGetTarget(out var candidate) ? candidate : null;
+        }
+    }
+
     /// <summary>
     /// Raw candidate index: buckets by the descriptor's structural fingerprint. It lives beside the
     /// normalized dictionary in the same thread-local scope and is dropped by the same generation
     /// transition, so <see cref="Clear"/> leaves no usable auxiliary alias.
     /// </summary>
     [ThreadStatic]
-    private static Dictionary<int, List<RawCandidate>>? _rawIndex;
+    private static Dictionary<int, List<RawIndexEntry>>? _rawIndex;
 
     /// <summary>
     /// Native candidate index (I7/M2): the value-agnostic shape of a raw query mapped to the plan that
@@ -82,13 +120,15 @@ internal static class QueryPlanStore
                 // Neither auxiliary index can keep a usable alias after the primary generation changes.
                 _rawIndex = null;
                 _nativeIndex = null;
+                _opaqueOwners = null;
+                _opaqueIndex = null;
             }
 
             return _cache;
         }
     }
 
-    private static Dictionary<int, List<RawCandidate>> RawIndex
+    private static Dictionary<int, List<RawIndexEntry>> RawIndex
     {
         get
         {
@@ -219,12 +259,17 @@ internal static class QueryPlanStore
         return false;
     }
 
-    /// <summary>Publishes a compiled holder under its value-agnostic shape (a no-op replace on a collision).</summary>
+    /// <summary>Publishes the normalized plan's holder under its value-agnostic shape.</summary>
+    /// <param name="contextType">The context type that published the normalized plan.</param>
+    /// <param name="plan">The normalized plan key.</param>
     /// <param name="shape">The shape the holder was compiled for.</param>
     /// <param name="holder">The compiled holder.</param>
     /// <param name="binder">The value binder for the holder's parameters.</param>
-    internal static void SetNative(ShapeKey shape, IDbCommandHolder holder, NativeBinder binder)
+    internal static void SetNative(Type contextType, QueryPlan plan, ShapeKey shape, IDbCommandHolder holder, NativeBinder binder)
     {
+        if (!Cache.TryGetValue(new Key(contextType, plan), out var owner) || !ReferenceEquals(owner.Holder, holder))
+            return;
+
         var index = NativeIndex;
         if (!index.TryGetValue(shape.Hash, out var bucket))
         {
@@ -232,18 +277,13 @@ internal static class QueryPlanStore
             index[shape.Hash] = bucket;
         }
 
-        var candidate = new NativeCandidate(shape, holder, binder);
         for (var i = 0; i < bucket.Count; i++)
         {
-            if (ReferenceEquals(bucket[i].Shape, shape))
-            {
-                bucket[i] = candidate;
-                Interlocked.Increment(ref _nativePublishes);
+            if (shape.Tokens.AsSpan().SequenceEqual(bucket[i].Shape.Tokens))
                 return;
-            }
         }
 
-        bucket.Add(candidate);
+        bucket.Add(new NativeCandidate(shape, holder, binder));
         Interlocked.Increment(ref _nativePublishes);
     }
 
@@ -256,15 +296,84 @@ internal static class QueryPlanStore
             return true;
         }
 
+        if (FindOpaquePlan(contextType, plan) is { } opaque)
+        {
+            holder = opaque.Holder;
+            // Memoizing another command's key would keep its opaque descriptor alive. Give the
+            // matching invocation its own representative of the same holder instead.
+            storedPlan = plan;
+            if (!ReferenceEquals(plan, opaque.Key.Plan))
+                StoreOpaquePlan(contextType, plan.GetSqlCacheVersion(), holder);
+            return true;
+        }
+
         holder = null;
         storedPlan = null;
         return false;
     }
 
-    internal static void Set(Type contextType, QueryPlan plan, IDbCommandHolder holder)
+    internal static (QueryPlan Plan, IDbCommandHolder Holder) Set(Type contextType, QueryPlan plan, IDbCommandHolder holder)
     {
-        var key = new Key(contextType, plan);
-        Cache[key] = new Entry(key, holder);
+        // Building can reenter the planner before publication. An equivalent key keeps the first
+        // holder so a late cold candidate cannot orphan its already-published aliases.
+        if (TryGet(contextType, plan, out var existing, out var storedPlan))
+            return (storedPlan!, existing!);
+
+        if (plan.HasOpaqueComponentDescriptors)
+        {
+            StoreOpaquePlan(contextType, plan, holder);
+        }
+        else
+        {
+            var key = new Key(contextType, plan);
+            Cache.Add(key, new Entry(key, holder));
+        }
+        return (plan, holder);
+    }
+
+    private static OpaqueEntry? FindOpaquePlan(Type contextType, QueryPlan plan)
+    {
+        if (_opaqueOwners is null)
+            return null;
+        if (_opaqueOwners.TryGetValue(plan, out var owner) && owner.Key.ContextType == contextType)
+            return owner;
+        if (!_opaqueIndex!.TryGetValue((contextType, plan.GetHashCode()), out var bucket))
+            return null;
+
+        for (var i = bucket.Count - 1; i >= 0; i--)
+        {
+            if (!bucket[i].TryGetTarget(out var entry))
+            {
+                bucket.RemoveAt(i);
+                continue;
+            }
+            if (entry.Key.Plan.Equals(plan))
+                return entry;
+        }
+        if (bucket.Count == 0)
+            _opaqueIndex.Remove((contextType, plan.GetHashCode()));
+        return null;
+    }
+
+    private static void StoreOpaquePlan(Type contextType, QueryPlan plan, IDbCommandHolder holder)
+    {
+        var owners = _opaqueOwners ??= new();
+        if (owners.TryGetValue(plan, out var existing))
+        {
+            existing.Holder = holder;
+            return;
+        }
+
+        var index = _opaqueIndex ??= [];
+        var hashKey = (contextType, plan.GetHashCode());
+        if (!index.TryGetValue(hashKey, out var bucket))
+        {
+            bucket = [];
+            index.Add(hashKey, bucket);
+        }
+        var entry = new OpaqueEntry(new Key(contextType, plan), holder);
+        owners.Add(plan, entry);
+        bucket.Add(new WeakReference<OpaqueEntry>(entry));
     }
 
     /// <summary>
@@ -281,7 +390,7 @@ internal static class QueryPlanStore
 
         var generation = Volatile.Read(ref _generation);
         var cache = Cache; // performs the shared generation transition for both indexes
-        if (cache.Count == 0)
+        if (cache.Count == 0 && _opaqueOwners is null)
             return false;
 
         if (!RawIndex.TryGetValue(shape.Fingerprint, out var bucket) || bucket.Count == 0)
@@ -289,15 +398,22 @@ internal static class QueryPlanStore
 
         for (var i = 0; i < bucket.Count; i++)
         {
-            var candidate = bucket[i];
+            var candidate = bucket[i].GetCandidate();
+            if (candidate is null)
+            {
+                bucket.RemoveAt(i--);
+                continue;
+            }
             if (!candidate.Shape.Matches(shape, comparerSource))
                 continue;
 
             // The owner must still be live under the historical normalized key and hold the published holder.
-            if (!cache.TryGetValue(new Key(contextType, candidate.Plan), out var entry))
-                continue;
-
-            if (!ReferenceEquals(entry.Holder, candidate.Holder))
+            IDbCommandHolder? owner;
+            if (candidate.Plan.HasOpaqueComponentDescriptors)
+                owner = RegisteredOpaqueHolder(contextType, candidate.Plan);
+            else
+                owner = cache.TryGetValue(new Key(contextType, candidate.Plan), out var entry) ? entry.Holder : null;
+            if (!ReferenceEquals(owner, candidate.Holder))
                 continue;
 
             // Generation recheck before the fast path commits: a Clear observed here rejects the candidate.
@@ -318,7 +434,6 @@ internal static class QueryPlanStore
     /// </summary>
     internal static void SetRaw(Type contextType, QueryPlan plan, IDbCommandHolder holder, QueryCommand.RawShape shape, QueryCommand comparerSource)
     {
-        _ = contextType;
         RawCandidate candidate;
         if (comparerSource.TryDetachRawClauses(shape) is { } replay)
         {
@@ -331,24 +446,48 @@ internal static class QueryPlanStore
                 ? comparerSource.CloneForRawRecipe(componentShape) : plan.QueryCommand;
             candidate = new RawCandidate(plan, holder, componentShape, recipe, false, false);
         }
+
+        if (plan.HasOpaqueComponentDescriptors)
+        {
+            if (_opaqueOwners is null || !_opaqueOwners.TryGetValue(plan, out var entry)
+                || entry.Key.ContextType != contextType || !ReferenceEquals(entry.Holder, holder))
+                return;
+            entry.Raw = candidate;
+        }
+        else if (!Cache.TryGetValue(new Key(contextType, plan), out var owner) || !ReferenceEquals(owner.Holder, holder))
+        {
+            return;
+        }
+
+        var indexed = new RawIndexEntry(candidate);
         var index = RawIndex;
         if (!index.TryGetValue(shape.Fingerprint, out var bucket))
         {
-            bucket = new List<RawCandidate>(2);
+            bucket = new List<RawIndexEntry>(2);
             index[shape.Fingerprint] = bucket;
         }
 
         for (var i = 0; i < bucket.Count; i++)
         {
-            if (bucket[i].Shape.Matches(shape, comparerSource))
+            var existing = bucket[i].GetCandidate();
+            if (existing is null)
             {
-                bucket[i] = candidate;
+                bucket.RemoveAt(i--);
+                continue;
+            }
+            if (existing.Shape.Matches(shape, comparerSource))
+            {
+                bucket[i] = indexed;
                 return;
             }
         }
 
-        bucket.Add(candidate);
+        bucket.Add(indexed);
     }
+
+    private static IDbCommandHolder? RegisteredOpaqueHolder(Type contextType, QueryPlan plan)
+        => _opaqueOwners is { } owners && owners.TryGetValue(plan, out var entry) && entry.Key.ContextType == contextType
+            ? entry.Holder : null;
 
     /// <summary>
     /// One published native candidate: the shape it belongs to, the compiled holder that executes it and
@@ -374,6 +513,14 @@ internal static class QueryPlanStore
         {
             foreach (var entry in Cache.Values)
                 yield return entry.Holder;
+
+            if (_opaqueOwners is { } owners)
+            {
+                var seen = new HashSet<IDbCommandHolder>(ReferenceEqualityComparer.Instance);
+                foreach (var pair in owners)
+                    if (seen.Add(pair.Value.Holder))
+                        yield return pair.Value.Holder;
+            }
         }
     }
 }

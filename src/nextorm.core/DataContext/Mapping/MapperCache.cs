@@ -64,10 +64,14 @@ internal static class MapperCache
 
     private static readonly SqlMappers _sql = new();
     private static readonly ConcurrentDictionary<RawMapperCacheKey, Delegate> _rawCache = new();
+    private static readonly ConditionalWeakTable<DataContext, SqlMappers> ContextSqlMappers = new();
+    private static readonly ConditionalWeakTable<DataContext, ConcurrentDictionary<RawMapperCacheKey, Delegate>> ContextRawMappers = new();
 
-    internal static SqlMappers ForColumns(SelectExpression[]? columns)
+    internal static SqlMappers ForColumns(SelectExpression[]? columns, DataContext? context)
     {
-        var scope = _sql;
+        var scope = context is { UsesContextBoundColumnMapping: true }
+            ? ContextSqlMappers.GetValue(context, static _ => new SqlMappers())
+            : _sql;
         if (columns is not null)
             foreach (var column in columns)
                 if (column.Converter is { } converter)
@@ -76,18 +80,27 @@ internal static class MapperCache
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool TryGetRaw(RawMapperCacheKey key, out Delegate map) => _rawCache.TryGetValue(key, out map!);
+    public static bool TryGetRaw(RawMapperCacheKey key, DataContext? context, out Delegate map)
+        => RawCacheFor(context).TryGetValue(key, out map!);
 
-    public static void AddRaw(RawMapperCacheKey key, Delegate map)
+    public static void AddRaw(RawMapperCacheKey key, Delegate map, DataContext? context)
     {
-        if (_rawCache.Count >= MaxRawEntries) return;
-        _rawCache.TryAdd(key, map);
+        var cache = RawCacheFor(context);
+        if (cache.Count < MaxRawEntries)
+            cache.TryAdd(key, map);
     }
+
+    private static ConcurrentDictionary<RawMapperCacheKey, Delegate> RawCacheFor(DataContext? context)
+        => context is { UsesContextBoundColumnMapping: true }
+            ? ContextRawMappers.GetValue(context, static _ => new())
+            : _rawCache;
 
     public static void Clear()
     {
         _sql.Clear();
         _rawCache.Clear();
+        ContextSqlMappers.Clear();
+        ContextRawMappers.Clear();
     }
 
     internal sealed class SqlMappers

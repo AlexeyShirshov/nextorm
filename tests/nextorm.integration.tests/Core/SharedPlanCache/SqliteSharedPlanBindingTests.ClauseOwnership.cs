@@ -120,6 +120,83 @@ public sealed partial class SqliteSharedPlanBindingTests
 
     private sealed record ClauseOwner(int JoinTarget, int SortDirection);
 
+    [Fact]
+    public void NamedWindowPlan_RebindsWithoutRetainingItsFirstOrderKeyOwner()
+    {
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        using var firstConnection = OpenSeededConnection();
+        using var secondConnection = OpenSeededConnection();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+
+        var (firstOwner, firstPlan) = Execute(first, 1, [1, 2]);
+        var (_, secondPlan) = Execute(second, -1, [2, 1]);
+        secondPlan.Should().BeSameAs(firstPlan);
+        firstTap.LastParameters.Should().Equal((0, "Direction", 1));
+        secondTap.LastParameters.Should().Equal((0, "Direction", -1));
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        firstOwner.IsAlive.Should().BeFalse("the normalized window definition must not own the first order key capture");
+        QueryPlanStore.Values.Should().Contain(firstPlan);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (WeakReference Owner, DbPreparedQueryCommand<int> Plan) Execute(SqliteDataContext context,
+            int direction, int[] expected)
+        {
+            var owner = new SortOwner { Direction = direction };
+            var source = context.From<BindingRow>();
+            var command = source.Window("binding_order", orderBy: [source.Asc(row => row.Id * owner.Direction)])
+                .OrderBy(row => row.Id).Select(row => SqlFunctions.Sql.row_number().Over("binding_order"));
+            var invocation = context.GetStreamingRowsQueryCommand(command, TestContext.Current.CancellationToken);
+            invocation.ToList(context).Should().Equal(expected);
+            return (new WeakReference(owner), BoundQueryInvocation<int>.GetPlan(invocation)!);
+        }
+    }
+
+    [Fact]
+    public void RawRecipe_UsesTheFreshNamedWindowWithoutRetainingItsOwner()
+    {
+        var tap = new BindingTap();
+        using var connection = OpenSeededConnection();
+        using var context = new SqliteDataContext(connection, new DataContextBuilder().AddInterceptor(tap));
+        var (owner, holder) = Execute(context, tap);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        owner.IsAlive.Should().BeFalse("neither the raw descriptor nor its recipe should retain the named window capture");
+        QueryPlanStore.Values.Should().Contain(holder);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (WeakReference Owner, DbPreparedQueryCommand<int> Plan) Execute(SqliteDataContext context, BindingTap tap)
+        {
+            var owner = new SortOwner { Direction = 1 };
+            var source = context.From<BindingRow>().WithTag("raw named window ownership");
+            QueryCommand<int> Build() => source.Window("binding_order", orderBy: [source.Asc(row => row.Id * owner.Direction)])
+                .OrderBy(row => row.Id).Select(row => SqlFunctions.Sql.row_number().Over("binding_order"));
+            var token = TestContext.Current.CancellationToken;
+            var cold = context.GetPreparedQueryCommand(Build(), false, true, token);
+            cold.ToList(context).Should().Equal(1, 2);
+            tap.LastParameters.Should().Equal((0, "Direction", 1));
+
+            owner.Direction = -1;
+            var fresh = Build();
+            var windows = fresh.Windows;
+            var reuses = QueryPlanner.RecipeReuses;
+            var warm = context.GetPreparedQueryCommand(fresh, false, true, token);
+            warm.ToList(context).Should().Equal(2, 1);
+            tap.LastParameters.Should().Equal((0, "Direction", -1));
+            QueryPlanner.RecipeReuses.Should().BeGreaterThan(reuses);
+            fresh.Windows.Should().BeSameAs(windows);
+            var holder = BoundQueryInvocation<int>.GetPlan(cold)!;
+            BoundQueryInvocation<int>.GetPlan(warm).Should().BeSameAs(holder);
+            return (new WeakReference(owner), holder);
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
