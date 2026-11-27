@@ -215,13 +215,7 @@ public partial class QueryCommand
                 // so later re-preparation of the live command cannot mutate what the cache compares against.
                 // The typed-projection flag and the recursive reference travel with the declaration: a plan
                 // served from cache must keep the typed aliasing and the recursive shape validation.
-                dst._ctes = _ctes.Select(c => c.Mutation is not null
-                    ? new CteDefinition(c.Name, c.Query.CloneForCache(), c.Mutation)
-                    : new CteDefinition(c.Name, c.Query.CloneForCache(), c.Recursive, c.MaxRecursion)
-                    {
-                        TypedProjection = c.TypedProjection,
-                        RecursiveReference = c.RecursiveReference,
-                    }).ToList();
+                dst._ctes = _ctes.Select(c => c.WithQuery(c.Query.CloneForCache())).ToList();
             }
 
             if (Prep?.ReferencedQueries is { Count: > 0 } referencedQueries)
@@ -309,13 +303,28 @@ public partial class QueryCommand
         return cmd;
     }
 
-    internal QueryCommand CloneForRawRecipe()
+    internal QueryCommand CloneForRawRecipe(RawShape? componentShape = null)
     {
         var clone = CloneForCache();
-        // The outer command keeps its own components when the recipe is staged.
-        clone._components = default;
-        clone._componentsView = null;
+        clone.ClearRawRecipeComponents(componentShape);
         return clone;
+    }
+
+    private void ClearRawRecipeComponents(RawShape? componentShape)
+    {
+        // The command and its staged descendants use the current components.
+        _components = default;
+        _componentsView = null;
+        if (componentShape?.UnionWithComponents is { } unionShape)
+            _union!.ClearRawRecipeComponents(unionShape);
+        if (componentShape is { HasCteComponents: true } && _ctes is { } ctes)
+        {
+            foreach (var definition in ctes)
+            {
+                if (componentShape.FindCteWithComponents(definition.Name) is { } body)
+                    definition.Query.ClearRawRecipeComponents(body);
+            }
+        }
     }
 
     // SQL keys are compared, not rendered. Keep the legacy cache clone executable for raw recipe

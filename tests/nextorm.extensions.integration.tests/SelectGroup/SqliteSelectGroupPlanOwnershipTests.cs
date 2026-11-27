@@ -142,6 +142,92 @@ public sealed class SqliteSelectGroupPlanOwnershipTests
     private static int RecipeReuses() => (int)typeof(DataContext).Assembly.GetType("NextORM.Core.QueryPlanner", throwOnError: true)!
         .GetProperty("RecipeReuses", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
 
+    [Fact]
+    public void RawRecipe_ReusesUnionWithoutRetainingTheFirstOperandsComponent()
+    {
+        using var firstConnection = new SqliteConnection("Data Source=:memory:");
+        using var secondConnection = new SqliteConnection("Data Source=:memory:");
+        Seed(firstConnection);
+        Seed(secondConnection);
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder());
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder());
+
+        var (firstPlan, firstComponent, _) = Execute(first);
+        var before = RecipeReuses();
+        var (secondPlan, _, keptFreshComponent) = Execute(second);
+        RecipeReuses().Should().Be(before + 1, "the second command must stage the raw set-operation recipe");
+        secondPlan.Should().BeSameAs(firstPlan);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        using var assertions = new AssertionScope();
+        firstComponent.IsAlive.Should().BeFalse("a nested raw recipe must not own the first operand's component");
+        keptFreshComponent.Should().BeTrue("staging must preserve the component of the current operand");
+        GC.KeepAlive(firstPlan);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (DbPreparedQueryCommand<int> Plan, WeakReference Component, bool KeptOwnComponent) Execute(SqliteDataContext context)
+        {
+            var right = context.From<GroupRow>().SelectGroupHaving(row => row.Id, id => id > 1);
+            var component = right.Components!.Single();
+            var command = context.From<GroupRow>()
+                .WithTag("raw union grouping ownership")
+                .Where(row => row.Id == 1)
+                .Select(row => row.Id)
+                .UnionAll(right);
+            var invocation = context.GetPreparedQueryCommand(command, false, true, TestContext.Current.CancellationToken);
+            invocation.ToList(context).Should().BeEquivalentTo(new[] { 1, 2 });
+            return (PreparedPlanObservation.GetPlan(invocation), new WeakReference(component),
+                ReferenceEquals(command.UnionQuery!.Components!.Single(), component));
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RawRecipe_ReusesCteWithoutRetainingTheFirstBodyComponent(bool withSibling)
+    {
+        using var firstConnection = new SqliteConnection("Data Source=:memory:");
+        using var secondConnection = new SqliteConnection("Data Source=:memory:");
+        Seed(firstConnection);
+        Seed(secondConnection);
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder());
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder());
+
+        var (firstPlan, firstComponent, _) = Execute(first, withSibling);
+        var before = RecipeReuses();
+        var (secondPlan, _, keptFreshComponent) = Execute(second, withSibling);
+        RecipeReuses().Should().Be(before + 1, "the second command must stage the raw CTE recipe");
+        secondPlan.Should().BeSameAs(firstPlan);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        using var assertions = new AssertionScope();
+        firstComponent.IsAlive.Should().BeFalse("the raw CTE recipe must not own the first definition's component");
+        keptFreshComponent.Should().BeTrue("staging must preserve the component of the current CTE body");
+        GC.KeepAlive(firstPlan);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (DbPreparedQueryCommand<int> Plan, WeakReference Component, bool KeptOwnComponent) Execute(
+            SqliteDataContext context, bool withSibling)
+        {
+            const string name = "issue16_owned_group";
+            var body = context.From<GroupRow>().SelectGroupHaving(row => row.Id, id => id > 1);
+            var component = body.Components!.Single();
+            var ctes = withSibling
+                ? context.With("issue16_other_group", context.From<GroupRow>().Select(row => row.Id)).With(name, body)
+                : context.With(name, body);
+            var command = ctes.From(name).Select(row => row["Id"].AsInt);
+            var invocation = context.GetPreparedQueryCommand(command, false, true, TestContext.Current.CancellationToken);
+            invocation.ToList(context).Should().Equal(2);
+            var preparedBody = command.Ctes!.Single(definition => definition.Name == name).Query;
+            return (PreparedPlanObservation.GetPlan(invocation), new WeakReference(component),
+                ReferenceEquals(preparedBody.Components!.Single(), component));
+        }
+    }
+
     private static void Seed(SqliteConnection connection)
     {
         connection.Open();

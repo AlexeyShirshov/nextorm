@@ -48,7 +48,7 @@ internal static class QueryPlanStore
         internal QueryCommand Recipe { get; } = recipe;
         internal void ApplyTo(QueryCommand command)
         {
-            command.ApplyPreparationFrom(Recipe, useCurrentWhere, useCurrentSorting);
+            command.ApplyPreparationFrom(Recipe, useCurrentWhere, useCurrentSorting, Shape);
             if (rebindGrouping)
                 command.RebindRawGrouping();
         }
@@ -334,9 +334,10 @@ internal static class QueryPlanStore
         }
         else
         {
-            var recipe = plan.NeedsSeparateRawRecipe || !shape.Components.IsEmpty
-                ? comparerSource.CloneForRawRecipe() : plan.QueryCommand;
-            candidate = new RawCandidate(plan, holder, shape.SnapshotComponents(), recipe, false, false);
+            var componentShape = shape.SnapshotComponents();
+            var recipe = plan.NeedsSeparateRawRecipe || !ReferenceEquals(componentShape, shape)
+                ? comparerSource.CloneForRawRecipe(componentShape) : plan.QueryCommand;
+            candidate = new RawCandidate(plan, holder, componentShape, recipe, false, false);
         }
         var index = RawIndex;
         if (!index.TryGetValue(shape.Fingerprint, out var bucket))
