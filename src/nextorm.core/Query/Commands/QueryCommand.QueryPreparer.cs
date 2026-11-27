@@ -4210,6 +4210,7 @@ public partial class QueryCommand
         private bool _hasComponentsInGraph;
         internal RawShape? UnionWithComponents => Union is { _hasComponentsInGraph: true } ? Union : null;
         internal bool HasCteComponents { get; private set; }
+        internal bool RebindGrouping { get; private set; }
         // Receiver identity at each captured-member occurrence, in traversal order. The same set of
         // owners is not enough: all occurrences must read the same owners as the staged expressions.
         internal object?[]? Closures;
@@ -4225,10 +4226,10 @@ public partial class QueryCommand
             return copy;
         }
 
-        internal RawShape SnapshotComponents(ExpressionVisitor? rewriter = null)
+        internal RawShape SnapshotComponents(QueryCommand? prepared)
         {
-            var union = Union?.SnapshotComponents(rewriter);
-            var ctes = SnapshotCteComponents(rewriter);
+            var union = Union?.SnapshotComponents(prepared?._union);
+            var ctes = SnapshotCteComponents(prepared?._ctes);
             if (Components.IsEmpty && ReferenceEquals(union, Union) && ReferenceEquals(ctes, Ctes))
                 return this;
 
@@ -4244,17 +4245,16 @@ public partial class QueryCommand
             for (var i = 0; i < shapes.Length; i++)
             {
                 var component = ReadComponentShape(i);
-                var selectors = rewriter is null
-                    ? (LambdaExpression[])component.Selectors.Clone()
-                    : Array.ConvertAll(component.Selectors, expression => (LambdaExpression)rewriter.Visit(expression));
-                shapes[i] = component with { Selectors = selectors };
+                var selectors = prepared?.TryGetRawGroupingSelectors(this, component.Selectors);
+                copy.RebindGrouping |= selectors is not null;
+                shapes[i] = component with { Selectors = selectors ?? (LambdaExpression[])component.Selectors.Clone() };
             }
             copy._componentShapes = shapes;
             copy.Components = default;
             return copy;
         }
 
-        private CteShape[]? SnapshotCteComponents(ExpressionVisitor? rewriter)
+        private CteShape[]? SnapshotCteComponents(IReadOnlyList<CteDefinition>? preparedCtes)
         {
             if (Ctes is not { } ctes)
                 return null;
@@ -4263,7 +4263,8 @@ public partial class QueryCommand
             for (var i = 0; i < ctes.Length; i++)
             {
                 var declaration = ctes[i];
-                var body = declaration.Body.SnapshotComponents(rewriter);
+                var prepared = preparedCtes?.FirstOrDefault(cte => cte.Name == declaration.Name);
+                var body = declaration.Body.SnapshotComponents(prepared?.Query);
                 if (!ReferenceEquals(body, declaration.Body))
                 {
                     snapshot ??= (CteShape[])ctes.Clone();
@@ -5548,6 +5549,8 @@ public partial class QueryCommand
         applied.PreparedArrayJoin = clone.Prep?.PreparedArrayJoin;
         if (useCurrentWhere)
             applied.PreparedCondition = _condition;
+        if (componentShape?.RebindGrouping == true)
+            RebindRawGrouping();
     }
 
     private static QueryCommand StageNestedPreparation(QueryCommand current, QueryCommand recipe, RawShape shape)

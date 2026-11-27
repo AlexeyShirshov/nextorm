@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using FluentAssertions;
@@ -227,6 +228,76 @@ public sealed class SqliteSelectGroupPlanOwnershipTests
                 ReferenceEquals(preparedBody.Components!.Single(), component));
         }
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RawRecipe_RebindsNestedHavingWithoutRetainingItsCapture(bool useCte)
+    {
+        using var firstConnection = new SqliteConnection("Data Source=:memory:");
+        using var secondConnection = new SqliteConnection("Data Source=:memory:");
+        Seed(firstConnection);
+        Seed(secondConnection);
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+
+        var (plan, capture) = Warm(first, second, useCte);
+        var targetOrdinal = useCte ? 0 : 1;
+        firstTap.Parameters.Should().Contain((targetOrdinal, "Target", 2));
+        secondTap.Parameters.Should().Contain((targetOrdinal, "Target", 1));
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        capture.IsAlive.Should().BeFalse("the nested raw selector and recipe must release the HAVING capture");
+        GC.KeepAlive(plan);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (DbPreparedQueryCommand<int> Plan, WeakReference Capture) Warm(
+            SqliteDataContext first, SqliteDataContext second, bool useCte)
+        {
+            var owner = new HavingOwner(2);
+            Expression<Func<int, bool>> having = id => id == owner.Target;
+            // Use a separate receiver so the outer WHERE makes the shape eligible for the existing
+            // refresh path without also keeping the nested capture alive.
+            var (entityFilter, cteFilter) = OuterFilters(new OuterFilter(1, 0));
+            var token = TestContext.Current.CancellationToken;
+
+            QueryCommand<int> Build(SqliteDataContext context)
+            {
+                var body = context.From<GroupRow>().SelectGroupHaving(row => row.Id, having);
+                if (useCte)
+                {
+                    const string name = "issue16_captured_group";
+                    return context.With(name, body).From(name).Where(cteFilter).Select(row => row["Id"].AsInt);
+                }
+
+                return context.From<GroupRow>()
+                    .WithTag("nested raw having ownership")
+                    .Where(entityFilter)
+                    .Select(row => row.Id)
+                    .UnionAll(body);
+            }
+
+            var cold = first.GetPreparedQueryCommand(Build(first), false, true, token);
+            cold.ToList(first).Should().BeEquivalentTo(useCte ? [2] : new[] { 1, 2 });
+            owner.Target = 1;
+            var before = RecipeReuses();
+            var warm = second.GetPreparedQueryCommand(Build(second), false, true, token);
+            warm.ToList(second).Should().BeEquivalentTo(useCte ? [1] : new[] { 1, 1 });
+            RecipeReuses().Should().Be(before + 1, "the second call must stage the existing nested recipe");
+            var plan = PreparedPlanObservation.GetPlan(cold);
+            PreparedPlanObservation.GetPlan(warm).Should().BeSameAs(plan);
+            return (plan, new WeakReference(owner));
+        }
+    }
+
+    private static (Expression<Func<GroupRow, bool>>, Expression<Func<TableAlias, bool>>) OuterFilters(OuterFilter filter)
+        => (row => row.Id == filter.RootId, row => row["Id"].AsInt > filter.LowerBound);
+
+    private sealed record OuterFilter(int RootId, int LowerBound);
 
     private static void Seed(SqliteConnection connection)
     {

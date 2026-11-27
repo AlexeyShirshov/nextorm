@@ -303,21 +303,26 @@ public partial class QueryCommand
         return cmd;
     }
 
-    internal QueryCommand CloneForRawRecipe(RawShape? componentShape = null)
+    internal QueryCommand CloneForRawRecipe(RawShape componentShape)
     {
         var clone = CloneForCache();
         clone.ClearRawRecipeComponents(componentShape);
         return clone;
     }
 
-    private void ClearRawRecipeComponents(RawShape? componentShape)
+    private void ClearRawRecipeComponents(RawShape componentShape)
     {
         // The command and its staged descendants use the current components.
         _components = default;
         _componentsView = null;
-        if (componentShape?.UnionWithComponents is { } unionShape)
+        if (componentShape.RebindGrouping)
+        {
+            EffectiveHaving = null;
+            PreparedComponents = null;
+        }
+        if (componentShape.UnionWithComponents is { } unionShape)
             _union!.ClearRawRecipeComponents(unionShape);
-        if (componentShape is { HasCteComponents: true } && _ctes is { } ctes)
+        if (componentShape.HasCteComponents && _ctes is { } ctes)
         {
             foreach (var definition in ctes)
             {

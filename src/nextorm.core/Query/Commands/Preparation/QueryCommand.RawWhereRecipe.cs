@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 
 namespace NextORM.Core;
@@ -79,7 +80,7 @@ public partial class QueryCommand
 
     // Keep the inferred keys, but rebuild HAVING from the fresh component and projection. No
     // capture from the original selector or the first bound predicate belongs in this recipe.
-    internal (RawShape Shape, QueryCommand Recipe)? TryDetachRawGrouping(RawShape shape)
+    private LambdaExpression[]? TryGetRawGroupingSelectors(RawShape shape, LambdaExpression[] selectors)
     {
         if (shape.Closures is not { Length: > 0 } || !SupportsSimpleRawReplay(shape)
             || shape.Components.Count != 1 || shape.Components[0] is not IRawGroupingComponent
@@ -108,17 +109,14 @@ public partial class QueryCommand
             return null;
 
         visitor.RemoveReceivers = true;
-        var comparison = shape.SnapshotComponents(visitor);
+        var comparison = Array.ConvertAll(selectors, expression => (LambdaExpression)visitor.Visit(expression));
         if (!visitor.Supported || !visitor.RemovedReceiver)
             return null;
 
-        var recipe = CloneForRawRecipe();
-        recipe.EffectiveHaving = null;
-        recipe.PreparedComponents = null;
-        return (comparison, recipe);
+        return comparison;
     }
 
-    internal void RebindRawGrouping()
+    private void RebindRawGrouping()
     {
         var component = (IRawGroupingComponent)_components[0];
         var descriptor = component.BindRawHaving(_exp!, EffectiveGroupingKeys!, GetExpressionPlanEqualityComparer());
@@ -230,6 +228,7 @@ public partial class QueryCommand
             return Supported;
         }
 
+        [return: NotNullIfNotNull(nameof(node))]
         public override Expression? Visit(Expression? node)
         {
             if (node is null || !Supported)

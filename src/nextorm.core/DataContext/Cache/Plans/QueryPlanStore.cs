@@ -40,18 +40,14 @@ internal static class QueryPlanStore
     /// must be separate when the normalized key uses comparison-only expressions.
     /// </summary>
     internal sealed class RawCandidate(QueryPlan plan, IDbCommandHolder holder, QueryCommand.RawShape shape,
-        QueryCommand recipe, bool useCurrentWhere, bool useCurrentSorting, bool rebindGrouping = false)
+        QueryCommand recipe, bool useCurrentWhere, bool useCurrentSorting)
     {
         internal QueryPlan Plan { get; } = plan;
         internal IDbCommandHolder Holder { get; } = holder;
         internal QueryCommand.RawShape Shape { get; } = shape;
         internal QueryCommand Recipe { get; } = recipe;
-        internal void ApplyTo(QueryCommand command)
-        {
+        internal void ApplyTo(QueryCommand command) =>
             command.ApplyPreparationFrom(Recipe, useCurrentWhere, useCurrentSorting, Shape);
-            if (rebindGrouping)
-                command.RebindRawGrouping();
-        }
     }
 
     /// <summary>
@@ -324,17 +320,13 @@ internal static class QueryPlanStore
     {
         _ = contextType;
         RawCandidate candidate;
-        if (comparerSource.TryDetachRawGrouping(shape) is { } grouping)
-        {
-            candidate = new RawCandidate(plan, holder, grouping.Shape, grouping.Recipe, false, false, rebindGrouping: true);
-        }
-        else if (comparerSource.TryDetachRawClauses(shape) is { } replay)
+        if (comparerSource.TryDetachRawClauses(shape) is { } replay)
         {
             candidate = new RawCandidate(plan, holder, replay.Shape, replay.Recipe, replay.UseCurrentWhere, replay.UseCurrentSorting);
         }
         else
         {
-            var componentShape = shape.SnapshotComponents();
+            var componentShape = shape.SnapshotComponents(comparerSource);
             var recipe = plan.NeedsSeparateRawRecipe || !ReferenceEquals(componentShape, shape)
                 ? comparerSource.CloneForRawRecipe(componentShape) : plan.QueryCommand;
             candidate = new RawCandidate(plan, holder, componentShape, recipe, false, false);
