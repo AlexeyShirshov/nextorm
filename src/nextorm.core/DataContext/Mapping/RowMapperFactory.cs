@@ -254,11 +254,12 @@ internal static class RowMapperFactory
         bool streaming = false)
     {
         var key = BuildKey(queryCommand, typeof(TResult), sql, providerType, streaming);
-        if (MapperCache.TryGet(key, out var cached))
+        var cache = MapperCache.ForColumns(queryCommand.SelectList);
+        if (cache.TryGet(key, out var cached))
             return (Func<IDataRecord, TResult>)cached;
 
         var map = Build<TResult>(queryCommand, logger, mapColumn, streaming);
-        MapperCache.Add(key, map);
+        cache.Add(key, map);
         return map;
     }
 
@@ -287,11 +288,12 @@ internal static class RowMapperFactory
         bool streaming = false)
     {
         var key = BuildKey(queryCommand, resultType, sql, providerType, streaming, boxed: true);
-        if (MapperCache.TryGet(key, out var cached))
+        var cache = MapperCache.ForColumns(queryCommand.SelectList);
+        if (cache.TryGet(key, out var cached))
             return (Func<IDataRecord, object?>)cached;
 
         var map = BuildBoxed(queryCommand, resultType, logger, mapColumn, streaming);
-        MapperCache.Add(key, map);
+        cache.Add(key, map);
         return map;
     }
 
@@ -318,11 +320,12 @@ internal static class RowMapperFactory
         var context = mapColumn.Target as DataContext;
         var key = new MapperCacheKey(providerType, typeof(TResult), sql, MapperColumnShape.Create(selectList), oneColumn, Streaming: false,
             Dialect: PlanDialectIdentity.For(context), Mapping: PlanMappingIdentity.For(context));
-        if (MapperCache.TryGet(key, out var cached))
+        var cache = MapperCache.ForColumns(selectList);
+        if (cache.TryGet(key, out var cached))
             return (Func<IDataRecord, TResult>)cached;
 
         var map = Build<TResult>(selectList, oneColumn, null, mapColumn, streaming: false);
-        MapperCache.Add(key, map);
+        cache.Add(key, map);
         return map;
     }
 
