@@ -714,6 +714,19 @@ var refs = db.From<InstructionState>()
     .Select(p => new { p.Item1.SessionId, p.Item3.Value });
 ```
 
+With `InstructionState` mapped to the `instruction_state` table and `snake_case`
+columns, the SQLite provider generates this SQL. The first `json_each` reads JSON
+from `t1`, and the second expands the `t2.value` emitted by the first:
+
+```sql
+select t1.session_id as 'SessionId', t3.value
+from instruction_state as 't1'
+cross join json_each(
+    json_array(json(t1.initial_values), json(t1.current_values))
+) as 't2'
+cross join json_each(t2.value) as 't3'
+```
+
 To name a joined source, pass an [alias marker](04-joins.md#named-join-aliases) as the second
 argument. Use the generated property to refer to that source in the next factory lambda:
 
@@ -726,8 +739,11 @@ var refs = db.From<InstructionState>()
     .Select(p => new { p.Item1.SessionId, p.Refs.Value });
 ```
 
-SQLite renders the function directly after `CROSS JOIN`, without `LATERAL`. Call the TVF factory
-directly in the lambda and put any filters after the join. Use `() => ...` for an uncorrelated source.
+The query using `Alias.States` and `Alias.Refs` generates the same SQL: the C#
+property names correspond to the SQL aliases `t2` and `t3`. The SQLite provider
+renders the function directly after `CROSS JOIN`, without `LATERAL`. Call the TVF
+factory directly in the lambda and put any filters after the join. Use `() => ...`
+for an uncorrelated source.
 
 ## Provider differences
 

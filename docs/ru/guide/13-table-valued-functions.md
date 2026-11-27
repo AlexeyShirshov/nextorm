@@ -719,6 +719,19 @@ var refs = db.From<InstructionState>()
     .Select(p => new { p.Item1.SessionId, p.Item3.Value });
 ```
 
+Если `InstructionState` сопоставлен с таблицей `instruction_state` и столбцами в
+`snake_case`, провайдер SQLite генерирует такой SQL. Первый `json_each` читает JSON из
+строки `t1`, а второй разворачивает значение `t2.value`, полученное от первого:
+
+```sql
+select t1.session_id as 'SessionId', t3.value
+from instruction_state as 't1'
+cross join json_each(
+    json_array(json(t1.initial_values), json(t1.current_values))
+) as 't2'
+cross join json_each(t2.value) as 't3'
+```
+
 Чтобы назвать присоединённый источник, передайте
 [маркер псевдонима](04-joins.md#именованные-псевдонимы-соединений) вторым аргументом.
 В следующей лямбде обращайтесь к этому источнику через сгенерированное свойство:
@@ -732,9 +745,11 @@ var refs = db.From<InstructionState>()
     .Select(p => new { p.Item1.SessionId, p.Refs.Value });
 ```
 
-SQLite выводит вызов функции сразу после `CROSS JOIN`, без `LATERAL`. Вызовите фабрику
-табличной функции непосредственно в лямбде, а фильтры задайте после соединения. Для
-некоррелированного источника используйте `() => ...`.
+Запрос с `Alias.States` и `Alias.Refs` генерирует тот же SQL: имена свойств в C#
+соответствуют SQL-псевдонимам `t2` и `t3`. Провайдер SQLite помещает вызов функции
+сразу после `CROSS JOIN`, без `LATERAL`. Вызовите фабрику табличной функции
+непосредственно в лямбде, а фильтры задайте после соединения. Для некоррелированного
+источника используйте `() => ...`.
 
 ## Различия между провайдерами
 
