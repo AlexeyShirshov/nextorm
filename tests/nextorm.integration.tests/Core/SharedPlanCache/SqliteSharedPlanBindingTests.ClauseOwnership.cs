@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using FluentAssertions;
 using NextORM.Sqlite;
@@ -6,6 +7,104 @@ namespace NextORM.Integration.Tests;
 
 public sealed partial class SqliteSharedPlanBindingTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RawRecipe_DoesNotShareMutableNestedCommandsBetweenCallers(bool useCte)
+    {
+        using var connection = OpenSeededConnection();
+        using var context = new SqliteDataContext(connection, new DataContextBuilder());
+        var token = TestContext.Current.CancellationToken;
+        var cold = context.GetPreparedQueryCommand(Build(), false, true, token);
+        var before = QueryPlanner.RecipeReuses;
+        var first = Build();
+        var firstWarm = context.GetPreparedQueryCommand(first, false, true, token);
+        var second = Build();
+        var secondWarm = context.GetPreparedQueryCommand(second, false, true, token);
+        QueryPlanner.RecipeReuses.Should().Be(before + 2);
+        BoundQueryInvocation<int>.GetPlan(firstWarm).Should().BeSameAs(BoundQueryInvocation<int>.GetPlan(cold));
+        BoundQueryInvocation<int>.GetPlan(secondWarm).Should().BeSameAs(BoundQueryInvocation<int>.GetPlan(cold));
+
+        var firstBody = Body(first);
+        var secondBody = Body(second);
+        firstBody.Should().NotBeSameAs(secondBody, "a raw hit must own its mutable nested command");
+        firstBody.ResetPreparation();
+        secondBody.IsPrepared.Should().BeTrue();
+        secondWarm.ToList(context).Should().BeEquivalentTo(useCte ? [2] : new[] { 1, 2 });
+
+        QueryCommand Body(QueryCommand<int> command)
+            => useCte ? command.Ctes!.Single().Query : command.UnionQuery!;
+
+        QueryCommand<int> Build()
+        {
+            var body = context.From<BindingRow>().Where(row => row.Id == 2).Select(row => row.Id);
+            return useCte
+                ? context.With("issue16_owned_raw_body", body).From("issue16_owned_raw_body").Select(row => row["Id"].AsInt)
+                : context.From<BindingRow>().WithTag("raw nested body identity").Where(row => row.Id == 1)
+                    .Select(row => row.Id).UnionAll(body);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RawRecipe_RebindsNestedWhereWithoutRetainingItsCapture(bool useCte)
+    {
+        using var firstConnection = OpenSeededConnection();
+        using var secondConnection = OpenSeededConnection();
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+        var (holder, capture) = Execute(first, second, useCte);
+
+        firstTap.LastParameters.Should().Contain((useCte ? 0 : 1, "Target", 2));
+        secondTap.LastParameters.Should().Contain((useCte ? 0 : 1, "Target", 1));
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        capture.IsAlive.Should().BeFalse("the nested WHERE recipe and descriptor must release their first capture");
+        QueryPlanStore.Values.Should().Contain(holder);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (DbPreparedQueryCommand<int> Holder, WeakReference Capture) Execute(
+            SqliteDataContext first, SqliteDataContext second, bool useCte)
+        {
+            var owner = new WhereOwner { Target = 2 };
+            Expression<Func<BindingRow, bool>> nestedFilter = row => row.Id == owner.Target;
+            var (entityFilter, cteFilter) = OuterFilters(1, 0);
+            var token = TestContext.Current.CancellationToken;
+
+            QueryCommand<int> Build(SqliteDataContext context)
+            {
+                var body = context.From<BindingRow>().Where(nestedFilter).Select(row => row.Id);
+                if (useCte)
+                {
+                    const string name = "issue16_nested_raw_where";
+                    return context.With(name, body).From(name).Where(cteFilter).Select(row => row["Id"].AsInt);
+                }
+
+                return context.From<BindingRow>().WithTag("nested raw where ownership")
+                    .Where(entityFilter).Select(row => row.Id).UnionAll(body);
+            }
+
+            var cold = first.GetPreparedQueryCommand(Build(first), false, true, token);
+            cold.ToList(first).Should().BeEquivalentTo(useCte ? [2] : new[] { 1, 2 });
+            owner.Target = 1;
+            var reuses = QueryPlanner.RecipeReuses;
+            var warm = second.GetPreparedQueryCommand(Build(second), false, true, token);
+            warm.ToList(second).Should().BeEquivalentTo(useCte ? [1] : new[] { 1, 1 });
+            QueryPlanner.RecipeReuses.Should().Be(reuses + 1, "the second call must stage the nested recipe");
+            var holder = BoundQueryInvocation<int>.GetPlan(cold)!;
+            BoundQueryInvocation<int>.GetPlan(warm).Should().BeSameAs(holder);
+            return (holder, new WeakReference(owner));
+        }
+
+        static (Expression<Func<BindingRow, bool>>, Expression<Func<TableAlias, bool>>) OuterFilters(int outerId, int lowerBound)
+            => (row => row.Id == outerId, row => row["Id"].AsInt > lowerBound);
+    }
+
     [Fact]
     public void RawRecipe_RebindsScalarProjectionWithoutRetainingTheFirstOwner()
     {

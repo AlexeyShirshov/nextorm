@@ -8,14 +8,23 @@ public partial class QueryCommand
     // If preparation left an authored clause intact, the next matching command already owns
     // its executable form. Keep only comparison syntax for that clause in the descriptor.
     // More complex preparations keep the existing executable snapshot for now.
-    internal (RawShape Shape, QueryCommand Recipe, bool UseCurrentWhere, bool UseCurrentSorting)? TryDetachRawClauses(RawShape shape)
+    internal (RawShape Shape, QueryCommand Recipe)? TryDetachRawClauses(RawShape shape)
     {
-        if (shape.Closures is not { Length: > 0 } || !SupportsRawWhereReplay(shape))
+        if (shape.Closures is not { Length: > 0 }
+            || SnapshotRawClauses(shape) is not { } replay || ReferenceEquals(shape, replay))
+            return null;
+
+        return (replay, CloneForRawRecipe(replay));
+    }
+
+    private RawShape? SnapshotRawClauses(RawShape shape)
+    {
+        if (!SupportsRawWhereReplay(shape))
             return null;
 
         var condition = shape.Condition;
         if (!ReferenceEquals(condition, _condition)
-            || (condition is not null && !HasUnchangedClause(condition, PreparedCondition)))
+            || !HasUnchangedClause(RawWhereForReplay(condition), PreparedCondition))
             return null;
 
         var visitor = new RawClauseCaptureVisitor();
@@ -87,22 +96,13 @@ public partial class QueryCommand
         visitor.RemoveReceivers = true;
         var comparisonWindows = _windows is { Count: > 0 } windows ? RewriteWindowExpressions(windows, visitor) : null;
 
-        if (!visitor.Supported
-            || (!useCurrentWhere && !useCurrentSorting && comparisonProjection is null && comparisonWindows is null))
+        if (!visitor.Supported)
             return null;
 
-        var recipe = CloneForCache();
-        if (useCurrentWhere)
-            recipe.PreparedCondition = null;
-        if (useCurrentSorting)
-            recipe._sorting = null;
-        if (comparisonProjection is not null)
-            recipe._selectList![0].Expression = null;
-        if (comparisonWindows is not null)
-            recipe._windows = null;
-
-        return (shape.WithComparisonClauses(comparisonCondition, comparisonSorting, comparisonProjection, comparisonWindows),
-            recipe, useCurrentWhere, useCurrentSorting);
+        var replay = useCurrentWhere || useCurrentSorting || comparisonProjection is not null || comparisonWindows is not null
+            ? shape.WithComparisonClauses(comparisonCondition, comparisonSorting, comparisonProjection, comparisonWindows)
+            : shape;
+        return replay.SnapshotRawClauseChildren(this);
     }
 
     // Keep the inferred keys, but rebuild HAVING from the fresh component and projection. No
@@ -110,6 +110,7 @@ public partial class QueryCommand
     private LambdaExpression[]? TryGetRawGroupingSelectors(RawShape shape, LambdaExpression[] selectors)
     {
         if (shape.Closures is not { Length: > 0 } || !SupportsSimpleRawReplay(shape)
+            || shape.Ctes is not null || shape.Union is not null || _ctes is not null || _union is not null
             || shape.Windows is not null || _windows is not null
             || shape.Components.Count != 1 || shape.Components[0] is not IRawGroupingComponent
             || shape.Exp is null || !ReferenceEquals(shape.Exp, _exp)
@@ -151,6 +152,12 @@ public partial class QueryCommand
         PreparedComponents = [descriptor];
         EffectiveHaving = descriptor.Preparation.Having;
     }
+
+    // The correlation visitor strips the TableAlias lambda wrapper during WHERE preparation.
+    private static Expression? RawWhereForReplay(LambdaExpression? condition)
+        => condition is { Parameters: [var parameter] } && parameter.Type == typeof(TableAlias)
+            ? condition.Body
+            : condition;
 
     private static bool HasUnchangedClause(Expression? authored, Expression? prepared)
         // The correlated visitor recreates the lambda wrapper even for an unchanged body. Require
@@ -196,12 +203,12 @@ public partial class QueryCommand
             };
 
     private bool SupportsSimpleRawReplay(RawShape shape)
-        => shape.Joins is null && shape.Ctes is null && shape.Union is null
+        => shape.Joins is null
             && shape.Group is null && shape.Having is null && shape.PreWhere is null
             && shape.PerParentPartition is null && shape.ArrayJoins is null
             && shape.LimitBy is null && shape.DistinctOn is null && shape.ExtremeRow is null
             && IsPlainRecipeSource(shape.From) && IsPlainRecipeSource(_from)
-            && _joins is null && _ctes is null && _union is null
+            && _joins is null
             && OuterRegistry is null
             && NavigationPaths is null && NavigationChain is null && JunctionChildFilter is null
             && _groupExp is null && _having is null && _preWhere is null && PerParentPartition is null

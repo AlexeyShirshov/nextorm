@@ -56,15 +56,14 @@ internal static class QueryPlanStore
     /// preparation, the normalized plan key, the holder, and the prepared graph to stage. The graph
     /// must be separate when the normalized key uses comparison-only expressions.
     /// </summary>
-    internal sealed class RawCandidate(QueryPlan plan, IDbCommandHolder holder, QueryCommand.RawShape shape,
-        QueryCommand recipe, bool useCurrentWhere, bool useCurrentSorting)
+    internal sealed class RawCandidate(QueryPlan plan, IDbCommandHolder holder, QueryCommand.RawShape shape, QueryCommand recipe)
     {
         internal QueryPlan Plan { get; } = plan;
         internal IDbCommandHolder Holder { get; } = holder;
         internal QueryCommand.RawShape Shape { get; } = shape;
         internal QueryCommand Recipe { get; } = recipe;
         internal void ApplyTo(QueryCommand command) =>
-            command.ApplyPreparationFrom(Recipe, useCurrentWhere, useCurrentSorting, Shape);
+            command.ApplyPreparationFrom(Recipe, Shape);
     }
 
     private readonly struct RawIndexEntry
@@ -437,14 +436,14 @@ internal static class QueryPlanStore
         RawCandidate candidate;
         if (comparerSource.TryDetachRawClauses(shape) is { } replay)
         {
-            candidate = new RawCandidate(plan, holder, replay.Shape, replay.Recipe, replay.UseCurrentWhere, replay.UseCurrentSorting);
+            candidate = new RawCandidate(plan, holder, replay.Shape, replay.Recipe);
         }
         else
         {
             var componentShape = shape.SnapshotComponents(comparerSource);
             var recipe = plan.NeedsSeparateRawRecipe || !ReferenceEquals(componentShape, shape)
                 ? comparerSource.CloneForRawRecipe(componentShape) : plan.QueryCommand;
-            candidate = new RawCandidate(plan, holder, componentShape, recipe, false, false);
+            candidate = new RawCandidate(plan, holder, componentShape, recipe);
         }
 
         if (plan.HasOpaqueComponentDescriptors)

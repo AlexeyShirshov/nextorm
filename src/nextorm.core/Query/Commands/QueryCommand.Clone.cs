@@ -303,31 +303,39 @@ public partial class QueryCommand
         return cmd;
     }
 
-    internal QueryCommand CloneForRawRecipe(RawShape componentShape)
+    internal QueryCommand CloneForRawRecipe(RawShape shape)
     {
         var clone = CloneForCache();
-        clone.ClearRawRecipeComponents(componentShape);
+        clone.ClearReplayedRawState(shape);
         return clone;
     }
 
-    private void ClearRawRecipeComponents(RawShape componentShape)
+    private void ClearReplayedRawState(RawShape shape)
     {
-        // The command and its staged descendants use the current components.
+        // The staged command and its descendants use their own components and authored clauses.
         _components = default;
         _componentsView = null;
-        if (componentShape.RebindGrouping)
+        if (shape.UseCurrentWhere)
+            PreparedCondition = null;
+        if (shape.UseCurrentSorting)
+            _sorting = null;
+        if (shape.UseCurrentScalarProjection)
+            _selectList![0].Expression = null;
+        if (shape.UseCurrentWindows)
+            _windows = null;
+        if (shape.RebindGrouping)
         {
             EffectiveHaving = null;
             PreparedComponents = null;
         }
-        if (componentShape.UnionWithComponents is { } unionShape)
-            _union!.ClearRawRecipeComponents(unionShape);
-        if (componentShape.HasCteComponents && _ctes is { } ctes)
+        if (shape.UnionToStage is { } unionShape)
+            _union!.ClearReplayedRawState(unionShape);
+        if (shape.HasCtesToStage && _ctes is { } ctes)
         {
             foreach (var definition in ctes)
             {
-                if (componentShape.FindCteWithComponents(definition.Name) is { } body)
-                    definition.Query.ClearRawRecipeComponents(body);
+                if (shape.FindCteToStage(definition.Name) is { } body)
+                    definition.Query.ClearReplayedRawState(body);
             }
         }
     }

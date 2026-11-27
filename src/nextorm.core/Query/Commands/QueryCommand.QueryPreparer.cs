@@ -4208,10 +4208,12 @@ public partial class QueryCommand
         // comparison data on the root, set-operation operands and CTE declarations.
         internal ComponentSet Components;
         private ComponentShape[]? _componentShapes;
-        private bool _hasComponentsInGraph;
-        internal RawShape? UnionWithComponents => Union is { _hasComponentsInGraph: true } ? Union : null;
-        internal bool HasCteComponents { get; private set; }
+        private bool _requiresStaging;
+        internal RawShape? UnionToStage => Union is { _requiresStaging: true } ? Union : null;
+        internal bool HasCtesToStage { get; private set; }
         internal bool RebindGrouping { get; private set; }
+        internal bool UseCurrentWhere { get; private set; }
+        internal bool UseCurrentSorting { get; private set; }
         internal bool UseCurrentScalarProjection { get; private set; }
         internal bool UseCurrentWindows { get; private set; }
         // Receiver identity at each captured-member occurrence, in traversal order. The same set of
@@ -4225,6 +4227,9 @@ public partial class QueryCommand
             WindowDefinition[]? windows)
         {
             var copy = (RawShape)MemberwiseClone();
+            copy._requiresStaging = true;
+            copy.UseCurrentWhere = !ReferenceEquals(Condition, condition);
+            copy.UseCurrentSorting = !ReferenceEquals(Sorting, sorting);
             copy.Condition = condition;
             copy.Sorting = sorting;
             if (projection is not null)
@@ -4240,6 +4245,46 @@ public partial class QueryCommand
             return copy;
         }
 
+        internal RawShape? SnapshotRawClauseChildren(QueryCommand prepared)
+        {
+            if ((Ctes?.Length ?? 0) != (prepared._ctes?.Count ?? 0)
+                || (Union is null) != (prepared._union is null))
+                return null;
+
+            var union = Union is null ? null : prepared._union!.SnapshotRawClauses(Union);
+            if (Union is not null && union is null)
+                return null;
+
+            CteShape[]? ctes = null;
+            if (Ctes is { } declarations)
+            {
+                for (var i = 0; i < declarations.Length; i++)
+                {
+                    var declaration = declarations[i];
+                    // Prepared declarations keep their hoisted order. Pair bodies by name.
+                    var preparedBody = prepared._ctes!.FirstOrDefault(cte => cte.Name == declaration.Name);
+                    var body = preparedBody?.Query.SnapshotRawClauses(declaration.Body);
+                    if (body is null)
+                        return null;
+                    if (!ReferenceEquals(body, declaration.Body))
+                    {
+                        ctes ??= (CteShape[])declarations.Clone();
+                        ctes[i] = declaration.WithBody(body);
+                    }
+                }
+            }
+
+            if (ReferenceEquals(union, Union) && ctes is null)
+                return this;
+
+            var copy = (RawShape)MemberwiseClone();
+            copy.Union = union;
+            copy.Ctes = ctes ?? Ctes;
+            copy.HasCtesToStage |= ctes is not null;
+            copy._requiresStaging = true;
+            return copy;
+        }
+
         internal RawShape SnapshotComponents(QueryCommand? prepared)
         {
             var union = Union?.SnapshotComponents(prepared?._union);
@@ -4250,8 +4295,8 @@ public partial class QueryCommand
             var copy = (RawShape)MemberwiseClone();
             copy.Union = union;
             copy.Ctes = ctes;
-            copy.HasCteComponents = HasCteComponents || !ReferenceEquals(ctes, Ctes);
-            copy._hasComponentsInGraph = true;
+            copy.HasCtesToStage = HasCtesToStage || !ReferenceEquals(ctes, Ctes);
+            copy._requiresStaging = true;
             if (Components.IsEmpty)
                 return copy;
 
@@ -4288,11 +4333,11 @@ public partial class QueryCommand
             return snapshot ?? ctes;
         }
 
-        internal RawShape? FindCteWithComponents(string name)
+        internal RawShape? FindCteToStage(string name)
         {
             foreach (var cte in Ctes!)
             {
-                if (cte.Body._hasComponentsInGraph && string.Equals(cte.Name, name, StringComparison.Ordinal))
+                if (cte.Body._requiresStaging && string.Equals(cte.Name, name, StringComparison.Ordinal))
                     return cte.Body;
             }
             return null;
@@ -5507,8 +5552,7 @@ public partial class QueryCommand
     /// <c>joins</c>, <c>ctes</c>, <c>union</c>) and the sort keys, whose prepared form preparation fills
     /// in place; the caller restores all of them on discard.
     /// </summary>
-    internal void ApplyPreparationFrom(QueryCommand clone, bool useCurrentWhere = false, bool useCurrentSorting = false,
-        RawShape? componentShape = null)
+    internal void ApplyPreparationFrom(QueryCommand clone, RawShape? shape = null)
     {
         // Adopt the stored cache-side state through the same copy path the cache clone itself uses, so
         // the staged command is exactly what a normalized lookup compares against. The raw graph is
@@ -5523,30 +5567,35 @@ public partial class QueryCommand
         // own component when a parameter refresh needs to render.
         _components = components;
         _componentsView = componentsView;
-        if (componentShape?.UseCurrentWindows == true)
+        if (shape?.UseCurrentWindows == true)
             _windows = currentWindows;
-        if (componentShape?.UnionWithComponents is { } unionShape)
+        if (shape?.UnionToStage is { } unionShape)
             _union = StageNestedPreparation(currentUnion!, clone._union!, unionShape);
-        if (componentShape is { HasCteComponents: true } && _ctes is { } ctes)
+        else if (shape is not null)
+            _union = _union?.CloneForCache();
+        if (shape is not null && _ctes is { Count: > 0 } ctes)
         {
-            CteDefinition[]? staged = null;
+            // Even a body with no replay flags is a mutable command exposed on the staged query.
+            // It must not be the recipe's body or one already adopted by another caller.
+            var staged = new CteDefinition[ctes.Count];
             for (var i = 0; i < ctes.Count; i++)
             {
                 var definition = ctes[i];
-                if (componentShape.FindCteWithComponents(definition.Name) is not { } body)
+                if (!shape.HasCtesToStage || shape.FindCteToStage(definition.Name) is not { } body)
+                {
+                    staged[i] = definition.WithQuery(definition.Query.CloneForCache());
                     continue;
+                }
 
                 // Keep the recipe's hoisted order. Pair the caller's declaration by name rather
                 // than assuming that its position is unchanged by preparation.
                 var current = currentCtes!.First(cte => cte.Name == definition.Name);
-                staged ??= ctes.ToArray();
                 staged[i] = definition.WithQuery(StageNestedPreparation(current.Query, definition.Query, body));
             }
-            if (staged is not null)
-                _ctes = staged;
+            _ctes = staged;
         }
         CopyPreparedColumns();
-        if (componentShape?.UseCurrentScalarProjection == true)
+        if (shape?.UseCurrentScalarProjection == true)
             _selectList![0].Expression = _exp;
 
         // Members CopyTo never carries: the clone's joins come from its Definition, so they must be
@@ -5558,6 +5607,7 @@ public partial class QueryCommand
         // query differ from the stored one and reject the candidate on every call. The stored array is
         // the same shape the raw description already proved, so copying it is what makes the staged
         // command comparable; the caller's own raw array is restored by DiscardStagedPreparation.
+        var useCurrentSorting = shape?.UseCurrentSorting == true;
         _sorting = CloneJoinArray(useCurrentSorting ? _sorting : clone._sorting);
         if (useCurrentSorting && _sorting is { } sorting)
         {
@@ -5567,9 +5617,9 @@ public partial class QueryCommand
         var applied = Prepared;
         applied.WhereBasePlanHash = clone.Prep?.WhereBasePlanHash ?? 0;
         applied.PreparedArrayJoin = clone.Prep?.PreparedArrayJoin;
-        if (useCurrentWhere)
-            applied.PreparedCondition = _condition;
-        if (componentShape?.RebindGrouping == true)
+        if (shape?.UseCurrentWhere == true)
+            applied.PreparedCondition = RawWhereForReplay(_condition);
+        if (shape?.RebindGrouping == true)
             RebindRawGrouping();
     }
 
@@ -5578,7 +5628,7 @@ public partial class QueryCommand
         // Keep both the incoming command and the recipe unchanged so rollback can restore the
         // original input and prepare it normally.
         var staged = current.Clone();
-        staged.ApplyPreparationFrom(recipe, componentShape: shape);
+        staged.ApplyPreparationFrom(recipe, shape);
         return staged;
     }
 
