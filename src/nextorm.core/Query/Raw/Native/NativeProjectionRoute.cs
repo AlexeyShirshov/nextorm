@@ -361,7 +361,9 @@ internal static class NativeProjectionRoute
         /// <param name="prepared">The holder the legacy route compiled.</param>
         internal void Publish(QueryCommand<TResult> command, IPreparedQueryCommand<TResult> prepared)
         {
-            if (_shape is null || BoundQueryInvocation<TResult>.GetPlan(prepared) is not { } holder)
+            // A native hit skips projection preparation, which obtains the executing converter.
+            if (_shape is null
+                || BoundQueryInvocation<TResult>.GetPlan(prepared) is not { RequiresInvocationMapper: false } holder)
                 return;
 
             // A value list rendered in a clause whose shape is not part of the key (IN/PREWHERE at any

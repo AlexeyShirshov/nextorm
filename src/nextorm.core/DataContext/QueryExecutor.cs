@@ -713,7 +713,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     {
         if (preparedQueryCommand is BoundQueryInvocation<TResult> invocation)
         {
-            boundValues = invocation.Values;
+            boundValues = invocation.Values.Length == 0 ? null : invocation.Values;
             return invocation.Plan;
         }
 
@@ -722,15 +722,20 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             ?? throw new ArgumentException($"Expected {nameof(DbPreparedQueryCommand<TResult>)}, got {preparedQueryCommand.GetType().Name}", nameof(preparedQueryCommand));
     }
 
+    private static Func<IDataRecord, TResult>? GetInvocationMapper<TResult>(
+        IPreparedQueryCommand<TResult> prepared, DbPreparedQueryCommand<TResult> plan)
+        => plan.MapDelegate ?? (prepared as BoundQueryInvocation<TResult>)?.Mapper;
+
     /// <summary>
     /// Creates a fresh enumerator with the executing context's logging options. Rejects a command
     /// prepared for buffered use before creating or leasing a database command.
     /// </summary>
-    private ResultSetEnumerator<TResult> RequireEnumerator<TResult>(DbPreparedQueryCommand<TResult> compiledQuery)
+    private ResultSetEnumerator<TResult> RequireEnumerator<TResult>(DbPreparedQueryCommand<TResult> compiledQuery,
+        Func<IDataRecord, TResult>? mapper)
     {
         if (compiledQuery.StreamingEnabled)
         {
-            var enumerator = new ResultSetEnumerator<TResult>(compiledQuery);
+            var enumerator = new ResultSetEnumerator<TResult>(compiledQuery, mapper, null);
             enumerator.InitEnvironment(_resultSetEnumeratorLogger, _logSensitiveData);
             return enumerator;
         }
@@ -749,7 +754,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         if (compiledQuery.PendingBatch is { } batch)
             return _batchRunner.RunStream(batch, BeginBatch(compiledQuery, @params), cancellationToken, BatchManager(batch)).GetAsyncEnumerator(cancellationToken);
 
-        var sqlEnumerator = RequireEnumerator(compiledQuery);
+        var sqlEnumerator = RequireEnumerator(compiledQuery, GetInvocationMapper(preparedQueryCommand, compiledQuery));
         var connectionManager = _managerFor(compiledQuery.MappingVariant, compiledQuery.RouteSources, CommandKind.Read);
         sqlEnumerator.InitEnumerator(connectionManager, _createParam, @params, cancellationToken, _currentTransaction, _interceptors, _context, boundValues);
         return sqlEnumerator;
@@ -762,7 +767,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         if (compiledQuery.PendingBatch is { } batch)
             return _batchRunner.Run(batch, BeginBatch(compiledQuery, @params), BatchManager(batch)).GetEnumerator();
 
-        var sqlEnumerator = RequireEnumerator(compiledQuery);
+        var sqlEnumerator = RequireEnumerator(compiledQuery, GetInvocationMapper(preparedQueryCommand, compiledQuery));
         var connectionManager = _managerFor(compiledQuery.MappingVariant, compiledQuery.RouteSources, CommandKind.Read);
         sqlEnumerator.InitEnumerator(connectionManager, _createParam, @params, CancellationToken.None, _currentTransaction, _interceptors, _context, boundValues);
         sqlEnumerator.InitReader(@params);
@@ -833,7 +838,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             {
                 // Same consecutive-row-count capacity hint as the synchronous twin.
                 var l = new List<TResult>(lease.RowCapacityHint);
-                var mapper = compiledQuery.MapDelegate!;
+                var mapper = GetInvocationMapper(preparedQueryCommand, compiledQuery)!;
                 while (reader.Read())
                     l.Add(mapper(reader));
 
@@ -872,7 +877,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
                 // Pre-size from this connection's previous row count: a hint only, the list still grows
                 // to fit, but a small result set no longer pays the default four-slot array enlargement.
                 var l = new List<TResult>(lease.RowCapacityHint);
-                var mapper = compiledQuery.MapDelegate!;
+                var mapper = GetInvocationMapper(preparedQueryCommand, compiledQuery)!;
                 while (reader.Read())
                     l.Add(mapper(reader));
 
@@ -1081,13 +1086,13 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     // The buffered first/single terminals share one lease lifecycle: acquire before binding, fail (which
     // evicts a poisoned Connection command) on any error, and always release exactly once.
 
-    private TResult ReadFirst<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, ReadOnlySpan<object?> @params, object?[]? boundValues, bool throwWhenEmpty)
+    private TResult ReadFirst<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, ReadOnlySpan<object?> @params,
+        object?[]? boundValues, Func<IDataRecord, TResult> mapper, bool throwWhenEmpty)
     {
         var lease = AcquireLease(compiledQuery, @params, boundValues);
         try
         {
             var reader = RunReader(lease.Command, compiledQuery.Behavior);
-            var mapper = compiledQuery.MapDelegate!;
             using (reader)
             {
                 if (reader.Read())
@@ -1110,13 +1115,13 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         }
     }
 
-    private async Task<TResult> ReadFirstAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, object[]? @params, object?[]? boundValues, bool throwWhenEmpty, CancellationToken cancellationToken)
+    private async Task<TResult> ReadFirstAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, object[]? @params,
+        object?[]? boundValues, Func<IDataRecord, TResult> mapper, bool throwWhenEmpty, CancellationToken cancellationToken)
     {
         var lease = await AcquireLeaseAsync(compiledQuery, @params, cancellationToken, boundValues).ConfigureAwait(false);
         try
         {
             var reader = await RunReaderAsync(lease.Command, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
-            var mapper = compiledQuery.MapDelegate!;
             using (reader)
             {
                 if (reader.Read())
@@ -1139,7 +1144,8 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         }
     }
 
-    private TResult ReadSingle<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, ReadOnlySpan<object?> @params, object?[]? boundValues, bool throwWhenEmpty)
+    private TResult ReadSingle<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, ReadOnlySpan<object?> @params,
+        object?[]? boundValues, Func<IDataRecord, TResult> mapper, bool throwWhenEmpty)
     {
         var lease = AcquireLease(compiledQuery, @params, boundValues);
         try
@@ -1149,7 +1155,6 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             {
                 TResult? result = default;
                 var hasResult = false;
-                var mapper = compiledQuery.MapDelegate!;
                 while (reader.Read())
                 {
                     if (hasResult)
@@ -1176,7 +1181,8 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         }
     }
 
-    private async Task<TResult> ReadSingleAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, object[]? @params, object?[]? boundValues, bool throwWhenEmpty, CancellationToken cancellationToken)
+    private async Task<TResult> ReadSingleAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, object[]? @params,
+        object?[]? boundValues, Func<IDataRecord, TResult> mapper, bool throwWhenEmpty, CancellationToken cancellationToken)
     {
         var lease = await AcquireLeaseAsync(compiledQuery, @params, cancellationToken, boundValues).ConfigureAwait(false);
         try
@@ -1186,7 +1192,6 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             {
                 TResult? result = default;
                 var hasResult = false;
-                var mapper = compiledQuery.MapDelegate!;
                 while (reader.Read())
                 {
                     if (hasResult)
@@ -1218,7 +1223,8 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         var compiledQuery = AsDbCommand(preparedQueryCommand, out var boundValues);
 
         // Scalar mode: no row mapper was compiled, read the value directly.
-        if (compiledQuery.MapDelegate is null)
+        var mapper = GetInvocationMapper(preparedQueryCommand, compiledQuery);
+        if (mapper is null)
             return ExecuteScalar<TResult>(preparedQueryCommand, @params, true)!;
 
         if (compiledQuery.PendingBatch is { } batch)
@@ -1230,7 +1236,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             throw new InvalidOperationException();
         }
 
-        return ReadFirst(compiledQuery, @params, boundValues, throwWhenEmpty: true);
+        return ReadFirst(compiledQuery, @params, boundValues, mapper, throwWhenEmpty: true);
     }
 
     public async Task<TResult> FirstAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
@@ -1238,7 +1244,8 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         var compiledQuery = AsDbCommand(preparedQueryCommand, out var boundValues);
 
         // Scalar mode: no row mapper was compiled, read the value directly.
-        if (compiledQuery.MapDelegate is null)
+        var mapper = GetInvocationMapper(preparedQueryCommand, compiledQuery);
+        if (mapper is null)
             return (await ExecuteScalar<TResult>(preparedQueryCommand, @params, true, cancellationToken))!;
 
         if (compiledQuery.PendingBatch is { } batch)
@@ -1250,7 +1257,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             throw new InvalidOperationException();
         }
 
-        return await ReadFirstAsync(compiledQuery, @params, boundValues, throwWhenEmpty: true, cancellationToken).ConfigureAwait(false);
+        return await ReadFirstAsync(compiledQuery, @params, boundValues, mapper, throwWhenEmpty: true, cancellationToken).ConfigureAwait(false);
     }
 
     public TResult? FirstOrDefault<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params)
@@ -1258,7 +1265,8 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         var compiledQuery = AsDbCommand(preparedQueryCommand, out var boundValues);
 
         // Scalar mode: no row mapper was compiled, read the value directly.
-        if (compiledQuery.MapDelegate is null)
+        var mapper = GetInvocationMapper(preparedQueryCommand, compiledQuery);
+        if (mapper is null)
             return ExecuteScalar<TResult>(preparedQueryCommand, @params, false);
 
         if (compiledQuery.PendingBatch is { } batch)
@@ -1267,7 +1275,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return rows.Count > 0 ? rows[0] : default;
         }
 
-        return ReadFirst(compiledQuery, @params, boundValues, throwWhenEmpty: false);
+        return ReadFirst(compiledQuery, @params, boundValues, mapper, throwWhenEmpty: false);
     }
 
     public async Task<TResult?> FirstOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
@@ -1275,7 +1283,8 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         var compiledQuery = AsDbCommand(preparedQueryCommand, out var boundValues);
 
         // Scalar mode: no row mapper was compiled, read the value directly.
-        if (compiledQuery.MapDelegate is null)
+        var mapper = GetInvocationMapper(preparedQueryCommand, compiledQuery);
+        if (mapper is null)
             return await ExecuteScalar<TResult>(preparedQueryCommand, @params, false, cancellationToken);
 
         if (compiledQuery.PendingBatch is { } batch)
@@ -1284,7 +1293,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return rows.Count > 0 ? rows[0] : default;
         }
 
-        return await ReadFirstAsync(compiledQuery, @params, boundValues, throwWhenEmpty: false, cancellationToken).ConfigureAwait(false);
+        return await ReadFirstAsync(compiledQuery, @params, boundValues, mapper, throwWhenEmpty: false, cancellationToken).ConfigureAwait(false);
     }
 
     public TResult Single<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params)
@@ -1300,7 +1309,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return rows[0];
         }
 
-        return ReadSingle(compiledQuery, @params, boundValues, throwWhenEmpty: true);
+        return ReadSingle(compiledQuery, @params, boundValues, GetInvocationMapper(preparedQueryCommand, compiledQuery)!, throwWhenEmpty: true);
     }
 
     public async Task<TResult> SingleAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
@@ -1316,7 +1325,8 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return rows[0];
         }
 
-        return await ReadSingleAsync(compiledQuery, @params, boundValues, throwWhenEmpty: true, cancellationToken).ConfigureAwait(false);
+        return await ReadSingleAsync(compiledQuery, @params, boundValues, GetInvocationMapper(preparedQueryCommand, compiledQuery)!,
+            throwWhenEmpty: true, cancellationToken).ConfigureAwait(false);
     }
 
     public TResult? SingleOrDefault<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params)
@@ -1332,7 +1342,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return rows.Count == 1 ? rows[0] : default;
         }
 
-        return ReadSingle(compiledQuery, @params, boundValues, throwWhenEmpty: false);
+        return ReadSingle(compiledQuery, @params, boundValues, GetInvocationMapper(preparedQueryCommand, compiledQuery)!, throwWhenEmpty: false);
     }
 
     public async Task<TResult?> SingleOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
@@ -1348,7 +1358,8 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return rows.Count == 1 ? rows[0] : default;
         }
 
-        return await ReadSingleAsync(compiledQuery, @params, boundValues, throwWhenEmpty: false, cancellationToken).ConfigureAwait(false);
+        return await ReadSingleAsync(compiledQuery, @params, boundValues, GetInvocationMapper(preparedQueryCommand, compiledQuery)!,
+            throwWhenEmpty: false, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

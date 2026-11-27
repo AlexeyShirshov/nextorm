@@ -433,8 +433,13 @@ public partial class QueryCommand
         void RewriteColumns(SelectExpression[]? columns)
         {
             if (columns is not null)
+            {
                 foreach (var column in columns)
+                {
                     column.Expression = rewriter.Visit(column.Expression);
+                    rewriter.Changed |= column.DetachConverterForSqlPlanKey();
+                }
+            }
         }
 
         FromExpression? DetachSource(FromExpression? source)

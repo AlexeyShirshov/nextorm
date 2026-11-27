@@ -81,6 +81,20 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     /// </summary>
     public IPropertyValueConverter? Converter { get; set; }
 
+    private object? _planConverterIdentity;
+
+    internal object? PlanConverterIdentity => _planConverterIdentity ?? PlanObjectIdentity.For(Converter);
+
+    internal bool DetachConverterForSqlPlanKey()
+    {
+        if (Converter is null)
+            return false;
+
+        _planConverterIdentity = PlanObjectIdentity.For(Converter);
+        Converter = null;
+        return true;
+    }
+
     /// <summary>
     /// True when a SQL NULL in this column means "no row" (the projection came from a
     /// <c>*OrDefault</c> scalar terminal) and the column is a non-nullable value type, so the reader

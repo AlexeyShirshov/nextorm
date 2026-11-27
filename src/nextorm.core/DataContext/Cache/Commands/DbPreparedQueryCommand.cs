@@ -145,6 +145,9 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     /// </summary>
     internal bool StreamingEnabled => Volatile.Read(ref _streamingEnabled);
 
+    // The mapper closes over the live projection's converters and travels with the invocation.
+    internal bool RequiresInvocationMapper { get; init; }
+
     /// <summary>Number of execution commands this prepared command has created. Diagnostic only.</summary>
     internal int CreatedCommandCount => Volatile.Read(ref _createdCommandCount);
 

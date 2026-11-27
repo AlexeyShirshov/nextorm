@@ -56,10 +56,15 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     /// <param name="compiledQuery">The compiled query supplying the command text, behavior and row mapper.</param>
     /// <param name="sbPool">Pool used to build the sensitive-data log message; defaults to <c>StringBuilderPool.Shared</c> when <see langword="null"/>.</param>
     public ResultSetEnumerator(DbPreparedQueryCommand<TResult> compiledQuery, ObjectPool<StringBuilder>? sbPool = null)
+        : this(compiledQuery, compiledQuery.MapDelegate, sbPool)
     {
-        //_cmd = cmd;
+    }
+
+    internal ResultSetEnumerator(DbPreparedQueryCommand<TResult> compiledQuery, Func<IDataRecord, TResult>? mapper,
+        ObjectPool<StringBuilder>? sbPool)
+    {
         _compiledQuery = compiledQuery;
-        _map = compiledQuery.MapDelegate;
+        _map = mapper;
         _sbPool = sbPool ?? StringBuilderPool.Shared;
     }
     // The row is materialized in MoveNext/MoveNextAsync, so Current is a plain field read.

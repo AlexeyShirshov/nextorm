@@ -1014,6 +1014,10 @@ internal sealed class QueryPlanner : IQueryPlanner
                     : BuildMap<TRow>(queryCommand, sql, false, boxed, boxedResultType);
 
             var publish = storeInCache && queryCommand.Cache;
+            var convertedProjection = publish && queryCommand.SelectList is { } columns
+                && Array.Exists(columns, static column => column.Converter is not null);
+            var invocationMapper = convertedProjection ? map : null;
+            var planMapper = convertedProjection ? null : map;
             var generatedImplicitPlan = publish && ext is null;
             var noParams = !(@params?.Count > 0);
             var needsParamRefresh = false;
@@ -1050,12 +1054,13 @@ internal sealed class QueryPlanner : IQueryPlanner
             // there to avoid a duplicated clause.
             var singleRow = queryCommand.SingleRow && _dialect().SupportsCommandBehaviorSingleRow;
 
-            var compiledQuery = new DbPreparedQueryCommand<TRow>(factory, planParameters, map, new PreparedCommandOptions(singleRow, ext is null ? sql! : null, noParams, needsParamRefresh)
+            var compiledQuery = new DbPreparedQueryCommand<TRow>(factory, planParameters, planMapper, new PreparedCommandOptions(singleRow, ext is null ? sql! : null, noParams, needsParamRefresh)
             {
                 SequentialAccess = sequentialAccess,
                 Cache = cache,
             }, trackConnectionLifetime: publish)
             {
+                RequiresInvocationMapper = invocationMapper is not null,
                 MappingVariant = queryCommand.MappingVariant,
                 RouteEntityType = queryCommand.RouteEntityType,
                 RouteSources = CommandRouteSources.Collect(queryCommand),
@@ -1084,11 +1089,12 @@ internal sealed class QueryPlanner : IQueryPlanner
                 QueryPlanStore.Set(_contextType, queryPlan!.GetSqlCacheVersion(), compiledQuery);
 
                 // Publication happens ONLY after ordinary preparation succeeded, the normalized key
-                // was constructed and the cacheable holder was stored through Set. A value-independent
-                // plan is always publishable; a plan with refreshed parameters is publishable only when
-                // the raw shape is keyed by the captured closure identities (a hit reads the same live
-                // closures, so it binds their current values), never for a captured-collection shape.
+                // was constructed and the cacheable holder was stored through Set. Staging must not
+                // supply the first projection's converter; prepare those projections on the live command.
+                // A plan with refreshed parameters needs the captured closure identities for a raw hit
+                // to read the current values. Captured-collection shapes cannot use that shortcut.
                 if (recipeShape is not null
+                    && !convertedProjection
                     && (!needsParamRefresh || CanPublishCapturedRecipe(recipeShape, @params))
                     && queryCommand.InValuesShapeHash == 0
                     && queryCommand.PreWhereShapeHash == 0
@@ -1102,7 +1108,7 @@ internal sealed class QueryPlanner : IQueryPlanner
                 }
             }
 
-            return boundValues is null ? compiledQuery : BoundQueryInvocation<TRow>.Create(compiledQuery, boundValues);
+            return BoundQueryInvocation<TRow>.Create(compiledQuery, boundValues, invocationMapper);
         }
         else
         {
@@ -1133,7 +1139,10 @@ internal sealed class QueryPlanner : IQueryPlanner
             if (createEnumerator && !compiledQuery.StreamingEnabled)
                 compiledQuery.EnableStreaming();
 
-            return boundValues is null ? compiledQuery : BoundQueryInvocation<TRow>.Create(compiledQuery, boundValues);
+            var invocationMapper = compiledQuery.RequiresInvocationMapper
+                ? BuildMap<TRow>(queryCommand, compiledQuery.CommandText, streamingRows, boxed, boxedResultType)
+                : null;
+            return BoundQueryInvocation<TRow>.Create(compiledQuery, boundValues, invocationMapper);
         }
         (string?, List<Parameter>, SqlParameterTemplateCapture?) MakeSelectInternal()
         {
