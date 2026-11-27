@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using FluentAssertions;
 using FluentAssertions.Execution;
@@ -54,6 +55,47 @@ public sealed class SqliteSelectGroupPlanOwnershipTests
             return (PreparedPlanObservation.GetPlan(invocation), new WeakReference(command.Components!.Single()),
                 new WeakReference(owner));
         }
+    }
+
+    [Fact]
+    public void RawRecipe_ReusesGroupingWithoutRetainingTheFirstComponent()
+    {
+        using var firstConnection = new SqliteConnection("Data Source=:memory:");
+        using var secondConnection = new SqliteConnection("Data Source=:memory:");
+        Seed(firstConnection);
+        Seed(secondConnection);
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder());
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder());
+
+        var (firstPlan, firstComponent, _) = Execute(first);
+        var before = RecipeReuses();
+        var (secondPlan, _, keptFreshComponent) = Execute(second);
+        RecipeReuses().Should().Be(before + 1, "the second command must stage the raw recipe");
+        secondPlan.Should().BeSameAs(firstPlan);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        using var assertions = new AssertionScope();
+        firstComponent.IsAlive.Should().BeFalse("neither the raw shape nor the recipe should own the first component");
+        keptFreshComponent.Should().BeTrue("staging must preserve the current command's component");
+        GC.KeepAlive(firstPlan);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (DbPreparedQueryCommand<int> Plan, WeakReference Component, bool KeptOwnComponent) Execute(SqliteDataContext context)
+        {
+            var command = context.From<GroupRow>()
+                .WithTag("raw select group ownership")
+                .SelectGroupHaving(row => row.Id, id => id > 1);
+            var component = command.Components!.Single();
+            var invocation = context.GetPreparedQueryCommand(command, false, true, TestContext.Current.CancellationToken);
+            invocation.ToList(context).Should().Equal(2);
+            return (PreparedPlanObservation.GetPlan(invocation), new WeakReference(component),
+                ReferenceEquals(command.Components!.Single(), component));
+        }
+
+        static int RecipeReuses() => (int)typeof(DataContext).Assembly.GetType("NextORM.Core.QueryPlanner", throwOnError: true)!
+            .GetProperty("RecipeReuses", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
     }
 
     private static void Seed(SqliteConnection connection)

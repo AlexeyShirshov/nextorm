@@ -309,6 +309,15 @@ public partial class QueryCommand
         return cmd;
     }
 
+    internal QueryCommand CloneForRawRecipe()
+    {
+        var clone = CloneForCache();
+        // The outer command keeps its own components when the recipe is staged.
+        clone._components = default;
+        clone._componentsView = null;
+        return clone;
+    }
+
     // SQL keys are compared, not rendered. Keep the legacy cache clone executable for raw recipe
     // adoption and for the in-memory route. Walk only command edges owned by the cache clone.
     internal bool DetachSqlPlanKey()

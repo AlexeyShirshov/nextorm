@@ -4203,9 +4203,10 @@ public partial class QueryCommand
         internal UnionType UnionType;
         internal RawShape? Union;
         internal CteShape[]? Ctes;
-        // Query components, held as the command's allocation-free component state: none, one, or an
-        // already-immutable list. Captured by reference — nothing is copied or reallocated per capture.
+        // A lookup borrows the fresh command's components. A published root stores only their
+        // comparison data and never needs to call into the original component.
         internal ComponentSet Components;
+        private ComponentShape[]? _componentShapes;
         // Receiver identity at each captured-member occurrence, in traversal order. The same set of
         // owners is not enough: all occurrences must read the same owners as the staged expressions.
         internal object?[]? Closures;
@@ -4218,6 +4219,23 @@ public partial class QueryCommand
             var copy = (RawShape)MemberwiseClone();
             copy.Condition = condition;
             copy.Sorting = sorting;
+            return copy;
+        }
+
+        internal RawShape SnapshotComponents()
+        {
+            if (Components.IsEmpty)
+                return this;
+
+            var copy = (RawShape)MemberwiseClone();
+            var shapes = new ComponentShape[Components.Count];
+            for (var i = 0; i < shapes.Length; i++)
+            {
+                var component = ReadComponentShape(i);
+                shapes[i] = component with { Selectors = (LambdaExpression[])component.Selectors.Clone() };
+            }
+            copy._componentShapes = shapes;
+            copy.Components = default;
             return copy;
         }
 
@@ -4235,30 +4253,42 @@ public partial class QueryCommand
         /// the fresh command, exactly like every other expression-bearing member; the scalar identity is
         /// compared with <see cref="object.Equals(object)"/>.
         /// </summary>
-        private static bool ComponentsMatch(ComponentSet x, ComponentSet y, QueryCommand comparerSource)
+        private bool ComponentsMatch(RawShape other, QueryCommand comparerSource)
         {
-            if (x.Count != y.Count) return false;
-            if (x.IsEmpty) return true;
+            var count = _componentShapes?.Length ?? Components.Count;
+            if (count != (other._componentShapes?.Length ?? other.Components.Count)) return false;
+            if (count == 0) return true;
 
             var comparer = comparerSource.GetExpressionPlanEqualityComparer();
-            for (var i = 0; i < x.Count; i++)
+            for (var i = 0; i < count; i++)
             {
-                if (x[i] is not IQueryComponentShape xs || y[i] is not IQueryComponentShape ys) return false;
-                if (x[i].Slot != y[i].Slot) return false;
-                if (x[i].Contribution != y[i].Contribution) return false;
-                if (!Equals(xs.ShapeState, ys.ShapeState)) return false;
+                var left = ReadComponentShape(i);
+                var right = other.ReadComponentShape(i);
+                if (left.Type != right.Type || left.Slot != right.Slot || left.Contribution != right.Contribution
+                    || !Equals(left.State, right.State) || left.Selectors.Length != right.Selectors.Length)
+                    return false;
 
-                var left = xs.ShapeSelectors;
-                var right = ys.ShapeSelectors;
-                if (left.Length != right.Length) return false;
-                for (var j = 0; j < left.Length; j++)
+                for (var j = 0; j < left.Selectors.Length; j++)
                 {
-                    if (!comparer.Equals(left[j], right[j])) return false;
+                    if (!comparer.Equals(left.Selectors[j], right.Selectors[j])) return false;
                 }
             }
 
             return true;
         }
+
+        private ComponentShape ReadComponentShape(int index)
+        {
+            if (_componentShapes is { } shapes)
+                return shapes[index];
+
+            var component = Components[index];
+            var shape = (IQueryComponentShape)component;
+            return new ComponentShape(component.GetType(), component.Slot, component.Contribution, shape.ShapeState, shape.ShapeSelectors);
+        }
+
+        private readonly record struct ComponentShape(Type Type, Type Slot, QueryComponentContribution Contribution,
+            object? State, LambdaExpression[] Selectors);
 
         /// <summary>
         /// Full raw structural differential against another descriptor of the same graph. Uses the
@@ -4294,7 +4324,7 @@ public partial class QueryCommand
             if (!Equals(TableSample, other.TableSample) || !Equals(Temporal, other.Temporal)) return false;
             if (!Equals(RowLock, other.RowLock) || !Equals(SourceLockClause, other.SourceLockClause)) return false;
             if (!Equals(LimitBy, other.LimitBy) || !Equals(DistinctOn, other.DistinctOn) || !Equals(ExtremeRow, other.ExtremeRow)) return false;
-            if (!ComponentsMatch(Components, other.Components, comparerSource)) return false;
+            if (!ComponentsMatch(other, comparerSource)) return false;
             if (!ClosureIdentitiesEqual(Closures, other.Closures)) return false;
             if (!FilterScopeEqual(FilterScope, other.FilterScope)) return false;
 
@@ -5415,7 +5445,13 @@ public partial class QueryCommand
         // Adopt the stored cache-side state through the same copy path the cache clone itself uses, so
         // the staged command is exactly what a normalized lookup compares against. The raw graph is
         // verified separately by the descriptor, which is what makes adopting these members sound.
+        var components = _components;
+        var componentsView = _componentsView;
         clone.CopyTo(this, copyAll: true);
+        // Shape verification covers the component contract; BuildQuery must run on the caller's
+        // own component when a parameter refresh needs to render.
+        _components = components;
+        _componentsView = componentsView;
         CopyPreparedColumns();
 
         // Members CopyTo never carries: the clone's joins come from its Definition, so they must be

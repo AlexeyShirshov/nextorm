@@ -321,8 +321,9 @@ internal static class QueryPlanStore
         var detached = comparerSource.TryDetachRawClauses(shape);
         var candidate = detached is { } replay
             ? new RawCandidate(plan, holder, replay.Shape, replay.Recipe, replay.UseCurrentWhere, replay.UseCurrentSorting)
-            : new RawCandidate(plan, holder, shape,
-                plan.NeedsSeparateRawRecipe ? comparerSource.CloneForCache() : plan.QueryCommand, false, false);
+            : new RawCandidate(plan, holder, shape.SnapshotComponents(),
+                plan.NeedsSeparateRawRecipe || !shape.Components.IsEmpty
+                    ? comparerSource.CloneForRawRecipe() : plan.QueryCommand, false, false);
         var index = RawIndex;
         if (!index.TryGetValue(shape.Fingerprint, out var bucket))
         {
