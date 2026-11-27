@@ -108,6 +108,17 @@ public class TvfEntityBuilder<T> : EntityBuilder<T>
     /// <summary>Where the caller-declared result schema is rendered.</summary>
     public TableFunctionSchema ResultSchema { get; }
 
+    /// <summary>Adds PostgreSQL's one-based <c>WITH ORDINALITY</c> column to the source.</summary>
+    /// <typeparam name="TRow">
+    /// The result mapping, with the original columns and a <see cref="long"/> or nullable
+    /// <see cref="long"/> property mapped to <c>ordinality</c>. Use the nullable form when
+    /// <c>OuterApply</c> can produce a missing right row.
+    /// </typeparam>
+    /// <returns>A typed source for use in a <c>From</c> or APPLY expression.</returns>
+    /// <exception cref="NotSupportedException">Called directly instead of in a query source expression.</exception>
+    public TvfEntityBuilder<TRow> WithOrdinality<TRow>()
+        => throw new NotSupportedException("Use WithOrdinality directly after a TVF factory call in a query source expression.");
+
     /// <summary>
     /// Clones the unbound descriptor, preserving its runtime metadata. Unlike a context-bound builder
     /// clone this copy needs no data context, so <c>Where</c>/<c>OrderBy</c> composition on a descriptor

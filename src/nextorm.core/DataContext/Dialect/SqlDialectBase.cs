@@ -334,6 +334,11 @@ public abstract class SqlDialectBase : ISqlDialect
     /// </summary>
     public virtual string WrapTableFunction(string name, string call) => call;
 
+    /// <summary>Renders a TVF source with the appended server-generated ordinality column.</summary>
+    internal virtual string RenderTableFunctionWithOrdinality(string name, string call, IReadOnlyList<string> arguments,
+        string? columnDefinitions, bool builtIn, KeywordCase keywordCase)
+        => throw new NotSupportedException("WITH ORDINALITY on a table function is not supported by this provider.");
+
     /// <summary>
     /// Wraps the rendered table-function call with its structured, already-rendered arguments, or
     /// returns it unchanged. The default forwards to <see cref="WrapTableFunction(string, string)"/>;

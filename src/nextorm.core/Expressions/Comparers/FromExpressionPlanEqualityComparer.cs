@@ -139,6 +139,7 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         if (!string.Equals(x.Schema, y.Schema, StringComparison.Ordinal)) return false;
         if (!string.Equals(x.WithClause, y.WithClause, StringComparison.Ordinal)) return false;
         if (!string.Equals(x.CallClause, y.CallClause, StringComparison.Ordinal)) return false;
+        if (x.WithOrdinality != y.WithOrdinality) return false;
 
         // The declared result placement is rendered into the SQL, so it is part of identity for every
         // value. The row type only matters when a schema is actually derived from it: a legacy source
@@ -192,6 +193,8 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         hash.Add(function.Schema, StringComparer.Ordinal);
         hash.Add(function.WithClause, StringComparer.Ordinal);
         hash.Add(function.CallClause, StringComparer.Ordinal);
+        if (function.WithOrdinality)
+            hash.Add(true);
         hash.Add((int)function.ResultSchema);
         if (function.ResultSchema != TableFunctionSchema.None)
             hash.Add(function.ResultType is null ? 0 : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(function.ResultType));

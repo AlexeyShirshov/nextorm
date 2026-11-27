@@ -426,114 +426,101 @@ public class PostgresDialect : SqlDialectBase
     /// argument does not resolve from a text parameter. A function whose columns and arguments are all
     /// mappable is left alone and keeps its bare call.
     /// </summary>
-    public override string WrapTableFunction(string name, string call, IReadOnlyList<string> arguments) => name switch
+    public override string WrapTableFunction(string name, string call, IReadOnlyList<string> arguments)
+        => RenderTableFunction(name, call, arguments, null, null);
+
+    /// <inheritdoc/>
+    internal override string RenderTableFunctionWithOrdinality(string name, string call, IReadOnlyList<string> arguments,
+        string? columnDefinitions, bool builtIn, KeywordCase keywordCase)
     {
-        // The multi-array and WITH ORDINALITY forms of unnest are FROM-clause grammar: the server names
-        // every output column `unnest` (measured: two such columns, ambiguous by name), so the rows are
-        // built with ROWS FROM and the columns renamed through its alias column list, then restored in a
-        // one-column-per-array subquery. ROWS FROM keeps PostgreSQL's NULL padding of the shorter arrays.
-        // The arity is fixed by the overloads (one, two and three arrays); four or more are refused before
-        // rendering, so this arm never sees them.
-        "unnest" when arguments.Count >= 2 =>
-            "(select " + string.Join(", ", Enumerable.Range(1, arguments.Count).Select(i => $"value{i}"))
+        var ordinality = SqlKeywords.Of(keywordCase, " with ordinality");
+        if (!builtIn)
+            return columnDefinitions is null
+                ? call + ordinality
+                : SqlKeywords.Of(keywordCase, "rows from (") + call
+                    + SqlKeywords.Of(keywordCase, " as (") + columnDefinitions + "))" + ordinality;
+
+        if (name == "unnest_with_ordinality")
+            throw new NotSupportedException("The legacy unnest_with_ordinality source already includes WITH ORDINALITY.");
+
+        return RenderTableFunction(name, call, arguments, ordinality, columnDefinitions);
+    }
+
+    private string RenderTableFunction(string name, string call, IReadOnlyList<string> arguments,
+        string? ordinality, string? columnDefinitions)
+    {
+        string Source(string sql) => columnDefinitions is null
+            ? sql + ordinality
+            : $"rows from ({sql} as ({columnDefinitions})){ordinality}";
+
+        string Project(string columns, string sql)
+            => $"(select {columns}{(ordinality is null || columns == "*" ? "" : ", ordinality")}\n from {Source(sql)})";
+
+        return name switch
+        {
+            // The multi-array and WITH ORDINALITY forms of unnest are FROM-clause grammar: the server names
+            // every output column `unnest` (measured: two such columns, ambiguous by name), so the rows are
+            // built with ROWS FROM and the columns renamed through its alias column list, then restored in a
+            // one-column-per-array subquery. ROWS FROM keeps PostgreSQL's NULL padding of the shorter arrays.
+            // The arity is fixed by the overloads (one, two and three arrays); four or more are refused before
+            // rendering, so this arm never sees them.
+            "unnest" when arguments.Count >= 2 => RenderMultiArrayUnnest(arguments, ordinality),
+            "unnest_with_ordinality" when arguments.Count == 1 =>
+                "(select value, ordinality\n from rows from (unnest(" + arguments[0]
+                + ")) with ordinality as u(value, ordinality))",
+            "unnest_with_ordinality" =>
+                "(select " + string.Join(", ", Enumerable.Range(1, arguments.Count).Select(i => $"value{i}"))
+                + ", ordinality\n from rows from (" + string.Join(", ", arguments.Select(a => $"unnest({a})"))
+                + ") with ordinality as u("
+                + string.Join(", ", Enumerable.Range(1, arguments.Count).Select(i => $"value{i}"))
+                + ", ordinality))",
+            "json_array_elements" or "json_array_elements_text" or "json_each" or "json_each_text"
+                or "json_to_record" or "json_to_recordset" => Source($"{name}(cast({arguments[0]} as json))"),
+            "jsonb_path_query_tz" => Project("jsonb_path_query_tz",
+                $"jsonb_path_query_tz(cast({arguments[0]} as jsonb), cast({arguments[1]} as jsonpath), cast({arguments[2]} as jsonb), {arguments[3]})"),
+            "pg_control_recovery" => Project("min_recovery_end_lsn::text as min_recovery_end_lsn, min_recovery_end_timeline,"
+                + " backup_start_lsn::text as backup_start_lsn, backup_end_lsn::text as backup_end_lsn, end_of_backup_record_required", call),
+            "pg_control_checkpoint" => Project("checkpoint_lsn::text as checkpoint_lsn, redo_lsn::text as redo_lsn, redo_wal_file,"
+                + " timeline_id, prev_timeline_id, full_page_writes, next_xid, next_oid::text as next_oid,"
+                + " next_multixact_id, next_multi_offset, oldest_xid, oldest_xid_dbid::text as oldest_xid_dbid,"
+                + " oldest_active_xid, oldest_multi_xid, oldest_multi_dbid::text as oldest_multi_dbid,"
+                + " oldest_commit_ts_xid, newest_commit_ts_xid, checkpoint_time", call),
+            "pg_get_keywords" => Project("word, catcode::text as catcode, barelabel, catdesc, baredesc", call),
+            "pg_snapshot_xip" => Project("pg_snapshot_xip::text as pg_snapshot_xip", $"pg_snapshot_xip(cast({arguments[0]} as pg_snapshot))"),
+            "pg_tablespace_databases" => Project("pg_tablespace_databases::text as pg_tablespace_databases", $"pg_tablespace_databases(cast({arguments[0]} as oid))"),
+            "pg_get_catalog_foreign_keys" => Project("fktable::text as fktable, fkcols, pktable::text as pktable, pkcols, is_array, is_opt", call),
+            "pg_available_wal_summaries" => Project("tli, start_lsn::text as start_lsn, end_lsn::text as end_lsn", call),
+            "pg_get_multixact_members" => ordinality is null
+                ? $"(select * from pg_get_multixact_members(cast(cast({arguments[0]} as text) as xid)))"
+                : Source($"pg_get_multixact_members(cast(cast({arguments[0]} as text) as xid))"),
+            "pg_get_object_address" => Project("classid::text as classid, objid::text as objid, objsubid",
+                $"pg_get_object_address({arguments[0]}, cast({arguments[1]} as text[]), cast({arguments[2]} as text[]))"),
+            "pg_get_wal_summarizer_state" => Project("summarized_tli, summarized_lsn::text as summarized_lsn, pending_lsn::text as pending_lsn, summarizer_pid", call),
+            "pg_last_committed_xact" => Project("xid, timestamp, roident::text as roident", call),
+            "pg_identify_object" => $"(select * from pg_identify_object(cast({arguments[0]} as oid), cast({arguments[1]} as oid), {arguments[2]}){ordinality})",
+            "pg_identify_object_as_address" => $"(select * from pg_identify_object_as_address(cast({arguments[0]} as oid), cast({arguments[1]} as oid), {arguments[2]}){ordinality})",
+            "pg_wal_summary_contents" => Project("relfilenode::text as relfilenode, reltablespace::text as reltablespace, reldatabase::text as reldatabase, relforknumber, relblocknumber, is_limit_block",
+                $"pg_wal_summary_contents({arguments[0]}, cast({arguments[1]} as pg_lsn), cast({arguments[2]} as pg_lsn))"),
+            "pg_xact_commit_timestamp_origin" => Project("timestamp, roident::text as roident", $"pg_xact_commit_timestamp_origin(cast(cast({arguments[0]} as text) as xid))"),
+            "ts_debug" => Project("alias, description, token, dictionaries::text[] as dictionaries, dictionary::text as dictionary, lexemes",
+                $"ts_debug({arguments[0]})"),
+            // A FROM alias can replace the scalar output name; name both columns before
+            // the outer query aliases the derived source.
+            "generate_series" or "unnest" or "regexp_matches" or "regexp_split_to_table" or "string_to_table"
+                or "jsonb_object_keys" or "jsonb_path_query" or "pg_listening_channels" or "generate_subscripts"
+                when ordinality is not null =>
+                $"(select *\n from {Source(call)} as numbered({name}, ordinality))",
+            _ => ordinality is null ? WrapTableFunction(name, call) : Source(call)
+        };
+    }
+
+    private static string RenderMultiArrayUnnest(IReadOnlyList<string> arguments, string? ordinality)
+    {
+        var columns = string.Join(", ", Enumerable.Range(1, arguments.Count).Select(i => $"value{i}"));
+        return "(select " + columns + (ordinality is null ? "" : ", ordinality")
             + "\n from rows from (" + string.Join(", ", arguments.Select(a => $"unnest({a})"))
-            + ") as u("
-            + string.Join(", ", Enumerable.Range(1, arguments.Count).Select(i => $"value{i}")) + "))",
-        "unnest_with_ordinality" when arguments.Count == 1 =>
-            "(select value, ordinality\n from rows from (unnest(" + arguments[0]
-            + ")) with ordinality as u(value, ordinality))",
-        "unnest_with_ordinality" =>
-            "(select " + string.Join(", ", Enumerable.Range(1, arguments.Count).Select(i => $"value{i}"))
-            + ", ordinality\n from rows from (" + string.Join(", ", arguments.Select(a => $"unnest({a})"))
-            + ") with ordinality as u("
-            + string.Join(", ", Enumerable.Range(1, arguments.Count).Select(i => $"value{i}"))
-            + ", ordinality))",
-        "json_array_elements" or "json_array_elements_text" or "json_each" or "json_each_text"
-            or "json_to_record" or "json_to_recordset" =>
-            // The non-b JSON readers take a json value; a text parameter does not resolve the overload
-            // (json_array_elements(text) does not exist), so the document argument is cast — harmless for
-            // an inline JSON literal, load-bearing for a bound parameter.
-            $"{name}(cast({arguments[0]} as json))",
-        "jsonb_path_query_tz" =>
-            // A scalar set-returning function names its only column after the function, but aliasing the
-            // call in FROM renames that column to the alias, so the match column is restored in a
-            // one-column subquery. The document/path/vars arguments are cast: a text parameter resolves to
-            // none of jsonb/jsonpath.
-            "(select jsonb_path_query_tz\n from jsonb_path_query_tz("
-            + $"cast({arguments[0]} as jsonb), cast({arguments[1]} as jsonpath),"
-            + $" cast({arguments[2]} as jsonb), {arguments[3]}))",
-        "pg_control_recovery" =>
-            "(select min_recovery_end_lsn::text as min_recovery_end_lsn, min_recovery_end_timeline,"
-            + " backup_start_lsn::text as backup_start_lsn, backup_end_lsn::text as backup_end_lsn,"
-            + " end_of_backup_record_required"
-            + $"\n from {call})",
-        "pg_control_checkpoint" =>
-            "(select checkpoint_lsn::text as checkpoint_lsn, redo_lsn::text as redo_lsn, redo_wal_file,"
-            + " timeline_id, prev_timeline_id, full_page_writes, next_xid, next_oid::text as next_oid,"
-            + " next_multixact_id, next_multi_offset, oldest_xid, oldest_xid_dbid::text as oldest_xid_dbid,"
-            + " oldest_active_xid, oldest_multi_xid, oldest_multi_dbid::text as oldest_multi_dbid,"
-            + " oldest_commit_ts_xid, newest_commit_ts_xid, checkpoint_time"
-            + $"\n from {call})",
-        "pg_get_keywords" =>
-            "(select word, catcode::text as catcode, barelabel, catdesc, baredesc"
-            + $"\n from {call})",
-        "pg_snapshot_xip" =>
-            "(select pg_snapshot_xip::text as pg_snapshot_xip"
-            + $"\n from pg_snapshot_xip(cast({arguments[0]} as pg_snapshot)))",
-        "pg_tablespace_databases" =>
-            "(select pg_tablespace_databases::text as pg_tablespace_databases"
-            + $"\n from pg_tablespace_databases(cast({arguments[0]} as oid)))",
-        "pg_get_catalog_foreign_keys" =>
-            "(select fktable::text as fktable, fkcols, pktable::text as pktable, pkcols, is_array, is_opt"
-            + $"\n from {call})",
-        "pg_available_wal_summaries" =>
-            "(select tli, start_lsn::text as start_lsn, end_lsn::text as end_lsn"
-            + $"\n from {call})",
-        "pg_get_multixact_members" =>
-            // Same text bridge as the transaction-origin reader: a uint literal renders as an integer,
-            // and PostgreSQL has no integer-to-xid cast (42846).
-            $"(select * from pg_get_multixact_members(cast(cast({arguments[0]} as text) as xid)))",
-        "pg_get_object_address" =>
-            "(select classid::text as classid, objid::text as objid, objsubid"
-            + "\n from pg_get_object_address("
-            + string.Join(", ", new[]
-            {
-                arguments[0],
-                $"cast({arguments[1]} as text[])",
-                $"cast({arguments[2]} as text[])"
-            })
-            + "))",
-        "pg_get_wal_summarizer_state" =>
-            "(select summarized_tli, summarized_lsn::text as summarized_lsn,"
-            + " pending_lsn::text as pending_lsn, summarizer_pid"
-            + $"\n from {call})",
-        "pg_last_committed_xact" =>
-            "(select xid, timestamp, roident::text as roident"
-            + $"\n from {call})",
-        "pg_identify_object" =>
-            $"(select * from pg_identify_object(cast({arguments[0]} as oid), cast({arguments[1]} as oid), {arguments[2]}))",
-        "pg_identify_object_as_address" =>
-            $"(select * from pg_identify_object_as_address(cast({arguments[0]} as oid), cast({arguments[1]} as oid), {arguments[2]}))",
-        "pg_wal_summary_contents" =>
-            "(select relfilenode::text as relfilenode, reltablespace::text as reltablespace,"
-            + " reldatabase::text as reldatabase, relforknumber, relblocknumber, is_limit_block"
-            + "\n from pg_wal_summary_contents("
-            + $"{arguments[0]}, cast({arguments[1]} as pg_lsn), cast({arguments[2]} as pg_lsn)))",
-        "pg_xact_commit_timestamp_origin" =>
-            // The xid travels as text first: a uint literal renders as an integer, and PostgreSQL has
-            // no integer-to-xid cast (42846), while text-to-xid resolves for both the literal and the
-            // xid-bound parameter the driver sends.
-            "(select timestamp, roident::text as roident"
-            + $"\n from pg_xact_commit_timestamp_origin(cast(cast({arguments[0]} as text) as xid)))",
-        "ts_debug" =>
-            // The two dictionary columns are regdictionary/regdictionary[] — OID-alias types with no
-            // CLR mapping — so they are cast to text/text[] (the same bridge as the regclass/oid
-            // columns of the system-information readers). The token columns need no cast.
-            "(select alias, description, token, dictionaries::text[] as dictionaries,"
-            + " dictionary::text as dictionary, lexemes"
-            + $"\n from ts_debug({arguments[0]}))",
-        _ => WrapTableFunction(name, call)
-    };
+            + ")" + ordinality + " as u(" + columns + "))";
+    }
 
     // PostgreSQL has native json/jsonb types and the associated functions/operators.
     /// <inheritdoc/>

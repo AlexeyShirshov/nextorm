@@ -1,4 +1,5 @@
 #nullable enable
+NextORM.Core.TvfEntityBuilder<T>.WithOrdinality<TRow>() -> NextORM.Core.TvfEntityBuilder<TRow>!
 NextORM.Core.CommonFunctions.not_in<T>(T column, NextORM.Core.QueryCommand<T>! cmd) -> bool
 NextORM.Core.CommonFunctions.not_in<T>(T column, params T[]! values) -> bool
 NextORM.Core.CommonFunctions.not_in<T>(T column, System.Collections.Generic.IEnumerable<T>! values) -> bool

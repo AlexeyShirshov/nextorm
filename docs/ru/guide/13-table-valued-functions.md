@@ -422,6 +422,43 @@ var elements = dataContext
     .ToList(new long[] { 1, 2, 3 });
 ```
 
+### Добавление позиции строки через `WITH ORDINALITY` в PostgreSQL
+
+В лямбде источника `From` или APPLY вызовите `WithOrdinality<TRow>()` сразу
+после фабрики табличной функции. Сопоставьте в `TRow` исходные столбцы функции,
+а столбец PostgreSQL `ordinality` — со свойством типа `long`. Для правой
+стороны `OuterApply`, которая может отсутствовать, используйте `long?`.
+Модификатор работает и с пользовательскими фабриками `TvfEntityBuilder<T>`
+в PostgreSQL. Другие провайдеры его отклоняют.
+
+Если `Items` в модели `Order` сопоставлено с допускающим SQL `NULL` массивом
+`jsonb`, разверните массив и отсортируйте результат по ID заказа и позиции элемента:
+
+```csharp
+var rows = dataContext.From<Order>()
+    .OuterApply(o => SqlFunctions.Postgres.jsonb_array_elements(o.Items)
+        .WithOrdinality<OrderItem>())
+    .OrderBy(p => p.Item1.Id)
+    .ThenBy(p => p.Item2.Position)
+    .Select(p => new { p.Item1.Id, p.Item2.Value, p.Item2.Position })
+    .ToList();
+
+public interface OrderItem
+{
+    [Column("value")] JsonDocument? Value { get; set; }
+    [Column("ordinality")] long? Position { get; set; }
+}
+```
+
+PostgreSQL начинает нумерацию с 1 для каждого вызова функции. У одинаковых
+элементов разные позиции. Если массив пуст или равен SQL `NULL`, `OuterApply`
+сохраняет заказ, а оба поля элемента в проекции получают `null`. Позиция не
+задаёт порядок выборки: `WithOrdinality` не добавляет `ORDER BY`. Чтобы получить
+исходный набор столбцов, не применяйте модификатор. Вызов
+`unnest_with_ordinality` уже возвращает позицию и не требует модификатора.
+
+### JSON, регулярные выражения и полнотекстовый поиск
+
 PostgreSQL также предоставляет set-returning функции для regexp, JSON и полнотекстового поиска:
 
 | `SqlFunctions.Postgres.*` | Выходные колонки SQL | Форма строки |

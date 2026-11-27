@@ -54,7 +54,8 @@ internal static class SourceExpressionLowerer
         if (call is null)
             throw new NotSupportedException(NotADirectFactoryCallMessage);
 
-        var rowType = GetFactoryRowType(call);
+        var factory = UnwrapOrdinality(call, out var ordinalRowType);
+        var rowType = GetFactoryRowType(factory);
         if (rowType is null && call.Object is not null)
         {
             // A call over a builder that is not a supported composition step (a pre-computed lambda, a
@@ -78,9 +79,10 @@ internal static class SourceExpressionLowerer
         // keeps the outer row as a free variable only inside an inspected quote and re-enters this
         // lowering at preparation time, after the outer member reads were replaced by outer-reference
         // markers, so no free parameter reaches this check.
-        RejectUnboundFactoryArguments(call);
+        RejectUnboundFactoryArguments(factory);
 
-        if (operations.Count == 0 && rowType != typeof(T))
+        var sourceType = ordinalRowType ?? rowType;
+        if (operations.Count == 0 && sourceType != typeof(T))
         {
             throw new NotSupportedException(
                 $"The factory '{call.Method.DeclaringType?.Name}.{call.Method.Name}' returns TvfEntityBuilder<{rowType.Name}>, which does not match the source row type {typeof(T).Name}.");
@@ -92,8 +94,8 @@ internal static class SourceExpressionLowerer
         try
         {
             return (EntityBuilder<T>)LowerComposedMI
-                .MakeGenericMethod(rowType, typeof(T))
-                .Invoke(null, [context, call, operations.ToArray()])!;
+                .MakeGenericMethod(rowType, sourceType, typeof(T))
+                .Invoke(null, [context, factory, operations.ToArray(), ordinalRowType is not null])!;
         }
         catch (TargetInvocationException exception) when (exception.InnerException is not null)
         {
@@ -118,7 +120,8 @@ internal static class SourceExpressionLowerer
     {
         operations = [];
         var current = StripConvert(body);
-        while (current is MethodCallExpression { Object: not null } operation && IsSupportedBuilderOperation(operation))
+        while (current is MethodCallExpression { Object: not null } operation
+            && !IsOrdinality(operation) && IsSupportedBuilderOperation(operation))
         {
             operations.Add(operation);
             current = StripConvert(operation.Object!);
@@ -135,10 +138,11 @@ internal static class SourceExpressionLowerer
     /// lambda expression nodes, never with a compiled delegate, so predicate/projection bodies and their
     /// closures stay expression trees and are not executed here.
     /// </summary>
-    private static EntityBuilder<TResult> LowerComposed<TRow, TResult>(
+    private static EntityBuilder<TResult> LowerComposed<TRow, TSource, TResult>(
         IDataContext context,
         MethodCallExpression call,
-        MethodCallExpression[] operations)
+        MethodCallExpression[] operations,
+        bool withOrdinality)
     {
         var descriptor = MaterializeMetadata<TRow>(call);
 
@@ -152,9 +156,14 @@ internal static class SourceExpressionLowerer
             descriptor.VerbatimArguments.Count == 0 ? null : descriptor.VerbatimArguments,
             call,
             typeof(TRow),
-            descriptor.ResultSchema);
+            descriptor.ResultSchema,
+            withOrdinality);
 
-        var builder = context.From<TRow>();
+        var builder = context.From<TSource>();
+        // A record-returning function's SQL column definitions come from the original factory
+        // mapping, not the augmented result row (which also contains the server-generated column).
+        if (withOrdinality && descriptor.ResultSchema != TableFunctionSchema.None)
+            _ = context.From<TRow>();
         builder.SourceFrom = new FromExpression(function);
 
         object current = builder;
@@ -287,7 +296,7 @@ internal static class SourceExpressionLowerer
     internal static void EnsureSupportedCorrelatedApplyBody(LambdaExpression source, string receiver)
     {
         var call = CollectCompositionSpine(source.Body, out var operations);
-        if (call is null || operations.Count == 0 || GetFactoryRowType(call) is null)
+        if (call is null || operations.Count == 0 || GetFactoryRowType(UnwrapOrdinality(call, out _)) is null)
             return;
 
         throw new NotSupportedException(
@@ -327,7 +336,11 @@ internal static class SourceExpressionLowerer
     {
         applySource = null;
 
-        if (StripConvert(source.Body) is not MethodCallExpression call || GetFactoryRowType(call) != typeof(T))
+        if (StripConvert(source.Body) is not MethodCallExpression call)
+            return false;
+
+        var factoryCall = UnwrapOrdinality(call, out var ordinalRowType);
+        if (GetFactoryRowType(factoryCall) is not { } factoryRowType || (ordinalRowType ?? factoryRowType) != typeof(T))
             return false;
 
         // Keep the factory call verbatim (the outer parameter included) and defer the lowering to
@@ -381,6 +394,25 @@ internal static class SourceExpressionLowerer
         // visitor; the parameter list is dropped here because From(...) carries the call, not the
         // correlation, and the rewritten body no longer references the outer parameter.
         => context.From(Expression.Lambda<Func<EntityBuilder<T>>>(source.Body)).ToCommand();
+
+    private static bool IsOrdinality(MethodCallExpression call)
+        => call.Method.Name == nameof(TvfEntityBuilder<object>.WithOrdinality)
+            && call.Method.DeclaringType is { IsGenericType: true } declaringType
+            && declaringType.GetGenericTypeDefinition() == typeof(TvfEntityBuilder<>);
+
+    private static MethodCallExpression UnwrapOrdinality(MethodCallExpression call, out Type? ordinalRowType)
+    {
+        ordinalRowType = null;
+        if (!IsOrdinality(call))
+            return call;
+
+        if (StripConvert(call.Object!) is not MethodCallExpression factory || IsOrdinality(factory)
+            || GetFactoryRowType(factory) is null || IsSupportedBuilderOperation(factory))
+            throw new NotSupportedException("Use WithOrdinality once, directly after a TVF factory call.");
+
+        ordinalRowType = call.Method.GetGenericArguments()[0];
+        return factory;
+    }
 
     private static Type? GetFactoryRowType(MethodCallExpression call)
     {

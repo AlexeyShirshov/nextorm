@@ -420,6 +420,42 @@ var elements = dataContext
     .ToList(new long[] { 1, 2, 3 });
 ```
 
+### Add row positions with PostgreSQL `WITH ORDINALITY`
+
+In a `From` or APPLY source lambda, call `WithOrdinality<TRow>()` directly after
+the table-function factory. Map the original output columns in `TRow` and map
+the PostgreSQL `ordinality` column to a `long` property. Use `long?` for a
+nullable right side in `OuterApply`. The modifier also works with custom
+`TvfEntityBuilder<T>` factories on PostgreSQL; other providers reject it.
+
+For example, given an `Order` mapping where `Items` is a nullable `jsonb` array,
+expand the array and sort by order ID and element position:
+
+```csharp
+var rows = dataContext.From<Order>()
+    .OuterApply(o => SqlFunctions.Postgres.jsonb_array_elements(o.Items)
+        .WithOrdinality<OrderItem>())
+    .OrderBy(p => p.Item1.Id)
+    .ThenBy(p => p.Item2.Position)
+    .Select(p => new { p.Item1.Id, p.Item2.Value, p.Item2.Position })
+    .ToList();
+
+public interface OrderItem
+{
+    [Column("value")] JsonDocument? Value { get; set; }
+    [Column("ordinality")] long? Position { get; set; }
+}
+```
+
+PostgreSQL starts numbering at 1 for each function call. Duplicate elements
+get distinct positions. If the array is empty or SQL `NULL`, `OuterApply`
+keeps the order and both projected item fields are `null`. A position is not
+a sort order: `WithOrdinality` doesn't add `ORDER BY`. Omit the modifier for
+the original row shape. Existing `unnest_with_ordinality` calls already
+include the position and don't need the modifier.
+
+### JSON, regexp, and text search
+
 PostgreSQL also ships the regexp, JSON and text-search set-returning functions:
 
 | `SqlFunctions.Postgres.*` | SQL output columns | Row shape |

@@ -1282,7 +1282,14 @@ internal static class SqlSourceRenderer
             sqlBuilder.Append(')');
 
             var callSql = sqlBuilder.ToString();
-            var wrappedCall = ctx.Dialect.WrapTableFunction(function.Name, callSql, renderedArguments);
+            if (function.WithOrdinality && !string.IsNullOrEmpty(function.WithClause))
+                throw new NotSupportedException("WITH ORDINALITY cannot be combined with a table function's WITH (...) clause.");
+
+            var wrappedCall = function.WithOrdinality
+                ? (ctx.Dialect as SqlDialectBase
+                    ?? throw new NotSupportedException("WITH ORDINALITY on a table function is not supported by this provider."))
+                    .RenderTableFunctionWithOrdinality(function.Name, callSql, renderedArguments, columnDefinitions, isBuiltIn, ctx.KeywordCase)
+                : ctx.Dialect.WrapTableFunction(function.Name, callSql, renderedArguments);
             if (!string.Equals(wrappedCall, callSql, StringComparison.Ordinal))
             {
                 sqlBuilder.Clear();
@@ -1299,7 +1306,7 @@ internal static class SqlSourceRenderer
 
                 sqlBuilder.Append(ctx.Dialect.MakeTableFunctionAlias(
                     ctx.AliasProvider!.GetNextAlias(from),
-                    function.ResultSchema == TableFunctionSchema.AliasColumnList ? columnDefinitions : null,
+                    !function.WithOrdinality && function.ResultSchema == TableFunctionSchema.AliasColumnList ? columnDefinitions : null,
                     ctx.KeywordCase));
             }
 

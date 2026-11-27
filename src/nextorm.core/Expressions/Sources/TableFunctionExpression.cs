@@ -108,6 +108,8 @@ public sealed class TableFunctionExpression
     /// <summary>True when this source is the SQL Server approximate VECTOR_SEARCH table construct.</summary>
     internal bool IsApproximateVectorSearch => ApproximateTopK is not null;
 
+    internal bool WithOrdinality { get; private init; }
+
     /// <summary>Creates the internal SQL Server VECTOR_SEARCH source with its four named arguments.</summary>
     internal static TableFunctionExpression CreateApproximateVectorSearch(
         string tableName,
@@ -149,6 +151,10 @@ public sealed class TableFunctionExpression
         IReadOnlyList<int>? verbatimArguments,
         MethodCallExpression call,
         Type resultType,
-        TableFunctionSchema resultSchema)
-        => new(name, schema, withClause, callClause, verbatimArguments, call, resultType, resultSchema);
+        TableFunctionSchema resultSchema,
+        bool withOrdinality = false)
+        => new(name, schema, withClause, callClause, verbatimArguments, call, resultType, resultSchema)
+        {
+            WithOrdinality = withOrdinality
+        };
 }
