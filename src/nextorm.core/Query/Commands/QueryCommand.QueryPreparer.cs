@@ -4222,7 +4222,7 @@ public partial class QueryCommand
             return copy;
         }
 
-        internal RawShape SnapshotComponents()
+        internal RawShape SnapshotComponents(ExpressionVisitor? rewriter = null)
         {
             if (Components.IsEmpty)
                 return this;
@@ -4232,7 +4232,10 @@ public partial class QueryCommand
             for (var i = 0; i < shapes.Length; i++)
             {
                 var component = ReadComponentShape(i);
-                shapes[i] = component with { Selectors = (LambdaExpression[])component.Selectors.Clone() };
+                var selectors = rewriter is null
+                    ? (LambdaExpression[])component.Selectors.Clone()
+                    : Array.ConvertAll(component.Selectors, expression => (LambdaExpression)rewriter.Visit(expression));
+                shapes[i] = component with { Selectors = selectors };
             }
             copy._componentShapes = shapes;
             copy.Components = default;

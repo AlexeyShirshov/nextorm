@@ -40,13 +40,18 @@ internal static class QueryPlanStore
     /// must be separate when the normalized key uses comparison-only expressions.
     /// </summary>
     internal sealed class RawCandidate(QueryPlan plan, IDbCommandHolder holder, QueryCommand.RawShape shape,
-        QueryCommand recipe, bool useCurrentWhere, bool useCurrentSorting)
+        QueryCommand recipe, bool useCurrentWhere, bool useCurrentSorting, bool rebindGrouping = false)
     {
         internal QueryPlan Plan { get; } = plan;
         internal IDbCommandHolder Holder { get; } = holder;
         internal QueryCommand.RawShape Shape { get; } = shape;
         internal QueryCommand Recipe { get; } = recipe;
-        internal void ApplyTo(QueryCommand command) => command.ApplyPreparationFrom(Recipe, useCurrentWhere, useCurrentSorting);
+        internal void ApplyTo(QueryCommand command)
+        {
+            command.ApplyPreparationFrom(Recipe, useCurrentWhere, useCurrentSorting);
+            if (rebindGrouping)
+                command.RebindRawGrouping();
+        }
     }
 
     /// <summary>
@@ -318,12 +323,21 @@ internal static class QueryPlanStore
     internal static void SetRaw(Type contextType, QueryPlan plan, IDbCommandHolder holder, QueryCommand.RawShape shape, QueryCommand comparerSource)
     {
         _ = contextType;
-        var detached = comparerSource.TryDetachRawClauses(shape);
-        var candidate = detached is { } replay
-            ? new RawCandidate(plan, holder, replay.Shape, replay.Recipe, replay.UseCurrentWhere, replay.UseCurrentSorting)
-            : new RawCandidate(plan, holder, shape.SnapshotComponents(),
-                plan.NeedsSeparateRawRecipe || !shape.Components.IsEmpty
-                    ? comparerSource.CloneForRawRecipe() : plan.QueryCommand, false, false);
+        RawCandidate candidate;
+        if (comparerSource.TryDetachRawGrouping(shape) is { } grouping)
+        {
+            candidate = new RawCandidate(plan, holder, grouping.Shape, grouping.Recipe, false, false, rebindGrouping: true);
+        }
+        else if (comparerSource.TryDetachRawClauses(shape) is { } replay)
+        {
+            candidate = new RawCandidate(plan, holder, replay.Shape, replay.Recipe, replay.UseCurrentWhere, replay.UseCurrentSorting);
+        }
+        else
+        {
+            var recipe = plan.NeedsSeparateRawRecipe || !shape.Components.IsEmpty
+                ? comparerSource.CloneForRawRecipe() : plan.QueryCommand;
+            candidate = new RawCandidate(plan, holder, shape.SnapshotComponents(), recipe, false, false);
+        }
         var index = RawIndex;
         if (!index.TryGetValue(shape.Fingerprint, out var bucket))
         {

@@ -12,7 +12,7 @@ namespace NextORM.Extensions;
 /// <see cref="SelectGroupMode"/>, and returns a descriptor used in the plan key. The engine renders the
 /// statement from the prepared state, so <see cref="BuildQuery"/> does not modify the command.
 /// </remarks>
-public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryComponentShape
+public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryComponentShape, IRawGroupingComponent
 {
     private readonly LambdaExpression _projection;
     private readonly LambdaExpression? _condition; // for SelectGroupHaving
@@ -167,14 +167,27 @@ public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryCompo
                 throw new QueryPreparationException("SelectGroup projection analysis is missing.");
         }
 
-        var comparer = context.ExpressionComparer;
+        return new PreparationDescriptor(_projection, _condition, GetDescriptorHash(context.ExpressionComparer), contribution);
+    }
+
+    IQueryPreparationDescriptor IRawGroupingComponent.BindRawHaving(LambdaExpression projection,
+        IReadOnlyList<LambdaExpression> groupingKeys, IEqualityComparer<Expression> comparer)
+    {
+        var condition = SelectGroupConditionBinder.Bind<TEntity>(projection, _condition!);
+        var contribution = new QueryPreparationContribution(groupingKeys, QueryPreparationHavingMode.Replace,
+            condition, sourcePredicate: null, requireDistinct: false);
+        return new PreparationDescriptor(_projection, _condition, GetDescriptorHash(comparer), contribution);
+    }
+
+    private int GetDescriptorHash(IEqualityComparer<Expression> comparer)
+    {
         var hash = new HashCode();
         hash.Add(Slot);
         hash.Add(GetType());
         hash.Add(_projection, comparer);
         if (_condition is not null) hash.Add(_condition, comparer);
 
-        return new PreparationDescriptor(_projection, _condition, hash.ToHashCode(), contribution);
+        return hash.ToHashCode();
     }
 
     /// <summary>Does nothing: the engine renders the statement from the effective prepared state.</summary>

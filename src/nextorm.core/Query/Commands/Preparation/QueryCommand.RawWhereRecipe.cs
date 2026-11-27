@@ -19,18 +19,7 @@ public partial class QueryCommand
 
         var visitor = new RawClauseCaptureVisitor();
         visitor.Visit(shape.Exp);
-
-        if (_selectList is { } columns)
-        {
-            foreach (var column in columns)
-            {
-                if (column.Converter is not null)
-                    return null;
-                visitor.Visit(column.Expression);
-            }
-        }
-
-        if (!visitor.Supported)
+        if (!visitor.CheckColumns(_selectList))
             return null;
 
         visitor.RemoveReceivers = true;
@@ -88,6 +77,55 @@ public partial class QueryCommand
         return (shape.WithComparisonClauses(comparisonCondition, comparisonSorting), recipe, useCurrentWhere, useCurrentSorting);
     }
 
+    // Keep the inferred keys, but rebuild HAVING from the fresh component and projection. No
+    // capture from the original selector or the first bound predicate belongs in this recipe.
+    internal (RawShape Shape, QueryCommand Recipe)? TryDetachRawGrouping(RawShape shape)
+    {
+        if (shape.Closures is not { Length: > 0 } || !SupportsSimpleRawReplay(shape)
+            || shape.Components.Count != 1 || shape.Components[0] is not IRawGroupingComponent
+            || shape.Exp is null || !ReferenceEquals(shape.Exp, _exp)
+            || shape.Sorting is not null || _sorting is not null
+            || Prep is not
+            {
+                PreparedComponents: [IQueryPreparationDescriptor],
+                EffectiveGroupingKeys: { } keys, GroupingList: var groupingColumns, EffectiveHaving: not null,
+                EffectiveHavingMode: QueryPreparationHavingMode.Replace, EffectiveRequireDistinct: false,
+                EffectiveSourcePredicate: null
+            })
+            return null;
+
+        var visitor = new RawClauseCaptureVisitor();
+        visitor.Visit(shape.Exp);
+        visitor.Visit(shape.Condition);
+        visitor.Visit(PreparedCondition);
+        if (!visitor.CheckColumns(_selectList) || !visitor.CheckColumns(groupingColumns))
+            return null;
+        foreach (var key in keys)
+        {
+            visitor.Visit(key);
+        }
+        if (!visitor.Supported)
+            return null;
+
+        visitor.RemoveReceivers = true;
+        var comparison = shape.SnapshotComponents(visitor);
+        if (!visitor.Supported || !visitor.RemovedReceiver)
+            return null;
+
+        var recipe = CloneForRawRecipe();
+        recipe.EffectiveHaving = null;
+        recipe.PreparedComponents = null;
+        return (comparison, recipe);
+    }
+
+    internal void RebindRawGrouping()
+    {
+        var component = (IRawGroupingComponent)_components[0];
+        var descriptor = component.BindRawHaving(_exp!, EffectiveGroupingKeys!, GetExpressionPlanEqualityComparer());
+        PreparedComponents = [descriptor];
+        EffectiveHaving = descriptor.Preparation.Having;
+    }
+
     private static bool HasUnchangedClause(Expression? authored, Expression? prepared)
         // The correlated visitor recreates the lambda wrapper even for an unchanged body. Require
         // the same binder and original leaves, not structural equality with another expression tree.
@@ -123,13 +161,22 @@ public partial class QueryCommand
     }
 
     private bool SupportsRawWhereReplay(RawShape shape)
-        => shape.Joins is null && shape.Ctes is null && shape.Union is null && shape.Components.IsEmpty
+        => SupportsSimpleRawReplay(shape)
+            && shape.Components.IsEmpty && _components.IsEmpty
+            && Prep is
+            {
+                PreparedComponents: null, EffectiveGroupingKeys: null, EffectiveHaving: null,
+                EffectiveSourcePredicate: null, GroupingList: null or { Length: 0 }
+            };
+
+    private bool SupportsSimpleRawReplay(RawShape shape)
+        => shape.Joins is null && shape.Ctes is null && shape.Union is null
             && shape.Group is null && shape.Having is null && shape.PreWhere is null
             && shape.PerParentPartition is null && shape.ArrayJoins is null && shape.Windows is null
             && shape.LimitBy is null && shape.DistinctOn is null && shape.ExtremeRow is null
             && IsPlainRecipeSource(shape.From) && IsPlainRecipeSource(_from)
             && _joins is null && _ctes is null && _union is null
-            && _components.IsEmpty && OuterRegistry is null
+            && OuterRegistry is null
             && NavigationPaths is null && NavigationChain is null && JunctionChildFilter is null
             && _groupExp is null && _having is null && _preWhere is null && PerParentPartition is null
             && _arrayJoins is null && _windows is null && LimitBy is null && DistinctOn is null && ExtremeRow is null
@@ -138,8 +185,6 @@ public partial class QueryCommand
             && Prep is
             {
                 ReferencedQueries: null, OuterRefs: null, OuterRefBindings: null,
-                PreparedComponents: null, EffectiveGroupingKeys: null, EffectiveHaving: null,
-                EffectiveSourcePredicate: null, GroupingList: null or { Length: 0 },
                 LimitByColumns: null or { Length: 0 }, DistinctOnColumns: null or { Length: 0 },
                 ExtremeRowColumns: null or { Length: 0 }, ExtremeRowGroupByColumns: null or { Length: 0 },
                 PerParentPartitionColumns: null or { Length: 0 }, PreparedArrayJoin: null, PreparedHaving: null,
@@ -155,6 +200,21 @@ public partial class QueryCommand
     {
         internal bool Supported { get; private set; } = true;
         internal bool RemoveReceivers { get; set; }
+        internal bool RemovedReceiver { get; private set; }
+
+        internal bool CheckColumns(SelectExpression[]? columns)
+        {
+            if (columns is not null)
+            {
+                foreach (var column in columns)
+                {
+                    if (column.Converter is not null)
+                        return false;
+                    Visit(column.Expression);
+                }
+            }
+            return Supported;
+        }
 
         internal bool CheckSorts(Sorting[]? sorts)
         {
@@ -189,7 +249,12 @@ public partial class QueryCommand
             // type remain in the syntax; the raw descriptor separately verifies receiver tokens.
             if (RemoveReceivers && node.Expression is ConstantExpression { Value: not null and not string } receiver
                 && !receiver.Type.IsValueType && !typeof(QueryCommand).IsAssignableFrom(node.Type))
+            {
+                RemovedReceiver = true;
+                // Inspect the remaining syntax during the walk; the receiver is represented by its
+                // existing raw identity token and is never evaluated in the comparison tree.
                 return node.Update(Expression.Constant(null, receiver.Type));
+            }
 
             return base.VisitMember(node);
         }

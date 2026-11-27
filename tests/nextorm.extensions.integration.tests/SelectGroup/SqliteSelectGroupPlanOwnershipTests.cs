@@ -93,10 +93,54 @@ public sealed class SqliteSelectGroupPlanOwnershipTests
             return (PreparedPlanObservation.GetPlan(invocation), new WeakReference(component),
                 ReferenceEquals(command.Components!.Single(), component));
         }
-
-        static int RecipeReuses() => (int)typeof(DataContext).Assembly.GetType("NextORM.Core.QueryPlanner", throwOnError: true)!
-            .GetProperty("RecipeReuses", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
     }
+
+    [Fact]
+    public void RawRecipe_RebindsHavingWithoutRetainingItsCapture()
+    {
+        using var firstConnection = new SqliteConnection("Data Source=:memory:");
+        using var secondConnection = new SqliteConnection("Data Source=:memory:");
+        Seed(firstConnection);
+        Seed(secondConnection);
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+
+        var (plan, capture) = Warm(first, second);
+        firstTap.Parameters.Should().Equal((0, "Target", 1));
+        secondTap.Parameters.Should().Equal((0, "Target", 2));
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        capture.IsAlive.Should().BeFalse("neither the raw selector nor the executable recipe should own the HAVING capture");
+        GC.KeepAlive(plan);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (DbPreparedQueryCommand<int> Plan, WeakReference Capture) Warm(SqliteDataContext first, SqliteDataContext second)
+        {
+            var owner = new HavingOwner(1);
+            var token = TestContext.Current.CancellationToken;
+            QueryCommand<int> Build(SqliteDataContext context) => context.From<GroupRow>()
+                .WithTag("captured raw select group ownership")
+                .SelectGroupHaving(row => row.Id, id => id == owner.Target);
+
+            var cold = first.GetPreparedQueryCommand(Build(first), false, true, token);
+            cold.ToList(first).Should().Equal(1);
+            owner.Target = 2;
+            var before = RecipeReuses();
+            var warm = second.GetPreparedQueryCommand(Build(second), false, true, token);
+            warm.ToList(second).Should().Equal(2);
+            RecipeReuses().Should().Be(before + 1, "the second command must stage the raw recipe");
+            var plan = PreparedPlanObservation.GetPlan(cold);
+            PreparedPlanObservation.GetPlan(warm).Should().BeSameAs(plan);
+            return (plan, new WeakReference(owner));
+        }
+    }
+
+    private static int RecipeReuses() => (int)typeof(DataContext).Assembly.GetType("NextORM.Core.QueryPlanner", throwOnError: true)!
+        .GetProperty("RecipeReuses", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
 
     private static void Seed(SqliteConnection connection)
     {
@@ -118,7 +162,10 @@ public sealed class SqliteSelectGroupPlanOwnershipTests
         }
     }
 
-    private sealed record HavingOwner(int Target);
+    private sealed class HavingOwner(int target)
+    {
+        internal int Target { get; set; } = target;
+    }
 
     [SqlTable("issue16_group_rows")]
     public sealed class GroupRow

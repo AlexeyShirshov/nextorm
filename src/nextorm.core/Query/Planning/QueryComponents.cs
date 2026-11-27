@@ -104,6 +104,13 @@ internal interface ISqlPlanComponentDescriptor
     IQueryComponentDescriptor ToSqlPlanKey(ExpressionVisitor rewriter);
 }
 
+// The grouping keys and mode have already been inferred. Bind only the current component's HAVING.
+internal interface IRawGroupingComponent
+{
+    IQueryPreparationDescriptor BindRawHaving(LambdaExpression projection, IReadOnlyList<LambdaExpression> groupingKeys,
+        IEqualityComparer<Expression> comparer);
+}
+
 /// <summary>
 /// Context supplied to <see cref="IQueryComponent.Prepare"/>. It exposes the command being prepared
 /// and the engine's expression comparer.
