@@ -352,6 +352,27 @@ public partial class QueryCommand
             RewriteColumns(prepared.ExtremeRowColumns);
             RewriteColumns(prepared.ExtremeRowGroupByColumns);
             RewriteColumns(prepared.PerParentPartitionColumns);
+            if (prepared.PreparedComponents is { Count: > 0 } descriptors)
+            {
+                // The normalized comparer uses prepared descriptors, not the raw components or their
+                // rendering inputs. A raw candidate still needs a separate executable copy.
+                _components = default;
+                _componentsView = null;
+                prepared.EffectiveGroupingKeys = null;
+                prepared.EffectiveHaving = null;
+                prepared.EffectiveSourcePredicate = null;
+                var comparison = new IQueryComponentDescriptor[descriptors.Count];
+                for (var i = 0; i < comparison.Length; i++)
+                {
+                    var descriptor = descriptors[i];
+                    comparison[i] = descriptor is ISqlPlanComponentDescriptor detachable
+                        ? detachable.ToSqlPlanKey(rewriter)
+                        : descriptor;
+                }
+                prepared.PreparedComponents = comparison;
+                prepared.PreparedComponentsView = Array.AsReadOnly(comparison);
+                rewriter.Changed = true;
+            }
             if (prepared.ReferencedQueries is { } referenced)
                 foreach (var command in referenced)
                     command.DetachSqlPlanKey(rewriter);

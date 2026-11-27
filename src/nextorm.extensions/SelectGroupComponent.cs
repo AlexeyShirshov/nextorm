@@ -174,7 +174,7 @@ public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryCompo
         hash.Add(_projection, comparer);
         if (_condition is not null) hash.Add(_condition, comparer);
 
-        return new Descriptor(this, contribution, hash.ToHashCode());
+        return new PreparationDescriptor(_projection, _condition, hash.ToHashCode(), contribution);
     }
 
     /// <summary>Does nothing: the engine renders the statement from the effective prepared state.</summary>
@@ -205,23 +205,31 @@ public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryCompo
         protected override Expression VisitParameter(ParameterExpression node) => node == _old ? _new : base.VisitParameter(node);
     }
 
-    private sealed class Descriptor : IQueryPreparationDescriptor
+    private class Descriptor(Expression projection, Expression? condition, int hash)
+        : IQueryComponentDescriptor, ISqlPlanComponentDescriptor
     {
-        private readonly SelectGroupComponent<TEntity> _component;
-        public Descriptor(SelectGroupComponent<TEntity> component, QueryPreparationContribution prep, int hash)
-        {
-            _component = component;
-            Preparation = prep;
-            StructuralHash = hash;
-        }
-        public Type Slot => _component.Slot;
-        public Type ComponentType => _component.GetType();
-        public QueryComponentContribution Contribution => _component.Contribution;
+        private readonly Expression _projection = projection;
+        private readonly Expression? _condition = condition;
+
+        public Type Slot => typeof(SelectGroupComponent<TEntity>);
+        public Type ComponentType => typeof(SelectGroupComponent<TEntity>);
+        public QueryComponentContribution Contribution => QueryComponentContribution.ExclusiveGrouping;
         public string Discriminator => "SelectGroup";
-        public int StructuralHash { get; }
-        public QueryPreparationContribution Preparation { get; }
+        public int StructuralHash { get; } = hash;
+
         public bool StructurallyEquals(IQueryComponentDescriptor? other)
-            => other is Descriptor rhs && Slot == rhs.Slot && StructuralHash == rhs.StructuralHash;
+            => other is Descriptor rhs && StructuralHash == rhs.StructuralHash
+                && ExpressionPlanEqualityComparer.AreEqual(_projection, rhs._projection)
+                && ExpressionPlanEqualityComparer.AreEqual(_condition, rhs._condition);
+
+        public IQueryComponentDescriptor ToSqlPlanKey(ExpressionVisitor rewriter)
+            => new Descriptor(rewriter.Visit(_projection), rewriter.Visit(_condition), StructuralHash);
+    }
+
+    private sealed class PreparationDescriptor(Expression projection, Expression? condition, int hash,
+        QueryPreparationContribution preparation) : Descriptor(projection, condition, hash), IQueryPreparationDescriptor
+    {
+        public QueryPreparationContribution Preparation { get; } = preparation;
     }
 }
 

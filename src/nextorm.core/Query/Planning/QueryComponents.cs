@@ -97,6 +97,13 @@ public interface IQueryComponentDescriptor
     bool StructurallyEquals(IQueryComponentDescriptor? other);
 }
 
+// A packaged descriptor can provide just the immutable state needed for normalized SQL equality.
+// The expression visitor preserves comparison semantics; its output must never be executed.
+internal interface ISqlPlanComponentDescriptor
+{
+    IQueryComponentDescriptor ToSqlPlanKey(ExpressionVisitor rewriter);
+}
+
 /// <summary>
 /// Context supplied to <see cref="IQueryComponent.Prepare"/>. It exposes the command being prepared
 /// and the engine's expression comparer.

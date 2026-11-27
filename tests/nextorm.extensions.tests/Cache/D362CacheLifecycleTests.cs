@@ -50,6 +50,37 @@ public class D362CacheLifecycleTests
         sqlA.Should().NotBe(sqlB);
     }
 
+    [Fact]
+    public void SelectGroupDescriptor_EqualHashesDoNotMatchDifferentConditions()
+    {
+        using var ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
+        Expression<Func<E, long>> projection = row => row.Id;
+        Expression<Func<long, bool>> above = id => id > 5;
+        Expression<Func<long, bool>> below = id => id < 5;
+        var prep = new CollisionContext(ctx.From<E>().Select(projection));
+
+        var first = new SelectGroupComponent<E>(projection, above).Prepare(prep);
+        var equivalent = new SelectGroupComponent<E>(projection, (Expression<Func<long, bool>>)(id => id > 5)).Prepare(prep);
+        var different = new SelectGroupComponent<E>(projection, below).Prepare(prep);
+
+        different.StructuralHash.Should().Be(first.StructuralHash);
+        first.StructurallyEquals(equivalent).Should().BeTrue();
+        first.StructurallyEquals(different).Should().BeFalse();
+        different.StructurallyEquals(first).Should().BeFalse();
+    }
+
+    private sealed class CollisionContext(QueryCommand command) : IQueryComponentPrepareContext
+    {
+        public QueryCommand Command { get; } = command;
+        public IEqualityComparer<Expression> ExpressionComparer { get; } = new ConstantHasher(new QueryComponentContext(command).ExpressionComparer);
+    }
+
+    private sealed class ConstantHasher(IEqualityComparer<Expression> comparer) : IEqualityComparer<Expression>
+    {
+        public bool Equals(Expression? x, Expression? y) => comparer.Equals(x, y);
+        public int GetHashCode(Expression obj) => 0;
+    }
+
     // 5. ResetPreparation re-derives, no accumulation
     [Fact]
     public void ResetPreparation_NoAccumulation()

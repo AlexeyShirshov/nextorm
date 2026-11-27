@@ -25,6 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\nextorm.test.shared\PreparedPlanObservation.cs" Link="Support\PreparedPlanObservation.cs" />
     <ProjectReference Include="..\..\src\nextorm.extensions\nextorm.extensions.csproj" />
     <ProjectReference Include="..\nextorm.integration.tests\nextorm.integration.tests.csproj" />
   </ItemGroup>
