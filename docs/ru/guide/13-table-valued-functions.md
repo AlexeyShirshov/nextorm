@@ -407,20 +407,33 @@ var act = () => dataContext.From(() => descriptor);
 ([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String))), в отличие
 от пользовательской фабрики, которая выводится verbatim.
 
-`SqlFunctions.Postgres.generate_series` и `SqlFunctions.Postgres.unnest` относятся к PostgreSQL (они возвращают [`SqlFunctions.IGenerateSeriesRow`](xref:NextORM.Core.SqlFunctions.IGenerateSeriesRow)
-с колонкой `generate_series` и [`SqlFunctions.IUnnestRow<T>`](xref:NextORM.Core.SqlFunctions.IUnnestRow`1) с колонкой `unnest`):
+Для каждой поддерживаемой встроенной табличной функции PostgreSQL можно начать
+запрос с именованного расширения `IDataContext` из `NextORM.Core`, например
+`FromGenerateSeries`, `FromUnnest` или `FromJsonbArrayElements`. Передавайте каждый
+аргумент отдельной лямбдой. Маркер `SqlFunctions.Parameter<T>(index)` и захваченные
+значения остаются в дереве выражения и обрабатываются так же, как в
+`From(() => SqlFunctions.Postgres.… )`. Возвращаемый `EntityBuilder<T>` поддерживает
+композицию, в том числе `Where` и `Select`:
 
 ```csharp
 var numbers = dataContext
-    .From(() => SqlFunctions.Postgres.generate_series(1L, 3L))
-    .Select(r => r.Value)
+    .FromGenerateSeries(() => 1L, () => 3L)
+    .Select(row => row.Value)
     .ToList();
 
 var elements = dataContext
-    .From(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
-    .Select(r => r.Value)
+    .FromUnnest(() => SqlFunctions.Parameter<long[]>(0))
+    .Where(row => row.Value > 1L)
+    .Select(row => row.Value)
     .ToList(new long[] { 1, 2, 3 });
 ```
+
+`FromGenerateSeries` возвращает строки [`SqlFunctions.IGenerateSeriesRow`](xref:NextORM.Core.SqlFunctions.IGenerateSeriesRow) с колонкой `generate_series`,
+а `FromUnnest` с одним массивом — строки [`SqlFunctions.IUnnestRow<T>`](xref:NextORM.Core.SqlFunctions.IUnnestRow`1) с колонкой `unnest`.
+
+Для сокращений действуют те же требования к провайдеру, версии сервера и правам,
+что и для исходных вызовов. Используйте исходную форму с лямбдой для пользовательских
+табличных функций и модификаторов источника, таких как `WithOrdinality`.
 
 ### Добавление позиции строки через `WITH ORDINALITY` в PostgreSQL
 

@@ -405,20 +405,32 @@ A few common table-valued functions are pre-declared as `TvfEntityBuilder<T>` fa
 ([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String))), unlike a
 custom factory, which is emitted verbatim.
 
-`SqlFunctions.Postgres.generate_series` and `SqlFunctions.Postgres.unnest` are PostgreSQL (they return [`SqlFunctions.IGenerateSeriesRow`](xref:NextORM.Core.SqlFunctions.IGenerateSeriesRow)
-with the `generate_series` column and [`SqlFunctions.IUnnestRow<T>`](xref:NextORM.Core.SqlFunctions.IUnnestRow`1) with the `unnest` column):
+For each supported built-in PostgreSQL table function, you can start a query with
+its named `IDataContext` extension in `NextORM.Core`, such as `FromGenerateSeries`,
+`FromUnnest`, or `FromJsonbArrayElements`. Pass a lambda for each argument. Both
+`SqlFunctions.Parameter<T>(index)` and captured values stay in the expression tree
+and are translated and bound as with `From(() => SqlFunctions.Postgres.… )`.
+The returned `EntityBuilder<T>` supports composition, including `Where` and `Select`:
 
 ```csharp
 var numbers = dataContext
-    .From(() => SqlFunctions.Postgres.generate_series(1L, 3L))
-    .Select(r => r.Value)
+    .FromGenerateSeries(() => 1L, () => 3L)
+    .Select(row => row.Value)
     .ToList();
 
 var elements = dataContext
-    .From(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
-    .Select(r => r.Value)
+    .FromUnnest(() => SqlFunctions.Parameter<long[]>(0))
+    .Where(row => row.Value > 1L)
+    .Select(row => row.Value)
     .ToList(new long[] { 1, 2, 3 });
 ```
+
+`FromGenerateSeries` exposes [`SqlFunctions.IGenerateSeriesRow`](xref:NextORM.Core.SqlFunctions.IGenerateSeriesRow) with the `generate_series` column, and
+`FromUnnest` with one array exposes [`SqlFunctions.IUnnestRow<T>`](xref:NextORM.Core.SqlFunctions.IUnnestRow`1) with the `unnest` column.
+
+These shortcuts have the same provider, server version, and permission requirements
+as the original calls. Keep using the source-lambda form for custom table functions
+and for source modifiers such as `WithOrdinality`.
 
 ### Add row positions with PostgreSQL `WITH ORDINALITY`
 
