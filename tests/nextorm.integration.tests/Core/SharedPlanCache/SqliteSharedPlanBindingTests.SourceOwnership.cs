@@ -1,12 +1,82 @@
 using System.Data.Common;
 using System.Runtime.CompilerServices;
 using FluentAssertions;
+using FluentAssertions.Execution;
 using NextORM.Sqlite;
 
 namespace NextORM.Integration.Tests;
 
 public sealed partial class SqliteSharedPlanBindingTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TypedCtePlan_RebindsWithoutKeepingTheDefiningCommands(bool recursive)
+    {
+        var (holder, key, context, shape, anchor) = Execute(recursive);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        using var assertions = new AssertionScope();
+        shape.IsAlive.Should().BeFalse("the named source's column shape belongs to the live query");
+        if (anchor is not null)
+        {
+            anchor.IsAlive.Should().BeFalse("the recursive reference's anchor belongs to the live declaration");
+            key.QueryCommand.Ctes![0].RecursiveReference.Should().BeNull("the comparison key does not render or validate the recursive step");
+        }
+        context.IsAlive.Should().BeFalse("published plans must not own the context that built the CTE");
+        QueryPlanStore.Values.Should().Contain(holder);
+        GC.KeepAlive(key);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (DbPreparedQueryCommand<int> Holder, QueryPlan Key, WeakReference Context, WeakReference Shape, WeakReference? Anchor)
+            Execute(bool recursive)
+        {
+            using var firstConnection = OpenSeededConnection();
+            using var secondConnection = OpenSeededConnection();
+            var firstTap = new BindingTap();
+            var secondTap = new BindingTap();
+            using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+            using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+            var token = TestContext.Current.CancellationToken;
+
+            var firstQuery = Build(first, 1, recursive);
+            var secondQuery = Build(second, 2, recursive);
+            QueryCommand.CaptureRawShape(firstQuery).Should().BeNull("typed sources use the normalized plan route");
+            var columnShape = firstQuery.From!.ColumnShape;
+            columnShape.Should().NotBeNull();
+            var anchorShape = firstQuery.Ctes![0].RecursiveReference?.AnchorShape;
+            (anchorShape is not null).Should().Be(recursive);
+            var cold = first.GetPreparedQueryCommand(firstQuery, false, true, token);
+            var warm = second.GetPreparedQueryCommand(secondQuery, false, true, token);
+            var holder = BoundQueryInvocation<int>.GetPlan(cold)!;
+            BoundQueryInvocation<int>.GetPlan(warm).Should().BeSameAs(holder);
+
+            int[] expectedCold = recursive ? [1, 2, 3] : [1];
+            int[] expectedWarm = recursive ? [2, 3] : [2];
+            cold.ToList(first).Should().Equal(expectedCold);
+            warm.ToList(second).Should().Equal(expectedWarm);
+            firstTap.LastParameters.Should().Equal((0, "target", 1));
+            secondTap.LastParameters.Should().Equal((0, "target", 2));
+
+            return (holder, firstQuery.GetOrCreatePlanKey(null), new WeakReference(first),
+                new WeakReference(columnShape), anchorShape is null ? null : new WeakReference(anchorShape));
+        }
+
+        static QueryCommand<int> Build(SqliteDataContext context, int target, bool recursive)
+        {
+            var anchor = context.From<BindingRow>().Where(row => row.Id == target)
+                .Select(row => new CteBindingRow { Number = row.Id });
+            var cte = recursive
+                ? anchor.AsRecursiveCte("issue16_typed_cte", self => context.From(self)
+                    .Where(row => row.Number < 3).Select(row => new CteBindingRow { Number = row.Number + 1 }))
+                : anchor.AsCte("issue16_typed_cte");
+            return context.From(cte).OrderBy(row => row.Number).Select(row => row.Number);
+        }
+    }
+
     [Fact]
     public void RawSourcePlan_RebindsTheSameSourceWithoutKeepingItsParameterBag()
     {
@@ -91,6 +161,11 @@ public sealed partial class SqliteSharedPlanBindingTests
     private sealed class RawSourceBag
     {
         public int Value { get; set; }
+    }
+
+    private sealed class CteBindingRow
+    {
+        public int Number { get; init; }
     }
 
     private sealed record JsonSourceArgument(string Document);

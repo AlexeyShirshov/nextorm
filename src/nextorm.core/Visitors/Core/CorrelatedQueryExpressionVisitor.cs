@@ -301,7 +301,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
             // A captured builder belongs to this invocation. Share its accessor, not a compiled
             // call that always reads the first expression's receiver.
-            var cmd = (QueryCommand)ValueExpressionAccessor.Evaluate(AsCommandExpression(builderReceiver), _queryProvider, _logger)!;
+            var cmd = (QueryCommand)ValueExpressionAccessor.Evaluate(AsCommandExpression(builderReceiver), _queryProvider, _logger, subquery: true)!;
             return ReplaceQueryCommand(node, cmd);
         }
         else if (node.Object is { } receiver && receiver.Type.IsAssignableTo(typeof(QueryCommand)))
@@ -322,7 +322,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             tv.Visit(receiver);
             if (tv.Has2)
             {
-                var cmd = (QueryCommand)ValueExpressionAccessor.Evaluate(receiver, _queryProvider, _logger)!;
+                var cmd = (QueryCommand)ValueExpressionAccessor.Evaluate(receiver, _queryProvider, _logger, subquery: true)!;
                 return ReplaceQueryCommand(node, cmd);
             }
         }
@@ -1498,7 +1498,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         while (receiver is MemberExpression { Expression: { } owner })
             receiver = owner;
         if (receiver is ConstantExpression)
-            return (QueryCommand)ValueExpressionAccessor.Evaluate(exp, _queryProvider, _logger)!;
+            return (QueryCommand)ValueExpressionAccessor.Evaluate(exp, _queryProvider, _logger, subquery: true)!;
 
         // Nested commands resolve ReferencedQueries/OuterReferences against the root registry, so a
         // marker registered by an ancestor scope (correlation depth > 1) is looked up there too. A
@@ -1525,9 +1525,6 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
             if (constRepl.Params.Count > 0)
             {
-                var pp = constRepl.Params.Select(it => it.Item1);
-                var args = constRepl.Params.Select(it => it.Item2).ToArray();
-
                 // A body that carries an outer reference bakes the marker index - a position in the
                 // *current* outer command's OuterReferences - into the compiled delegate. The same
                 // member can map to a different index on another command (depending on how many
@@ -1547,22 +1544,9 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 }
                 else
                 {
-                    var keyCmd = new ExpressionKey(exp, _queryProvider);
-                    if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
-                    {
-                        var d = Expression.Lambda(body, pp).Compile();
-
-                        DataContextCache.ExpressionsCache[keyCmd] = d;
-                        cmd = (QueryCommand)d.DynamicInvoke(args)!;
-
-                        if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
-                        {
-                            _logger.LogTrace("Subquery expression miss: {exp}", exp);
-                        }
-                        else if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Subquery expression miss");
-                    }
-                    else
-                        cmd = (QueryCommand)dCmd.DynamicInvoke(args)!;
+                    // No outer markers were introduced. Evaluate the original expression through
+                    // typed value slots so neither the key nor the accessor owns its captures.
+                    cmd = (QueryCommand)ValueExpressionAccessor.Evaluate(exp, _queryProvider, _logger, subquery: true)!;
                 }
             }
             else

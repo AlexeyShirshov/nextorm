@@ -6,6 +6,46 @@ namespace NextORM.Integration.Tests;
 
 public sealed partial class SqliteSharedPlanBindingTests
 {
+    [Fact]
+    public void RawRecipe_RebindsScalarProjectionWithoutRetainingTheFirstOwner()
+    {
+        var tap = new BindingTap();
+        using var connection = OpenSeededConnection();
+        using var context = new SqliteDataContext(connection, new DataContextBuilder().AddInterceptor(tap));
+
+        var (owner, holder) = Execute(context, tap);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        owner.IsAlive.Should().BeFalse("the raw projection must not keep the first capture alive");
+        QueryPlanStore.Values.Should().Contain(holder);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (WeakReference Owner, DbPreparedQueryCommand<int> Holder) Execute(SqliteDataContext context, BindingTap tap)
+        {
+            var owner = new WhereOwner { Target = 10 };
+            QueryCommand<int> Build() => context.From<BindingRow>().WithTag("raw scalar projection ownership")
+                .Where(row => row.Id == 1).Select(row => row.Id + owner.Target);
+
+            var token = TestContext.Current.CancellationToken;
+            var cold = context.GetPreparedQueryCommand(Build(), false, true, token);
+            cold.ToList(context).Should().Equal(11);
+            tap.LastParameters.Should().Equal((0, "Target", 10));
+
+            owner.Target = 20;
+            var fresh = Build();
+            var reuses = QueryPlanner.RecipeReuses;
+            var warm = context.GetPreparedQueryCommand(fresh, false, true, token);
+            warm.ToList(context).Should().Equal(21);
+            tap.LastParameters.Should().Equal((0, "Target", 20));
+            QueryPlanner.RecipeReuses.Should().BeGreaterThan(reuses, "the raw preparation path must still be used");
+            var holder = BoundQueryInvocation<int>.GetPlan(cold)!;
+            BoundQueryInvocation<int>.GetPlan(warm).Should().BeSameAs(holder);
+            return (new WeakReference(owner), holder);
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

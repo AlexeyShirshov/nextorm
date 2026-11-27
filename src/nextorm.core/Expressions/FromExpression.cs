@@ -71,6 +71,7 @@ public sealed class FromExpression
      {
           Table = table;
           ColumnShape = columnShape;
+          HasColumnShape = true;
      }
       /// <summary>Creates a source from a deferred temporary table or view.</summary>
       /// <param name="temporarySource">The temporary object to create and read.</param>
@@ -134,6 +135,8 @@ public sealed class FromExpression
      /// provider so member access resolves against the returned columns.
      /// </summary>
      internal readonly QueryCommand? ColumnShape;
+     // The comparison-only copy keeps the source kind without retaining the defining command.
+     internal bool HasColumnShape { get; }
      /// <summary>
      /// Set when the source is a table-valued function. Mutually exclusive with <see cref="Table"/>
      /// and <see cref="SubQuery"/>.
@@ -251,6 +254,7 @@ public sealed class FromExpression
           TemporarySource = source.TemporarySource;
           SourceType = source.SourceType;
           ColumnShape = source.ColumnShape;
+          HasColumnShape = source.HasColumnShape;
           TableFunction = source.TableFunction;
           Pivot = source.Pivot;
           LinqSource = source.LinqSource;
@@ -276,6 +280,7 @@ public sealed class FromExpression
           RawSqlSource = raw;
           TableFunction = function;
           Pivot = pivot;
+          ColumnShape = null;
      }
 
      /// <summary>
@@ -354,7 +359,7 @@ public sealed class FromExpression
           var raw = RawSqlSource?.ForSqlPlanKey();
           var function = TableFunction?.ForSqlPlanKey(rewriter);
           var pivot = Pivot?.WithInner(Pivot.Inner.ForSqlPlanKey(rewriter));
-          return ReferenceEquals(raw, RawSqlSource) && ReferenceEquals(function, TableFunction) && ReferenceEquals(pivot, Pivot)
+          return ColumnShape is null && ReferenceEquals(raw, RawSqlSource) && ReferenceEquals(function, TableFunction) && ReferenceEquals(pivot, Pivot)
                ? this
                : new FromExpression(this, raw, function, pivot);
      }

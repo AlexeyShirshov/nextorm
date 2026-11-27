@@ -19,9 +19,24 @@ public partial class QueryCommand
             return null;
 
         var visitor = new RawClauseCaptureVisitor();
-        visitor.Visit(shape.Exp);
-        if (!visitor.CheckColumns(_selectList))
-            return null;
+        LambdaExpression? comparisonProjection = null;
+        // For an unchanged scalar projection, the recipe needs only the prepared column metadata.
+        // The matching command already has the executable selector and its own captures.
+        if (OneColumn && _selectList is [{ Converter: null, IsLobStreaming: false } column]
+            && shape.Exp is { } projection && ReferenceEquals(projection, _exp)
+            && HasUnchangedClause(projection, column.Expression))
+        {
+            visitor.RemoveReceivers = true;
+            var comparison = (LambdaExpression)visitor.Visit(projection);
+            if (!ReferenceEquals(comparison, projection))
+                comparisonProjection = comparison;
+        }
+        else
+        {
+            visitor.Visit(shape.Exp);
+            if (!visitor.CheckColumns(_selectList))
+                return null;
+        }
 
         visitor.RemoveReceivers = true;
         var comparisonCondition = (LambdaExpression?)visitor.Visit(condition);
@@ -66,7 +81,7 @@ public partial class QueryCommand
             visitor.CheckSorts(_sorting);
         }
 
-        if (!visitor.Supported || (!useCurrentWhere && !useCurrentSorting))
+        if (!visitor.Supported || (!useCurrentWhere && !useCurrentSorting && comparisonProjection is null))
             return null;
 
         var recipe = CloneForCache();
@@ -74,8 +89,11 @@ public partial class QueryCommand
             recipe.PreparedCondition = null;
         if (useCurrentSorting)
             recipe._sorting = null;
+        if (comparisonProjection is not null)
+            recipe._selectList![0].Expression = null;
 
-        return (shape.WithComparisonClauses(comparisonCondition, comparisonSorting), recipe, useCurrentWhere, useCurrentSorting);
+        return (shape.WithComparisonClauses(comparisonCondition, comparisonSorting, comparisonProjection),
+            recipe, useCurrentWhere, useCurrentSorting);
     }
 
     // Keep the inferred keys, but rebuild HAVING from the fresh component and projection. No

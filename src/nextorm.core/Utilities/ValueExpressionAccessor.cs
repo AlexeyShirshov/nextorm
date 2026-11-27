@@ -17,7 +17,7 @@ internal sealed class ValueExpressionAccessor : ExpressionVisitor
     private bool _canCache = true;
     private List<object?>? _values;
 
-    internal static object? Evaluate(Expression expression, IQueryRegistry registry, ILogger? logger)
+    internal static object? Evaluate(Expression expression, IQueryRegistry registry, ILogger? logger, bool subquery = false)
     {
         if (expression is ConstantExpression constant)
             return constant.Value;
@@ -25,7 +25,11 @@ internal sealed class ValueExpressionAccessor : ExpressionVisitor
         var rewriter = new ValueExpressionAccessor();
         var body = rewriter.Visit(expression)!;
         if (!rewriter._canCache)
+        {
+            if (subquery)
+                LogSubqueryMiss(logger, expression);
             return EvaluateUncached(expression);
+        }
 
         var key = new ExpressionKey(body, registry);
         var cache = DataContextCache.ExpressionsCache;
@@ -35,12 +39,22 @@ internal sealed class ValueExpressionAccessor : ExpressionVisitor
         var accessor = Compile<ValueAccessor>(body);
         cache[key] = accessor;
         var value = accessor(rewriter._values);
-        if (logger?.IsEnabled(LogLevel.Trace) ?? false)
+        if (subquery)
+            LogSubqueryMiss(logger, expression);
+        else if (logger?.IsEnabled(LogLevel.Trace) ?? false)
             logger.LogTrace("Value expression cache miss. Hash: {Hash}, value: {Value}", key.GetHashCode(), value);
         else if (logger?.IsEnabled(LogLevel.Debug) ?? false)
             logger.LogDebug("Value expression cache miss");
 
         return value;
+    }
+
+    private static void LogSubqueryMiss(ILogger? logger, Expression expression)
+    {
+        if (logger?.IsEnabled(LogLevel.Trace) ?? false)
+            logger.LogTrace("Subquery expression miss: {Expression}", expression);
+        else if (logger?.IsEnabled(LogLevel.Debug) ?? false)
+            logger.LogDebug("Subquery expression miss");
     }
 
     internal static object? EvaluateCollection(Expression expression, IQueryRegistry registry)

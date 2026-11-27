@@ -400,6 +400,7 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             if (a.Name != b.Name) return false;
             if (a.Recursive != b.Recursive) return false;
             if (a.MaxRecursion != b.MaxRecursion) return false;
+            if (a.TypedProjection != b.TypedProjection) return false;
             // A data-modifying CTE's plan is never cached (its insert body is not part of the query
             // shape), so compare the bodies by reference and the read CTE queries structurally.
             if (a.IsDataModifying || b.IsDataModifying)

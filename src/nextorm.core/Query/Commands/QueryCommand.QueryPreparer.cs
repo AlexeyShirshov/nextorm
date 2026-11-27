@@ -603,6 +603,7 @@ public partial class QueryCommand
                     var cte = cmd._ctes[i];
                     hash.Add(cte.Name);
                     hash.Add(cte.Recursive);
+                    hash.Add(cte.TypedProjection);
                     if (cte.MaxRecursion is int maxRecursion)
                         hash.Add(maxRecursion);
                     // Hash the body without its own nested declarations: after the hoist above they are
@@ -4211,6 +4212,7 @@ public partial class QueryCommand
         internal RawShape? UnionWithComponents => Union is { _hasComponentsInGraph: true } ? Union : null;
         internal bool HasCteComponents { get; private set; }
         internal bool RebindGrouping { get; private set; }
+        internal bool UseCurrentScalarProjection { get; private set; }
         // Receiver identity at each captured-member occurrence, in traversal order. The same set of
         // owners is not enough: all occurrences must read the same owners as the staged expressions.
         internal object?[]? Closures;
@@ -4218,11 +4220,16 @@ public partial class QueryCommand
         /// <summary>Structural fingerprint used only to partition candidates into buckets.</summary>
         internal int Fingerprint;
 
-        internal RawShape WithComparisonClauses(LambdaExpression? condition, Sorting[]? sorting)
+        internal RawShape WithComparisonClauses(LambdaExpression? condition, Sorting[]? sorting, LambdaExpression? projection)
         {
             var copy = (RawShape)MemberwiseClone();
             copy.Condition = condition;
             copy.Sorting = sorting;
+            if (projection is not null)
+            {
+                copy.Exp = projection;
+                copy.UseCurrentScalarProjection = true;
+            }
             return copy;
         }
 
@@ -4639,7 +4646,8 @@ public partial class QueryCommand
                 var cte = declarations[i];
                 // A flattened (already hoisted) declaration tree is required: CteHoister.Hoist
                 // reassigns the list, so a nested declaration tree has no stable pre/post pairing.
-                if (cte.Mutation is not null || cte.Query._ctes is { Count: > 0 }) return null;
+                // A typed recursive reference owns the live anchor and cannot be staged from a recipe.
+                if (cte.Mutation is not null || cte.RecursiveReference is not null || cte.Query._ctes is { Count: > 0 }) return null;
 
                 var body = CaptureRawShape(cte.Query, depth + 1);
                 if (body is null) return null;
@@ -5244,7 +5252,7 @@ public partial class QueryCommand
             for (var i = 0; i < declarations.Count; i++)
             {
                 var cte = declarations[i];
-                if (cte.Mutation is not null || cte.Query._ctes is { Count: > 0 }) return null;
+                if (cte.Mutation is not null || cte.RecursiveReference is not null || cte.Query._ctes is { Count: > 0 }) return null;
 
                 var body = ComputeRawFingerprint(cte.Query, depth + 1, ref comparers);
                 if (body is null) return null;
@@ -5528,6 +5536,8 @@ public partial class QueryCommand
                 _ctes = staged;
         }
         CopyPreparedColumns();
+        if (componentShape?.UseCurrentScalarProjection == true)
+            _selectList![0].Expression = _exp;
 
         // Members CopyTo never carries: the clone's joins come from its Definition, so they must be
         // copied explicitly so later edits to this command cannot change the stored key.

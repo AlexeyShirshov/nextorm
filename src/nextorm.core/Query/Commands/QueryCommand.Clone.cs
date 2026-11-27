@@ -426,8 +426,24 @@ public partial class QueryCommand
         }
 
         if (_ctes is { } ctes)
-            foreach (var cte in ctes)
+        {
+            CteDefinition[]? detached = null;
+            for (var i = 0; i < ctes.Count; i++)
+            {
+                var cte = ctes[i];
                 cte.Query.DetachSqlPlanKey(rewriter);
+                if (cte.RecursiveReference is not null)
+                {
+                    // The declaration and step were validated on the live command. The CTE body
+                    // and typed projection flag describe the SQL; the reference owns the live anchor.
+                    detached ??= ctes.ToArray();
+                    detached[i] = cte.WithQuery(cte.Query, keepRecursiveReference: false);
+                    rewriter.Changed = true;
+                }
+            }
+            if (detached is not null)
+                _ctes = detached;
+        }
         _union?.DetachSqlPlanKey(rewriter);
 
         void RewriteColumns(SelectExpression[]? columns)

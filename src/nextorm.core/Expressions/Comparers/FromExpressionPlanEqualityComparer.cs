@@ -91,7 +91,8 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
 
         if (!string.IsNullOrEmpty(x.Table))
             return x.Table == y.Table && x.Schema == y.Schema
-                && x.IsAutoMapped == y.IsAutoMapped && x.SourceIsInterface == y.SourceIsInterface;
+                && x.IsAutoMapped == y.IsAutoMapped && x.SourceIsInterface == y.SourceIsInterface
+                && x.HasColumnShape == y.HasColumnShape;
 
         // A type-only source is identified by its CLR source type: the applied join renders from it,
         // so two different types must not fall through to the equal-null-subquery comparison. Equal
@@ -436,5 +437,6 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         hash.Add(source.Schema, StringComparer.Ordinal);
         hash.Add(source.IsAutoMapped);
         hash.Add(source.SourceIsInterface);
+        hash.Add(source.HasColumnShape);
     }
 }

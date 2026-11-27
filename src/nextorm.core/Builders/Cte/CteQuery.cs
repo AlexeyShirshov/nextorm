@@ -85,13 +85,13 @@ public sealed class CteDefinition
     /// </summary>
     internal CteReference? RecursiveReference { get; init; }
 
-    internal CteDefinition WithQuery(QueryCommand query)
+    internal CteDefinition WithQuery(QueryCommand query, bool keepRecursiveReference = true)
         => Mutation is { } mutation
             ? new CteDefinition(Name, query, mutation)
             : new CteDefinition(Name, query, Recursive, MaxRecursion)
             {
                 TypedProjection = TypedProjection,
-                RecursiveReference = RecursiveReference,
+                RecursiveReference = keepRecursiveReference ? RecursiveReference : null,
             };
 
     /// <summary>
