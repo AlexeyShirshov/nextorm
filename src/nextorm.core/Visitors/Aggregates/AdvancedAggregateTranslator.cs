@@ -24,6 +24,20 @@ namespace NextORM.Core;
 /// </summary>
 internal static class AdvancedAggregateTranslator
 {
+    internal static bool HasUnkeyedFraction(MethodCallExpression call)
+    {
+        var declaringType = call.Method.DeclaringType;
+        if (declaringType != typeof(PostgresFunctions) && declaringType != typeof(CommonFunctions)
+            && declaringType != typeof(SqlServerFunctions))
+            return false;
+
+        // Fractions are SQL parameters, but the translator validates their current value.
+        return call.Method.Name is nameof(PostgresFunctions.percentile_cont) or nameof(PostgresFunctions.percentile_disc)
+                or nameof(SqlServerFunctions.approx_percentile_cont) or nameof(SqlServerFunctions.approx_percentile_disc)
+            && call.Arguments.Count > 0
+            && TypeFacts.UnwrapConvert(call.Arguments[0]) is not ConstantExpression;
+    }
+
     /// <summary>Translates an advanced aggregate call; returns <c>false</c> when it is not one of them.</summary>
     internal static bool TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
     {

@@ -124,6 +124,41 @@ public sealed class WindowFunctionSweepTests : ProviderTestSuite
         rows.Select(r => r.Total).Should().Equal(1L, 2L, 5L);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CapturedFrame_ShouldUseCurrentBoundaries(bool useQueryCache)
+    {
+        using var context = Provider.CreateContext(new DataContextBuilder().UseQueryCache(useQueryCache));
+        var source = context.From<IComplexEntity>();
+
+        List<long> Read(WindowFrame frame) => source.OrderBy(row => row.Id)
+            .Select(row => SqlFunctions.Sql.sum_over(row.Id).Over(SqlFunctions.Sql.asc(() => row.Id), frame))
+            .ToList();
+
+        Read(WindowFrame.Rows(1, 0)).Should().Equal(1L, 3L, 5L);
+        Read(WindowFrame.Rows(2, 0)).Should().Equal(1L, 3L, 6L);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CapturedWindowName_ShouldSelectTheCurrentWindow(bool useQueryCache)
+    {
+        using var context = Provider.CreateContext(new DataContextBuilder().UseQueryCache(useQueryCache));
+        var source = context.From<IComplexEntity>();
+        var windows = source
+            .Window("ascending", orderBy: [source.Asc(row => row.Id)])
+            .Window("descending", orderBy: [source.Desc(row => row.Id)]);
+
+        List<int> Read(string name) => windows.OrderBy(row => row.Id)
+            .Select(row => SqlFunctions.Sql.row_number().Over(name)).ToList();
+
+        Read("ascending").Should().Equal(1, 2, 3);
+        Read("descending").Should().Equal(3, 2, 1);
+        FluentActions.Invoking(() => Read("bad name")).Should().Throw<ArgumentException>();
+    }
+
     [Fact]
     public void InvalidWindowNames_ShouldBeRejected()
     {

@@ -78,54 +78,110 @@ internal static class WindowSql
         return true;
     }
 
-    internal static List<Expression> ParseWindowPartitions(Expression? expression)
+    internal static bool HasUnkeyedSpecification(MethodCallExpression call)
+    {
+        var declaringType = call.Method.DeclaringType;
+        if (call.Method.Name != nameof(WindowFunction<int>.Over)
+            || declaringType is not { IsGenericType: true }
+            || declaringType.GetGenericTypeDefinition() != typeof(WindowFunction<>))
+            return false;
+
+        foreach (var argument in call.Arguments)
+        {
+            if (!IsInlineSpecification(argument))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsInlineSpecification(Expression expression)
+    {
+        if (UnwrapWindowLambda(expression) is not null)
+            return true;
+
+        switch (expression)
+        {
+            case ConstantExpression { Value: null or string or int or WindowFrame or WindowFrameBound or WindowFrameExclusion }:
+            case MemberExpression { Member.DeclaringType: var type, Expression: null }
+                when type == typeof(WindowFrame) || type == typeof(WindowFrameBound):
+                return true;
+            case NewArrayExpression { NodeType: ExpressionType.NewArrayInit } array:
+                return array.Expressions.All(IsInlineSpecification);
+            case MethodCallExpression call when IsOrderMarker(call):
+                return call.Arguments.All(IsInlineSpecification);
+            case MethodCallExpression call when call.Method.DeclaringType == typeof(WindowFrame)
+                || call.Method.DeclaringType == typeof(WindowFrameBound):
+                return call.Arguments.All(IsInlineSpecification) && (call.Object is null || IsInlineSpecification(call.Object));
+            default:
+                return false;
+        }
+    }
+
+    internal static List<Expression> ParseWindowPartitions(BaseExpressionVisitor visitor, Expression? expression)
     {
         var result = new List<Expression>();
         if (expression is null or ConstantExpression { Value: null })
             return result;
 
-        if (expression is NewArrayExpression array)
+        if (expression is NewArrayExpression { NodeType: ExpressionType.NewArrayInit } array)
         {
             for (var (i, cnt) = (0, array.Expressions.Count); i < cnt; i++)
-                AddWindowLambda(array.Expressions[i], result);
+                AddWindowLambda(visitor, array.Expressions[i], result);
+        }
+        else if (expression.Type.IsArray)
+        {
+            if (EvaluateSpecification(visitor, expression) is Expression<Func<object?>>[] partitions)
+                foreach (var partition in partitions)
+                    if (partition is not null)
+                        result.Add(partition.Body);
         }
         else
-            AddWindowLambda(expression, result);
+            AddWindowLambda(visitor, expression, result);
 
         return result;
     }
 
-    private static void AddWindowLambda(Expression expression, List<Expression> result)
+    private static void AddWindowLambda(BaseExpressionVisitor visitor, Expression expression, List<Expression> result)
     {
-        if (UnwrapWindowLambda(expression) is { } body)
+        if (ReadWindowLambda(visitor, expression) is { } body)
             result.Add(body);
     }
 
-    internal static List<(Expression Body, OrderDirection Direction)> ParseWindowOrders(Expression? expression)
+    internal static List<(Expression Body, OrderDirection Direction)> ParseWindowOrders(BaseExpressionVisitor visitor, Expression? expression)
     {
         var result = new List<(Expression, OrderDirection)>();
         if (expression is null or ConstantExpression { Value: null })
             return result;
 
-        if (expression is NewArrayExpression array)
+        if (expression is NewArrayExpression { NodeType: ExpressionType.NewArrayInit } array)
         {
             for (var (i, cnt) = (0, array.Expressions.Count); i < cnt; i++)
-                AddWindowOrder(array.Expressions[i], result);
+                AddWindowOrder(visitor, array.Expressions[i], result);
+        }
+        else if (expression.Type.IsArray)
+        {
+            if (EvaluateSpecification(visitor, expression) is WindowOrder[] orders)
+                foreach (var order in orders)
+                    if (order is not null)
+                        result.Add((order.Expression.Body, order.Direction));
         }
         else
-            AddWindowOrder(expression, result);
+            AddWindowOrder(visitor, expression, result);
 
         return result;
     }
 
-    private static void AddWindowOrder(Expression expression, List<(Expression, OrderDirection)> result)
+    private static bool IsOrderMarker(MethodCallExpression call)
+        => call.Method.DeclaringType == typeof(CommonFunctions)
+            && call.Method.Name is nameof(CommonFunctions.asc) or nameof(CommonFunctions.desc);
+
+    private static void AddWindowOrder(BaseExpressionVisitor visitor, Expression expression, List<(Expression, OrderDirection)> result)
     {
         // A WindowOrder (SqlFunctions.Sql.asc/desc) carries an explicit direction; a bare lambda is ascending.
-        if (expression is MethodCallExpression call
-            && call.Method.DeclaringType == typeof(CommonFunctions)
-            && call.Method.Name is nameof(CommonFunctions.asc) or nameof(CommonFunctions.desc))
+        if (expression is MethodCallExpression call && IsOrderMarker(call))
         {
-            if (UnwrapWindowLambda(call.Arguments[0]) is { } body)
+            if (ReadWindowLambda(visitor, call.Arguments[0]) is { } body)
             {
                 var direction = call.Method.Name == nameof(CommonFunctions.desc) ? OrderDirection.Desc : OrderDirection.Asc;
                 result.Add((body, direction));
@@ -134,8 +190,27 @@ internal static class WindowSql
             return;
         }
 
-        if (UnwrapWindowLambda(expression) is { } plainBody)
+        if (expression.Type == typeof(WindowOrder))
+        {
+            if (EvaluateSpecification(visitor, expression) is WindowOrder order)
+                result.Add((order.Expression.Body, order.Direction));
+        }
+        else if (ReadWindowLambda(visitor, expression) is { } plainBody)
             result.Add((plainBody, OrderDirection.Asc));
+    }
+
+    private static Expression? ReadWindowLambda(BaseExpressionVisitor visitor, Expression expression)
+        => UnwrapWindowLambda(expression) ?? (EvaluateSpecification(visitor, expression) as LambdaExpression)?.Body;
+
+    internal static object? EvaluateSpecification(BaseExpressionVisitor visitor, Expression expression)
+    {
+        if (expression is ConstantExpression constant)
+            return constant.Value;
+
+        if (expression.Has<ParameterExpression>())
+            throw new NotSupportedException("A computed window specification must not depend on a query row.");
+
+        return ValueExpressionAccessor.Evaluate(expression, visitor.QueryProvider, visitor.Logger);
     }
 
     /// <summary>
@@ -156,6 +231,7 @@ internal static class WindowSql
     /// the parameter names of the resolved method rather than by position.
     /// </summary>
     internal static void SplitWindowArguments(
+        BaseExpressionVisitor visitor,
         MethodCallExpression node,
         out Expression? partitionArgument,
         out Expression? orderArgument,
@@ -173,8 +249,9 @@ internal static class WindowSql
 
         if (parameters.Length > 0 && parameters[0].Name == "windowName")
         {
-            if (args[0] is ConstantExpression { Value: string name })
-                namedWindow = name;
+            namedWindow = EvaluateSpecification(visitor, args[0]) as string;
+            if (!IsValidWindowName(namedWindow))
+                throw new ArgumentException("A window name must be a non-empty SQL identifier.", nameof(node));
 
             return;
         }

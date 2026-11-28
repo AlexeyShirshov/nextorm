@@ -284,8 +284,8 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         set => Prepared.HasUnkeyedTupleInValues = value;
     }
     /// <summary>
-    /// Whether SQL depends on a computed column name or scalar value list shape that the plan key
-    /// does not capture. The planner suppresses caching for this execution without changing <see cref="Cache"/>.
+    /// Whether SQL or its validation depends on an invocation value that the plan key does not capture.
+    /// The planner suppresses caching for this execution without changing <see cref="Cache"/>.
     /// Recomputed when <see cref="ReplaceCommand"/> swaps the shared terminal's referenced query.
     /// </summary>
     internal bool HasUnkeyedSqlShape
@@ -1683,7 +1683,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         if (_referencedQueries is null) throw new InvalidOperationException("Referenced queries must be initialized");
 
         _referencedQueries[idx] = cmd;
-        // The replacement can add or remove computed identifiers or an unkeyed value list.
+        // The replacement can change which invocation values affect rendering.
         // Recompute cache eligibility for the current referenced graph.
         HasUnkeyedSqlShape = QueryPreparer.ScanUnkeyedSqlShape(this);
         // The shared Any/Count command swaps its referenced subquery in place between executions

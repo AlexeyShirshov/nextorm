@@ -231,6 +231,26 @@ public class RangeColumnsTests
         ids.Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Overlaps_ChangingCapturedRange_ShouldUseItsCurrentBounds(bool useQueryCache)
+    {
+        using var conn = OpenConnection();
+        using var ctx = new SqliteDataContext(conn, new DataContextBuilder().UseQueryCache(useQueryCache));
+        Seed(ctx);
+
+        List<int> Read(Range<int> range) => ctx.From<ReservationEntity>()
+            .Where(row => SqlFunctions.Postgres.overlaps(row.During, range))
+            .OrderBy(row => row.Id).Select(row => row.Id).ToList();
+
+        Read(new Range<int>(5, 20, true, true)).Should().Equal(1, 2);
+        Read(new Range<int>(5, 20, true, false)).Should().Equal(1);
+        Read(new Range<int>(15, 0, true, false, false, true)).Should().Equal(2);
+        FluentActions.Invoking(() => Read(default)).Should().Throw<NotSupportedException>()
+            .WithMessage("*empty range*");
+    }
+
     [Fact]
     public void RangeContains_Value_ShouldFilter()
     {

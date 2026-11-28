@@ -3545,8 +3545,8 @@ public partial class QueryCommand
         }
 
         /// <summary>
-        /// Scans the rendered query graph for computed column names and scalar value lists that
-        /// change its SQL without changing the plan key.
+        /// Scans the rendered query graph for invocation values that affect SQL or its validation
+        /// without changing the plan key.
         /// </summary>
         internal static bool ScanUnkeyedSqlShape(QueryCommand cmd)
         {
@@ -3567,7 +3567,7 @@ public partial class QueryCommand
             if (!visited.Add(cmd))
                 return false;
 
-            // The root's WHERE/PREWHERE keys scalar list shapes, but never computed identifiers.
+            // The root's WHERE/PREWHERE keys scalar list shapes, but not other runtime SQL dependencies.
             // A descendant's conditions are rendered into the owner without re-keying either shape.
             if (HasUnkeyedCondition(cmd, includeScalarInValues: !isRoot))
                 return true;
@@ -5068,7 +5068,7 @@ public partial class QueryCommand
             hash = scan.IdentitiesHash;
             closures = capture ? scan.Snapshot() : null;
             return !scan.HasCapturedCommand && !scan.HasUnsupportedConstant
-                && !scan.HasUnpublishableValueList && !scan.HasComputedColumnName;
+                && !scan.HasUnpublishableValueList && !scan.HasUnkeyedSqlShape;
         }
         finally
         {
@@ -5088,7 +5088,7 @@ public partial class QueryCommand
         private ScanMember _member;
         internal bool HasCapturedCommand { get; private set; }
         internal bool HasUnsupportedConstant { get; private set; }
-        internal bool HasComputedColumnName { get; private set; }
+        internal bool HasUnkeyedSqlShape { get; private set; }
 
         /// <summary>
         /// Whether the scanned graph carries a collection shape that needs fresh preparation:
@@ -5108,7 +5108,7 @@ public partial class QueryCommand
             IdentitiesHash = 0;
             HasCapturedCommand = false;
             HasUnsupportedConstant = false;
-            HasComputedColumnName = false;
+            HasUnkeyedSqlShape = false;
             HasUnpublishableValueList = false;
             _member = ScanMember.Other;
         }
@@ -5117,7 +5117,7 @@ public partial class QueryCommand
 
         internal void Scan(Expression? expression)
         {
-            if (HasCapturedCommand || HasComputedColumnName || expression is null) return;
+            if (HasCapturedCommand || HasUnkeyedSqlShape || expression is null) return;
             Visit(expression);
         }
 
@@ -5187,9 +5187,9 @@ public partial class QueryCommand
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
             // The raw descriptor only sees the expression's shape and closure identity.
-            if (TableAliasAccessors.HasComputedColumnName(node))
+            if (SqlShapeDependency.IsUnkeyed(node))
             {
-                HasComputedColumnName = true;
+                HasUnkeyedSqlShape = true;
                 return node;
             }
 

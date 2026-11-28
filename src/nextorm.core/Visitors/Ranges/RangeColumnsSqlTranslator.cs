@@ -60,6 +60,24 @@ internal static class RangeColumnsSqlTranslator
         nameof(PostgresFunctions.range_intersect_agg),
     };
 
+    internal static bool HasUnkeyedOperand(MethodCallExpression call)
+    {
+        if (call.Method.DeclaringType != typeof(PostgresFunctions) || !Predicates.Contains(call.Method.Name))
+            return false;
+
+        foreach (var argument in call.Arguments)
+        {
+            var operand = Unwrap(argument);
+            // The current range supplies boundary flags as well as parameter values.
+            if (RangeTypeFacts.IsRange(operand.Type) && IsConstantRange(operand)
+                && operand is not ConstantExpression
+                && !(operand is NewExpression constructor && constructor.Arguments.All(static item => item is ConstantExpression)))
+                return true;
+        }
+
+        return false;
+    }
+
     internal static bool TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
         if (node.Method.DeclaringType != typeof(PostgresFunctions))

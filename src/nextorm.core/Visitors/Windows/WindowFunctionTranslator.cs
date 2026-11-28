@@ -118,16 +118,13 @@ internal static class WindowFunctionTranslator
 
         // The Over overloads differ in which parameters are present (partition-only, order-only, arrays,
         // a named window, frame), so the arguments are mapped by parameter name/type rather than by position.
-        WindowSql.SplitWindowArguments(node, out var partitionArgument, out var orderArgument, out var frameArgument, out var namedWindow);
+        WindowSql.SplitWindowArguments(visitor, node, out var partitionArgument, out var orderArgument, out var frameArgument, out var namedWindow);
 
-        var partitions = WindowSql.ParseWindowPartitions(partitionArgument);
-        var orders = WindowSql.ParseWindowOrders(orderArgument);
+        var partitions = WindowSql.ParseWindowPartitions(visitor, partitionArgument);
+        var orders = WindowSql.ParseWindowOrders(visitor, orderArgument);
 
         if (namedWindow is not null)
         {
-            if (!WindowSql.IsValidWindowName(namedWindow))
-                throw new ArgumentException("A window name must be a non-empty SQL identifier.", nameof(node));
-
             if (!visitor.Dialect.SupportsNamedWindows)
                 throw new NotSupportedException("Named windows (the WINDOW clause) are not supported by this provider.");
         }
@@ -393,7 +390,6 @@ internal static class WindowFunctionTranslator
     /// </summary>
     private static WindowFrame? EvaluateWindowFrame(BaseExpressionVisitor visitor, Expression? expression)
     {
-        return expression is null ? null
-            : (WindowFrame?)ValueExpressionAccessor.Evaluate(expression, visitor.QueryProvider, visitor.Logger);
+        return expression is null ? null : (WindowFrame?)WindowSql.EvaluateSpecification(visitor, expression);
     }
 }

@@ -56,7 +56,7 @@ internal sealed class QueryCommandPreparedState
     public bool ShapeValuesStable;
     /// <summary>Whether an unkeyed tuple-valued <c>IN</c> appears in the query.</summary>
     public bool HasUnkeyedTupleInValues;
-    /// <summary>Whether the query contains a computed column name or unkeyed scalar value list.</summary>
+    /// <summary>Whether rendering depends on an invocation value absent from the plan key.</summary>
     public bool HasUnkeyedSqlShape;
     /// <summary>The commands referenced by correlated subqueries, in registration order.</summary>
     public List<QueryCommand>? ReferencedQueries;

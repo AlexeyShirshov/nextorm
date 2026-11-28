@@ -107,7 +107,8 @@ public sealed class Issue319NativeProjectionTests : IDisposable
         .Select(t => t.GetInt64("id"))
         .ToList();
 
-    private Task<List<BucketCount>> BucketsAsync() => _context.From<NativeProjRow>()
+    private Task<List<BucketCount>> BucketsAsync(int threshold) => _context.From<NativeProjRow>()
+        .Where(x => x.Id > threshold)
         .GroupBy(x => new { Bucket = x.Id % 2 })
         .Select(x => new BucketCount { Bucket = x.Id % 2, Count = SqlFunctions.Sql.count() })
         .ToListAsync();
@@ -176,15 +177,16 @@ public sealed class Issue319NativeProjectionTests : IDisposable
     [Fact]
     public async Task Project_GroupedShape_ShouldHitAndReturnEveryGroup()
     {
-        var first = await BucketsAsync();
+        var first = await BucketsAsync(0);
         first.Should().HaveCount(2);
         first.Sum(row => row.Count).Should().Be(5);
         QueryPlanStore.NativePublishes.Should().BeGreaterThan(0);
 
         var hits = QueryPlanStore.NativeHits;
-        var second = await BucketsAsync();
+        var second = await BucketsAsync(2);
         QueryPlanStore.NativeHits.Should().BeGreaterThan(hits);
-        second.Should().BeEquivalentTo(first);
+        second.Should().HaveCount(2);
+        second.Sum(row => row.Count).Should().Be(3);
     }
 
     [Fact]

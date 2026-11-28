@@ -55,14 +55,14 @@ public class PlanCacheTests
 
             // Buffered terminal: GetPreparedQueryCommand(createEnumerator: false) caches the plan
             // without a ResultSetEnumerator.
-            ctx.From<ISimpleEntity>().Select(x => x.Id).ToList().Should().Equal(42);
+            QueryCommand<int> Query(int threshold) => ctx.From<ISimpleEntity>()
+                .Where(x => x.Id > threshold).Select(x => x.Id);
+            Query(0).ToList().Should().Equal(42);
 
             // Streaming terminal on the same shape: the cache hit must create the enumerator on demand.
-            var act = async () => await DrainAsync(
-                ctx.From<ISimpleEntity>().Select(x => x.Id).ToAsyncEnumerable(TestContext.Current.CancellationToken),
-                TestContext.Current.CancellationToken);
-
-            await act.Should().NotThrowAsync();
+            var token = TestContext.Current.CancellationToken;
+            (await DrainAsync(Query(1).ToAsyncEnumerable(token), token)).Should().Equal(42);
+            (await DrainAsync(Query(100).ToAsyncEnumerable(token), token)).Should().BeEmpty();
         }
         finally
         {
@@ -83,10 +83,13 @@ public class PlanCacheTests
         {
             ctx.PurgeQueryCache();
 
-            ctx.From<ISimpleEntity>().Select(x => x.Id).ToList().Should().Equal(42);
+            QueryCommand<int> Query(int threshold) => ctx.From<ISimpleEntity>()
+                .Where(x => x.Id > threshold).Select(x => x.Id);
+            Query(0).ToList().Should().Equal(42);
 
             // ToEnumerable -> GetPreparedQueryCommand(createEnumerator: true) -> CreateEnumerator.
-            ctx.From<ISimpleEntity>().Select(x => x.Id).ToEnumerable().Should().Equal(42);
+            Query(1).ToEnumerable().Should().Equal(42);
+            Query(100).ToEnumerable().Should().BeEmpty();
         }
         finally
         {
@@ -359,6 +362,11 @@ public class PlanCacheTests
             nested.ToList(ctx).Should().Equal(42);
             chained.ToList(ctx).Should().Equal(42);
 
+            threshold = 100;
+            var rebound = ctx.GetPreparedQueryCommand(cmdChained, false, true, TestContext.Current.CancellationToken);
+            BoundQueryInvocation<int>.GetPlan(rebound).Should().BeSameAs(BoundQueryInvocation<int>.GetPlan(chained));
+            rebound.ToList(ctx).Should().BeEmpty();
+
             // A structurally different definition (an unrelated constant, not the shared captured value)
             // must not reuse the cached plan.
             var cmdDifferent = ctx
@@ -420,33 +428,31 @@ public class PlanCacheTests
         {
             ctx.PurgeQueryCache();
 
-            static IPreparedQueryCommand<int> PrepareIntersect(IDataContext ctx)
+            static IPreparedQueryCommand<int> PrepareIntersect(IDataContext ctx, long threshold)
             {
                 var cmd = ctx.From<ISimpleEntity>().Select(s => s.Id)
-                    .Intersect(ctx.From<IComplexEntity>().Select(c => (int)c.Id));
+                    .Intersect(ctx.From<IComplexEntity>().Where(c => c.Id > threshold).Select(c => (int)c.Id));
                 return ctx.GetPreparedQueryCommand(cmd, false, true, TestContext.Current.CancellationToken);
             }
 
-            static IPreparedQueryCommand<int> PrepareExcept(IDataContext ctx)
+            static IPreparedQueryCommand<int> PrepareExcept(IDataContext ctx, long threshold)
             {
                 var cmd = ctx.From<ISimpleEntity>().Select(s => s.Id)
-                    .Except(ctx.From<IComplexEntity>().Select(c => (int)c.Id));
+                    .Except(ctx.From<IComplexEntity>().Where(c => c.Id > threshold).Select(c => (int)c.Id));
                 return ctx.GetPreparedQueryCommand(cmd, false, true, TestContext.Current.CancellationToken);
             }
 
-            var intersect1 = PrepareIntersect(ctx);
-            var intersect2 = PrepareIntersect(ctx);
-            ReferenceEquals(intersect1, intersect2).Should()
-                .BeTrue("an equal INTERSECT must reuse the cached plan");
+            var intersect1 = PrepareIntersect(ctx, 0);
+            var intersect2 = PrepareIntersect(ctx, 100);
+            BoundQueryInvocation<int>.GetPlan(intersect2).Should().BeSameAs(BoundQueryInvocation<int>.GetPlan(intersect1));
             intersect1.ToList(ctx).Should().Equal(42);
-            intersect2.ToList(ctx).Should().Equal(42);
+            intersect2.ToList(ctx).Should().BeEmpty();
 
-            var except1 = PrepareExcept(ctx);
-            var except2 = PrepareExcept(ctx);
-            ReferenceEquals(except1, except2).Should()
-                .BeTrue("an equal EXCEPT must reuse the cached plan");
+            var except1 = PrepareExcept(ctx, 0);
+            var except2 = PrepareExcept(ctx, 100);
+            BoundQueryInvocation<int>.GetPlan(except2).Should().BeSameAs(BoundQueryInvocation<int>.GetPlan(except1));
             except1.ToList(ctx).Should().BeEmpty();
-            except2.ToList(ctx).Should().BeEmpty();
+            except2.ToList(ctx).Should().Equal(42);
         }
         finally
         {
@@ -473,21 +479,20 @@ public class PlanCacheTests
         {
             ctx.PurgeQueryCache();
 
-            static IPreparedQueryCommand<int> Prepare(IDataContext ctx)
+            static IPreparedQueryCommand<int> Prepare(IDataContext ctx, int max)
             {
                 var anchor = ctx.From<ISimpleEntity>().Where(s => s.Id == 42).Select(s => new CteNumberRow { n = s.Id });
-                var step = ctx.From("nums").Where(t => t["n"].AsInt < 45).Select(t => new CteNumberRow { n = t["n"].AsInt + 1 });
+                var step = ctx.From("nums").Where(t => t["n"].AsInt < max).Select(t => new CteNumberRow { n = t["n"].AsInt + 1 });
                 var cmd = ctx.WithRecursive("nums", anchor.UnionAll(step)).From("nums").Select(t => t["n"].AsInt);
                 return ctx.GetPreparedQueryCommand(cmd, false, true, TestContext.Current.CancellationToken);
             }
 
-            var first = Prepare(ctx);
-            var second = Prepare(ctx);
+            var first = Prepare(ctx, 45);
+            var second = Prepare(ctx, 43);
 
-            ReferenceEquals(first, second).Should()
-                .BeTrue("an equal recursive CTE must reuse the cached plan");
+            BoundQueryInvocation<int>.GetPlan(second).Should().BeSameAs(BoundQueryInvocation<int>.GetPlan(first));
             first.ToList(ctx).Should().Equal(42, 43, 44, 45);
-            second.ToList(ctx).Should().Equal(42, 43, 44, 45);
+            second.ToList(ctx).Should().Equal(42, 43);
         }
         finally
         {

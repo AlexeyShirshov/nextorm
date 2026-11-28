@@ -301,7 +301,7 @@ internal static class InValues
             if (Found)
                 return node;
 
-            Found = TableAliasAccessors.HasComputedColumnName(node)
+            Found = SqlShapeDependency.IsUnkeyed(node)
                 || (_includeScalarInValues
                     && TryGetArguments(node, out _, out var valuesExp, out var elementType, out _)
                     && !TypeFacts.IsTupleFamily(elementType)

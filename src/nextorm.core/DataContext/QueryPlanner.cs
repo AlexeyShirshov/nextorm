@@ -910,8 +910,8 @@ internal sealed class QueryPlanner : IQueryPlanner
         if (!queryCommand.IsPrepared) queryCommand.PrepareCommand(!storeInCache, cancellationToken);
         else queryCommand.RefreshInValuesShape();
 
-        // Computed GetColumn names and unkeyed value lists can change the SQL without changing
-        // the plan key. Skip both lookup and publication without mutating the shared command's Cache flag.
+        // Some values can change the SQL or its validation without changing the plan key.
+        // Skip lookup and publication without mutating the shared command's Cache flag.
         if (queryCommand.HasUnkeyedTupleInValues || queryCommand.HasUnkeyedSqlShape)
             storeInCache = false;
 
