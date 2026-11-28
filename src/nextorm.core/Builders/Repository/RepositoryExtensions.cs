@@ -61,6 +61,20 @@ public static partial class RepositoryExtensions
     public static DeleteBuilder<TEntity> MakeDelete<TEntity>(this IRepository<TEntity> repository) =>
         repository.DataContext.CreateDeleteBuilder<TEntity>();
 
+    /// <summary>Executes the provider's native <c>TRUNCATE TABLE</c> for the repository's mapped table.</summary>
+    /// <returns>The driver's non-query result, which may not indicate how many rows were removed.</returns>
+    /// <exception cref="NotSupportedException">The provider does not support <c>TRUNCATE</c>.</exception>
+    public static int Truncate<TEntity>(this IRepository<TEntity> repository) =>
+        repository.DataContext.CreateTruncateBuilder<TEntity>().Execute();
+
+    /// <summary>Asynchronously executes the provider's native <c>TRUNCATE TABLE</c> for the repository's mapped table.</summary>
+    /// <param name="repository">The repository whose mapped table is truncated.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the driver's non-query result, which may not indicate how many rows were removed.</returns>
+    /// <exception cref="NotSupportedException">The provider does not support <c>TRUNCATE</c>.</exception>
+    public static Task<int> TruncateAsync<TEntity>(this IRepository<TEntity> repository, CancellationToken cancellationToken = default) =>
+        repository.DataContext.CreateTruncateBuilder<TEntity>().ExecuteAsync(cancellationToken);
+
     /// <summary>Joins the repository's mapped table to the query.</summary>
     public static JoinedEntityBuilder<TEntity, TJoinEntity> Join<TEntity, TJoinEntity>(
         this IRepository<TEntity> repository, IRepository<TJoinEntity> source, Expression<Func<TEntity, TJoinEntity, bool>> predicate) =>

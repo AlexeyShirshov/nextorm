@@ -1,6 +1,6 @@
 # Data modification (DELETE)
 
-> Use [`CreateDeleteBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateDeleteBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) to delete rows that match a predicate or explicitly delete every row. It builds a parameterized `DELETE FROM <table> [WHERE ...]`. Use [`Delete<TEntity>(entity)`](xref:NextORM.Core.DataContextExtensions.Delete``1(NextORM.Core.IDataContext,``0)) to delete by the entity's declared key. You can also delete rows selected by a join.
+> To delete rows from a query against one mapped table, specify `Where(...)`, a positive `Limit(...)`, or both, and call `Delete()` or `DeleteAsync()`. Use a delete builder when you need to inspect the SQL, return deleted rows, or explicitly delete the whole table with `All()`.
 
 **Prerequisites:** [Data modification (INSERT)](17-insert-statement.md) · [Filtering (WHERE)](03-filtering-where.md) · [Joins](04-joins.md) · [Provider overview](../connecting-providers/overview.md)
 
@@ -9,6 +9,7 @@
 - To delete rows that match a condition, use [Deleting rows by predicate](#deleting-rows-by-predicate).
 - To cap how many matching rows are deleted, use [Delete a bounded set of rows](#delete-a-bounded-set-of-rows).
 - To delete every row, mark the operation explicitly with [`All()`](#deleting-every-row).
+- To clear a table in multiple statements, see [Clear a table in batches](#clear-a-table-in-batches).
 - To delete one entity by its key, use [Deleting by key](#deleting-by-key).
 - To return the removed rows, see [Returning the removed rows](#returning-the-removed-rows).
 - To delete rows selected by a join or clear a table, see [Delete based on a join](#delete-based-on-a-join) or [Truncating a table](#truncating-a-table).
@@ -17,14 +18,16 @@ Each terminal issues one command. nextorm does not track changes and does not pr
 
 ## Deleting rows by predicate
 
-[`CreateDeleteBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateDeleteBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) removes rows and returns the number of deleted rows:
+Use `Where(...).Delete()` or `Where(...).DeleteAsync()` when you already have a
+query and only need the number of affected rows. Start the query with
+`ctx.From<TEntity>()` or a repository such as `app.Orders`:
 
 ```csharp
-var deleted = ctx.CreateDeleteBuilder<ISimpleEntity>()
+var deleted = ctx.From<ISimpleEntity>()
     .Where(x => x.Id == 1)
     .Delete();
 
-await ctx.CreateDeleteBuilder<ISimpleEntity>()
+await ctx.From<ISimpleEntity>()
     .Where(x => x.Age > 10)
     .DeleteAsync(cancellationToken);
 ```
@@ -38,8 +41,10 @@ delete from simple_entity where (age > 10)
 `Where` accepts the same predicate expressions as a query (`From<T>().Where(...)`). Repeated calls
 combine the predicates with `and`.
 
-To inspect the generated statement without opening a connection, call
-`CreateDeleteBuilder<T>().ToSql()`.
+Use an explicit delete builder when you need `.ToSql()` to inspect the generated
+DELETE without executing it, `.Returning(...)` to get the deleted rows on
+supported providers, or `.All()` to delete every row in one statement. Start the
+builder with `ctx.CreateDeleteBuilder<TEntity>()` or `app.Orders.MakeDelete()`.
 
 * Values captured in the predicate become parameters (`x => x.Id == id` renders `id = @id`); inline literals are emitted verbatim, exactly as in a query `WHERE`.
 * `Delete()`/`DeleteAsync()` return the affected-row count (`0` when nothing matched). ClickHouse reports no count (its mutation returns none).
@@ -49,11 +54,21 @@ To inspect the generated statement without opening a connection, call
 The examples use `app.Orders` from an application context. To set it up, see
 [Repositories and application context](37-repositories.md).
 
-Start from one mapped table and add an explicit `Where`. The query terminal keeps
-the predicate and applicable global filters, including any `IgnoreFilters`
-selection. A global filter or limit alone doesn't substitute for `Where`.
+Start from one mapped table and set a positive `Limit`. Add `Where` to restrict
+which rows can be deleted. Global filters still apply unless you disable them
+with `IgnoreFilters`. Without either `Where` or a positive limit, the query
+terminal throws `InvalidOperationException`, even if global filters are active.
 
-To delete up to 100 archived orders, oldest first, break timestamp ties with the
+To delete up to 100 archived orders when any matching rows will do, call
+`Delete()` directly on the query:
+
+```csharp
+var deleted = app.Orders.Where(o => o.IsArchived)
+    .Limit(100)
+    .Delete();
+```
+
+To delete the oldest archived orders first, break timestamp ties with the
 unique order ID:
 
 ```csharp
@@ -62,16 +77,6 @@ var deleted = await app.Orders.Where(o => o.IsArchived)
     .ThenBy(o => o.Id)
     .Limit(100)
     .DeleteAsync(cancellationToken);
-```
-
-Use `Delete()` for the synchronous equivalent. You can apply the same cap to an
-explicit delete builder. The following example accepts any 100 matching rows:
-
-```csharp
-var deleted = app.Orders.MakeDelete()
-    .Where(o => o.IsArchived)
-    .Limit(100)
-    .Delete();
 ```
 
 Declare a unique, non-null key that matches the database schema; composite keys
@@ -95,6 +100,31 @@ Combining `Where` and `All` throws `InvalidOperationException`:
 ```csharp
 ctx.CreateDeleteBuilder<ISimpleEntity>().All().Delete();   // delete from simple_entity
 ```
+
+## Clear a table in batches
+
+To clear an unsharded table on a [provider that supports bounded DELETE](#delete-a-bounded-set-of-rows),
+repeat a limited delete until it reports zero affected rows. Omit `Where` and
+use `IgnoreFilters()` to include rows hidden by global query filters, such as
+tenant or soft-delete filters. `All()` cannot be combined with `Limit()`:
+
+```csharp
+const int batchSize = 1_000;
+
+while (true)
+{
+    var deleted = await app.Orders.Limit(batchSize)
+        .IgnoreFilters()
+        .DeleteAsync(cancellationToken);
+
+    if (deleted == 0)
+        break;
+}
+```
+
+Each iteration issues one DELETE. Run without an enclosing transaction if each
+batch should commit separately. Pause concurrent writes if the table must be
+empty when the cleanup finishes.
 
 ## Deleting by key
 
@@ -200,14 +230,19 @@ To capture the removed rows for a later statement of the same batch instead of r
 
 ## Truncating a table
 
-To clear a table, use `CreateTruncateBuilder<TEntity>()`. It renders the provider's native
-`TRUNCATE TABLE`, which resets the table faster than `CreateDeleteBuilder<T>().All()`:
+To run the provider's native `TRUNCATE TABLE`, call `Truncate()` or
+`TruncateAsync()` on the repository. Use `CreateTruncateBuilder<TEntity>()` if
+you're working directly with the provider context or need to inspect the SQL:
 
 ```csharp
-var cleared = ctx.CreateTruncateBuilder<ISimpleEntity>().Execute();   // truncate table simple_entity
+app.Orders.Truncate();
+ctx.CreateTruncateBuilder<ISimpleEntity>().Execute();
 ```
 
-SQL Server, PostgreSQL, MySQL, MariaDB and ClickHouse have `TRUNCATE TABLE`; SQLite has no `TRUNCATE` and throws `NotSupportedException`, and the in-memory context is query-only and throws `NotSupportedException` too. `Execute()`/`ExecuteAsync()` return the affected-row count where the provider reports one (`0` otherwise).
+These operations return the driver's non-query result (`int`, or `Task<int>` for
+the async methods). Don't use it as a count of removed rows. SQL Server,
+PostgreSQL, MySQL, MariaDB, and ClickHouse support `TRUNCATE TABLE`. SQLite and
+the in-memory provider throw `NotSupportedException`.
 
 ## Delete based on a join
 

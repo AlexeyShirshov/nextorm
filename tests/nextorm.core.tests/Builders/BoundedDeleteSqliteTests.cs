@@ -76,7 +76,7 @@ public sealed class BoundedDeleteSqliteTests
     }
 
     [Fact]
-    public void RepositoryDeleteKeepsFiltersAndParticipatesInTheBorrowedTransaction()
+    public async Task RepositoryDeleteKeepsFiltersAndParticipatesInTheBorrowedTransaction()
     {
         using var connection = new SqliteConnection("Data Source=:memory:");
         connection.Open();
@@ -91,10 +91,10 @@ public sealed class BoundedDeleteSqliteTests
 
         using (var transaction = ((ITransactionManager)context).BeginTransaction())
         {
-            app.Rows.Where(row => row.Id > 0).OrderBy(row => row.Id).Limit(1).Delete().Should().Be(1);
+            app.Rows.OrderBy(row => row.Id).Limit(1).Delete().Should().Be(1);
             app.Rows.Query().IgnoreFilters().OrderBy(row => row.Id).ToList()
                 .Select(row => row.Id).Should().Equal(1, 3);
-            app.Rows.Where(row => row.Id > 0).IgnoreFilters().OrderBy(row => row.Id)
+            app.Rows.MakeDelete().IgnoreFilters().OrderBy(row => row.Id)
                 .Limit(1).Delete().Should().Be(1);
             app.Rows.Query().IgnoreFilters().ToList().Select(row => row.Id).Should().Equal(3);
             transaction.Rollback();
@@ -102,6 +102,25 @@ public sealed class BoundedDeleteSqliteTests
 
         app.Rows.Query().IgnoreFilters().OrderBy(row => row.Id).ToList()
             .Select(row => row.Id).Should().Equal(1, 2, 3);
+
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var batch = app.Rows.Limit(2).IgnoreFilters();
+        (await batch.DeleteAsync(cancellationToken)).Should().Be(2);
+        (await app.Rows.MakeDelete().IgnoreFilters().Limit(2).DeleteAsync(cancellationToken)).Should().Be(1);
+        (await batch.DeleteAsync(cancellationToken)).Should().Be(0);
+        app.Rows.Query().IgnoreFilters().Count().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task RepositoryTruncatePreservesUnsupportedProviderBehavior()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await using var context = new SqliteDataContext(connection, new DataContextBuilder());
+        var rows = new DeleteContext(context).Rows;
+
+        FluentActions.Invoking(() => rows.Truncate()).Should().Throw<NotSupportedException>();
+        await FluentActions.Awaiting(() => rows.TruncateAsync(TestContext.Current.CancellationToken))
+            .Should().ThrowAsync<NotSupportedException>();
     }
 
     [Fact]

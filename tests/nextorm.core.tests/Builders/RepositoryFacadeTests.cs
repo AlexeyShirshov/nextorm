@@ -149,15 +149,15 @@ public sealed class RepositoryFacadeTests
     }
 
     [Fact]
-    public void QueryDeleteRejectsMissingPredicateAndExplicitZeroAcrossClone()
+    public void QueryDeleteRejectsMissingPredicateAndLimitAndExplicitZeroAcrossClone()
     {
         using var provider = new InMemoryDataContext();
         var rows = new ApplicationContext(provider).Rows;
 
-        var missing = () => rows.Limit(1).Delete();
+        var missing = () => rows.Query().Delete();
         var zero = () => rows.Limit(0).Where(row => row.Id == 1).Clone().Delete();
 
-        missing.Should().Throw<InvalidOperationException>().WithMessage("*explicit Where*");
+        missing.Should().Throw<InvalidOperationException>().WithMessage("*explicit Where*positive limit*");
         zero.Should().Throw<InvalidOperationException>().WithMessage("*explicit zero limit*");
     }
 

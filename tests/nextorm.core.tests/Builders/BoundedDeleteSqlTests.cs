@@ -77,7 +77,7 @@ public sealed class BoundedDeleteSqlTests
         var delete = context.CreateDeleteBuilder<SqlRow>().Where(row => row.Tenant == 1);
 
         delete.ToSql().Should().StartWith("alter table ");
-        var bounded = () => delete.Limit(1).ToSql();
+        var bounded = () => context.CreateDeleteBuilder<SqlRow>().Limit(1).ToSql();
         bounded.Should().Throw<NotSupportedException>().WithMessage("*bounded DELETE*");
     }
 

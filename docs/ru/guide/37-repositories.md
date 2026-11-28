@@ -218,18 +218,22 @@ var fromArchived = app.DataContext.From(archived);
 
 ## Изменяйте данные через репозиторий
 
-`MakeInsert()`, `MakeUpdate()` и `MakeDelete()` каждый раз создают новый
-построитель. Например, чтобы удалить архивный заказ, передайте его
-идентификатор в `orderId` и явно выполните удаление:
+Чтобы удалить архивный заказ по идентификатору, вызовите `DeleteAsync()`
+на запросе с условием:
 
 ```csharp
-var deleted = await app.Orders.MakeDelete()
-    .Where(o => o.Id == orderId && o.IsArchived)
+var deleted = await app.Orders.Where(o => o.Id == orderId && o.IsArchived)
     .DeleteAsync(cancellationToken);
 ```
 
 На провайдере, который сообщает число затронутых строк, `deleted` равен `1`,
 если заказ подходит под условие и доступен с учётом активных фильтров, и `0`,
 если подходящего заказа нет. Команда использует тот же провайдер и участвует
-в его активной транзакции, если она открыта. О лимитах и ограничениях
-провайдеров см. [«Изменение данных (DELETE)»](18-delete-statement.md).
+в его активной транзакции, если она открыта.
+
+`MakeInsert()`, `MakeUpdate()` и `MakeDelete()` каждый раз создают новый
+построитель. Используйте `MakeDelete()`, если нужен метод построителя,
+например `ToSql()`, `Returning(...)` или `All()`. Чтобы очистить таблицу на
+провайдере с поддержкой `TRUNCATE TABLE`, вызовите `app.Orders.Truncate()` или
+`await app.Orders.TruncateAsync(cancellationToken)`. О лимитах, ограничениях
+провайдеров и очистке порциями см. [«Изменение данных (DELETE)»](18-delete-statement.md).

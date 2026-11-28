@@ -36,8 +36,8 @@ public sealed class TruncateBuilder<TEntity>
         throw new NotSupportedException($"{_dataContext.GetType().Name} cannot render SQL: it is not a database-backed context.");
     }
 
-    /// <summary>Executes the truncate and returns the affected-row count where the provider reports one.</summary>
-    /// <returns>The affected-row count, or 0 where the provider reports none.</returns>
+    /// <summary>Executes the truncate.</summary>
+    /// <returns>The driver's non-query result, which may not indicate how many rows were removed.</returns>
     /// <exception cref="NotSupportedException">The context is read-only, or the provider has no <c>TRUNCATE</c>.</exception>
     public int Execute()
     {
@@ -49,9 +49,9 @@ public sealed class TruncateBuilder<TEntity>
         throw Unsupported();
     }
 
-    /// <summary>Asynchronously executes the truncate and returns the affected-row count where the provider reports one.</summary>
+    /// <summary>Asynchronously executes the truncate.</summary>
     /// <param name="cancellationToken">Cancels execution.</param>
-    /// <returns>A task producing the affected-row count, or 0 where the provider reports none.</returns>
+    /// <returns>A task producing the driver's non-query result, which may not indicate how many rows were removed.</returns>
     /// <exception cref="NotSupportedException">The context is read-only, or the provider has no <c>TRUNCATE</c>.</exception>
     public Task<int> ExecuteAsync(CancellationToken cancellationToken = default)
     {

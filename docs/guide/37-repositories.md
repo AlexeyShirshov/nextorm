@@ -214,18 +214,20 @@ var fromArchived = app.DataContext.From(archived);
 
 ## Change data through a repository
 
-`MakeInsert()`, `MakeUpdate()`, and `MakeDelete()` each create a fresh builder.
-For example, to delete an archived order, set `orderId` to its ID and execute
-the delete explicitly:
+To delete an archived order by ID, call `DeleteAsync()` on the filtered query:
 
 ```csharp
-var deleted = await app.Orders.MakeDelete()
-    .Where(o => o.Id == orderId && o.IsArchived)
+var deleted = await app.Orders.Where(o => o.Id == orderId && o.IsArchived)
     .DeleteAsync(cancellationToken);
 ```
 
 On providers that report affected-row counts, `deleted` is `1` if the order
 matches and is visible through the active filters, or `0` otherwise. The command
 uses the same provider and participates in its active transaction, if any.
-For limits, provider restrictions, and more examples, see
+
+`MakeInsert()`, `MakeUpdate()`, and `MakeDelete()` each create a fresh builder.
+Use `MakeDelete()` when you need a builder method such as `ToSql()`, `Returning(...)`,
+or `All()`. To clear the mapped table on a provider that supports `TRUNCATE TABLE`,
+call `app.Orders.Truncate()` or `await app.Orders.TruncateAsync(cancellationToken)`.
+For limits, provider restrictions, and batch cleanup, see
 [Data modification (DELETE)](18-delete-statement.md).

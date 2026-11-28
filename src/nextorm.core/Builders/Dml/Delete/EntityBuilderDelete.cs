@@ -3,14 +3,14 @@ namespace NextORM.Core;
 /// <summary>Deletes rows selected by a query over a single mapped table.</summary>
 public static class QueryDeleteExtensions
 {
-    /// <summary>Deletes rows matching an explicit predicate on a mapped table.</summary>
+    /// <summary>Deletes rows from a mapped table using an explicit predicate, a positive limit, or both.</summary>
     public static int Delete<TEntity>(this EntityBuilder<TEntity> query)
     {
         ArgumentNullException.ThrowIfNull(query);
         return query.CreateQueryDelete().DeleteQuery(query);
     }
 
-    /// <summary>Asynchronously deletes rows matching an explicit predicate on a mapped table.</summary>
+    /// <summary>Asynchronously deletes rows from a mapped table using an explicit predicate, a positive limit, or both.</summary>
     public static Task<int> DeleteAsync<TEntity>(this EntityBuilder<TEntity> query, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
@@ -32,11 +32,11 @@ public partial class EntityBuilder<TEntity>
             throw new NotSupportedException("Query DELETE requires a single mapped table source.");
         }
 
-        if (_condition is null)
-            throw new InvalidOperationException("Query DELETE requires an explicit Where predicate.");
-
         if (_hasExplicitLimit && Paging.Limit == 0)
             throw new InvalidOperationException("Query DELETE does not allow an explicit zero limit.");
+
+        if (_condition is null && Paging.Limit == 0)
+            throw new InvalidOperationException("Query DELETE requires an explicit Where predicate or a positive limit.");
 
         if (Paging.Offset > 0 || Paging.HasWithTies || _group is not null || _having is not null ||
             _componentState is not null || _extremeRow is not null || _extras?.SubQueryHint is not null ||

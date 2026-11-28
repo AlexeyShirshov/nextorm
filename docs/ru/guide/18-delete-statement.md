@@ -1,6 +1,6 @@
 # Изменение данных (DELETE)
 
-> Используйте [`CreateDeleteBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateDeleteBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})), чтобы удалить строки по условию или явно удалить все строки. Он формирует параметризованный `DELETE FROM <table> [WHERE ...]`. Чтобы удалить сущность по объявленному ключу, передайте её в [`Delete<TEntity>(entity)`](xref:NextORM.Core.DataContextExtensions.Delete``1(NextORM.Core.IDataContext,``0)). Также можно удалить строки, выбранные соединением.
+> Чтобы удалить строки из одной отображённой таблицы по запросу, задайте `Where(...)`, положительный `Limit(...)` или оба сразу и вызовите `Delete()` или `DeleteAsync()`. Используйте построитель DELETE, если нужно посмотреть SQL, получить удалённые строки или явно удалить всю таблицу командой `All()`.
 
 **Что нужно знать:** [Изменение данных (INSERT)](17-insert-statement.md) · [Фильтрация (WHERE)](03-filtering-where.md) · [Соединения (JOIN)](04-joins.md) · [Обзор провайдеров](../connecting-providers/overview.md)
 
@@ -9,6 +9,7 @@
 - Чтобы удалить строки по условию, используйте [Удаление строк по предикату](#удаление-строк-по-предикату).
 - Чтобы задать максимум удаляемых строк, см. [Удалите ограниченное число строк](#удалите-ограниченное-число-строк).
 - Чтобы удалить все строки, явно укажите маркер [`All()`](#удаление-всех-строк).
+- Чтобы очистить таблицу несколькими командами, см. [Очистите таблицу порциями](#очистите-таблицу-порциями).
 - Чтобы удалить сущность по ключу, см. [Удаление по ключу](#удаление-по-ключу).
 - Чтобы получить удалённые строки, см. [Возврат удалённых строк](#возврат-удалённых-строк).
 - Чтобы удалить строки по соединению или очистить таблицу, см. [Удаление по соединению](#удаление-по-соединению) или [Очистка таблицы (`TRUNCATE`)](#очистка-таблицы-truncate).
@@ -17,14 +18,16 @@
 
 ## Удаление строк по предикату
 
-[`CreateDeleteBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateDeleteBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) удаляет строки и возвращает число удалённых строк:
+Если у вас уже есть запрос и нужно только число затронутых строк, используйте
+`Where(...).Delete()` или `Where(...).DeleteAsync()`. Начните запрос с
+`ctx.From<TEntity>()` или с репозитория, например `app.Orders`:
 
 ```csharp
-var deleted = ctx.CreateDeleteBuilder<ISimpleEntity>()
+var deleted = ctx.From<ISimpleEntity>()
     .Where(x => x.Id == 1)
     .Delete();
 
-await ctx.CreateDeleteBuilder<ISimpleEntity>()
+await ctx.From<ISimpleEntity>()
     .Where(x => x.Age > 10)
     .DeleteAsync(cancellationToken);
 ```
@@ -38,8 +41,11 @@ delete from simple_entity where (age > 10)
 `Where` принимает те же выражения-предикаты, что и запрос (`From<T>().Where(...)`). Повторные вызовы
 объединяют условия через `and`.
 
-Чтобы проверить сформированный SQL без открытия соединения, вызовите
-`CreateDeleteBuilder<T>().ToSql()`.
+Используйте явный построитель, чтобы посмотреть SQL удаления без выполнения
+через `.ToSql()`, получить удалённые строки через `.Returning(...)` на
+поддерживаемых провайдерах или удалить все строки одной командой через `.All()`.
+Создайте построитель вызовом `ctx.CreateDeleteBuilder<TEntity>()` или
+`app.Orders.MakeDelete()`.
 
 * Захваченные в предикате значения становятся параметрами (`x => x.Id == id` рендерит `id = @id`); встроенные литералы подставляются как есть, точно как в `WHERE` запроса.
 * `Delete()`/`DeleteAsync()` возвращают число затронутых строк (`0`, если ничего не совпало). ClickHouse число не возвращает (мутация его не отдаёт).
@@ -49,11 +55,22 @@ delete from simple_entity where (age > 10)
 В примерах `app.Orders` — репозиторий из контекста приложения. Как его настроить, см.
 в руководстве [«Репозитории и контекст приложения»](37-repositories.md).
 
-Начните с одной отображённой таблицы и задайте явный `Where`. Терминал сохраняет
-предикат и применимые глобальные фильтры, в том числе настройки `IgnoreFilters`.
-Глобальный фильтр или лимит не заменяет явный `Where`.
+Начните с одной отображённой таблицы и задайте положительный `Limit`. Добавьте
+`Where`, если нужно удалить только строки, подходящие под условие. Глобальные
+фильтры применяются, пока вы не отключите их через `IgnoreFilters`. Если нет ни
+`Where`, ни положительного лимита, удаление по запросу выбрасывает
+`InvalidOperationException`, даже если есть глобальные фильтры.
 
-Чтобы удалить до 100 самых старых архивных заказов, добавьте уникальный
+Чтобы удалить до 100 архивных заказов без заданного порядка, вызовите
+`Delete()` прямо на запросе:
+
+```csharp
+var deleted = app.Orders.Where(o => o.IsArchived)
+    .Limit(100)
+    .Delete();
+```
+
+Чтобы удалять сначала самые старые архивные заказы, добавьте уникальный
 идентификатор заказа для разрешения совпадений даты:
 
 ```csharp
@@ -62,17 +79,6 @@ var deleted = await app.Orders.Where(o => o.IsArchived)
     .ThenBy(o => o.Id)
     .Limit(100)
     .DeleteAsync(cancellationToken);
-```
-
-Для синхронного вызова используйте `Delete()`. Такой же лимит можно задать на
-явном построителе. Следующий пример удаляет произвольные 100 подходящих строк
-или меньше:
-
-```csharp
-var deleted = app.Orders.MakeDelete()
-    .Where(o => o.IsArchived)
-    .Limit(100)
-    .Delete();
 ```
 
 Объявите уникальный ключ из столбцов без `NULL` в соответствии со схемой базы.
@@ -96,6 +102,33 @@ InMemory не поддерживает изменения. Для удалени
 ```csharp
 ctx.CreateDeleteBuilder<ISimpleEntity>().All().Delete();   // delete from simple_entity
 ```
+
+## Очистите таблицу порциями
+
+Чтобы очистить нешардированную таблицу на [провайдере с поддержкой DELETE с лимитом](#удалите-ограниченное-число-строк),
+повторяйте удаление с лимитом, пока очередная команда не вернёт ноль
+затронутых строк. Не задавайте `Where` и вызовите `IgnoreFilters()`, чтобы
+включить строки, скрытые глобальными фильтрами,
+например фильтром арендатора или мягкого удаления. `All()` нельзя сочетать с
+`Limit()`:
+
+```csharp
+const int batchSize = 1_000;
+
+while (true)
+{
+    var deleted = await app.Orders.Limit(batchSize)
+        .IgnoreFilters()
+        .DeleteAsync(cancellationToken);
+
+    if (deleted == 0)
+        break;
+}
+```
+
+Каждая итерация выполняет одну команду DELETE. Чтобы фиксировать каждую порцию
+отдельно, выполняйте цикл вне общей транзакции. Если к концу очистки таблица
+должна быть пустой, приостановите параллельные записи.
 
 ## Удаление по ключу
 
@@ -201,14 +234,20 @@ delete from simple_entity where id = 1 returning id, name, age
 
 ## Очистка таблицы (`TRUNCATE`)
 
-Чтобы очистить таблицу, используйте `CreateTruncateBuilder<TEntity>()`. Он формирует нативную команду
-`TRUNCATE TABLE`, которая сбрасывает таблицу быстрее, чем `CreateDeleteBuilder<T>().All()`:
+Чтобы выполнить нативную команду провайдера `TRUNCATE TABLE`, вызовите
+`Truncate()` или `TruncateAsync()` на репозитории. Используйте
+`CreateTruncateBuilder<TEntity>()`, если работаете напрямую с контекстом
+провайдера или хотите посмотреть SQL:
 
 ```csharp
-var cleared = ctx.CreateTruncateBuilder<ISimpleEntity>().Execute();   // truncate table simple_entity
+app.Orders.Truncate();
+ctx.CreateTruncateBuilder<ISimpleEntity>().Execute();
 ```
 
-`TRUNCATE TABLE` есть у SQL Server, PostgreSQL, MySQL, MariaDB и ClickHouse; у SQLite его нет — бросается `NotSupportedException`, а in-memory-контекст только для запросов и тоже бросает `NotSupportedException`. `Execute()`/`ExecuteAsync()` возвращают число затронутых строк там, где провайдер его отдаёт (`0` иначе).
+Эти методы возвращают результат выполнения команды от драйвера (`int` или
+`Task<int>` для асинхронных методов). Не используйте его как счётчик удалённых
+строк. `TRUNCATE TABLE` поддерживают SQL Server, PostgreSQL, MySQL, MariaDB и
+ClickHouse. SQLite и провайдер InMemory выбрасывают `NotSupportedException`.
 
 ## Удаление по соединению
 

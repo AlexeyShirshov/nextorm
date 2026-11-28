@@ -5,10 +5,9 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Fluent builder for a <c>DELETE</c> statement, started with
-/// <see cref="DataContextExtensions.CreateDeleteBuilder{TEntity}(IDataContext, MappingVariant)"/>. The rows to remove are selected either by a
-/// predicate (<see cref="Where"/>) or explicitly as the whole table (<see cref="All"/>); both render a
-/// parameterised <c>DELETE FROM &lt;table&gt; [WHERE ...]</c>. There is deliberately no change tracking:
-/// the terminal issues exactly one explicit command.
+/// <see cref="DataContextExtensions.CreateDeleteBuilder{TEntity}(IDataContext, MappingVariant)"/>. Select rows with
+/// <see cref="Where"/>, <see cref="Limit"/>, or both. To delete the entire table in one statement, use
+/// <see cref="All"/>. The terminal issues exactly one explicit command without change tracking.
 /// </summary>
 /// <typeparam name="TEntity">The mapped entity type whose rows are deleted.</typeparam>
 public sealed class DeleteBuilder<TEntity>
@@ -154,8 +153,8 @@ public sealed class DeleteBuilder<TEntity>
     }
 
     /// <summary>
-    /// Deletes every row of the table. Required (and only meaningful) when no <see cref="Where"/> is
-    /// given, so an accidental full-table delete cannot be written by omitting the predicate.
+    /// Deletes every row of the table. Required when neither <see cref="Where"/> nor
+    /// <see cref="Limit"/> is specified.
     /// </summary>
     /// <returns>This builder, for chaining.</returns>
     /// <exception cref="InvalidOperationException"><see cref="Where"/> was already called.</exception>
@@ -173,7 +172,7 @@ public sealed class DeleteBuilder<TEntity>
     /// diagnostics and for verifying SQL generation without a database.
     /// </summary>
     /// <returns>The rendered SQL text.</returns>
-    /// <exception cref="InvalidOperationException">Neither <see cref="Where"/> nor <see cref="All"/> was called.</exception>
+    /// <exception cref="InvalidOperationException">None of <see cref="Where"/>, <see cref="Limit"/>, or <see cref="All"/> was called.</exception>
     /// <exception cref="NotSupportedException">The context is not database-backed (for example the in-memory provider).</exception>
     public string ToSql()
     {
@@ -215,7 +214,7 @@ public sealed class DeleteBuilder<TEntity>
 
     /// <summary>Executes the delete and returns the number of affected rows.</summary>
     /// <returns>The number of deleted rows, as reported by the provider.</returns>
-    /// <exception cref="InvalidOperationException">Neither <see cref="Where"/> nor <see cref="All"/> was called.</exception>
+    /// <exception cref="InvalidOperationException">None of <see cref="Where"/>, <see cref="Limit"/>, or <see cref="All"/> was called.</exception>
     /// <exception cref="NotSupportedException">The context is not database-backed (for example the in-memory provider).</exception>
     public int Delete()
     {
@@ -226,7 +225,7 @@ public sealed class DeleteBuilder<TEntity>
     /// <summary>Asynchronously executes the delete and returns the number of affected rows.</summary>
     /// <param name="cancellationToken">Cancels execution.</param>
     /// <returns>A task producing the number of deleted rows.</returns>
-    /// <exception cref="InvalidOperationException">Neither <see cref="Where"/> nor <see cref="All"/> was called.</exception>
+    /// <exception cref="InvalidOperationException">None of <see cref="Where"/>, <see cref="Limit"/>, or <see cref="All"/> was called.</exception>
     /// <exception cref="NotSupportedException">The context is not database-backed (for example the in-memory provider).</exception>
     public Task<int> DeleteAsync(CancellationToken cancellationToken = default)
     {
@@ -248,16 +247,18 @@ public sealed class DeleteBuilder<TEntity>
 
     private DeleteCommand BuildCommand()
     {
-        if (!_hasPredicate && !_all)
-            throw new InvalidOperationException("A delete needs a predicate; call Where(...) or All() to delete every row.");
         if (_ordered && _limit is null)
             throw new InvalidOperationException("DELETE ordering requires a positive limit.");
         if (_limit is int limit)
         {
             if (_all)
-                throw new NotSupportedException("A bounded DELETE requires Where rather than All().");
-            return BuildQueryCommand(ApplyFilterScope(_filter!).Limit(limit));
+                throw new NotSupportedException("A bounded DELETE cannot be combined with All().");
+            var source = _filter ?? _dataContext.From<TEntity>(_mappingVariant);
+            return BuildQueryCommand(ApplyFilterScope(source).Limit(limit));
         }
+
+        if (!_hasPredicate && !_all)
+            throw new InvalidOperationException("A delete requires Where(...), a positive Limit(...), or All() to delete every row.");
 
         // The predicate reuses the SELECT pipeline: the command's prepared condition (user predicate
         // plus the injected target filter) is rendered as a standalone WHERE by the planner. All()
