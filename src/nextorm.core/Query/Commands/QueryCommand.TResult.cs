@@ -66,28 +66,31 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         ResultType = typeof(TResult);
     }
     /// <summary>
-    /// Prepares the command so it can be executed repeatedly, typically with different parameter values.
+    /// Prepares the command for repeated execution that materializes results.
     /// </summary>
     /// <param name="options">
-    /// How the prepared command reuses its underlying command and whether rows are streamed. The default
-    /// value prepares a buffered command whose underlying command is reused per connection.
+    /// How the prepared command reuses its underlying command. The default is reuse per connection.
     /// </param>
     /// <param name="cancellationToken">A token to cancel preparation.</param>
     /// <returns>The prepared query command.</returns>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="options"/> carries a <see cref="PreparedCommandCache"/> value that is not defined.
     /// </exception>
-    public IPreparedQueryCommand<TResult> Prepare(PrepareOptions options = default, CancellationToken cancellationToken = default)
-    {
-        if (!Enum.IsDefined(options.Cache))
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(options),
-                options.Cache,
-                "The prepared-command cache policy is not a defined PreparedCommandCache value; use PreparedCommandCache.Connection or PreparedCommandCache.None.");
-        }
+    public IPreparedBufferedQueryCommand<TResult> PrepareBuffered(PrepareOptions options = default, CancellationToken cancellationToken = default)
+        => new PreparedBufferedQueryCommand<TResult>(PrepareCore(options, streaming: false, cancellationToken));
 
-        return _dataContext!.GetPreparedQueryCommand(this, options.Streaming, false, options.Cache, cancellationToken);
+    /// <summary>Prepares the command for repeated execution that streams result rows.</summary>
+    /// <param name="options">How the prepared command reuses its underlying command. The default is reuse per connection.</param>
+    /// <param name="cancellationToken">A token to cancel preparation.</param>
+    /// <returns>The prepared streaming command.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="options"/> contains an undefined cache policy.</exception>
+    public IPreparedStreamingQueryCommand<TResult> PrepareStreaming(PrepareOptions options = default, CancellationToken cancellationToken = default)
+        => new PreparedStreamingQueryCommand<TResult>(PrepareCore(options, streaming: true, cancellationToken));
+
+    private IPreparedQueryCommand<TResult> PrepareCore(PrepareOptions options, bool streaming, CancellationToken cancellationToken)
+    {
+        PrepareOptions.Validate(options);
+        return _dataContext!.GetPreparedQueryCommand(this, streaming, false, options.Cache, cancellationToken);
     }
     /// <summary>
     /// Prepares the command and returns an async enumerator over its rows.

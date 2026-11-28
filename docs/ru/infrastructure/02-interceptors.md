@@ -161,7 +161,7 @@ public sealed class AuditConnectionInterceptor : IConnectionInterceptor
 ## См. также
 
 * [Соединения](01-connections.md)
-* [Переиспользование запросов: кэш и `Prepare`](../engine/03-plan-cache-and-reuse.md)
+* [Переиспользование запросов: кэш и `PrepareBuffered`](../engine/03-plan-cache-and-reuse.md)
 * [Внедрение зависимостей](../getting-started/04-dependency-injection.md)
 * [Справочник API](../advanced/api-reference.md)
 

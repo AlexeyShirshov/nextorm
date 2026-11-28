@@ -93,7 +93,7 @@ breadth, see [Provider features](provider-features.md).
 | Navigation properties / associations / eager loading | partial (declarative O2M/M2O/O2O/M2M metadata, `JoinInto`, `LoadWith` eager loading — split or single-query, nested level 2+ with a graph-wide mode and per-level ordering/top-N — and declared-relationship implicit navigation; convention-over-FK inference is absent in linq2db too) | yes (`[Association]`, `LoadWith`) | yes |
 | Context configuration, logging and DI | yes | yes | yes |
 | Query plan cache | yes | yes (compiled queries, query cache) | yes |
-| Explicit `Prepare()` | yes (`IPreparedQueryCommand<TResult>`) | yes | no |
+| Explicit `PrepareBuffered()` | yes (`IPreparedBufferedQueryCommand<TResult>`) | yes | no |
 | Change tracking / identity map | no (by design) | partial | yes |
 | Migrations | no | partial (schema API; migrations via third-party) | yes |
 | Database-first scaffolding | partial ([separate tool](../advanced/schema-scaffolding.md): CLI for SQLite, PostgreSQL, MySQL, MariaDB, and SQL Server; generator from supplied metadata for ClickHouse) | yes ([CLI and T4](https://github.com/linq2db/docs/blob/master/source/articles/CLI.md)) | yes ([CLI and Visual Studio Package Manager Console](https://learn.microsoft.com/en-us/ef/core/managing-schemas/scaffolding/)) |
@@ -156,7 +156,7 @@ Against the shared surface Nextorm matches or exceeds linq2db; on top of that it
 - Cross-provider row values, portable range-over-scalar-pairs (`[RangeColumns]`), index hints, configurable
   keyword casing, full-text search including the SQLite FTS3/4/5 query surface and the FTS5
   maintenance/control builder, and CLR `Regex` translation.
-- Two reuse paths (implicit plan cache and explicit `Prepare()`), query parametrisation and a low-allocation
+- Two reuse paths (implicit plan cache and explicit `PrepareBuffered()`), query parametrisation and a low-allocation
   design benchmarked at or above Dapper, EF Core and linq2db on the shipped scenarios.
 
 ## Interface entities without an implementation class
@@ -229,7 +229,7 @@ async inner source.
 |---|---|---|
 | Model | Query builder and mapper without change tracking, with a full explicit write surface (`INSERT`/`UPDATE`/`DELETE`/`MERGE`), bulk insert and transactions | Explicit CRUD ORM with associations; no automatic change tracking |
 | Entity requirement | Entity class optional — mapped via attributes/fluent/conventions, or none at all with `From("table")` + `TableAlias` | A mapped class required (attributes, fluent or convention) |
-| Reuse | Implicit plan cache and `Prepare()` | Compiled queries, query cache |
+| Reuse | Implicit plan cache and `PrepareBuffered()` | Compiled queries, query cache |
 | Result consumption | First-class non-materialising terminals on the query: single-column LOB streaming (`ToStream`/`ToTextReader`), a caller-owned `DbDataReader` (`ToDataReader`) and JSON/CSV export (`WriteJson`/`WriteCsv`) that stream rows without constructing `TResult` | Always materialises the mapped type per row; raw access only through `DataConnection.ExecuteReader`/`DataReaderWrapper`, with no LOB or JSON/CSV terminals |
 
 ## Summary

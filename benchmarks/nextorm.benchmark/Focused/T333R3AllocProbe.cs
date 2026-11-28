@@ -31,7 +31,7 @@ internal static class T333R3AllocProbe
         var connectionLarge = repo.LargeEntity
             .Where(it => it.Id == SqlFunctions.Parameter<long>(0))
             .Select(it => it.Id)
-            .Prepare();
+            .PrepareBuffered();
 
         // Warm the plan cache, the per-connection state and its parameter map exactly like the arm's
         // GlobalSetup does, so the measured executions are steady-state.
@@ -74,7 +74,7 @@ internal static class T333R3AllocProbe
     }
 
     /// <summary>One arm call: one benchmark invocation, i.e. <see cref="Iterations"/> queries.</summary>
-    private static Func<int> ArmBody(IPreparedQueryCommand<long> connectionLarge, IDataContext db) => () =>
+    private static Func<int> ArmBody(IPreparedBufferedQueryCommand<long> connectionLarge, IDataContext db) => () =>
     {
         var n = 0;
         for (var i = 0; i < Iterations; i++)
@@ -121,7 +121,7 @@ internal static class T333R3AllocProbe
     /// Allocated bytes of each of the <see cref="Iterations"/> individual queries of one warm arm call, in
     /// order, so the per-query object sizes (and therefore the chosen list capacity) are visible.
     /// </summary>
-    private static long[] SingleCallQueryDeltas(IPreparedQueryCommand<long> connectionLarge, IDataContext db)
+    private static long[] SingleCallQueryDeltas(IPreparedBufferedQueryCommand<long> connectionLarge, IDataContext db)
     {
         for (var warm = 0; warm < 3; warm++)
         {

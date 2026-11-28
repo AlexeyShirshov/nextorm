@@ -37,9 +37,9 @@ public abstract class T302ExtremeRowBenchmarkBase
 
     private string _file = null!;
     private IDataContext _db = null!;
-    private IPreparedQueryCommand<ExtremeRowEntity> _all = null!;
-    private IPreparedQueryCommand<ExtremeRowEntity> _one = null!;
-    private IPreparedQueryCommand<ExtremeRowEntity> _allValueOnly = null!;
+    private IPreparedBufferedQueryCommand<ExtremeRowEntity> _all = null!;
+    private IPreparedBufferedQueryCommand<ExtremeRowEntity> _one = null!;
+    private IPreparedBufferedQueryCommand<ExtremeRowEntity> _allValueOnly = null!;
     private int _sink;
 
     /// <summary>Whether the extreme key carries an index for this arm.</summary>
@@ -95,23 +95,23 @@ public abstract class T302ExtremeRowBenchmarkBase
         _db = builder.CreateDataContext();
 
         var source = _db.From<ExtremeRowEntity>();
-        _all = source.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All).Prepare();
-        _one = source.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.One).Prepare();
+        _all = source.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All).PrepareBuffered();
+        _one = source.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.One).PrepareBuffered();
         _allValueOnly = _db.From<ExtremeRowEntity>()
             .Where(x => x.Score > ValueOnlyThreshold)
             .SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All)
-            .Prepare();
+            .PrepareBuffered();
 
-        var all = _db.ToList(_all);
-        var one = _db.ToList(_one);
-        var valueOnly = _db.ToList(_allValueOnly);
+        var all = _all.ToList(_db);
+        var one = _one.ToList(_db);
+        var valueOnly = _allValueOnly.ToList(_db);
         if (all.Count != AllRows)
             throw new InvalidOperationException($"All expected {AllRows} rows, got {all.Count}");
         if (one.Count != 1)
             throw new InvalidOperationException($"One expected 1 row, got {one.Count}");
         if (valueOnly.Count != AllRows)
             throw new InvalidOperationException($"All(value-only) expected {AllRows} rows, got {valueOnly.Count}");
-        if (_db.ToList(_all).Select(x => x.Score).Distinct().Single() != DistinctValues - 1)
+        if (_all.ToList(_db).Select(x => x.Score).Distinct().Single() != DistinctValues - 1)
             throw new InvalidOperationException("All did not keep the extreme key");
     }
 
@@ -125,15 +125,15 @@ public abstract class T302ExtremeRowBenchmarkBase
 
     [Benchmark]
     [BenchmarkCategory("A_ExtremeRow")]
-    public int All_Global() => _sink += _db.ToList(_all).Count;
+    public int All_Global() => _sink += _all.ToList(_db).Count;
 
     [Benchmark]
     [BenchmarkCategory("A_ExtremeRow")]
-    public int All_ValueOnly() => _sink += _db.ToList(_allValueOnly).Count;
+    public int All_ValueOnly() => _sink += _allValueOnly.ToList(_db).Count;
 
     [Benchmark]
     [BenchmarkCategory("A_ExtremeRow")]
-    public int One_Global() => _sink += _db.ToList(_one).Count;
+    public int One_Global() => _sink += _one.ToList(_db).Count;
 }
 
 /// <summary>Extreme-row matrix without an index on the extreme key.</summary>

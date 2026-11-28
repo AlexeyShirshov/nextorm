@@ -343,7 +343,7 @@ isolation it guarantees — is described in [Runtime mapping variant](33-runtime
 * **A `WHEN NOT MATCHED BY SOURCE` condition is target-only on SQL Server.** SQL Server's `MERGE` does not expose a source alias in that clause, so the condition may only reference the target row.
 * **Server-side query source.** `Using(ctx.From<T>().Where(...))` / `Using(QueryCommand<T>)` is accepted by the full-`MERGE` form only; the key-upsert providers fall back to a `VALUES` batch.
 * **PostgreSQL 15+ is a server prerequisite.** nextorm does not discover or configure the server version and performs no version read; it renders the general `MERGE` from the dialect's capability flags alone, and an older server rejects the statement itself. There is no client-side "PostgreSQL < 15 refuses" guard.
-* **Mutations are not prepared or plan-cached.** Optimisation in nextorm targets read-only queries only (`Prepare`, the implicit plan cache, benchmarks); a merge always renders and executes one command per call.
+* **Mutations are not prepared or plan-cached.** Optimisation in nextorm targets read-only queries only (`PrepareBuffered`, the implicit plan cache, benchmarks); a merge always renders and executes one command per call.
 * **Affected-row count.** `Merge()`/`MergeAsync()` return the number of rows the provider reports.
 * **Global query filters and the merge target.** A filter declared for the entity type is not injected
   through a source `FROM`; the incoming source rows of every branch of the supported full `MERGE`

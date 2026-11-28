@@ -17,12 +17,7 @@ public enum PreparedCommandCache
 }
 
 /// <summary>
-/// Options controlling how a prepared query command is built by
-/// <c>QueryCommand&lt;TResult&gt;.Prepare</c> and <c>EntityBuilderExtensions.Prepare</c>.
-/// <para>
-/// The default value (<c>default(PrepareOptions)</c>) prepares a buffered command whose underlying command is
-/// reused per connection, which is the behavior of the parameterless preparation.
-/// </para>
+/// Options for <c>PrepareBuffered</c> and <c>PrepareStreaming</c>.
 /// </summary>
 public readonly record struct PrepareOptions
 {
@@ -32,10 +27,14 @@ public readonly record struct PrepareOptions
     /// </summary>
     public PreparedCommandCache Cache { get; init; }
 
-    /// <summary>
-    /// When <see langword="true"/>, prepares a streaming command and creates the row enumerator as part of
-    /// preparation; when <see langword="false"/> (the default), prepares a buffered command that needs no
-    /// enumerator.
-    /// </summary>
-    public bool Streaming { get; init; }
+    internal static void Validate(PrepareOptions options)
+    {
+        if (!Enum.IsDefined(options.Cache))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                options.Cache,
+                "The prepared-command cache policy is not a defined PreparedCommandCache value; use PreparedCommandCache.Connection or PreparedCommandCache.None.");
+        }
+    }
 }

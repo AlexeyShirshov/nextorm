@@ -155,7 +155,7 @@ public class T287NullOrderingSqlBenchmarks
 
     private readonly IDataContext _db;
     private readonly TestDataRepository _repo;
-    private readonly IPreparedQueryCommand<int> _prepared;
+    private readonly IPreparedBufferedQueryCommand<int> _prepared;
 
     public T287NullOrderingSqlBenchmarks()
     {
@@ -165,7 +165,7 @@ public class T287NullOrderingSqlBenchmarks
         _repo = new TestDataRepository(_db);
         ((IConnectionManager)_db).EnsureConnectionOpen();
 
-        _prepared = PreparedPlacementQuery().Prepare();
+        _prepared = PreparedPlacementQuery().PrepareBuffered();
 
         // Warm the plan cache so the measured loops exercise only the cached path.
         _ = _repo.SimpleEntity

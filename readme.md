@@ -15,7 +15,7 @@ with no change tracking and no mandatory entity class.
 
 * **Query compilation and parameterization** — SQL is built once and cached; values are bound as parameters.
 * **Two ways to reuse a query** — the implicit plan cache and the explicit
-  [`Prepare()`](https://alexeyshirshov.github.io/nextorm/engine/03-plan-cache-and-reuse.html).
+  [`PrepareBuffered()`](https://alexeyshirshov.github.io/nextorm/engine/03-plan-cache-and-reuse.html).
 * **Entities are optional** — query tables and columns directly with
   [`TableAlias`](https://alexeyshirshov.github.io/nextorm/guide/30-projections.html), or map with attributes / fluent API.
 * **Rich projection targets** — classes, interfaces, records, anonymous types, tuples, scalars and nested projections.
@@ -96,8 +96,7 @@ with the separate Nextorm scaffolding tool.
 
 Avoid rebuilding a query plan on every execution in two independent ways: the **implicit plan cache**
 (used automatically by the terminal methods) and the explicit
-[`Prepare`](https://alexeyshirshov.github.io/nextorm/api/NextORM.Core.EntityBuilder-1.html) returning an
-[`IPreparedQueryCommand<TResult>`](https://alexeyshirshov.github.io/nextorm/api/NextORM.Core.IPreparedQueryCommand-1.html).
+preparation methods `PrepareBuffered()` and `PrepareStreaming()`, which return separate interfaces.
 They differ in cost, lifetime and thread-safety rules — see
 [Query reuse: cache vs Prepare](https://alexeyshirshov.github.io/nextorm/engine/03-plan-cache-and-reuse.html).
 

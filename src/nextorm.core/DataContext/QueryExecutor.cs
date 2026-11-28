@@ -741,9 +741,8 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         }
 
         throw new InvalidOperationException(
-            "This prepared command has no enumerator because it was prepared as buffered "
-            + "(PrepareOptions.Streaming = false), which is optimised for buffered and scalar results. "
-            + "Use Prepare(new PrepareOptions { Streaming = true }) "
+            "This prepared command has no enumerator because it was prepared for buffered and scalar results. "
+            + "Use PrepareStreaming() "
             + "to stream (ToAsyncEnumerable/ToEnumerable/CreateEnumerator).");
     }
 

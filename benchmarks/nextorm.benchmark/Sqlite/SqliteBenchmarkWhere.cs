@@ -22,8 +22,8 @@ public class SqliteBenchmarkWhere
     const int Iterations = 100;
     private readonly IDataContext _db;
     private readonly TestDataRepository _ctx;
-    private readonly IPreparedQueryCommand<SimpleEntity> _cmd;
-    private readonly IPreparedQueryCommand<SimpleEntity> _cmdToList;
+    private readonly IPreparedStreamingQueryCommand<SimpleEntity> _cmd;
+    private readonly IPreparedBufferedQueryCommand<SimpleEntity> _cmdToList;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
     private readonly Func<EFDataContext, int, IAsyncEnumerable<SimpleEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx, int i) => ctx.SimpleEntities.Where(it => it.Id == i));
@@ -45,9 +45,9 @@ public class SqliteBenchmarkWhere
         _ctx = new TestDataRepository(_db);
         ((IConnectionManager)_db).EnsureConnectionOpen();
 
-        _cmd = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Prepare(new PrepareOptions { Streaming = true });
+        _cmd = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).PrepareStreaming();
 
-        _cmdToList = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Prepare();
+        _cmdToList = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).PrepareBuffered();
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={filepath}");
@@ -145,7 +145,7 @@ public class SqliteBenchmarkWhere
     //[BenchmarkCategory("Buffered")]
     public async Task Nextorm_CachedForLoop_ToListAsync()
     {
-        var cmd = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Select(entity => new { entity.Id }).Prepare();
+        var cmd = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Select(entity => new { entity.Id }).PrepareBuffered();
         for (var i = 0; i < Iterations; i++)
         {
             foreach (var row in await cmd.ToListAsync(_db, i))

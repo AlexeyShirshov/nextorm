@@ -48,7 +48,7 @@ public static IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(this Entity
 * `@params` is a plain object. Its **public instance properties** become named parameters in property
   order, using each property name as the parameter name.
 * `mode` is a `[Flags]` value. [`None`](xref:NextORM.Core.PrepareFromSqlMode.None) is the default
-  for buffered or scalar execution. It matches the buffered form selected by parameterless `Prepare()`.
+  for buffered or scalar execution. It matches the buffered form selected by parameterless `PrepareBuffered()`.
   Use [`Streaming`](xref:NextORM.Core.PrepareFromSqlMode.Streaming) for streaming (non-buffered)
   consumption. [`StoreInCache`](xref:NextORM.Core.PrepareFromSqlMode.StoreInCache) populates the plan
   cache. Because every overload defaults to `None`, prepared raw SQL does not populate the cache unless

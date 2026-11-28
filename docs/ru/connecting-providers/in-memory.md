@@ -173,7 +173,7 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 - [SQLite](sqlite.md)
 - [SQL Server](sqlserver.md)
 - [PostgreSQL](postgres.md)
-- [Переиспользование запросов: кэш или `Prepare`](../engine/03-plan-cache-and-reuse.md)
+- [Переиспользование запросов: кэш или `PrepareBuffered`](../engine/03-plan-cache-and-reuse.md)
 - [Ограничения и функции вне области поддержки](../advanced/limitations.md)
 
 ---

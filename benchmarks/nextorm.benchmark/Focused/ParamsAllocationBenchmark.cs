@@ -30,8 +30,8 @@ public class ParamsAllocationBenchmark
     private readonly IDataContext _db;
     private readonly DataContext _dbCtx;
     private readonly TestDataRepository _repo;
-    private readonly IPreparedQueryCommand<bool> _cmd1;
-    private readonly IPreparedQueryCommand<bool> _cmd2;
+    private readonly IPreparedBufferedQueryCommand<bool> _cmd1;
+    private readonly IPreparedBufferedQueryCommand<bool> _cmd2;
     private readonly DbPreparedQueryCommand<bool> _dbCmd;
     private readonly DbConnection _conn;
     private readonly Func<string, object?, DbParameter> _createParam;
@@ -63,12 +63,12 @@ public class ParamsAllocationBenchmark
         _cmd1 = _repo.SimpleEntity
             .Where(e => e.Id == SqlFunctions.Parameter<int>(0))
             .AnyCommand()
-            .Prepare();
+            .PrepareBuffered();
 
         _cmd2 = _repo.SimpleEntity
             .Where(e => e.Id > SqlFunctions.Parameter<int>(0) && e.Id < SqlFunctions.Parameter<int>(1))
             .AnyCommand()
-            .Prepare();
+            .PrepareBuffered();
 
         ((IConnectionManager)_db).EnsureConnectionOpen();
         _conn = _dbCtx.GetConnection();
@@ -78,7 +78,7 @@ public class ParamsAllocationBenchmark
         // forwards that delegate to the shared binding core without a capturing adapter, so the
         // public GetDbCommand arm carries no extra closure over the command-aware internal path.
         _createParam = _dbCtx.CreateParam;
-        _dbCmd = (DbPreparedQueryCommand<bool>)_cmd1;
+        _dbCmd = (DbPreparedQueryCommand<bool>)((PreparedBufferedQueryCommand<bool>)_cmd1).Command;
     }
 
     // ---- NextORM public sync API: span params vs explicit array -----------------
@@ -127,7 +127,7 @@ public class ParamsAllocationBenchmark
     public async Task Nextorm_Any_1Arg_Params()
     {
         for (var i = 0; i < Iterations; i++)
-            if (await _db.AnyAsync(_cmd1, i)) _sink++;
+            if (await _cmd1.ExecuteScalarAsync(_db, throwIfNull: true, i)) _sink++;
     }
 
     [Benchmark]
@@ -137,7 +137,7 @@ public class ParamsAllocationBenchmark
         for (var i = 0; i < Iterations; i++)
         {
             args[0] = i;
-            if (await _db.AnyAsync(_cmd1, args)) _sink++;
+            if (await _cmd1.ExecuteScalarAsync(_db, throwIfNull: true, args)) _sink++;
         }
     }
 
@@ -145,7 +145,7 @@ public class ParamsAllocationBenchmark
     public async Task Nextorm_Any_2Arg_Params()
     {
         for (var i = 0; i < Iterations; i++)
-            if (await _db.AnyAsync(_cmd2, i, i + 1)) _sink++;
+            if (await _cmd2.ExecuteScalarAsync(_db, throwIfNull: true, i, i + 1)) _sink++;
     }
 
     [Benchmark]
@@ -156,7 +156,7 @@ public class ParamsAllocationBenchmark
         {
             args[0] = i;
             args[1] = i + 1;
-            if (await _db.AnyAsync(_cmd2, args)) _sink++;
+            if (await _cmd2.ExecuteScalarAsync(_db, throwIfNull: true, args)) _sink++;
         }
     }
 

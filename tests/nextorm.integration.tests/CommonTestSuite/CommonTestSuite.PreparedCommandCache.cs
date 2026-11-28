@@ -16,8 +16,8 @@ namespace NextORM.Integration.Tests;
 /// partials. Each fact observes real rows, not just "did not throw".
 ///
 /// <para>
-/// Every prepared command is created through the public surface (<c>QueryCommand.Prepare</c> with
-/// <see cref="PrepareOptions"/>) from a throwaway provider context and then executed by other
+/// Every prepared command is created through <c>PrepareBuffered</c> or <c>PrepareStreaming</c> with
+/// <see cref="PrepareOptions"/> from a throwaway provider context and then executed by other
 /// contexts, which is exactly the cross-context reuse the prepared object promises. The internal
 /// diagnostics (<c>PeekCommand</c>, <c>CreatedCommandCount</c>, <c>GetLeaseOwnerForTest</c>,
 /// <c>PendingBatch</c>) are visible because <c>nextorm.core.csproj</c> already grants
@@ -53,16 +53,20 @@ public abstract class PreparedCommandCacheSuite : ProviderTestSuite
     /// Returns the process-wide prepared command for this provider and form, preparing it exactly once
     /// from a throwaway context (preparation needs a dialect, never a connection).
     /// </summary>
-    private IPreparedQueryCommand<int> LivePrepared(PrepareOptions options)
+    private IPreparedQueryCommand<int> LivePrepared(PrepareOptions options, bool streaming = false)
         => LivePreparedCommands.GetOrAdd(
-            $"{Provider.Name}|{(int)options.Cache}|{options.Streaming}",
-            _ => PrepareLive(options));
+            $"{Provider.Name}|{(int)options.Cache}|{streaming}",
+            _ => PrepareLive(options, streaming));
 
-    private IPreparedQueryCommand<int> PrepareLive(PrepareOptions options)
+    private IPreparedQueryCommand<int> PrepareLive(PrepareOptions options, bool streaming)
     {
         Provider.EnsureSeeded();
         using var preparingContext = Provider.CreateContext();
-        return BuildByIdQuery(preparingContext).Prepare(options, TestContext.Current.CancellationToken);
+        var query = BuildByIdQuery(preparingContext);
+        var token = TestContext.Current.CancellationToken;
+        return streaming
+            ? ((PreparedStreamingQueryCommand<int>)query.PrepareStreaming(options, token)).Command
+            : ((PreparedBufferedQueryCommand<int>)query.PrepareBuffered(options, token)).Command;
     }
 
     private static List<int> ExecuteIds(IDataContext ctx, DbPreparedQueryCommand<int> prepared, int value)
@@ -224,7 +228,7 @@ public abstract class PreparedCommandCacheSuite : ProviderTestSuite
 
         // Streaming: the command stays owned by the live stream and is disposed exactly once at the end.
         var streaming = (DbPreparedQueryCommand<int>)LivePrepared(
-            new PrepareOptions { Cache = PreparedCommandCache.None, Streaming = true });
+            new PrepareOptions { Cache = PreparedCommandCache.None }, streaming: true);
         var streamCreatedBefore = streaming.CreatedCommandCount;
         var streamDisposedBefore = streaming.DisposedCommandCount;
 
@@ -286,7 +290,7 @@ public abstract class PreparedCommandCacheSuite : ProviderTestSuite
         PreparedCommandCache cache)
     {
         var prepared = (DbPreparedQueryCommand<int>)LivePrepared(
-            new PrepareOptions { Cache = cache, Streaming = true });
+            new PrepareOptions { Cache = cache }, streaming: true);
         using var ctx = Provider.CreateContext();
         var connection = ConnectionOf(ctx);
         var createdBefore = prepared.CreatedCommandCount;
@@ -330,7 +334,7 @@ public abstract class PreparedCommandCacheSuite : ProviderTestSuite
         PreparedCommandCache cache)
     {
         var prepared = (DbPreparedQueryCommand<int>)LivePrepared(
-            new PrepareOptions { Cache = cache, Streaming = true });
+            new PrepareOptions { Cache = cache }, streaming: true);
         using var firstContext = Provider.CreateContext();
         using var secondContext = Provider.CreateContext();
         using var gate = new Barrier(2);
@@ -381,7 +385,7 @@ public abstract class PreparedCommandCacheSuite : ProviderTestSuite
         PreparedCommandCache cache, bool streaming)
     {
         var prepared = (DbPreparedQueryCommand<int>)LivePrepared(
-            new PrepareOptions { Cache = cache, Streaming = streaming });
+            new PrepareOptions { Cache = cache }, streaming);
         using var ctx = Provider.CreateContext();
 
         prepared.SqlStmt.Should().NotBeNullOrWhiteSpace();
@@ -421,8 +425,8 @@ public abstract class PreparedCommandCacheSuite : ProviderTestSuite
         {
             var act = () =>
             {
-                var rejected = BuildTempTableQuery(ctx).Prepare(new PrepareOptions(), TestContext.Current.CancellationToken);
-                ctx.ToList(rejected);
+                var rejected = BuildTempTableQuery(ctx).PrepareBuffered(new PrepareOptions(), TestContext.Current.CancellationToken);
+                rejected.ToList(ctx);
             };
 
             act.Should().Throw<NotSupportedException>(
@@ -430,10 +434,11 @@ public abstract class PreparedCommandCacheSuite : ProviderTestSuite
             return;
         }
 
-        var prepared = (DbPreparedQueryCommand<int>)BuildTempTableQuery(ctx).Prepare(new PrepareOptions(), TestContext.Current.CancellationToken);
-        prepared.PendingBatch.Should().NotBeNull("a lazy temporary-table source is executed through the batch plan");
+        var prepared = BuildTempTableQuery(ctx).PrepareBuffered(cancellationToken: TestContext.Current.CancellationToken);
+        var plan = (DbPreparedQueryCommand<int>)((PreparedBufferedQueryCommand<int>)prepared).Command;
+        plan.PendingBatch.Should().NotBeNull("a lazy temporary-table source is executed through the batch plan");
 
-        var ids = ctx.ToList(prepared).OrderBy(id => id).ToList();
+        var ids = prepared.ToList(ctx).OrderBy(id => id).ToList();
         ids.Should().Equal(new[] { 1, 2, 3 }, "the pending batch materialises the source and reads it back");
     }
 

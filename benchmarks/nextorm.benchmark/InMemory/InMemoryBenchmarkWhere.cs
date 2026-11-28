@@ -11,7 +11,7 @@ public class InMemoryBenchmarkWhere
 {
     const int Iterations = 100;
     private readonly InMemoryDataRepository _ctx;
-    private readonly IPreparedQueryCommand<Tuple<int>> _cmd;
+    private readonly IPreparedStreamingQueryCommand<Tuple<int>> _cmd;
     private readonly IEnumerable<SimpleEntity> _data;
     private readonly IDataContext _provider;
     private EFInMemoryDataContext? _efCtx;
@@ -31,7 +31,7 @@ public class InMemoryBenchmarkWhere
         _ctx = new InMemoryDataRepository(_provider);
         _ctx.SimpleEntity.WithData(_data);
 
-        _cmd = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Select(entity => new Tuple<int>(entity.Id)).Prepare(new PrepareOptions { Streaming = true });
+        _cmd = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Select(entity => new Tuple<int>(entity.Id)).PrepareStreaming();
     }
 
     private EFInMemoryDataContext EfContext => _efCtx ??= EfInMemory.Create(10_000);
@@ -42,7 +42,7 @@ public class InMemoryBenchmarkWhere
         var acc = 0L;
         for (var i = 0; i < Iterations; i++)
         {
-            foreach (var row in _provider.GetEnumerable(_cmd, i))
+            foreach (var row in _cmd.ToEnumerable(_provider, i))
             {
                 acc += row.Item1;
             }

@@ -86,7 +86,7 @@ public static partial class AotScenarioCatalog
     {
         // Prepared explicitly, then executed twice: the second execution must reuse the prepared
         // statement and its parameter binding instead of preparing again.
-        var command = context.From<AotSimpleEntity>().OrderBy(x => x.Id).Select(x => x.Id).Prepare();
+        var command = context.From<AotSimpleEntity>().OrderBy(x => x.Id).Select(x => x.Id).PrepareBuffered();
         var first = command.ToList(context);
         var second = command.ToList(context);
         return $"first={string.Join(",", first)};second={string.Join(",", second)}";
@@ -103,8 +103,8 @@ public static partial class AotScenarioCatalog
         var command = context.From<AotSimpleEntity>()
             .Where(x => x.Id > 5)
             .AnyCommand()
-            .Prepare();
-        return $"any={context.Any(command)}";
+            .PrepareBuffered();
+        return $"any={command.ExecuteScalar(context, throwIfNull: true)}";
     }
 
     private static object? TerminalFirstScalar(IDataContext context)
@@ -112,7 +112,7 @@ public static partial class AotScenarioCatalog
         var command = context.From<AotSimpleEntity>()
             .OrderBy(x => x.Id)
             .FirstOrFirstOrDefaultCommand(x => x.Id)
-            .Prepare();
+            .PrepareBuffered();
         return $"first={command.FirstOrDefault(context)}";
     }
 
@@ -121,7 +121,7 @@ public static partial class AotScenarioCatalog
         var command = context.From<AotComplexEntity>()
             .OrderBy(x => x.Id)
             .FirstOrFirstOrDefaultCommand()
-            .Prepare();
+            .PrepareBuffered();
         var row = command.FirstOrDefault(context);
         return row is null
             ? "null"
@@ -133,7 +133,7 @@ public static partial class AotScenarioCatalog
         var command = context.From<AotSimpleEntity>()
             .Where(x => x.Id == 3)
             .SingleOrSingleOrDefaultCommand(x => x.Id)
-            .Prepare();
+            .PrepareBuffered();
         return $"single={command.SingleOrDefault(context)}";
     }
 
@@ -142,7 +142,7 @@ public static partial class AotScenarioCatalog
         var command = context.From<AotComplexEntity>()
             .Where(x => x.Id == 2)
             .SingleOrSingleOrDefaultCommand()
-            .Prepare();
+            .PrepareBuffered();
         var row = command.SingleOrDefault(context);
         return row is null
             ? "null"

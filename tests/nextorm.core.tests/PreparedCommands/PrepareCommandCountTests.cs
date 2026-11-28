@@ -83,8 +83,8 @@ public class PrepareCommandCountTests
             reuseBinding.Should().NotBeNull();
 
             var noneCommand = ctx.From<PreparedCommandHarness.PreparedProbeRow>().OrderBy(x => x.Id).Select(x => x.Id);
-            var none = (DbPreparedQueryCommand<int>)noneCommand.Prepare(
-                new PrepareOptions { Cache = PreparedCommandCache.None }, TestContext.Current.CancellationToken);
+            var none = (DbPreparedQueryCommand<int>)((PreparedBufferedQueryCommand<int>)noneCommand.PrepareBuffered(
+                new PrepareOptions { Cache = PreparedCommandCache.None }, TestContext.Current.CancellationToken)).Command;
             none.CachePolicy.Should().Be(PreparedCommandCache.None);
             none.Should().NotBeSameAs(reuse, "the two policies are carried by two distinct prepared objects");
             none.CreatedCommandCount.Should().Be(0);
@@ -213,7 +213,8 @@ public class PrepareCommandCountTests
     private static DbPreparedQueryCommand<int> PrepareDefault(SqliteDataContext ctx)
     {
         var command = ctx.From<PreparedCommandHarness.PreparedProbeRow>().OrderBy(x => x.Id).Select(x => x.Id);
-        return (DbPreparedQueryCommand<int>)command.Prepare(default(PrepareOptions), TestContext.Current.CancellationToken);
+        return (DbPreparedQueryCommand<int>)((PreparedBufferedQueryCommand<int>)
+            command.PrepareBuffered(default, TestContext.Current.CancellationToken)).Command;
     }
 
     private static void Execute(SqliteDataContext ctx, IPreparedQueryCommand<int> prepared, string because)

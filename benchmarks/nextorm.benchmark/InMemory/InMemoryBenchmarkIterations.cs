@@ -10,8 +10,8 @@ namespace NextORM.Benchmark;
 public class InMemoryBenchmarkIteration
 {
     private readonly InMemoryDataRepository _ctx;
-    private readonly IPreparedQueryCommand<Tuple<int>> _cmd;
-    private readonly IPreparedQueryCommand<Tuple<int>> _cmdToList;
+    private readonly IPreparedStreamingQueryCommand<Tuple<int>> _cmd;
+    private readonly IPreparedBufferedQueryCommand<Tuple<int>> _cmdToList;
     private readonly IEnumerable<SimpleEntity> _data;
     private readonly IDataContext _provider;
     private EFInMemoryDataContext? _efCtx;
@@ -31,8 +31,8 @@ public class InMemoryBenchmarkIteration
         _ctx = new InMemoryDataRepository(_provider);
         _ctx.SimpleEntity.WithData(_data);
 
-        _cmd = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Prepare(new PrepareOptions { Streaming = true });
-        _cmdToList = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Prepare();
+        _cmd = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).PrepareStreaming();
+        _cmdToList = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).PrepareBuffered();
     }
 
     private EFInMemoryDataContext EfContext => _efCtx ??= EfInMemory.Create(10_000);
@@ -41,7 +41,7 @@ public class InMemoryBenchmarkIteration
     public void NextormPreparedSync()
     {
         var acc = 0L;
-        foreach (var row in _provider.GetEnumerable(_cmd))
+        foreach (var row in _cmd.ToEnumerable(_provider))
         {
             acc += row.Item1;
         }
@@ -51,7 +51,7 @@ public class InMemoryBenchmarkIteration
     public void NextormPreparedSyncToList()
     {
         var acc = 0L;
-        foreach (var row in _provider.ToList(_cmdToList))
+        foreach (var row in _cmdToList.ToList(_provider))
         {
             acc += row.Item1;
         }

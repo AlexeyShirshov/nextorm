@@ -155,7 +155,7 @@ The connection is opened lazily and reused, so `ConnectionOpening`/`ConnectionOp
 ## See also
 
 * [Connections](01-connections.md)
-* [Query reuse: cache vs `Prepare`](../engine/03-plan-cache-and-reuse.md)
+* [Query reuse: cache vs `PrepareBuffered`](../engine/03-plan-cache-and-reuse.md)
 * [Dependency injection](../getting-started/04-dependency-injection.md)
 * [API reference](../advanced/api-reference.md)
 

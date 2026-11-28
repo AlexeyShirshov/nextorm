@@ -1,6 +1,6 @@
 # How the engine works
 
-> A query moves from description to result: you build its shape, NextORM prepares and renders provider-specific SQL, the executor runs it, and the chosen terminal shapes the result. This section explains those stages and the two ways to reuse preparation: the implicit plan cache and explicit `Prepare`. For step-by-step usage, see the [Guide](../guide/03-filtering-where.md); for caching rules, see [Plan cache and reuse](03-plan-cache-and-reuse.md).
+> A query moves from description to result: you build its shape, NextORM prepares and renders provider-specific SQL, the executor runs it, and the chosen terminal shapes the result. This section explains those stages and the two ways to reuse preparation: the implicit plan cache and explicit `PrepareBuffered`. For step-by-step usage, see the [Guide](../guide/03-filtering-where.md); for caching rules, see [Plan cache and reuse](03-plan-cache-and-reuse.md).
 
 **Prerequisites:** [Quickstart](../getting-started/02-quickstart.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md).
 
@@ -54,17 +54,17 @@ The diagram traces the query from the fluent builder through plan lookup and SQL
 
 ![Command execution path: EntityBuilder → QueryCommand → QueryPlan → plan-cache lookup → QueryExecutor → DbDataReader → RowMapperFactory → buffered/streamed/scalar/serializing/raw terminals; on a cache miss QueryPreparer → SqlBuilder generate the SQL, and QueryPlanStore backs the lookup.](../assets/diagrams/nextorm-command-execution.svg)
 
-## Explicit `Prepare()`
+## Explicit `PrepareBuffered()`
 
-The second diagram shows explicit reuse: the query is compiled once into an [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1), which you can execute repeatedly without using the implicit plan cache:
+The second diagram shows explicit reuse: the query is compiled once into an [`IPreparedBufferedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedBufferedQueryCommand`1), which you can execute repeatedly without using the implicit plan cache:
 
-![Explicit Prepare: EntityBuilder → QueryCommand.Prepare() → GetPreparedQueryCommand → QueryPreparer → SqlBuilder, which forks into RowMapperFactory and CreateCommand, both merged into IPreparedQueryCommand<TResult>; the compiled command is then executed N times through prepared.ToList(db)/First(db) → QueryExecutor → DbDataReader → result rows, while QueryPlanStore is bypassed.](../assets/diagrams/nextorm-command-execution-prepared.svg)
+![Explicit Prepare: EntityBuilder → QueryCommand.PrepareBuffered() → GetPreparedQueryCommand → QueryPreparer → SqlBuilder, which forks into RowMapperFactory and CreateCommand, both merged into IPreparedBufferedQueryCommand<TResult>; the compiled command is then executed N times through prepared.ToList(db)/First(db) → QueryExecutor → DbDataReader → result rows, while QueryPlanStore is bypassed.](../assets/diagrams/nextorm-command-execution-prepared.svg)
 
 ## In this section
 
 * [Query pipeline: fluent to SQL](01-query-pipeline.md) — trace query intent through preparation, the plan key, and SQL generation.
 * [Execution and rows](02-execution-and-rows.md) — follow command execution and choose how to consume its result.
-* [Plan cache and reuse: `Prepare`](03-plan-cache-and-reuse.md) — compare automatic plan reuse with explicit prepared commands.
+* [Plan cache and reuse: `PrepareBuffered`](03-plan-cache-and-reuse.md) — compare automatic plan reuse with explicit prepared commands.
 
 ## See also
 

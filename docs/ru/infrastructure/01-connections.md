@@ -180,7 +180,7 @@ var slowIds = ctx.From<ISimpleEntity>()
 ## См. также
 
 * [Логирование](04-logging.md)
-* [Переиспользование запросов: кэш планов и `Prepare`](../engine/03-plan-cache-and-reuse.md)
+* [Переиспользование запросов: кэш планов и `PrepareBuffered`](../engine/03-plan-cache-and-reuse.md)
 * [Внедрение зависимостей](../getting-started/04-dependency-injection.md)
 * [Быстрый старт](../getting-started/02-quickstart.md)
 * [Указатель документации](../index.md)

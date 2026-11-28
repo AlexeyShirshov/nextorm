@@ -22,11 +22,11 @@ public class SqliteBenchmarkSimulateWork
     const int LargeListSize = 500;
     private readonly IDataContext _db;
     private readonly TestDataRepository _ctx;
-    private readonly IPreparedQueryCommand<LargeEntity> _cmd;
-    private readonly IPreparedQueryCommand<LargeEntity> _cmdToList;
+    private readonly IPreparedStreamingQueryCommand<LargeEntity> _cmd;
+    private readonly IPreparedBufferedQueryCommand<LargeEntity> _cmdToList;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
-    private readonly IPreparedQueryCommand<SimpleEntity?> _cmdInner;
+    private readonly IPreparedBufferedQueryCommand<SimpleEntity?> _cmdInner;
     private readonly Func<EFDataContext, IAsyncEnumerable<LargeEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.LargeEntities.Where(it => it.Id < LargeListSize));
     private readonly Func<EFDataContext, long, int, Task<SimpleEntity?>> _efInnerCompiled = EF.CompileAsyncQuery((EFDataContext ctx, long id, int i) => ctx.SimpleEntities.Where(it => (it.Id - i) == id).FirstOrDefault());
     private readonly Linq2DbDataRepository _linq2Db;
@@ -50,11 +50,11 @@ public class SqliteBenchmarkSimulateWork
         _ctx = new TestDataRepository(_db);
         ((IConnectionManager)_ctx.DataContext).EnsureConnectionOpen();
 
-        _cmd = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Prepare(new PrepareOptions { Streaming = true });
+        _cmd = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).PrepareStreaming();
 
-        _cmdToList = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Prepare();
+        _cmdToList = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).PrepareBuffered();
 
-        _cmdInner = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0) + SqlFunctions.Parameter<int>(1)).FirstOrFirstOrDefaultCommand().Prepare();
+        _cmdInner = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0) + SqlFunctions.Parameter<int>(1)).FirstOrFirstOrDefaultCommand().PrepareBuffered();
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(_conn);
@@ -156,12 +156,12 @@ public class SqliteBenchmarkSimulateWork
     [Benchmark()]
     public async Task Nextorm_PreparedForLoop_ToListAsync()
     {
-        var cmdInner = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0) + SqlFunctions.Parameter<int>(1)).FirstOrFirstOrDefaultCommand(entity => new { entity.Id }).Prepare();
+        var cmdInner = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0) + SqlFunctions.Parameter<int>(1)).FirstOrFirstOrDefaultCommand(entity => new { entity.Id }).PrepareBuffered();
         foreach (var row in await _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
         {
             for (var i = 0; i < SmallIterations; i++)
             {
-                await _db.FirstOrDefaultAsync(cmdInner, row.Id, i);
+                await cmdInner.FirstOrDefaultAsync(_db, row.Id, i);
             }
         }
     }

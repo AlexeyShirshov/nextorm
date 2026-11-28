@@ -72,8 +72,8 @@ internal static class T245AttributionProbe
 
         // V7 controls: prepared commands reused per iteration (mirrors
         // SqliteBenchmarkFeaturesFair.A_Nextorm_Prepared_Except / _Intersect).
-        var preparedExcept = ctx.SimpleEntity.Select(s => s.Id).Except(ctx.ComplexEntity.Select(c => (int)c.Id)).Prepare();
-        var preparedIntersect = ctx.SimpleEntity.Select(s => s.Id).Intersect(ctx.ComplexEntity.Select(c => (int)c.Id)).Prepare();
+        var preparedExcept = ctx.SimpleEntity.Select(s => s.Id).Except(ctx.ComplexEntity.Select(c => (int)c.Id)).PrepareBuffered();
+        var preparedIntersect = ctx.SimpleEntity.Select(s => s.Id).Intersect(ctx.ComplexEntity.Select(c => (int)c.Id)).PrepareBuffered();
 
         // G2 inputs: pre-built expression trees for the record-only variant. Hoisting is a probe
         // artifice only; the fluent call emits a fresh tree per Select, so V8's bytes are NOT the

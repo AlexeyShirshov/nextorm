@@ -98,7 +98,7 @@ public sealed class SqliteDynamicNumericMapperTests : IDisposable
     {
         var command = _db.From<DynRow>()
             .Where(row => row.Id == SqlFunctions.Parameter<int>(0))
-            .Prepare(default, TestContext.Current.CancellationToken);
+            .PrepareBuffered(default, TestContext.Current.CancellationToken);
 
         var integerRow = await command.ToListAsync(_db, TestContext.Current.CancellationToken, 1);
         var realRow = await command.ToListAsync(_db, TestContext.Current.CancellationToken, 2);
@@ -108,7 +108,7 @@ public sealed class SqliteDynamicNumericMapperTests : IDisposable
 
         if (RuntimeFeature.IsDynamicCodeSupported)
         {
-            var method = MapperMethod(command);
+            var method = MapperMethod(((PreparedBufferedQueryCommand<DynRow>)command).Command);
             method.Should().NotBeNull();
             method!.Module.Assembly.IsDynamic.Should().BeFalse(
                 "a multi-column numeric shape keeps the generated materializer on JIT");

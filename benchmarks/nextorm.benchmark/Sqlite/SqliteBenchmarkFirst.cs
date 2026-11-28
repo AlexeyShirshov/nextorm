@@ -18,8 +18,8 @@ public class SqliteBenchmarkFirst
 {
     private readonly IDataContext _db;
     private readonly TestDataRepository _ctx;
-    private readonly IPreparedQueryCommand<int> _cmd;
-    private readonly IPreparedQueryCommand<LargeEntity?> _cmdEntPrepared;
+    private readonly IPreparedBufferedQueryCommand<int> _cmd;
+    private readonly IPreparedBufferedQueryCommand<LargeEntity?> _cmdEntPrepared;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
     //private readonly Func<EFDataContext, int i, Task<int>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Where(it => it.Id == i).Select(it => it.Id).First());
@@ -43,8 +43,8 @@ public class SqliteBenchmarkFirst
         _ctx = new TestDataRepository(_db);
         ((IConnectionManager)_db).EnsureConnectionOpen();
 
-        _cmd = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).FirstOrFirstOrDefaultCommand(it => it.Id).Prepare();
-        _cmdEntPrepared = _ctx.LargeEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).FirstOrFirstOrDefaultCommand().Prepare();
+        _cmd = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).FirstOrFirstOrDefaultCommand(it => it.Id).PrepareBuffered();
+        _cmdEntPrepared = _ctx.LargeEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).FirstOrFirstOrDefaultCommand().PrepareBuffered();
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={BenchDb.FilePath}");

@@ -40,8 +40,8 @@ public class T245ReconciliationBenchmark
 
     private readonly IDataContext _db;
     private readonly TestDataRepository _ctx;
-    private readonly IPreparedQueryCommand<int> _preparedExcept;
-    private readonly IPreparedQueryCommand<int> _preparedIntersect;
+    private readonly IPreparedBufferedQueryCommand<int> _preparedExcept;
+    private readonly IPreparedBufferedQueryCommand<int> _preparedIntersect;
 
     private long _sink;
 
@@ -55,8 +55,8 @@ public class T245ReconciliationBenchmark
 
         _ = _db.GetPreparedQueryCommand(BuildContextExcept(_ctx), false, true, CancellationToken.None);
         _ = _db.GetPreparedQueryCommand(BuildContextIntersect(_ctx), false, true, CancellationToken.None);
-        _preparedExcept = BuildExcept(_ctx).Prepare();
-        _preparedIntersect = BuildIntersect(_ctx).Prepare();
+        _preparedExcept = BuildExcept(_ctx).PrepareBuffered();
+        _preparedIntersect = BuildIntersect(_ctx).PrepareBuffered();
     }
 
     private static QueryCommand<int> BuildExcept(TestDataRepository ctx)

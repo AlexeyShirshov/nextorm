@@ -29,9 +29,9 @@ public class SqliteBenchmarkStreamProjection
         ((IConnectionManager)_db).EnsureConnectionOpen();
 
         var classQuery = _ctx.LargeEntity.Where(e => e.Id <= Rows)
-            .Select(e => new ClassProjection(e.Id)).Prepare(new PrepareOptions { Streaming = true });
+            .Select(e => new ClassProjection(e.Id)).PrepareStreaming();
         var structQuery = _ctx.LargeEntity.Where(e => e.Id <= Rows)
-            .Select(e => new StructProjection(e.Id)).Prepare(new PrepareOptions { Streaming = true });
+            .Select(e => new StructProjection(e.Id)).PrepareStreaming();
 
         var classResult = await Consume(classQuery);
         var structResult = await Consume(structQuery);
@@ -48,7 +48,7 @@ public class SqliteBenchmarkStreamProjection
     public Task<(int Count, long Checksum)> ClassProjectionStreaming()
     {
         var query = _ctx.LargeEntity.Where(e => e.Id <= Rows)
-            .Select(e => new ClassProjection(e.Id)).Prepare(new PrepareOptions { Streaming = true });
+            .Select(e => new ClassProjection(e.Id)).PrepareStreaming();
         return Consume(query);
     }
 
@@ -56,11 +56,11 @@ public class SqliteBenchmarkStreamProjection
     public Task<(int Count, long Checksum)> ReadonlyStructProjectionStreaming()
     {
         var query = _ctx.LargeEntity.Where(e => e.Id <= Rows)
-            .Select(e => new StructProjection(e.Id)).Prepare(new PrepareOptions { Streaming = true });
+            .Select(e => new StructProjection(e.Id)).PrepareStreaming();
         return Consume(query);
     }
 
-    private async Task<(int Count, long Checksum)> Consume<T>(IPreparedQueryCommand<T> query)
+    private async Task<(int Count, long Checksum)> Consume<T>(IPreparedStreamingQueryCommand<T> query)
     {
         var count = 0;
         long checksum = 0;

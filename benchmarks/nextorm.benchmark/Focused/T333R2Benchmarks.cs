@@ -39,8 +39,8 @@ public class T333R2Benchmarks
     private const int Iterations = 100;
 
     private IDataContext _db = null!;
-    private IPreparedQueryCommand<long> _connectionLarge = null!;
-    private IPreparedQueryCommand<int> _noneBenchC = null!;
+    private IPreparedBufferedQueryCommand<long> _connectionLarge = null!;
+    private IPreparedStreamingQueryCommand<int> _noneBenchC = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -57,12 +57,12 @@ public class T333R2Benchmarks
         _connectionLarge = repo.LargeEntity
             .Where(it => it.Id == SqlFunctions.Parameter<long>(0))
             .Select(it => it.Id)
-            .Prepare();
+            .PrepareBuffered();
 
         _noneBenchC = repo.SimpleEntity
             .Where(it => it.Id == SqlFunctions.Parameter<int>(0))
             .Select(it => it.Id)
-            .Prepare(new PrepareOptions { Cache = PreparedCommandCache.None, Streaming = true });
+            .PrepareStreaming(new PrepareOptions { Cache = PreparedCommandCache.None });
 
         // Warm both prepared commands (plan cache / parameter binding) so the measured loops only exercise
         // the steady-state path; warming the None arm also mints and disposes its first command.

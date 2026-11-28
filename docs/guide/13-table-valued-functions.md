@@ -162,7 +162,7 @@ var id = 5L;
 var prepared = dataContext
     .From(() => Tvf.ById(id))
     .Select(r => new { r.Id })
-    .Prepare();
+    .PrepareBuffered();
 ```
 
 ```sql
@@ -180,7 +180,7 @@ var hi = 3L;
 var prepared = dataContext
     .From(() => Tvf.Between(lo, hi))
     .Select(r => new { r.Id })
-    .Prepare();
+    .PrepareBuffered();
 ```
 
 ```sql
@@ -196,9 +196,9 @@ literal is part of the statement text and therefore a different literal is a dif
 var id = 1L;
 QueryCommand<long> Build() => dataContext.From(() => Tvf.ById(id)).Select(r => r.Id);
 
-var first = Build().Prepare();   // id = 1
+var first = Build().PrepareBuffered();   // id = 1
 id = 2;
-var second = Build().Prepare();  // same cached plan, parameter refreshed to 2
+var second = Build().PrepareBuffered();  // captures the new value 2
 ```
 
 Multiple sources refresh independently — with a TVF in `FROM` and another as the join source, only the

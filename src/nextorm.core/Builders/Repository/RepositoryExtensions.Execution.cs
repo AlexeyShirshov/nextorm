@@ -108,9 +108,13 @@ public static partial class RepositoryExtensions
         public IAsyncEnumerable<TEntity> ToAsyncEnumerable(CancellationToken cancellationToken = default) =>
             repository.Query().ToAsyncEnumerable(cancellationToken);
 
-        /// <summary>Prepares the query for repeated execution.</summary>
-        public IPreparedQueryCommand<TEntity> Prepare(PrepareOptions options = default, CancellationToken cancellationToken = default) =>
-            repository.Query().Prepare(options, cancellationToken);
+        /// <summary>Prepares the query for repeated execution that materializes results.</summary>
+        public IPreparedBufferedQueryCommand<TEntity> PrepareBuffered(PrepareOptions options = default, CancellationToken cancellationToken = default) =>
+            repository.Query().PrepareBuffered(options, cancellationToken);
+
+        /// <summary>Prepares the query for repeated execution that streams result rows.</summary>
+        public IPreparedStreamingQueryCommand<TEntity> PrepareStreaming(PrepareOptions options = default, CancellationToken cancellationToken = default) =>
+            repository.Query().PrepareStreaming(options, cancellationToken);
 
         /// <summary>Writes the query results to a stream as CSV.</summary>
         public void WriteCsv(Stream destination, CsvStreamOptions? options = null, CancellationToken cancellationToken = default) =>

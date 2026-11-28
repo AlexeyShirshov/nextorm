@@ -185,7 +185,7 @@ var start = 1;
 
 var prepared = dataContext.From<IComplexEntity>()
     .Select(e => new { V = Udf.Slice(e.String!, start) })
-    .Prepare();
+    .PrepareBuffered();
 ```
 
 ```sql

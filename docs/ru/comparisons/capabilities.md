@@ -93,7 +93,7 @@
 | Навигационные свойства / связи / eager loading | partial (декларативные метаданные O2M/M2O/O2O/M2M, `JoinInto`, eager loading `LoadWith` — split или single-query, вложенность уровня 2+ с единым режимом на граф и порядком/top-N на уровне — и неявная навигация по объявленным связям; вывод по конвенции FK отсутствует и в linq2db) | yes (`[Association]`, `LoadWith`) | yes |
 | Конфигурация контекста, логирование и DI | yes | yes | yes |
 | Кэш планов запросов | yes | yes (компилируемые запросы, кэш запросов) | yes |
-| Явный `Prepare()` | yes (`IPreparedQueryCommand<TResult>`) | yes | no |
+| Явный `PrepareBuffered()` | yes (`IPreparedBufferedQueryCommand<TResult>`) | yes | no |
 | Отслеживание изменений / identity map | no (по замыслу) | partial | yes |
 | Миграции | no | partial (schema API; миграции через сторонние) | yes |
 | Генерация по существующей БД | partial ([отдельный инструмент](../advanced/schema-scaffolding.md): CLI для SQLite, PostgreSQL, MySQL, MariaDB и SQL Server; для ClickHouse — генератор по переданным метаданным) | yes ([CLI и T4](https://github.com/linq2db/docs/blob/master/source/articles/CLI.md)) | yes ([CLI и консоль диспетчера пакетов Visual Studio](https://learn.microsoft.com/en-us/ef/core/managing-schemas/scaffolding/)) |
@@ -159,7 +159,7 @@
 - Кросс-провайдерные row values, переносимый range поверх пары колонок (`[RangeColumns]`), index hints,
   настраиваемый регистр ключевых слов, полнотекстовый поиск вместе с SQLite-поверхностью FTS3/4/5 и
   билдером FTS5 maintenance/control, а также трансляцию CLR `Regex`.
-- Два пути переиспользования (неявный кэш планов и явный `Prepare()`), параметризацию запросов и
+- Два пути переиспользования (неявный кэш планов и явный `PrepareBuffered()`), параметризацию запросов и
   низкоаллокационный дизайн с бенчмарками на уровне или выше Dapper, EF Core и linq2db на поставляемых
   сценариях.
 
@@ -234,7 +234,7 @@ SQL-провайдеры поддерживают коррелированные
 |---|---|---|
 | Модель | Конструктор запросов и мапер без отслеживания изменений, с полной явной поверхностью записи (`INSERT`/`UPDATE`/`DELETE`/`MERGE`), массовой вставкой и транзакциями | Явный CRUD-ORM со связями; без автоматического отслеживания изменений |
 | Требование к сущности | Класс сущности необязателен — маппинг атрибутами/fluent/конвенциями либо без него, через `From("table")` + `TableAlias` | Нужен сопоставленный класс (атрибуты, fluent или конвенции) |
-| Переиспользование | Неявный кэш планов и `Prepare()` | Компилируемые запросы, кэш запросов |
+| Переиспользование | Неявный кэш планов и `PrepareBuffered()` | Компилируемые запросы, кэш запросов |
 | Потребление результата | Терминалы на запросе без материализации: потоковое чтение LOB одной колонки (`ToStream`/`ToTextReader`), `DbDataReader` во владении вызывающего (`ToDataReader`) и экспорт JSON/CSV (`WriteJson`/`WriteCsv`), стримящие строки без построения `TResult` | Всегда материализует сопоставленный тип построчно; сырой доступ только через `DataConnection.ExecuteReader`/`DataReaderWrapper`, без LOB- и JSON/CSV-терминалов |
 
 ## Итог

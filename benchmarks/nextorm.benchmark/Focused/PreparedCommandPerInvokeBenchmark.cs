@@ -46,10 +46,10 @@ public class PreparedCommandPerInvokeBenchmark
     private const int Iterations = 100;
 
     private IDataContext _db = null!;
-    private IPreparedQueryCommand<long> _preparedBuffered = null!;
-    private IPreparedQueryCommand<long> _preparedStreaming = null!;
-    private IPreparedQueryCommand<long> _preparedNoneBuffered = null!;
-    private IPreparedQueryCommand<long> _preparedNoneStreaming = null!;
+    private IPreparedBufferedQueryCommand<long> _preparedBuffered = null!;
+    private IPreparedStreamingQueryCommand<long> _preparedStreaming = null!;
+    private IPreparedBufferedQueryCommand<long> _preparedNoneBuffered = null!;
+    private IPreparedStreamingQueryCommand<long> _preparedNoneStreaming = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -66,22 +66,22 @@ public class PreparedCommandPerInvokeBenchmark
         _preparedBuffered = repo.LargeEntity
             .Where(it => it.Id == SqlFunctions.Parameter<long>(0))
             .Select(it => it.Id)
-            .Prepare();
+            .PrepareBuffered();
 
         _preparedStreaming = repo.LargeEntity
             .Where(it => it.Id == SqlFunctions.Parameter<long>(0))
             .Select(it => it.Id)
-            .Prepare(new PrepareOptions { Streaming = true });
+            .PrepareStreaming();
 
         _preparedNoneBuffered = repo.LargeEntity
             .Where(it => it.Id == SqlFunctions.Parameter<long>(0))
             .Select(it => it.Id)
-            .Prepare(new PrepareOptions { Cache = PreparedCommandCache.None });
+            .PrepareBuffered(new PrepareOptions { Cache = PreparedCommandCache.None });
 
         _preparedNoneStreaming = repo.LargeEntity
             .Where(it => it.Id == SqlFunctions.Parameter<long>(0))
             .Select(it => it.Id)
-            .Prepare(new PrepareOptions { Cache = PreparedCommandCache.None, Streaming = true });
+            .PrepareStreaming(new PrepareOptions { Cache = PreparedCommandCache.None });
 
         // Warm both prepared shapes (plan cache / first reader) so the measured loops only exercise
         // the steady-state path; the None arms warm the same way, one command per call.

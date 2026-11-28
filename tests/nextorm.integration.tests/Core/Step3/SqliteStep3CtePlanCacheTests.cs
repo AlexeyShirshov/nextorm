@@ -78,10 +78,10 @@ public sealed class SqliteStep3CtePlanCacheTests : ProviderTestSuite
         var prepared = Context.From<S3PcRow>()
             .Where(x => x.Id >= SqlFunctions.Parameter<int>(0))
             .Select(x => x.Id)
-            .Prepare(new PrepareOptions(), TestContext.Current.CancellationToken);
+            .PrepareBuffered(new PrepareOptions(), TestContext.Current.CancellationToken);
 
-        Context.ToList(prepared, new object?[] { 5103 }).Should().Equal(5103, 5104);
-        Context.ToList(prepared, new object?[] { 5102 }).Should().Equal(5102, 5103, 5104);
+        prepared.ToList(Context, 5103).Should().Equal(5103, 5104);
+        prepared.ToList(Context, 5102).Should().Equal(5102, 5103, 5104);
     }
 
     /// <summary>A <c>storeInCache:false</c> preparation leaves the context's shared plan cache intact.</summary>
@@ -128,9 +128,9 @@ public sealed class SqliteStep3CtePlanCacheTests : ProviderTestSuite
         var prepared = Context.From<S3PcFilteredRow>()
             .OrderBy(x => x.Id)
             .Select(x => x.Id)
-            .Prepare(new PrepareOptions(), TestContext.Current.CancellationToken);
+            .PrepareBuffered(new PrepareOptions(), TestContext.Current.CancellationToken);
 
-        Context.ToList(prepared).Should().Equal(5101, 5102, 5103);
+        prepared.ToList(Context).Should().Equal(5101, 5102, 5103);
 
         Context.From<S3PcFilteredRow>()
             .IgnoreFilters()

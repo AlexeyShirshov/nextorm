@@ -33,7 +33,7 @@ public class SqliteBenchmarkProjection
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
     private readonly Linq2DbDataRepository _linq2Db;
-    private readonly IPreparedQueryCommand<ProjectionDto> _nextormPrepared;
+    private readonly IPreparedBufferedQueryCommand<ProjectionDto> _nextormPrepared;
 
     private long _sink;
 
@@ -47,7 +47,7 @@ public class SqliteBenchmarkProjection
 
         _nextormPrepared = _ctx.LargeEntity
             .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str })
-            .Prepare();
+            .PrepareBuffered();
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite($"Filename={BenchDb.FilePath}");
@@ -75,7 +75,7 @@ public class SqliteBenchmarkProjection
     {
         var expected = CountLargeRows();
 
-        var nextorm = ToList(_nextormPrepared);
+        var nextorm = _nextormPrepared.ToList(_db);
         var linq2Db = _linq2Db.Db.GetTable<Linq2DbLargeEntity>()
             .Select(it => new ProjectionDto { Id = it.Id, Str = it.Str }).ToList();
         var ef = _efCtx.LargeEntities
@@ -96,15 +96,13 @@ public class SqliteBenchmarkProjection
         BenchmarkComparisonValidation.EnsureChecksum(expected.Checksum, actual.Checksum, context);
     }
 
-    private List<ProjectionDto> ToList(IPreparedQueryCommand<ProjectionDto> command) => _db.ToList(command);
-
     private long CountLargeRows() => _ctx.LargeEntity.Count();
 
     [Benchmark]
     [BenchmarkCategory("A_Projection")]
     public async Task A_Nextorm_Prepared_ToListAsync()
     {
-        foreach (var row in await _db.ToListAsync(_nextormPrepared))
+        foreach (var row in await _nextormPrepared.ToListAsync(_db))
             _sink += row.Id;
     }
 

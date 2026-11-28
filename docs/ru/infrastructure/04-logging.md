@@ -67,7 +67,7 @@ var builder = new DataContextBuilder()
 
 * [Соединения](01-connections.md)
 * [Внедрение зависимостей](../getting-started/04-dependency-injection.md)
-* [Переиспользование запросов: кэш планов и `Prepare`](../engine/03-plan-cache-and-reuse.md)
+* [Переиспользование запросов: кэш планов и `PrepareBuffered`](../engine/03-plan-cache-and-reuse.md)
 * [Указатель документации](../index.md)
 
 ---

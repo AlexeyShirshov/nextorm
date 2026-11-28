@@ -31,7 +31,7 @@ public class SqliteBenchmarkRecursiveCte
 
     private readonly IDataContext _db;
     private readonly Cte<int> _nums;
-    private readonly IPreparedQueryCommand<int> _prepared;
+    private readonly IPreparedBufferedQueryCommand<int> _prepared;
 
     public SqliteBenchmarkRecursiveCte()
     {
@@ -46,7 +46,7 @@ public class SqliteBenchmarkRecursiveCte
             .Select(it => it.Id)
             .AsRecursiveCte("bench_recursive_nums", self => _db.From(self).Where(n => n < 5).Select(n => n + 1));
 
-        _prepared = _db.From(_nums).Limit(20).Select(n => n).Prepare();
+        _prepared = _db.From(_nums).Limit(20).Select(n => n).PrepareBuffered();
 
         // Warm the recomposed consumer's plan cache so the measured arm only pays cache-hit overhead.
         _ = _db.From(_nums).Limit(20).Select(n => n).ToList();

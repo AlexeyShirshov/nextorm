@@ -29,22 +29,22 @@ public class SqliteBenchmarkFeatures
     private readonly SqliteConnection _conn;
     private readonly Linq2DbDataRepository _linq2Db;
 
-    private readonly IPreparedQueryCommand<LeftJoinRow> _nextormLeftJoin;
-    private readonly IPreparedQueryCommand<FourJoinRow> _nextormJoin4;
-    private readonly IPreparedQueryCommand<int?> _nextormDistinct;
-    private readonly IPreparedQueryCommand<int> _nextormCase;
-    private readonly IPreparedQueryCommand<string> _nextormToUpper;
-    private readonly IPreparedQueryCommand<long> _nextormContains;
-    private readonly IPreparedQueryCommand<long> _nextormIn;
-    private readonly IPreparedQueryCommand<long> _nextormListContains;
-    private readonly IPreparedQueryCommand<RowNumberRow> _nextormRowNumber;
-    private readonly IPreparedQueryCommand<SumOverRow> _nextormSumOver;
-    private readonly IPreparedQueryCommand<CteJoinRow> _nextormCte;
-    private readonly IPreparedQueryCommand<int> _nextormRecursiveCte;
-    private readonly IPreparedQueryCommand<int> _nextormIntersect;
-    private readonly IPreparedQueryCommand<int> _nextormExcept;
-    private readonly IPreparedQueryCommand<string> _nextormUdf;
-    private readonly IPreparedQueryCommand<long> _nextormTvf;
+    private readonly IPreparedBufferedQueryCommand<LeftJoinRow> _nextormLeftJoin;
+    private readonly IPreparedBufferedQueryCommand<FourJoinRow> _nextormJoin4;
+    private readonly IPreparedBufferedQueryCommand<int?> _nextormDistinct;
+    private readonly IPreparedBufferedQueryCommand<int> _nextormCase;
+    private readonly IPreparedBufferedQueryCommand<string> _nextormToUpper;
+    private readonly IPreparedBufferedQueryCommand<long> _nextormContains;
+    private readonly IPreparedBufferedQueryCommand<long> _nextormIn;
+    private readonly IPreparedBufferedQueryCommand<long> _nextormListContains;
+    private readonly IPreparedBufferedQueryCommand<RowNumberRow> _nextormRowNumber;
+    private readonly IPreparedBufferedQueryCommand<SumOverRow> _nextormSumOver;
+    private readonly IPreparedBufferedQueryCommand<CteJoinRow> _nextormCte;
+    private readonly IPreparedBufferedQueryCommand<int> _nextormRecursiveCte;
+    private readonly IPreparedBufferedQueryCommand<int> _nextormIntersect;
+    private readonly IPreparedBufferedQueryCommand<int> _nextormExcept;
+    private readonly IPreparedBufferedQueryCommand<string> _nextormUdf;
+    private readonly IPreparedBufferedQueryCommand<long> _nextormTvf;
 
     public SqliteBenchmarkFeatures()
     {
@@ -57,53 +57,53 @@ public class SqliteBenchmarkFeatures
         _nextormLeftJoin = _ctx.SimpleEntity
             .LeftJoin(_ctx.ComplexEntity, (s, c) => (long)s.Id == c.Id)
             .Select(p => new LeftJoinRow { Id = p.Item1.Id, RightString = p.Item2.RequiredString })
-            .Prepare();
+            .PrepareBuffered();
 
         _nextormJoin4 = _ctx.SimpleEntity
             .Join(_ctx.ComplexEntity, (s, c) => (long)s.Id == c.Id)
             .Join(_ctx.SimpleEntity, (p, s) => p.Item2.Id == (long)s.Id)
             .Join(_ctx.ComplexEntity, (p, c) => (long)p.Item3.Id == c.Id)
             .Select(p => new FourJoinRow { A = p.Item1.Id, B = p.Item2.RequiredString, C = p.Item3.Id, D = p.Item4.RequiredString })
-            .Prepare();
+            .PrepareBuffered();
 
-        _nextormDistinct = _ctx.ComplexEntity.Select(c => c.Int).Distinct().Prepare();
-        _nextormCase = _ctx.ComplexEntity.Select(c => c.Id > 1 ? 10 : 20).Prepare();
-        _nextormToUpper = _ctx.ComplexEntity.Where(c => c.Id == 2).Select(c => c.String!.ToUpper()).Prepare();
-        _nextormContains = _ctx.ComplexEntity.Where(c => c.String!.Contains("df")).Select(c => c.Id).Prepare();
+        _nextormDistinct = _ctx.ComplexEntity.Select(c => c.Int).Distinct().PrepareBuffered();
+        _nextormCase = _ctx.ComplexEntity.Select(c => c.Id > 1 ? 10 : 20).PrepareBuffered();
+        _nextormToUpper = _ctx.ComplexEntity.Where(c => c.Id == 2).Select(c => c.String!.ToUpper()).PrepareBuffered();
+        _nextormContains = _ctx.ComplexEntity.Where(c => c.String!.Contains("df")).Select(c => c.Id).PrepareBuffered();
 
         var inValues = new long[] { 1, 3, 10 };
-        _nextormIn = _ctx.ComplexEntity.Where(c => SqlFunctions.Sql.@in(c.Id, inValues)).Select(c => c.Id).Prepare();
-        _nextormListContains = _ctx.ComplexEntity.Where(c => inValues.Contains(c.Id)).Select(c => c.Id).Prepare();
+        _nextormIn = _ctx.ComplexEntity.Where(c => SqlFunctions.Sql.@in(c.Id, inValues)).Select(c => c.Id).PrepareBuffered();
+        _nextormListContains = _ctx.ComplexEntity.Where(c => inValues.Contains(c.Id)).Select(c => c.Id).PrepareBuffered();
 
         _nextormRowNumber = _ctx.ComplexEntity.Select(c => new RowNumberRow
         {
             Id = c.Id,
             Rn = SqlFunctions.Sql.row_number().Over(partitionBy: () => c.Int, orderBy: () => c.Id)
-        }).Prepare();
+        }).PrepareBuffered();
 
         _nextormSumOver = _ctx.ComplexEntity.Select(c => new SumOverRow
         {
             Id = c.Id,
             Total = SqlFunctions.Sql.sum_over(c.Id).Over(partitionBy: () => c.Int)
-        }).Prepare();
+        }).PrepareBuffered();
 
         var recent = _ctx.ComplexEntity.Where(c => c.Id > 1).Select(c => new { c.Id, c.RequiredString });
         _nextormCte = _db.With("recent", recent)
             .From("recent")
             .Join(_ctx.SimpleEntity, (r, s) => r["id"].AsInt == s.Id)
             .Select(p => new CteJoinRow { Id = p.Item1["id"].AsInt, SimpleId = p.Item2.Id })
-            .Prepare();
+            .PrepareBuffered();
 
         var anchor = _ctx.SimpleEntity.Where(s => s.Id == 1).Select(s => new CteNumberRow { n = s.Id });
         var step = _db.From("nums").Where(t => t["n"].AsInt < 5).Select(t => new CteNumberRow { n = t["n"].AsInt + 1 });
         var body = anchor.UnionAll(step);
-        _nextormRecursiveCte = _db.WithRecursive("nums", body).From("nums").Select(t => t["n"].AsInt).Prepare();
+        _nextormRecursiveCte = _db.WithRecursive("nums", body).From("nums").Select(t => t["n"].AsInt).PrepareBuffered();
 
-        _nextormIntersect = _ctx.SimpleEntity.Select(s => s.Id).Intersect(_ctx.ComplexEntity.Select(c => (int)c.Id)).Prepare();
-        _nextormExcept = _ctx.SimpleEntity.Select(s => s.Id).Except(_ctx.ComplexEntity.Select(c => (int)c.Id)).Prepare();
+        _nextormIntersect = _ctx.SimpleEntity.Select(s => s.Id).Intersect(_ctx.ComplexEntity.Select(c => (int)c.Id)).PrepareBuffered();
+        _nextormExcept = _ctx.SimpleEntity.Select(s => s.Id).Except(_ctx.ComplexEntity.Select(c => (int)c.Id)).PrepareBuffered();
 
-        _nextormUdf = _ctx.ComplexEntity.Where(c => c.Id == 2).Select(c => Udf.ToUpper(c.String!)).Prepare();
-        _nextormTvf = _db.From(() => Tvf.JsonEach("[1,2,3]")).Select(r => r.Value).Prepare();
+        _nextormUdf = _ctx.ComplexEntity.Where(c => c.Id == 2).Select(c => Udf.ToUpper(c.String!)).PrepareBuffered();
+        _nextormTvf = _db.From(() => Tvf.JsonEach("[1,2,3]")).Select(r => r.Value).PrepareBuffered();
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={BenchDb.FilePath}");

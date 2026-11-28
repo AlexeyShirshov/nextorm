@@ -24,7 +24,7 @@ public class SqliteBenchmarkQueryFilterFunc
     private const string TenantKey = "bench_filter_func_tenant";
 
     private readonly IDataContext _db;
-    private readonly IPreparedQueryCommand<int> _prepared;
+    private readonly IPreparedBufferedQueryCommand<int> _prepared;
     private readonly EntityBuilder<FilterFuncBenchEntity> _filtered;
 
     public SqliteBenchmarkQueryFilterFunc()
@@ -38,7 +38,7 @@ public class SqliteBenchmarkQueryFilterFunc
         _filtered = _db.From<FilterFuncBenchEntity>(b => b.HasQueryFilter(
             "tenant", (eb, c) => eb.Where(e => e.Id >= (int)c.Properties[TenantKey])));
 
-        _prepared = _filtered.Select(it => it.Id).Prepare();
+        _prepared = _filtered.Select(it => it.Id).PrepareBuffered();
 
         // Warm the plan cache so the measured loops only exercise the prepared/cached paths.
         _ = _filtered.Select(it => it.Id).ToList();

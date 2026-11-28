@@ -18,8 +18,8 @@ public class SqliteBenchmarkIteration
 {
     private readonly IDataContext _db;
     private readonly TestDataRepository _ctx;
-    private readonly IPreparedQueryCommand<SimpleEntity> _cmd;
-    private readonly IPreparedQueryCommand<SimpleEntity> _cmdToList;
+    private readonly IPreparedStreamingQueryCommand<SimpleEntity> _cmd;
+    private readonly IPreparedBufferedQueryCommand<SimpleEntity> _cmdToList;
     private readonly IPreparedQueryCommand<SimpleEntity> _cmdManualToList;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
@@ -41,9 +41,9 @@ public class SqliteBenchmarkIteration
         _ctx = new TestDataRepository(_db);
         ((IConnectionManager)_db).EnsureConnectionOpen();
 
-        _cmd = _ctx.SimpleEntity.Prepare(new PrepareOptions { Streaming = true });
+        _cmd = _ctx.SimpleEntity.PrepareStreaming();
 
-        _cmdToList = _ctx.SimpleEntity.Prepare();
+        _cmdToList = _ctx.SimpleEntity.PrepareBuffered();
 
         _cmdManualToList = _ctx.SimpleEntity.PrepareFromSql("select id from simple_entity");
 

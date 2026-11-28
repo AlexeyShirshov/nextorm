@@ -311,7 +311,7 @@ scope), and such a statement is never plan-cached. See [Common table expressions
 * The in-memory context is query-only: `Update`/`UpdateAsync` (like every other write) throw
   `NotSupportedException`; query your own collections instead.
 * `UPDATE` is not prepared or plan-cached — optimisation in nextorm targets read-only queries only
-  (`Prepare`, the implicit plan cache, benchmarks); a mutation always renders and executes one command
+  (`PrepareBuffered`, the implicit plan cache, benchmarks); a mutation always renders and executes one command
   per call.
 
 ## See also

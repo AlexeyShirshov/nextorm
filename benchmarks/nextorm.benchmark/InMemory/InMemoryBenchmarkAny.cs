@@ -10,7 +10,7 @@ namespace NextORM.Benchmark;
 public class InMemoryBenchmarkAny
 {
     private readonly InMemoryDataRepository _ctx;
-    private readonly IPreparedQueryCommand<bool> _cmd;
+    private readonly IPreparedBufferedQueryCommand<bool> _cmd;
     private readonly IEnumerable<SimpleEntity> _data;
     private EFInMemoryDataContext? _efCtx;
     private Func<EFInMemoryDataContext, bool>? _efCompiled;
@@ -29,7 +29,7 @@ public class InMemoryBenchmarkAny
         _ctx = new InMemoryDataRepository(provider);
         _ctx.SimpleEntity.WithData(_data);
 
-        _cmd = _ctx.SimpleEntity.AnyCommand().Prepare();
+        _cmd = _ctx.SimpleEntity.AnyCommand().PrepareBuffered();
     }
 
     private EFInMemoryDataContext EfContext => _efCtx ??= EfInMemory.Create(10_000);
@@ -37,7 +37,7 @@ public class InMemoryBenchmarkAny
     [Benchmark()]
     public void NextormPrepared()
     {
-        _sink += _ctx.DataProvider.Any(_cmd, null) ? 1 : 0;
+        _sink += _cmd.ExecuteScalar(_ctx.DataProvider, throwIfNull: true) ? 1 : 0;
     }
     [Benchmark]
     public void Linq()

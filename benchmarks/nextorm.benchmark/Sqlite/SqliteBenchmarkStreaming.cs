@@ -38,8 +38,8 @@ public class SqliteBenchmarkStreaming
     private readonly SqliteConnection _conn;
     private readonly Linq2DbDataRepository _linq2Db;
 
-    private readonly IPreparedQueryCommand<ProjectionDto> _nextormBuffered;
-    private readonly IPreparedQueryCommand<ProjectionDto> _nextormUnbuffered;
+    private readonly IPreparedBufferedQueryCommand<ProjectionDto> _nextormBuffered;
+    private readonly IPreparedStreamingQueryCommand<ProjectionDto> _nextormUnbuffered;
     private readonly QueryCommand<ProjectionDto> _nextormReader;
 
     private readonly BenchmarkRowSink _sink = new();
@@ -57,15 +57,15 @@ public class SqliteBenchmarkStreaming
 
         _nextormBuffered = _ctx.LargeEntity
             .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str })
-            .Prepare();
+            .PrepareBuffered();
 
         _nextormUnbuffered = _ctx.LargeEntity
             .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str })
-            .Prepare(new PrepareOptions { Streaming = true });
+            .PrepareStreaming();
 
         _nextormReader = _ctx.LargeEntity
             .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str });
-        _ = _nextormReader.Prepare();
+        _ = _nextormReader.PrepareBuffered();
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite($"Filename={BenchDb.FilePath}");
@@ -88,7 +88,7 @@ public class SqliteBenchmarkStreaming
         var rows = _ctx.LargeEntity.Count();
         BenchmarkComparisonValidation.EnsureCount(SqliteBenchmarkAggregates.ExpectedRows, rows, "Streaming/large_table");
 
-        var buffered = await _db.ToListAsync(_nextormBuffered);
+        var buffered = await _nextormBuffered.ToListAsync(_db);
         var baseline = BenchmarkComparisonValidation.Measure(buffered, r => r.Id);
         BenchmarkComparisonValidation.EnsureCount(SqliteBenchmarkAggregates.ExpectedRows, baseline.Count, "Streaming/nextorm-buffered");
         BenchmarkComparisonValidation.Report("Streaming/nextorm-buffered", baseline.Count, baseline.Checksum);
@@ -264,7 +264,7 @@ public class SqliteBenchmarkStreaming
     [BenchmarkCategory("A_BufferedDto")]
     public async Task A_Nextorm_Prepared_ToList_Dto()
     {
-        foreach (var row in await _db.ToListAsync(_nextormBuffered))
+        foreach (var row in await _nextormBuffered.ToListAsync(_db))
             _sink.Add(row.Id);
     }
 

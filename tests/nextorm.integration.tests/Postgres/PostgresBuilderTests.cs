@@ -82,12 +82,9 @@ public sealed class PostgresBuilderTests : ProviderTestSuite
     {
         var simple = _sut.SimpleEntityAsClass;
         var command = simple.Where(x => x.Id > 5).AnyCommand()
-            .Prepare(cancellationToken: TestContext.Current.CancellationToken);
+            .PrepareBuffered(cancellationToken: TestContext.Current.CancellationToken);
 
-        // AnyCommand is executed through the Any terminal; ToList is not its execution contract
-        // (the same NRE reproduces in the JIT oracle control, so this is the documented shape, not a
-        // provider failure).
-        _sut.DataProvider.Any(command).Should().BeTrue();
+        command.ExecuteScalar(_sut.DataProvider, throwIfNull: true).Should().BeTrue();
     }
 
     [Fact]
@@ -101,7 +98,7 @@ public sealed class PostgresBuilderTests : ProviderTestSuite
         simple.OrderBy(x => x.Id).ToList().Should().HaveCount(10, "the seed must expose ten rows to this shape");
 
         var command = simple.OrderBy(x => x.Id).FirstOrFirstOrDefaultCommand()
-            .Prepare(cancellationToken: TestContext.Current.CancellationToken);
+            .PrepareBuffered(cancellationToken: TestContext.Current.CancellationToken);
 
         var row = command.FirstOrDefault(db);
         (row?.Id).Should().Be(1, "FirstOrDefault over a ten-row ordered seed must return the first row");
@@ -112,7 +109,7 @@ public sealed class PostgresBuilderTests : ProviderTestSuite
     {
         var simple = _sut.SimpleEntityAsClass;
         var command = simple.OrderBy(x => x.Id).FirstOrFirstOrDefaultCommand(x => x.Id)
-            .Prepare(cancellationToken: TestContext.Current.CancellationToken);
+            .PrepareBuffered(cancellationToken: TestContext.Current.CancellationToken);
 
         command.FirstOrDefault(_sut.DataProvider).Should().Be(1);
     }
@@ -122,7 +119,7 @@ public sealed class PostgresBuilderTests : ProviderTestSuite
     {
         var simple = _sut.SimpleEntityAsClass;
         var command = simple.Where(x => x.Id == 1).SingleOrSingleOrDefaultCommand()
-            .Prepare(cancellationToken: TestContext.Current.CancellationToken);
+            .PrepareBuffered(cancellationToken: TestContext.Current.CancellationToken);
 
         var row = command.SingleOrDefault(_sut.DataProvider);
         (row?.Id).Should().Be(1);
@@ -133,7 +130,7 @@ public sealed class PostgresBuilderTests : ProviderTestSuite
     {
         var simple = _sut.SimpleEntityAsClass;
         var command = simple.Where(x => x.Id == 1).SingleOrSingleOrDefaultCommand(x => x.Id)
-            .Prepare(cancellationToken: TestContext.Current.CancellationToken);
+            .PrepareBuffered(cancellationToken: TestContext.Current.CancellationToken);
 
         command.SingleOrDefault(_sut.DataProvider).Should().Be(1);
     }
@@ -142,9 +139,9 @@ public sealed class PostgresBuilderTests : ProviderTestSuite
     public void Prepare_List_ShouldReturnEverySeededRow()
     {
         var simple = _sut.SimpleEntityAsClass;
-        var prepared = simple.Where(x => x.Id > 0).Prepare(default, TestContext.Current.CancellationToken);
+        var prepared = simple.Where(x => x.Id > 0).PrepareBuffered(default, TestContext.Current.CancellationToken);
 
-        _sut.DataProvider.ToList(prepared).Should().HaveCount(10);
+        prepared.ToList(_sut.DataProvider).Should().HaveCount(10);
     }
 
     [Fact]

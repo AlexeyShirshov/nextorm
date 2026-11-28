@@ -21,9 +21,9 @@ public class PreparedCommandConcurrencyTests
         public int Id { get; set; }
     }
 
-    private static readonly IPreparedQueryCommand<int> Prepared = CreatePrepared();
+    private static readonly IPreparedBufferedQueryCommand<int> Prepared = CreatePrepared();
 
-    private static IPreparedQueryCommand<int> CreatePrepared()
+    private static IPreparedBufferedQueryCommand<int> CreatePrepared()
     {
         // Preparation needs the dialect only: no connection is opened, and the prepared command keeps
         // no reference to this context (it holds the immutable factory and the compiled mapper).
@@ -31,7 +31,7 @@ public class PreparedCommandConcurrencyTests
         var command = preparingContext.From<ConcurrentRow>()
             .Where(x => x.Id == SqlFunctions.Parameter<int>(0))
             .Select(x => x.Id);
-        return command.Prepare(cancellationToken: CancellationToken.None);
+        return command.PrepareBuffered(cancellationToken: CancellationToken.None);
     }
 
     [Fact]
@@ -53,7 +53,7 @@ public class PreparedCommandConcurrencyTests
                 {
                     gate.SignalAndWait(TimeSpan.FromSeconds(30)).Should().BeTrue(
                         "both contexts must reach the execution boundary together to expose interleaving");
-                    var rows = context.ToList(Prepared, new object?[] { parameter });
+                    var rows = Prepared.ToList(context, parameter);
                     rows.Should().Equal(new[] { expected },
                         "each connection must bind its own parameter value and read its own reader");
                 }

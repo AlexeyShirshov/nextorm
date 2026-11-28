@@ -21,7 +21,6 @@ public class PrepareOptionsTests
         var constructed = new PrepareOptions();
 
         byDefault.Cache.Should().Be(PreparedCommandCache.Connection);
-        byDefault.Streaming.Should().BeFalse("the default preparation is buffered");
         constructed.Should().Be(byDefault, "the parameterless struct is the documented default value");
         ((int)PreparedCommandCache.Connection).Should().Be(0, "the enum default must be connection reuse");
         ((int)PreparedCommandCache.None).Should().Be(1);
@@ -38,7 +37,7 @@ public class PrepareOptionsTests
             var command = ctx.From<PreparedCommandHarness.PreparedProbeRow>().OrderBy(x => x.Id).Select(x => x.Id);
             var createdBefore = connection.CreatedCommandCount;
 
-            var act = () => command.Prepare(new PrepareOptions { Cache = (PreparedCommandCache)42 });
+            var act = () => command.PrepareBuffered(new PrepareOptions { Cache = (PreparedCommandCache)42 });
 
             var exception = act.Should().Throw<ArgumentOutOfRangeException>().Which;
             exception.ParamName.Should().Be("options");
@@ -60,7 +59,7 @@ public class PrepareOptionsTests
         // policy error here instead of a NullReferenceException.
         var command = new QueryCommand<int>(null, new QueryDefinition());
 
-        var act = () => command.Prepare(new PrepareOptions { Cache = (PreparedCommandCache)42 });
+        var act = () => command.PrepareBuffered(new PrepareOptions { Cache = (PreparedCommandCache)42 });
 
         act.Should().Throw<ArgumentOutOfRangeException>()
             .Which.ParamName.Should().Be("options");
@@ -72,7 +71,7 @@ public class PrepareOptionsTests
         using var ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
         var builder = ctx.From<PreparedCommandHarness.PreparedProbeRow>();
 
-        var act = () => builder.Prepare(new PrepareOptions { Cache = (PreparedCommandCache)42 });
+        var act = () => builder.PrepareBuffered(new PrepareOptions { Cache = (PreparedCommandCache)42 });
 
         var exception = act.Should().Throw<ArgumentOutOfRangeException>().Which;
         exception.ParamName.Should().Be("options");
@@ -89,10 +88,10 @@ public class PrepareOptionsTests
             using var ctx = new SqliteDataContext(connection, new DataContextBuilder());
             var command = ctx.From<PreparedCommandHarness.PreparedProbeRow>().OrderBy(x => x.Id).Select(x => x.Id);
 
-            var reuse = ((DbPreparedQueryCommand<int>)command.Prepare(
-                new PrepareOptions { Cache = PreparedCommandCache.Connection }, TestContext.Current.CancellationToken));
-            var fresh = ((DbPreparedQueryCommand<int>)command.Prepare(
-                new PrepareOptions { Cache = PreparedCommandCache.None }, TestContext.Current.CancellationToken));
+            var reuse = (DbPreparedQueryCommand<int>)((PreparedBufferedQueryCommand<int>)command.PrepareBuffered(
+                new PrepareOptions { Cache = PreparedCommandCache.Connection }, TestContext.Current.CancellationToken)).Command;
+            var fresh = (DbPreparedQueryCommand<int>)((PreparedBufferedQueryCommand<int>)command.PrepareBuffered(
+                new PrepareOptions { Cache = PreparedCommandCache.None }, TestContext.Current.CancellationToken)).Command;
 
             reuse.CachePolicy.Should().Be(PreparedCommandCache.Connection);
             fresh.CachePolicy.Should().Be(PreparedCommandCache.None);

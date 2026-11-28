@@ -27,9 +27,9 @@ Choose a terminal by the result shape you need:
 | `ToEnumerable` / `ToAsyncEnumerable` / `Pipeline` | **Streamed**: rows are materialized lazily as you iterate. |
 | `WriteJson` / `WriteCsv` | **Serialized**: rows are written straight from the reader to JSON or CSV with **no materialization**. |
 | `ToDataReader` / `ToStream` / `ToTextReader` | **Raw**: the underlying `DbDataReader`, `Stream` or `TextReader` is handed to the caller, who owns and disposes it. |
-| `Prepare` | **Compiled, not executed**: returns an `IPreparedQueryCommand<TResult>` (see [plan cache and reuse](03-plan-cache-and-reuse.md)). |
+| `PrepareBuffered` / `PrepareStreaming` | **Compile without executing**: return separate interfaces for buffered and streaming reads (see [plan cache and reuse](03-plan-cache-and-reuse.md)). |
 
-All terminals have synchronous and asynchronous forms (`ToList`/`ToListAsync`, `ToEnumerable`/`ToAsyncEnumerable`, `WriteJson`/`WriteJsonAsync`, ...), except `Prepare`, which has no asynchronous twin. All terminals except `Prepare` take query parameters positionally.
+All terminals have synchronous and asynchronous forms (`ToList`/`ToListAsync`, `ToEnumerable`/`ToAsyncEnumerable`, `WriteJson`/`WriteJsonAsync`, ...), except `PrepareBuffered` and `PrepareStreaming`, which have no asynchronous twins. All terminals except `PrepareBuffered` take query parameters positionally.
 
 Buffered and streamed terminals reuse the same plan; they differ in when rows are materialized. Serializing terminals bypass the row mapper entirely.
 

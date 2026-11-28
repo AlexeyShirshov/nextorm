@@ -27,9 +27,9 @@
 | `ToEnumerable` / `ToAsyncEnumerable` / `Pipeline` | **Поток**: строки материализуются лениво по мере перебора. |
 | `WriteJson` / `WriteCsv` | **Сериализация**: строки записываются напрямую из `DbDataReader` в JSON или CSV **без материализации**. |
 | `ToDataReader` / `ToStream` / `ToTextReader` | **«Сырой» результат**: вызывающему передаётся исходный `DbDataReader`, `Stream` или `TextReader`; вызывающий отвечает за их освобождение. |
-| `Prepare` | **Компиляция без исполнения**: возвращает `IPreparedQueryCommand<TResult>` (см. [кэш планов и переиспользование](03-plan-cache-and-reuse.md)). |
+| `PrepareBuffered` / `PrepareStreaming` | **Компиляция без исполнения**: возвращают разные интерфейсы для буферизованного и потокового чтения (см. [кэш планов и переиспользование](03-plan-cache-and-reuse.md)). |
 
-У всех терминалов есть синхронная и асинхронная формы (`ToList`/`ToListAsync`, `ToEnumerable`/`ToAsyncEnumerable`, `WriteJson`/`WriteJsonAsync`, ...), кроме `Prepare`, у которого нет асинхронной пары. Все терминалы, кроме `Prepare`, принимают параметры запроса позиционно.
+У всех терминалов есть синхронная и асинхронная формы (`ToList`/`ToListAsync`, `ToEnumerable`/`ToAsyncEnumerable`, `WriteJson`/`WriteJsonAsync`, ...), кроме методов подготовки `PrepareBuffered` и `PrepareStreaming`, у которых нет асинхронной пары. Все терминалы, кроме методов подготовки `PrepareBuffered` и `PrepareStreaming`, принимают параметры запроса позиционно.
 
 Буферизованные и потоковые терминалы используют один план, но материализуют строки в разное время. Сериализующие терминалы не используют преобразователь строк.
 

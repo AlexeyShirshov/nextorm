@@ -34,8 +34,8 @@ public class SqliteBenchmarkStageA
 
     private readonly IDataContext _db;
     private readonly TestDataRepository _ctx;
-    private readonly IPreparedQueryCommand<int> _wherePrepared;
-    private readonly IPreparedQueryCommand<LargeEntity> _joinPrepared;
+    private readonly IPreparedBufferedQueryCommand<int> _wherePrepared;
+    private readonly IPreparedBufferedQueryCommand<LargeEntity> _joinPrepared;
 
     public SqliteBenchmarkStageA()
     {
@@ -52,13 +52,13 @@ public class SqliteBenchmarkStageA
         _wherePrepared = _ctx.SimpleEntity
             .Where(it => it.Id == SqlFunctions.Parameter<int>(0))
             .Select(it => it.Id)
-            .Prepare();
+            .PrepareBuffered();
 
         _joinPrepared = _ctx.LargeEntity
             .Join(_ctx.SimpleEntity, (t1, t2) => t1.Id == t2.Id)
             .Where(p => p.Item2.Id == SqlFunctions.Parameter<int>(0))
             .Select(p => new LargeEntity { Id = p.Item1.Id, Dt = p.Item1.Dt, Str = p.Item1.Str })
-            .Prepare();
+            .PrepareBuffered();
 
         // Prime both implicit plan caches for several captured values so every CachedHit_* arm runs
         // on the hit path (the first value would otherwise be the single cold miss).

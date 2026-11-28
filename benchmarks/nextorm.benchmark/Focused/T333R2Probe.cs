@@ -47,19 +47,19 @@ internal static class T333R2Probe
         var connectionLarge = repo.LargeEntity
             .Where(it => it.Id == SqlFunctions.Parameter<long>(0))
             .Select(it => it.Id)
-            .Prepare();
+            .PrepareBuffered();
 
         var warmBenchC = repo.SimpleEntity
             .Where(it => it.Id == SqlFunctions.Parameter<int>(0))
             .Select(it => it.Id)
-            .Prepare();
+            .PrepareBuffered();
 
         var noneBenchC0 = repo.SimpleEntity
             .Where(it => it.Id == SqlFunctions.Parameter<int>(0))
             .Select(it => it.Id)
-            .Prepare(new PrepareOptions { Cache = PreparedCommandCache.None, Streaming = true });
+            .PrepareStreaming(new PrepareOptions { Cache = PreparedCommandCache.None });
 
-        var noneBenchC = (DbPreparedQueryCommand<int>)noneBenchC0;
+        var noneBenchC = (DbPreparedQueryCommand<int>)((PreparedStreamingQueryCommand<int>)noneBenchC0).Command;
 
         // Warm every arm once, exactly like the benchmark setup does.
         _ = connectionLarge.ToList(db, 0L);
@@ -68,8 +68,8 @@ internal static class T333R2Probe
         {
         }
 
-        var largeCmd = (DbPreparedQueryCommand<long>)connectionLarge;
-        var warmCmd = (DbPreparedQueryCommand<int>)warmBenchC;
+        var largeCmd = (DbPreparedQueryCommand<long>)((PreparedBufferedQueryCommand<long>)connectionLarge).Command;
+        var warmCmd = (DbPreparedQueryCommand<int>)((PreparedBufferedQueryCommand<int>)warmBenchC).Command;
 
         document.Sql["large"] = largeCmd.CommandText;
         document.Sql["benchc"] = warmCmd.CommandText;
@@ -174,7 +174,7 @@ internal static class T333R2Probe
         return Convert.ToInt32(command.ExecuteScalar());
     }
 
-    private static List<long> CountStreamed(IPreparedQueryCommand<int> prepared, IDataContext db, int id)
+    private static List<long> CountStreamed(IPreparedStreamingQueryCommand<int> prepared, IDataContext db, int id)
     {
         var rows = new List<long>();
         foreach (var value in prepared.ToEnumerable(db, id))

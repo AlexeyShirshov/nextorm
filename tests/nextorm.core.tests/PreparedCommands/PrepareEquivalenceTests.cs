@@ -5,7 +5,7 @@ using NextORM.Sqlite;
 namespace NextORM.Core.Tests.PreparedCommands;
 
 /// <summary>
-/// AC07 — the parameterless <c>Prepare()</c> and the explicit <c>Prepare(default)</c> must produce an
+/// The parameterless <c>PrepareBuffered()</c> and explicit <c>PrepareBuffered(default)</c> produce an
 /// equivalent prepared command: the same SQL, the same reader behavior, the same buffered execution and
 /// the same rows. A buffered preparation must not support streaming, which is requested explicitly.
 /// </summary>
@@ -23,8 +23,10 @@ public class PrepareEquivalenceTests
             var command = ctx.From<PreparedCommandHarness.PreparedProbeRow>().OrderBy(x => x.Id).Select(x => x.Id);
             var cancellationToken = TestContext.Current.CancellationToken;
 
-            var byDefault = (DbPreparedQueryCommand<int>)command.Prepare(cancellationToken: cancellationToken);
-            var explicitDefault = (DbPreparedQueryCommand<int>)command.Prepare(default, cancellationToken);
+            var buffered = command.PrepareBuffered(cancellationToken: cancellationToken);
+            var byDefault = (DbPreparedQueryCommand<int>)((PreparedBufferedQueryCommand<int>)buffered).Command;
+            var explicitDefault = (DbPreparedQueryCommand<int>)((PreparedBufferedQueryCommand<int>)
+                command.PrepareBuffered(default, cancellationToken)).Command;
 
             byDefault.SqlStmt.Should().NotBeNullOrWhiteSpace();
             byDefault.SqlStmt.Should().Be(explicitDefault.SqlStmt, "both preparation forms compile the same SQL");
@@ -37,7 +39,7 @@ public class PrepareEquivalenceTests
 
             var executor = PreparedCommandHarness.CreateExecutor(new ProbeHarnessContext(), new ProbeConnectionManager(connection));
             FluentActions.Invoking(() => executor.CreateAsyncEnumerator(byDefault, null, cancellationToken))
-                .Should().Throw<InvalidOperationException>().WithMessage("*PrepareOptions.Streaming = false*");
+                .Should().Throw<InvalidOperationException>().WithMessage("*PrepareStreaming()*");
             ExecuteIds(executor, byDefault).Should().Equal(new[] { 1, 2 });
             ExecuteIds(executor, explicitDefault).Should().Equal(new[] { 1, 2 });
         }
@@ -58,10 +60,9 @@ public class PrepareEquivalenceTests
             var command = ctx.From<PreparedCommandHarness.PreparedProbeRow>().OrderBy(x => x.Id).Select(x => x.Id);
 
             var cancellationToken = TestContext.Current.CancellationToken;
-            var streaming = command.Prepare(new PrepareOptions { Streaming = true }, cancellationToken);
-            var executor = PreparedCommandHarness.CreateExecutor(new ProbeHarnessContext(), new ProbeConnectionManager(connection));
-            await using var first = executor.CreateAsyncEnumerator(streaming, null, cancellationToken);
-            await using var second = executor.CreateAsyncEnumerator(streaming, null, cancellationToken);
+            var streaming = command.PrepareStreaming(cancellationToken: cancellationToken);
+            await using var first = streaming.CreateAsyncEnumerator(ctx, cancellationToken);
+            await using var second = streaming.CreateAsyncEnumerator(ctx, cancellationToken);
             first.Should().NotBeSameAs(second);
         }
         finally

@@ -757,7 +757,7 @@ same-batch table variable for a later statement of the same batch; see
   PostgreSQL 15+ (see [Full MERGE](21-merge-statement.md#full-merge)). `INSERT ... SELECT` **is** implemented
   (see *A batch from a query* above). (An all-defaults row *is* supported: see [Writing values](#writing-values).)
 * **Mutations are not prepared or plan-cached.** Optimisation in nextorm targets read-only queries
-  only (`Prepare`, the implicit plan cache, benchmarks); a mutation always renders and executes one
+  only (`PrepareBuffered`, the implicit plan cache, benchmarks); a mutation always renders and executes one
   command per call.
 * **Affected-row count.** `Insert()`/`InsertAsync()` return the number of rows the provider reports.
   ClickHouse does not report one for `INSERT ... VALUES`, so it returns `0` even though the row is

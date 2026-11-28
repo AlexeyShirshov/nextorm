@@ -1,6 +1,6 @@
 # Как работает движок
 
-> Запрос проходит путь от описания до результата: вы задаёте его форму, NextORM подготавливает запрос и формирует SQL с учётом диалекта, `QueryExecutor` запускает команду, а выбранный терминал задаёт форму результата. В этом разделе разобраны этапы и два способа повторно использовать результаты подготовки: неявный кэш планов и явный `Prepare`. Пошаговые инструкции см. в [Руководстве](../guide/03-filtering-where.md), правила кэширования — в разделе [Кэш планов и переиспользование](03-plan-cache-and-reuse.md).
+> Запрос проходит путь от описания до результата: вы задаёте его форму, NextORM подготавливает запрос и формирует SQL с учётом диалекта, `QueryExecutor` запускает команду, а выбранный терминал задаёт форму результата. В этом разделе разобраны этапы и два способа повторно использовать результаты подготовки: неявный кэш планов и явный `PrepareBuffered`. Пошаговые инструкции см. в [Руководстве](../guide/03-filtering-where.md), правила кэширования — в разделе [Кэш планов и переиспользование](03-plan-cache-and-reuse.md).
 
 **Предварительные требования:** [Quickstart](../getting-started/02-quickstart.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md).
 
@@ -54,17 +54,17 @@
 
 ![Путь выполнения команды: EntityBuilder → QueryCommand → QueryPlan → поиск плана в кеше → QueryExecutor → DbDataReader → RowMapperFactory → буферизованные/потоковые/скалярные/сериализующие/сырые терминалы; при промахе QueryPreparer → SqlBuilder генерируют SQL, а QueryPlanStore обслуживает поиск.](../assets/diagrams/nextorm-command-execution.svg)
 
-## Явный `Prepare()`
+## Явный `PrepareBuffered()`
 
-Вторая диаграмма показывает явное переиспользование: запрос один раз компилируется в [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1), который можно выполнять повторно без обращения к неявному кэшу планов:
+Вторая диаграмма показывает явное переиспользование: запрос один раз компилируется в [`IPreparedBufferedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedBufferedQueryCommand`1), который можно выполнять повторно без обращения к неявному кэшу планов:
 
-![Явный Prepare: EntityBuilder → QueryCommand.Prepare() → GetPreparedQueryCommand → QueryPreparer → SqlBuilder, от которого идут две ветви — RowMapperFactory и CreateCommand, обе сливаются в IPreparedQueryCommand<TResult>; затем скомпилированная команда исполняется N раз через prepared.ToList(db)/First(db) → QueryExecutor → DbDataReader → строки результата, а QueryPlanStore обходится.](../assets/diagrams/nextorm-command-execution-prepared.svg)
+![Явный Prepare: EntityBuilder → QueryCommand.PrepareBuffered() → GetPreparedQueryCommand → QueryPreparer → SqlBuilder, от которого идут две ветви — RowMapperFactory и CreateCommand, обе сливаются в IPreparedBufferedQueryCommand<TResult>; затем скомпилированная команда исполняется N раз через prepared.ToList(db)/First(db) → QueryExecutor → DbDataReader → строки результата, а QueryPlanStore обходится.](../assets/diagrams/nextorm-command-execution-prepared.svg)
 
 ## В этом разделе
 
 * [Построение запроса: fluent к SQL](01-query-pipeline.md) — путь от описания запроса через подготовку и ключ плана к генерации SQL.
 * [Исполнение и строки](02-execution-and-rows.md) — выполнение команды и выбор способа получить результат.
-* [Кэш планов и переиспользование: `Prepare`](03-plan-cache-and-reuse.md) — сравнение автоматического кэширования планов и явных подготовленных команд.
+* [Кэш планов и переиспользование: `PrepareBuffered`](03-plan-cache-and-reuse.md) — сравнение автоматического кэширования планов и явных подготовленных команд.
 
 ## См. также
 

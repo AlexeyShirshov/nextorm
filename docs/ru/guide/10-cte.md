@@ -676,7 +676,7 @@ var prepared = dataContext
         .Select(x => new { x.Id }))
     .From("recent")
     .Select(t => new { id = t["id"].AsInt })
-    .Prepare();
+    .PrepareBuffered();
 
 var ids = prepared.ToList(dataContext);
 ```

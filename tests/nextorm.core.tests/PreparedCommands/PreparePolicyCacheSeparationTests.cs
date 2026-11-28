@@ -110,8 +110,8 @@ public class PreparePolicyCacheSeparationTests
             var any = EntityBuilderExtensions.GetAnyCommand(ctx, command);
             any.Cache.Should().BeTrue("the shared terminal command caches by default");
 
-            var none = (DbPreparedQueryCommand<bool>)any.Prepare(
-                new PrepareOptions { Cache = PreparedCommandCache.None }, cancellationToken);
+            var none = (DbPreparedQueryCommand<bool>)((PreparedBufferedQueryCommand<bool>)any.PrepareBuffered(
+                new PrepareOptions { Cache = PreparedCommandCache.None }, cancellationToken)).Command;
             none.CachePolicy.Should().Be(PreparedCommandCache.None);
             any.Cache.Should().BeTrue("preparing the shared Any command under None must not disable its cache");
 

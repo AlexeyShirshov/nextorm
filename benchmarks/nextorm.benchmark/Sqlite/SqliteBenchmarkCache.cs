@@ -18,7 +18,7 @@ public class SqliteBenchmarkCache
     private readonly TestDataRepository _repo;
     private readonly EFDataContext _efCtx;
     private readonly Linq2DbDataRepository _linq2Db;
-    private readonly IPreparedQueryCommand<LargeEntity> _nextormPreparedCmd;
+    private readonly IPreparedBufferedQueryCommand<LargeEntity> _nextormPreparedCmd;
 
     [Params(1, 3, 5, 10, 15, 20, 30)]
     public int Iterations { get; set; } = 1;
@@ -43,7 +43,7 @@ public class SqliteBenchmarkCache
         _nextormPreparedCmd = _repo.LargeEntity
             .Where(it => it.Id == SqlFunctions.Parameter<int>(0))
             .Select(it => new LargeEntity { Id = it.Id, Str = it.Str, Dt = it.Dt })
-            .Prepare();
+            .PrepareBuffered();
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(_conn);

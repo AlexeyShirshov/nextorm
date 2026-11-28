@@ -18,7 +18,7 @@ public class SqliteBenchmarkSingle
 {
     private readonly IDataContext _db;
     private readonly TestDataRepository _ctx;
-    private readonly IPreparedQueryCommand<int> _cmd;
+    private readonly IPreparedBufferedQueryCommand<int> _cmd;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
     private readonly Linq2DbDataRepository _linq2Db;
@@ -41,7 +41,7 @@ public class SqliteBenchmarkSingle
         _ctx = new TestDataRepository(_db);
         ((IConnectionManager)_db).EnsureConnectionOpen();
 
-        _cmd = _ctx.SimpleEntity.Where(it => it.Id == 1).SingleOrSingleOrDefaultCommand(it => it.Id).Prepare();
+        _cmd = _ctx.SimpleEntity.Where(it => it.Id == 1).SingleOrSingleOrDefaultCommand(it => it.Id).PrepareBuffered();
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={BenchDb.FilePath}");

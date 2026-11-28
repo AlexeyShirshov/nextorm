@@ -79,7 +79,7 @@ var needle = "df";
 var prepared = dataContext.From<IComplexEntity>()
     .Where(e => e.String!.Contains(needle))
     .Select(e => new { e.Id })
-    .Prepare();
+    .PrepareBuffered();
 ```
 
 ```sql

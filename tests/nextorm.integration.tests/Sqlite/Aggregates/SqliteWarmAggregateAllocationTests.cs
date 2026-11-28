@@ -91,8 +91,8 @@ public sealed class SqliteWarmAggregateAllocationTests : IDisposable
     private object? _sinkRef;
 
     // Stage C's prepared commands, built once outside every measured loop.
-    private IPreparedQueryCommand<int>? _preparedCount;
-    private IPreparedQueryCommand<long>? _preparedSum;
+    private IPreparedBufferedQueryCommand<int>? _preparedCount;
+    private IPreparedBufferedQueryCommand<long>? _preparedSum;
 
     public SqliteWarmAggregateAllocationTests()
     {
@@ -258,11 +258,11 @@ public sealed class SqliteWarmAggregateAllocationTests : IDisposable
         // Stage C setup — exactly the benchmark's prepared arms, built once, outside every measured loop.
         var countCommand = _rows.Select(e => SqlFunctions.Sql.count());
         countCommand.SingleRow = true;
-        _preparedCount = countCommand.Prepare(default, TestContext.Current.CancellationToken);
+        _preparedCount = countCommand.PrepareBuffered(default, TestContext.Current.CancellationToken);
 
         var sumCommand = _rows.Select(e => SqlFunctions.Sql.sum(e.Id));
         sumCommand.SingleRow = true;
-        _preparedSum = sumCommand.Prepare(default, TestContext.Current.CancellationToken);
+        _preparedSum = sumCommand.PrepareBuffered(default, TestContext.Current.CancellationToken);
 
         var harnessSeries = MeasureSeries(NoOp);
 
@@ -370,11 +370,11 @@ public sealed class SqliteWarmAggregateAllocationTests : IDisposable
 
     /// <summary>Stage C, Count arm: the prepared control.</summary>
     private void CountPreparedTerminal()
-        => _sink = _db.ExecuteScalar(_preparedCount!, ReadOnlySpan<object?>.Empty, false);
+        => _sink = _preparedCount!.ExecuteScalar(_db, throwIfNull: false);
 
     /// <summary>Stage C, Sum arm: the prepared control.</summary>
     private void SumPreparedTerminal()
-        => _sink = _db.ExecuteScalar(_preparedSum!, ReadOnlySpan<object?>.Empty, false);
+        => _sink = _preparedSum!.ExecuteScalar(_db, throwIfNull: false);
 
     /// <summary>
     /// Writes the stage-attribution JSON to <c>D243_ATTRIBUTION_REPORT</c>. Everything here is outside

@@ -179,7 +179,7 @@ The following table summarizes the connection type and provider-specific behavio
 ## See also
 
 * [Logging](04-logging.md)
-* [Query reuse: plan cache and `Prepare`](../engine/03-plan-cache-and-reuse.md)
+* [Query reuse: plan cache and `PrepareBuffered`](../engine/03-plan-cache-and-reuse.md)
 * [Dependency injection](../getting-started/04-dependency-injection.md)
 * [Quickstart](../getting-started/02-quickstart.md)
 * [Documentation index](../index.md)

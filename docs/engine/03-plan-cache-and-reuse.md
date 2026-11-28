@@ -1,6 +1,6 @@
-# Plan cache and reuse: [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken))
+# Plan cache and reuse
 
-> Reuse the work that turns a frequently run query into SQL and a row mapper. Ordinary terminals use the implicit plan cache; [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) returns an [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1) that you keep and execute explicitly.
+> NextORM reuses SQL and row mappers through its implicit plan cache. To reuse a command explicitly, call [`PrepareBuffered`](xref:NextORM.Core.EntityBuilderExtensions.PrepareBuffered``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) or [`PrepareStreaming`](xref:NextORM.Core.EntityBuilderExtensions.PrepareStreaming``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) and keep the returned command.
 
 **Prerequisites:** [Quickstart](../getting-started/02-quickstart.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Dependency injection](../getting-started/04-dependency-injection.md).
 
@@ -9,19 +9,19 @@
 Every terminal such as [`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) does more than read rows. It turns the fluent [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) into SQL and a row mapper, prepares a `DbCommand`, and reads the result. The two mechanisms below let NextORM reuse the preparation work:
 
 * the **implicit plan cache** - automatic, keyed by the structural shape of the query; for an APPLY join that shape includes the APPLY source expression, so two queries with the same projection type but different APPLY sources are different plans;
-* **[`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken))** - explicit, returns an [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1) that you keep and execute yourself.
+* **Explicit preparation** — [`PrepareBuffered`](xref:NextORM.Core.EntityBuilderExtensions.PrepareBuffered``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) or [`PrepareStreaming`](xref:NextORM.Core.EntityBuilderExtensions.PrepareStreaming``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) returns a command for repeated execution.
 
 The two mechanisms can look alike from the outside, but differ in how you identify and retain prepared work, where it is available, and whether it enters the cache:
 
-| | Implicit plan cache | Explicit [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) |
+| | Implicit plan cache | Explicit preparation |
 |---|---|---|
-| Entry point | any terminal on [`EntityBuilder`](xref:NextORM.Core.EntityBuilder) / [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) ([`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})), [`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])), ...) | [`Prepare`](xref:NextORM.Core.QueryCommand`1.Prepare(NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) / `EntityBuilder<T>.Prepare()` |
+| Entry point | [`PrepareBuffered`](xref:NextORM.Core.EntityBuilderExtensions.PrepareBuffered``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) / [`PrepareStreaming`](xref:NextORM.Core.EntityBuilderExtensions.PrepareStreaming``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) |
 | Lookup key | compatible provider and mapping settings, plus the verified structure of the query | none — you hold the returned command |
 | Lifetime | until the plan cache is cleared or the process exits; some custom query shapes also need a live command for comparison | as long as you keep the reference |
 | Scope | **process-wide** for compatible SQL contexts | the instance you keep |
 | Populates the cache | yes | **no** |
 | Concurrent use | independent contexts on **distinct** connections reuse a compatible plan | independent contexts on **distinct** connections reuse the prepared object |
-| Streamable (`IAsyncEnumerable`) | yes | only with `PrepareOptions { Streaming = true }` |
+| Streamable (`IAsyncEnumerable`) | yes | with `PrepareStreaming()` |
 
 Use this page to look up the API and caching rules. It does not repeat the measured cost of each option.
 
@@ -85,35 +85,31 @@ for (var i = 0; i < 2; i++)
 
 Both iterations reuse the same cache entry even though `entityId` changes.
 
-## Explicit [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken))
+## Explicit preparation
 
-The explicit path compiles the query once into an [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1), which you can execute repeatedly. It bypasses `QueryPlanStore`:
+Explicit preparation compiles the query once and bypasses `QueryPlanStore`.
 
 The explicit path is shown as a diagram on the [engine overview](index.md).
 
-[`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) is declared on both [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) and `EntityBuilder<T>` and returns [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1):
+Both methods are available on `QueryCommand<TResult>`, `EntityBuilder<T>`, and `IRepository<T>`. Choose the method based on how you read results:
 
 ```csharp
-public IPreparedQueryCommand<TResult> Prepare(PrepareOptions options = default, CancellationToken cancellationToken = default)
+public IPreparedBufferedQueryCommand<TResult> PrepareBuffered(PrepareOptions options = default, CancellationToken cancellationToken = default)
+public IPreparedStreamingQueryCommand<TResult> PrepareStreaming(PrepareOptions options = default, CancellationToken cancellationToken = default)
 ```
 
-The default (`default(PrepareOptions)`) is optimised for buffered and scalar results and reuses one underlying command per connection. [`PrepareOptions`](xref:NextORM.Core.PrepareOptions) selects the form (`Streaming`) and the command-reuse policy (`Cache`); both policies are described in [`PrepareOptions` and `PreparedCommandCache`](#prepareoptions-and-preparedcommandcache). The returned command is not bound to the context that created it: every terminal takes the [`IDataContext`](xref:NextORM.Core.IDataContext) as its first argument, so the same prepared command can be executed against another context of the same provider.
+By default, both methods reuse one underlying command per connection. Set `PrepareOptions.Cache` to change that policy. Every terminal takes `IDataContext` as its first argument, so you can execute the command against another context of the same provider.
 
 ```csharp
 var prepared = ctx.From<ISimpleEntity>()
     .Select(x => x.Id)
-    .Prepare();
+    .PrepareBuffered();
 
-// Terminal methods declared on IPreparedQueryCommand<TResult>.
+// Terminal methods declared on IPreparedBufferedQueryCommand<TResult>.
 List<int> all = prepared.ToList(ctx);
 int first = prepared.First(ctx);
 List<int> asyncAll = await prepared.ToListAsync(ctx);
 int? scalar = prepared.ExecuteScalar(ctx, throwIfNull: false);
-
-// The IDataContext extension overloads in DataContextExtensions are equivalent.
-List<int> all2 = ctx.ToList(prepared);
-List<int> asyncAll2 = await ctx.ToListAsync(prepared);
-int first2 = await ctx.FirstAsync(prepared);
 ```
 
 The same command can be re-executed with different runtime parameter values:
@@ -122,7 +118,7 @@ The same command can be re-executed with different runtime parameter values:
 var byId = ctx.From<ISimpleEntity>()
     .Where(x => x.Id == SqlFunctions.Parameter<int>(0))
     .Select(x => x.Id)
-    .Prepare();
+    .PrepareBuffered();
 
 var one = await byId.FirstAsync(ctx, 42);    // 42 fills norm_p0
 var many = await byId.ToListAsync(ctx, 43);  // same prepared command, new value
@@ -130,7 +126,7 @@ var many = await byId.ToListAsync(ctx, 43);  // same prepared command, new value
 
 ### `PrepareOptions` and `PreparedCommandCache`
 
-`Prepare` takes one options value. `default(PrepareOptions)` is the parameterless form: buffered results, with one command reused per connection.
+Both methods accept `PrepareOptions`. The default reuses one command per connection.
 
 ```csharp
 public enum PreparedCommandCache { Connection = 0, None = 1 }
@@ -138,7 +134,6 @@ public enum PreparedCommandCache { Connection = 0, None = 1 }
 public readonly record struct PrepareOptions
 {
     public PreparedCommandCache Cache { get; init; }  // default: Connection
-    public bool Streaming { get; init; }              // default: false (buffered)
 }
 ```
 
@@ -152,18 +147,18 @@ public readonly record struct PrepareOptions
 These examples configure buffered and streaming prepared queries:
 ```csharp
 // Buffered, one command per connection (the parameterless form).
-var cached = ctx.From<ISimpleEntity>().Select(x => x.Id).Prepare();
+var cached = ctx.From<ISimpleEntity>().Select(x => x.Id).PrepareBuffered();
 
 // Buffered, a fresh command per execution.
 var fresh = ctx.From<ISimpleEntity>().Select(x => x.Id)
-    .Prepare(new PrepareOptions { Cache = PreparedCommandCache.None });
+    .PrepareBuffered(new PrepareOptions { Cache = PreparedCommandCache.None });
 
 // Streaming, one command per connection.
 var streamed = ctx.From<ISimpleEntity>().Select(x => x.Id)
-    .Prepare(new PrepareOptions { Streaming = true });
+    .PrepareStreaming();
 ```
 
-A `Cache` value that is not defined in the enum is rejected by `Prepare` with an `ArgumentOutOfRangeException` before anything is allocated. Neither command-reuse policy stores the plan in the implicit cache.
+A `Cache` value that is not defined in the enum is rejected by either preparation method with an `ArgumentOutOfRangeException` before anything is allocated. Neither command-reuse policy stores the plan in the implicit cache.
 
 **Per-connection state.** A prepared command does not own one mutable `DbCommand`. Each connection has its own state for the command, parameter positions, transaction binding, and execution lease. The prepared command holds that state weakly, keyed by connection. When a connection becomes collectable, its entry is released; the prepared command does not keep a connection, transaction, context, or reader alive.
 
@@ -175,32 +170,19 @@ This separation allows concurrent use across connections: the same prepared obje
 
 > **Sharing rules.** Run concurrent queries through independent contexts on distinct connections. Allow only one active operation per context and per connection, including when two contexts wrap the same connection. Sequential use can resume on a different thread after `await`. A streaming operation stays active until the reader or enumerator is exhausted or disposed.
 
-### Inspecting and executing a prepared command
+### Buffered and streaming execution
 
-The concrete database prepared command ([`DbPreparedQueryCommand<TResult>`](xref:NextORM.Core.DbPreparedQueryCommand`1)) exposes [`SqlStmt`](xref:NextORM.Core.DbPreparedQueryCommand`1.SqlStmt) and [`Behavior`](xref:NextORM.Core.DbPreparedQueryCommand`1.Behavior) for inspection. The command acquired for an execution is an implementation detail: each execution gets the command for its connection, applies its parameter values and transaction binding, and holds the execution lease there. The prepared object never exposes that command or keeps a connection, transaction, context, or reader alive.
-
-Use these members according to what you need to inspect or run:
-
-| Need | Use |
-|---|---|
-| the prepared SQL text and the requested reader behavior | `SqlStmt` / `Behavior` on the prepared command |
-| rows, a single row or a scalar | the typed terminals on [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1): `ToList(...)`, `First(...)`, `Single(...)`, `ExecuteScalar(...)` and their async forms |
-| a streaming result | `ToAsyncEnumerable(...)`, `ToEnumerable(...)`, `CreateEnumerator(...)` / `CreateAsyncEnumerator(...)` |
-| running the query on another connection | execute the same prepared command against a context on that connection; its per-connection state is created on demand and released with the connection |
-
-### Streaming requires `Streaming = true`
-
-A prepared command created with the default options owns no [`ResultSetEnumerator<TResult>`](xref:NextORM.Core.ResultSetEnumerator`1), because the buffered form needs none. Buffered and scalar terminals work; a streaming terminal fails with an `InvalidOperationException`. Prepare the command for streaming instead, by setting `PrepareOptions.Streaming` to `true`. [`ToEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])) is a lazy iterator, so on that path the exception surfaces when enumeration starts, not when the call is made.
+`PrepareBuffered()` returns a command with `ToList`, `First`, `Single`, `ExecuteScalar`, and their async variants. `PrepareStreaming()` returns a command with `ToEnumerable`, `ToAsyncEnumerable`, and enumerator creation methods. Each interface exposes only its own mode’s operations.
 
 ```csharp
 // Buffered default: no enumerator is created.
-var buffered = ctx.From<ISimpleEntity>().Select(x => x.Id).Prepare();
+var buffered = ctx.From<ISimpleEntity>().Select(x => x.Id).PrepareBuffered();
 buffered.ToList(ctx); // fine
 
 // Streaming: the only way to get a streamable prepared command.
 var streaming = ctx.From<ISimpleEntity>()
     .Select(x => x.Id)
-    .Prepare(new PrepareOptions { Streaming = true });
+    .PrepareStreaming();
 
 await foreach (var id in streaming.ToAsyncEnumerable(ctx))
 {
@@ -208,14 +190,14 @@ await foreach (var id in streaming.ToAsyncEnumerable(ctx))
 }
 ```
 
-### [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) does not populate the plan cache
+### Explicit preparation bypasses the plan cache
 
-[`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) calls the planner with `storeInCache: false`, so it cannot be found by a later implicit lookup and cannot "pollute" the cache:
+Both methods call the planner with `storeInCache: false`:
 
 ```csharp
 ctx.PurgeQueryCache();
 
-var prepared = ctx.From<ISimpleEntity>().Select(x => x.Id).Prepare();
+var prepared = ctx.From<ISimpleEntity>().Select(x => x.Id).PrepareBuffered();
 prepared.ToList(ctx); // executes, but adds no plan-cache entry
 
 // A later implicit terminal builds its own plan.
@@ -306,13 +288,13 @@ Database providers use the same reuse mechanism but create provider-specific com
 
 | Provider | Behaviour |
 |---|---|
-| SQLite | Plan cache and [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) are core behaviour; a prepared command wraps a `SqliteCommand`. |
+| SQLite | Plan cache and [`PrepareBuffered`](xref:NextORM.Core.EntityBuilderExtensions.PrepareBuffered``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) are core behaviour; a prepared command wraps a `SqliteCommand`. |
 | SQL Server | Same mechanism; `TOP` vs `OFFSET ... FETCH` paging is part of the recorded plan shape, so the paging mode is baked into the cached SQL. |
 | PostgreSQL | Same mechanism; a prepared command wraps an `NpgsqlCommand`. |
-| MySQL | Plan cache and [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) are core behaviour; a prepared command wraps a `MySqlCommand`. |
+| MySQL | Plan cache and [`PrepareBuffered`](xref:NextORM.Core.EntityBuilderExtensions.PrepareBuffered``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) are core behaviour; a prepared command wraps a `MySqlCommand`. |
 | MariaDB | Same mechanism; a prepared command wraps a `MySqlCommand` (the MySQL driver). |
-| ClickHouse | Plan cache and [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) are core behaviour; a prepared command wraps a `ClickHouseCommand`. |
-| In-memory | [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) keeps its own compiled-query cache and returns an [`InMemoryPreparedQueryCommand<TResult>`](xref:NextORM.Core.InMemoryPreparedQueryCommand`1); [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) works, but raw-SQL [`PrepareFromSql`](xref:NextORM.Core.EntityExtensions.PrepareFromSql``1(NextORM.Core.EntityBuilder{``0},System.String)) is not supported (`NotSupportedException`). |
+| ClickHouse | Plan cache and [`PrepareBuffered`](xref:NextORM.Core.EntityBuilderExtensions.PrepareBuffered``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) are core behaviour; a prepared command wraps a `ClickHouseCommand`. |
+| In-memory | [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) keeps its own compiled-query cache and returns an [`InMemoryPreparedQueryCommand<TResult>`](xref:NextORM.Core.InMemoryPreparedQueryCommand`1); [`PrepareBuffered`](xref:NextORM.Core.EntityBuilderExtensions.PrepareBuffered``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) works, but raw-SQL [`PrepareFromSql`](xref:NextORM.Core.EntityExtensions.PrepareFromSql``1(NextORM.Core.EntityBuilder{``0},System.String)) is not supported (`NotSupportedException`). |
 
 ## See also
 
@@ -323,10 +305,10 @@ Database providers use the same reuse mechanism but create provider-specific com
 ---
 
 Source: `tests/nextorm.sqlite.tests/PlanCache/PlanCacheTests.cs:48` (buffered then streaming),
-`tests/nextorm.sqlite.tests/PlanCache/PlanCacheTests.cs:108` (`Prepare(new PrepareOptions { Streaming = true })`),
+`tests/nextorm.sqlite.tests/PlanCache/PlanCacheTests.cs:108` (`PrepareStreaming()`),
 `tests/nextorm.sqlite.tests/PlanCache/PlanCacheTests.cs:133` (buffered reuse),
-`tests/nextorm.sqlite.tests/PlanCache/PlanCacheTests.cs:160` (streaming the default throws),
-`tests/nextorm.sqlite.tests/PlanCache/PlanCacheTests.cs:404` ([`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) does not populate the cache);
+`tests/nextorm.sqlite.tests/PlanCache/PlanCacheTests.cs` (separate execution interfaces),
+`tests/nextorm.sqlite.tests/PlanCache/PlanCacheTests.cs:404` ([`PrepareBuffered`](xref:NextORM.Core.EntityBuilderExtensions.PrepareBuffered``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) does not populate the cache);
 `tests/nextorm.sqlite.tests/PlanCache/InListCacheTests.cs:41` (same-shape captured collection),
 `tests/nextorm.sqlite.tests/PlanCache/InListCacheTests.cs:92` (reassigned array),
 `tests/nextorm.sqlite.tests/PlanCache/InListCacheTests.cs:117` (grown list);
@@ -334,8 +316,8 @@ Source: `tests/nextorm.sqlite.tests/PlanCache/PlanCacheTests.cs:48` (buffered th
 `tests/nextorm.core.tests/Caching/QueryCacheControlsTests.cs:45` (clear, disable without mutating `Cache`, sliding expiration);
 `tests/nextorm.sqlite.tests/PlanCache/DataContextCacheClearTests.cs:31` (`DataContextCache.Clear` invalidates the plan cache);
 `tests/nextorm.integration.tests/CommonTestSuite/Caching/CommonTestSuite.Cache.cs:6`;
-`src/nextorm.core/Query/Commands/QueryCommand.TResult.cs:81` ([`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken))),
+`src/nextorm.core/Query/Commands/QueryCommand.TResult.cs:81` ([`PrepareBuffered`](xref:NextORM.Core.EntityBuilderExtensions.PrepareBuffered``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken))),
 `src/nextorm.core/DataContext/Cache/Preparation/PrepareOptions.cs:6` (`PreparedCommandCache` / `PrepareOptions`),
 `src/nextorm.core/DataContext/Cache/Commands/DbPreparedQueryCommand.cs:199` (`Acquire`: per-connection state and the same-connection rejection),
-`src/nextorm.core/DataContext/Cache/Commands/IPreparedQueryCommand.cs:5` (prepared terminals),
+`src/nextorm.core/DataContext/Cache/Commands/IPreparedBufferedQueryCommand.cs`, `src/nextorm.core/DataContext/Cache/Commands/IPreparedStreamingQueryCommand.cs`,
 `src/nextorm.core/DataContext/DataContext.cs:315` (`GetPreparedQueryCommand`).

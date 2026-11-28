@@ -96,16 +96,15 @@ public class PlanCacheTests
     }
 
     [Fact]
-    public async Task Prepared_NonStreaming_ShouldSupportStreaming()
+    public async Task PrepareStreaming_ShouldStreamRows()
     {
         var (ctx, path) = CreateDb();
         try
         {
             ctx.PurgeQueryCache();
 
-            // Prepare(new PrepareOptions { Streaming = true }) is the only way to get a streamable prepared command.
             var prepared = ctx.From<ISimpleEntity>().Select(x => x.Id)
-                .Prepare(new PrepareOptions { Streaming = true }, TestContext.Current.CancellationToken);
+                .PrepareStreaming(cancellationToken: TestContext.Current.CancellationToken);
 
             var rows = await DrainAsync(
                 prepared.ToAsyncEnumerable(ctx, TestContext.Current.CancellationToken),
@@ -128,9 +127,8 @@ public class PlanCacheTests
         {
             ctx.PurgeQueryCache();
 
-            // Prepare() defaults to buffered (PrepareOptions.Streaming = false, scalar/buffered only).
             var prepared = ctx.From<ISimpleEntity>().Select(x => x.Id)
-                .Prepare(default, TestContext.Current.CancellationToken);
+                .PrepareBuffered(default, TestContext.Current.CancellationToken);
 
             prepared.ToList(ctx).Should().Equal(42);
             prepared.ToList(ctx).Should().Equal(42);
@@ -144,36 +142,26 @@ public class PlanCacheTests
         }
     }
 
-    /// <summary>
-    /// The default Prepare() is optimised for buffered/scalar results and leaves no enumerator, so
-    /// streaming must fail with an actionable message instead of a NullReferenceException.
-    /// </summary>
     [Fact]
-    public async Task Prepared_Default_ShouldNotBeStreamable()
+    public void PreparedCommands_ExposeOnlyTheirOwnExecutionMode()
     {
         var (ctx, path) = CreateDb();
         try
         {
             ctx.PurgeQueryCache();
 
-            var prepared = ctx.From<ISimpleEntity>().Select(x => x.Id)
-                .Prepare(default, TestContext.Current.CancellationToken);
+            var query = ctx.From<ISimpleEntity>().Select(x => x.Id);
+            var buffered = query.PrepareBuffered(cancellationToken: TestContext.Current.CancellationToken);
+            var streaming = query.PrepareStreaming(cancellationToken: TestContext.Current.CancellationToken);
 
-            // Buffered terminals are fine with the very same command.
-            prepared.ToList(ctx).Should().Equal(42);
-
-            var asyncAct = async () => await DrainAsync(
-                prepared.ToAsyncEnumerable(ctx, TestContext.Current.CancellationToken),
-                TestContext.Current.CancellationToken);
-
-            (await asyncAct.Should().ThrowAsync<InvalidOperationException>())
-                .WithMessage("*Prepare(new PrepareOptions { Streaming = true })*");
-
-            // ToEnumerable is a lazy iterator, so the failure surfaces on enumeration, not on the call.
-            var syncAct = () => prepared.ToEnumerable(ctx).ToList();
-
-            syncAct.Should().Throw<InvalidOperationException>()
-                .WithMessage("*Prepare(new PrepareOptions { Streaming = true })*");
+            buffered.Should().NotBeAssignableTo<IPreparedStreamingQueryCommand<int>>();
+            streaming.Should().NotBeAssignableTo<IPreparedBufferedQueryCommand<int>>();
+            buffered.Should().NotBeAssignableTo<IPreparedQueryCommand<int>>();
+            streaming.Should().NotBeAssignableTo<IPreparedQueryCommand<int>>();
+            typeof(IPreparedBufferedQueryCommand<int>).GetMethods().Select(method => method.Name)
+                .Should().NotContain(nameof(IPreparedStreamingQueryCommand<int>.ToAsyncEnumerable));
+            typeof(IPreparedStreamingQueryCommand<int>).GetMethods().Select(method => method.Name)
+                .Should().NotContain(nameof(IPreparedBufferedQueryCommand<int>.ToList));
         }
         finally
         {
@@ -401,7 +389,7 @@ public class PlanCacheTests
 
             // Prepare() passes storeInCache: false, so it must not add an entry to the plan cache.
             var prepared = ctx.From<ISimpleEntity>().Select(x => x.Id)
-                .Prepare(default, TestContext.Current.CancellationToken);
+                .PrepareBuffered(default, TestContext.Current.CancellationToken);
             prepared.ToList(ctx).Should().Equal(42);
 
             var first = prepared.ToList(ctx);

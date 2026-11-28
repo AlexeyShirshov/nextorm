@@ -25,8 +25,8 @@ public class SqliteBenchmarkLargeIteration
 {
     private readonly IDataContext _db;
     private readonly TestDataRepository _ctx;
-    private readonly IPreparedQueryCommand<LargeEntity> _cmdExec;
-    private readonly IPreparedQueryCommand<LargeEntity> _cmdToList;
+    private readonly IPreparedStreamingQueryCommand<LargeEntity> _cmdExec;
+    private readonly IPreparedBufferedQueryCommand<LargeEntity> _cmdToList;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
     private readonly SqliteCommand _adoCmd;
@@ -48,9 +48,9 @@ public class SqliteBenchmarkLargeIteration
         _ctx = new TestDataRepository(_db);
         ((IConnectionManager)_db).EnsureConnectionOpen();
 
-        _cmdExec = _ctx.LargeEntity.Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Prepare(new PrepareOptions { Streaming = true });
+        _cmdExec = _ctx.LargeEntity.Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).PrepareStreaming();
 
-        _cmdToList = _ctx.LargeEntity.Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Prepare();
+        _cmdToList = _ctx.LargeEntity.Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).PrepareBuffered();
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={BenchDb.FilePath}");
@@ -244,7 +244,7 @@ public class SqliteBenchmarkLargeIteration
         using var reader = await _adoCmd.ExecuteReaderAsync(CommandBehavior.SingleResult);
         var l = new List<LargeEntity>();
         //var buf = new object[3];
-        var cq = _cmdToList as DbPreparedQueryCommand<LargeEntity>;
+        var cq = ((PreparedBufferedQueryCommand<LargeEntity>)_cmdToList).Command as DbPreparedQueryCommand<LargeEntity>;
         while (reader.Read())
         {
             var o = cq!.MapDelegate!(reader);

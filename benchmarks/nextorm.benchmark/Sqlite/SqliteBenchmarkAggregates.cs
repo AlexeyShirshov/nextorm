@@ -38,9 +38,9 @@ public class SqliteBenchmarkAggregates
     private readonly SqliteConnection _conn;
     private readonly Linq2DbDataRepository _linq2Db;
 
-    private readonly IPreparedQueryCommand<int> _nextormCount;
-    private readonly IPreparedQueryCommand<long> _nextormSum;
-    private readonly IPreparedQueryCommand<GroupCountRow> _nextormGroupBy;
+    private readonly IPreparedBufferedQueryCommand<int> _nextormCount;
+    private readonly IPreparedBufferedQueryCommand<long> _nextormSum;
+    private readonly IPreparedBufferedQueryCommand<GroupCountRow> _nextormGroupBy;
 
     private long _sink;
 
@@ -54,16 +54,16 @@ public class SqliteBenchmarkAggregates
 
         var countCmd = _ctx.LargeEntity.Select(e => SqlFunctions.Sql.count());
         countCmd.SingleRow = true;
-        _nextormCount = countCmd.Prepare();
+        _nextormCount = countCmd.PrepareBuffered();
 
         var sumCmd = _ctx.LargeEntity.Select(e => SqlFunctions.Sql.sum(e.Id));
         sumCmd.SingleRow = true;
-        _nextormSum = sumCmd.Prepare();
+        _nextormSum = sumCmd.PrepareBuffered();
 
         _nextormGroupBy = _ctx.LargeEntity
             .GroupBy(e => new { Bucket = e.Id % GroupModulus })
             .Select(e => new GroupCountRow { Key = e.Id % GroupModulus, Count = SqlFunctions.Sql.count() })
-            .Prepare();
+            .PrepareBuffered();
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite($"Filename={BenchDb.FilePath}");
@@ -106,8 +106,8 @@ public class SqliteBenchmarkAggregates
         BenchmarkComparisonValidation.EnsureCount(ExpectedRows, rows, "Aggregates/large_table");
         var expectedSum = SumOfFirstN(rows);
 
-        var count = _db.ExecuteScalar(_nextormCount, ReadOnlySpan<object?>.Empty, true);
-        var sum = _db.ExecuteScalar(_nextormSum, ReadOnlySpan<object?>.Empty, false);
+        var count = _nextormCount.ExecuteScalar(_db, throwIfNull: true);
+        var sum = _nextormSum.ExecuteScalar(_db, throwIfNull: false);
         BenchmarkComparisonValidation.EnsureCount(rows, count, "Aggregates/nextorm-count");
         BenchmarkComparisonValidation.EnsureCount(expectedSum, sum, "Aggregates/nextorm-sum");
 
@@ -126,7 +126,7 @@ public class SqliteBenchmarkAggregates
         BenchmarkComparisonValidation.EnsureCount(rows, efCount, "Aggregates/EFCore-count");
         BenchmarkComparisonValidation.EnsureCount(expectedSum, efSum, "Aggregates/EFCore-sum");
 
-        var groups = _db.ToList(_nextormGroupBy);
+        var groups = _nextormGroupBy.ToList(_db);
         BenchmarkComparisonValidation.EnsureCount(GroupModulus, groups.Count, "Aggregates/nextorm-groupby-groups");
         BenchmarkComparisonValidation.Report("Aggregates/nextorm", rows, expectedSum, $"sum={sum}, groups={groups.Count}");
     }
@@ -137,7 +137,7 @@ public class SqliteBenchmarkAggregates
     [BenchmarkCategory("A_Aggregates")]
     public long A_Nextorm_Prepared_Count()
     {
-        var value = _db.ExecuteScalar(_nextormCount, ReadOnlySpan<object?>.Empty, true);
+        var value = _nextormCount.ExecuteScalar(_db, throwIfNull: true);
         _sink += value;
         return value;
     }
@@ -146,7 +146,7 @@ public class SqliteBenchmarkAggregates
     [BenchmarkCategory("A_Aggregates")]
     public long A_Nextorm_Prepared_Sum()
     {
-        var value = _db.ExecuteScalar(_nextormSum, ReadOnlySpan<object?>.Empty, false);
+        var value = _nextormSum.ExecuteScalar(_db, throwIfNull: false);
         _sink += value;
         return value;
     }
@@ -155,7 +155,7 @@ public class SqliteBenchmarkAggregates
     [BenchmarkCategory("A_Aggregates")]
     public async Task A_Nextorm_Prepared_GroupByCount()
     {
-        foreach (var row in await _db.ToListAsync(_nextormGroupBy))
+        foreach (var row in await _nextormGroupBy.ToListAsync(_db))
             _sink += row.Count;
     }
 

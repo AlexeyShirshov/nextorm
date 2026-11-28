@@ -165,7 +165,7 @@ var unpaidCount = await app.QueryUnpaidOrders().CountAsync(cancellationToken);
 и `System.Threading.Tasks`:
 
 ```csharp
-private static IPreparedQueryCommand<Order>? _unpaidByCustomerPrepared;
+private static IPreparedBufferedQueryCommand<Order>? _unpaidByCustomerPrepared;
 private static object? _prepareLock;
 
 public Task<List<Order>> FindUnpaidByCustomer(
@@ -176,7 +176,7 @@ public Task<List<Order>> FindUnpaidByCustomer(
         ref _prepareLock,
         () => QueryUnpaidOrders()
             .Where(o => o.CustomerId == SqlFunctions.Parameter<int>(0))
-            .Prepare(cancellationToken: cancellationToken));
+            .PrepareBuffered(cancellationToken: cancellationToken));
 
     return prepared.ToListAsync(this.DataContext, cancellationToken, customerId);
 }

@@ -19,7 +19,7 @@ public class SqliteBenchmarkAny
     const int Iterations = 100;
     private IDataContext _db = null!;
     private TestDataRepository _ctx = null!;
-    private IPreparedQueryCommand<bool> _cmd = null!;
+    private IPreparedBufferedQueryCommand<bool> _cmd = null!;
     // private QueryCommand<bool> _cmdFilter;
     // private QueryCommand<bool> _cmdFilterParam;
     private EFDataContext _efCtx = null!;
@@ -54,7 +54,7 @@ public class SqliteBenchmarkAny
         _db = builder.CreateDataContext();
         _ctx = new TestDataRepository(_db);
 
-        _cmd = _ctx.SimpleEntity.Where(e => e.Id == SqlFunctions.Parameter<int>(0)).AnyCommand().Prepare();
+        _cmd = _ctx.SimpleEntity.Where(e => e.Id == SqlFunctions.Parameter<int>(0)).AnyCommand().PrepareBuffered();
 
         ((IConnectionManager)_db).EnsureConnectionOpen();
     }
@@ -120,7 +120,7 @@ public class SqliteBenchmarkAny
     public async Task Nextorm_Prepared()
     {
         for (var i = 0; i < Iterations; i++)
-            await _db.AnyAsync(_cmd, i);
+            await _cmd.ExecuteScalarAsync(_db, throwIfNull: true, i);
     }
     [Benchmark()]
     [BenchmarkCategory("acceptance")]

@@ -68,7 +68,7 @@ Logging behaves the same across every provider; only the connection type differs
 
 * [Connections](01-connections.md)
 * [Dependency injection](../getting-started/04-dependency-injection.md)
-* [Query reuse: plan cache and `Prepare`](../engine/03-plan-cache-and-reuse.md)
+* [Query reuse: plan cache and `PrepareBuffered`](../engine/03-plan-cache-and-reuse.md)
 * [Documentation index](../index.md)
 
 ---

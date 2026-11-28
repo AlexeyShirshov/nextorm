@@ -39,7 +39,7 @@ Runtime-параметр-массив использует тот же меха�
 var prepared = dataContext.From<IComplexEntity>()
     .Where(e => e.Id == SqlFunctions.Postgres.any(SqlFunctions.Parameter<long[]>(0)))
     .Select(e => new { e.Id })
-    .Prepare();
+    .PrepareBuffered();
 
 var rows = prepared.ToList(new long[] { 1, 2, 3 });
 ```

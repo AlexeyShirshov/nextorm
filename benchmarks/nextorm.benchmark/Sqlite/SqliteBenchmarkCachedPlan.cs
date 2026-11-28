@@ -14,7 +14,7 @@ public class SqliteBenchmarkCachedPlan
     const int Iterations = 100;
     private readonly IDataContext _db;
     private readonly TestDataRepository _repo;
-    private readonly IPreparedQueryCommand<int> _prepared;
+    private readonly IPreparedBufferedQueryCommand<int> _prepared;
     private readonly QueryCommand<int> _rePrepareCmd;
 
     public SqliteBenchmarkCachedPlan()
@@ -29,7 +29,7 @@ public class SqliteBenchmarkCachedPlan
         _prepared = _repo.SimpleEntity
             .Where(it => it.Id == SqlFunctions.Parameter<int>(0))
             .Select(it => it.Id)
-            .Prepare();
+            .PrepareBuffered();
 
         _rePrepareCmd = _repo.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Select(it => it.Id);
 

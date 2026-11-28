@@ -37,7 +37,7 @@ public class SqliteBenchmarkPaging
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
     private readonly Linq2DbDataRepository _linq2Db;
-    private readonly IPreparedQueryCommand<ProjectionDto> _nextormPrepared;
+    private readonly IPreparedBufferedQueryCommand<ProjectionDto> _nextormPrepared;
 
     private long _sink;
 
@@ -54,7 +54,7 @@ public class SqliteBenchmarkPaging
             .OrderBy(e => e.Id)
             .Offset(OffsetRows)
             .Limit(PageSize)
-            .Prepare();
+            .PrepareBuffered();
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite($"Filename={BenchDb.FilePath}");
@@ -92,7 +92,7 @@ public class SqliteBenchmarkPaging
         var rows = _ctx.LargeEntity.Count();
         BenchmarkComparisonValidation.EnsureCount(SqliteBenchmarkAggregates.ExpectedRows, rows, "Paging/large_table");
 
-        var page = _db.ToList(_nextormPrepared);
+        var page = _nextormPrepared.ToList(_db);
         BenchmarkComparisonValidation.EnsureCount(PageSize, page.Count, "Paging/nextorm-page");
         BenchmarkComparisonValidation.Ensure(page.Count > 0, "Paging/nextorm measured interior page is empty.");
         BenchmarkComparisonValidation.EnsureCount(OffsetRows + 1, page[0].Id, "Paging/nextorm first-id");
@@ -113,7 +113,7 @@ public class SqliteBenchmarkPaging
     [BenchmarkCategory("A_Paging")]
     public async Task A_Nextorm_Prepared_PageAsync()
     {
-        foreach (var row in await _db.ToListAsync(_nextormPrepared))
+        foreach (var row in await _nextormPrepared.ToListAsync(_db))
             _sink += row.Id;
     }
 

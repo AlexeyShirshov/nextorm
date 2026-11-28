@@ -108,10 +108,10 @@ public sealed class SqliteStep4PlanCacheSourceTests : ProviderTestSuite
         var prepared = Context.From<S4PcRow>()
             .Where(x => x.Id >= SqlFunctions.Parameter<int>(0))
             .Select(x => x.Id)
-            .Prepare(new PrepareOptions(), TestContext.Current.CancellationToken);
+            .PrepareBuffered(new PrepareOptions(), TestContext.Current.CancellationToken);
 
-        Context.ToList(prepared, new object?[] { 9203 }).Should().Equal(9203);
-        Context.ToList(prepared, new object?[] { 9202 }).Should().Equal(9202, 9203);
+        prepared.ToList(Context, 9203).Should().Equal(9203);
+        prepared.ToList(Context, 9202).Should().Equal(9202, 9203);
 
         var uncached = (DbPreparedQueryCommand<int>)((DataContext)Context)
             .GetPreparedQueryCommand(

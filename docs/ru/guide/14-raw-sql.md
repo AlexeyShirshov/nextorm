@@ -50,7 +50,7 @@ public static IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(this Entity
   параметрами в порядке свойств; имя свойства служит именем параметра.
 * `mode` — значение `[Flags]`. [`None`](xref:NextORM.Core.PrepareFromSqlMode.None) используется
   по умолчанию для буферизованного или скалярного выполнения. Это соответствует буферизованной форме,
-  которую выбирает `Prepare()` без аргументов. Для потокового (небуферизованного) чтения используйте
+  которую выбирает `PrepareBuffered()` без аргументов. Для потокового (небуферизованного) чтения используйте
   [`Streaming`](xref:NextORM.Core.PrepareFromSqlMode.Streaming). [`StoreInCache`](xref:NextORM.Core.PrepareFromSqlMode.StoreInCache)
   заполняет кэш планов. Все перегрузки по умолчанию используют `None`, поэтому подготовленный сырой
   SQL не попадает в кэш без явного запроса.

@@ -305,12 +305,12 @@ internal static class StageADiagnostics
         var wherePrepared = repo.SimpleEntity
             .Where(it => it.Id == SqlFunctions.Parameter<int>(0))
             .Select(it => it.Id)
-            .Prepare();
+            .PrepareBuffered();
         var joinPrepared = repo.LargeEntity
             .Join(repo.SimpleEntity, (t1, t2) => t1.Id == t2.Id)
             .Where(p => p.Item2.Id == SqlFunctions.Parameter<int>(0))
             .Select(p => new LargeEntity { Id = p.Item1.Id, Dt = p.Item1.Dt, Str = p.Item1.Str })
-            .Prepare();
+            .PrepareBuffered();
 
         var whereCachedParam = (DbPreparedQueryCommand<int>)db.GetPreparedQueryCommand(
             repo.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Select(it => it.Id), false, true, Ct);
@@ -321,8 +321,8 @@ internal static class StageADiagnostics
 
         var checks = new Dictionary<string, object?>
         {
-            ["where_sql_match"] = string.Equals(whereCachedParam.SqlStmt, ((DbPreparedQueryCommand<int>)wherePrepared).SqlStmt, StringComparison.Ordinal),
-            ["join_sql_match"] = string.Equals(joinCachedParam.SqlStmt, ((DbPreparedQueryCommand<LargeEntity>)joinPrepared).SqlStmt, StringComparison.Ordinal),
+            ["where_sql_match"] = string.Equals(whereCachedParam.SqlStmt, ((DbPreparedQueryCommand<int>)((PreparedBufferedQueryCommand<int>)wherePrepared).Command).SqlStmt, StringComparison.Ordinal),
+            ["join_sql_match"] = string.Equals(joinCachedParam.SqlStmt, ((DbPreparedQueryCommand<LargeEntity>)((PreparedBufferedQueryCommand<LargeEntity>)joinPrepared).Command).SqlStmt, StringComparison.Ordinal),
         };
 
         var whereRowsMatch = true;

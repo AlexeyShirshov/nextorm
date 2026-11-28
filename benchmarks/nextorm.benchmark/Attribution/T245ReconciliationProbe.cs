@@ -76,8 +76,8 @@ internal static class T245ReconciliationProbe
         _ = context.GetPreparedQueryCommand(BuildExcept(ctx), false, true, CancellationToken.None);
         _ = context.GetPreparedQueryCommand(BuildIntersect(ctx), false, true, CancellationToken.None);
 
-        var preparedExcept = BuildExcept(ctx).Prepare();
-        var preparedIntersect = BuildIntersect(ctx).Prepare();
+        var preparedExcept = BuildExcept(ctx).PrepareBuffered();
+        var preparedIntersect = BuildIntersect(ctx).PrepareBuffered();
 
         var payload = new Payload
         {
@@ -268,7 +268,7 @@ internal static class T245ReconciliationProbe
     }
 
     private static async Task PreparedBodyAsync(
-        TestDataRepository ctx, bool isExcept, IPreparedQueryCommand<int> except, IPreparedQueryCommand<int> intersect)
+        TestDataRepository ctx, bool isExcept, IPreparedBufferedQueryCommand<int> except, IPreparedBufferedQueryCommand<int> intersect)
     {
         for (var i = 0; i < BatchIterations; i++)
         {

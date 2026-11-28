@@ -1033,13 +1033,12 @@ public static class EntityBuilderExtensions
         => builder.ToParentCommand().LastOrDefaultAsync(cancellationToken, @params);
 
     /// <summary>
-    /// Creates a command with its SQL already compiled so it can be executed repeatedly, typically with different parameters.
+    /// Prepares the query for repeated execution that materializes results.
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="options">
-    /// How the prepared command reuses its underlying command and whether rows are streamed. The default
-    /// value prepares a buffered command whose underlying command is reused per connection.
+    /// How the prepared command reuses its underlying command. The default is reuse per connection.
     /// </param>
     /// <param name="cancellationToken">A token used to cancel the operation.</param>
     /// <returns>The prepared query command.</returns>
@@ -1047,17 +1046,23 @@ public static class EntityBuilderExtensions
     /// <paramref name="options"/> carries a <see cref="PreparedCommandCache"/> value that is not defined.
     /// </exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static IPreparedQueryCommand<TEntity> Prepare<TEntity>(this EntityBuilder<TEntity> builder, PrepareOptions options = default, CancellationToken cancellationToken = default)
+    public static IPreparedBufferedQueryCommand<TEntity> PrepareBuffered<TEntity>(this EntityBuilder<TEntity> builder, PrepareOptions options = default, CancellationToken cancellationToken = default)
     {
-        if (!Enum.IsDefined(options.Cache))
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(options),
-                options.Cache,
-                "The prepared-command cache policy is not a defined PreparedCommandCache value; use PreparedCommandCache.Connection or PreparedCommandCache.None.");
-        }
+        PrepareOptions.Validate(options);
+        return builder.ToParentCommand().PrepareBuffered(options, cancellationToken);
+    }
 
-        return builder.ToParentCommand().Prepare(options, cancellationToken);
+    /// <summary>Prepares the query for repeated execution that streams result rows.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="options">How the prepared command reuses its underlying command. The default is reuse per connection.</param>
+    /// <param name="cancellationToken">A token used to cancel preparation.</param>
+    /// <returns>The prepared streaming command.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="options"/> contains an undefined cache policy.</exception>
+    public static IPreparedStreamingQueryCommand<TEntity> PrepareStreaming<TEntity>(this EntityBuilder<TEntity> builder, PrepareOptions options = default, CancellationToken cancellationToken = default)
+    {
+        PrepareOptions.Validate(options);
+        return builder.ToParentCommand().PrepareStreaming(options, cancellationToken);
     }
 
     /// <summary>
