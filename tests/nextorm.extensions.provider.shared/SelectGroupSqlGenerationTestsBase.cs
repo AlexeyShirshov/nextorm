@@ -114,12 +114,18 @@ public abstract class SelectGroupSqlGenerationTestsBase
     {
         using var ctx = CreateContext();
         var state = "active";
-        var (sql, parameters) = Prepare(ctx, ctx.From<Entity>().SelectGroupHaving(
+        var command = ctx.From<Entity>().SelectGroupHaving(
             x => new { x.Code, Total = SqlFunctions.Sql.count(x.Id) },
-            r => r.Code == state));
+            r => r.Code == state);
+        var (sql, parameters) = Prepare(ctx, command);
 
         sql.Should().Be(Lf(Expected.ConverterKey), "a converter-mapped scalar is an ordinary key column");
         parameters.Should().Be("state=ACTIVE", "the converter maps the model value to the provider representation");
+
+        state = "archived";
+        var (warmSql, warmParameters) = Prepare(ctx, command);
+        warmSql.Should().Be(sql);
+        warmParameters.Should().Be("state=ARCHIVED", "the warm plan converts and binds the current model value");
     }
 
     [Fact]

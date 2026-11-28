@@ -7,7 +7,7 @@ namespace NextORM.Core.Tests;
 
 public class ExpressionCacheShapeTests
 {
-    private static int SharedAccessorValue => 42;
+    private static int SharedAccessorValue { get; set; } = 42;
 
     [Fact]
     public void ValueAccessor_DoesNotInvokeAnIncompatibleCachedDelegate()
@@ -24,11 +24,13 @@ public class ExpressionCacheShapeTests
             ValueExpressionAccessor.Evaluate(expression.Body, registry, null).Should().Be(42);
             var accessor = cache[key];
             accessor.Should().NotBeSameAs(incompatible);
-            ValueExpressionAccessor.Evaluate(expression.Body, registry, null).Should().Be(42);
+            SharedAccessorValue = 73;
+            ValueExpressionAccessor.Evaluate(expression.Body, registry, null).Should().Be(73);
             cache[key].Should().BeSameAs(accessor);
         }
         finally
         {
+            SharedAccessorValue = 42;
             cache.Remove(key);
         }
     }

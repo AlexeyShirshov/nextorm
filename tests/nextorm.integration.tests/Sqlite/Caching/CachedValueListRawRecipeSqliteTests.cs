@@ -68,8 +68,9 @@ public sealed class CachedValueListRawRecipeSqliteTests : IDisposable
     [Fact]
     public void InlineFilterValueList_ShouldKeepTheOrdinaryPlanCacheHit()
     {
+        var minimum = 0;
         var command = _db.From<CachedValue>()
-            .Where(x => new int[] { 1, 3, 10 }.Contains(x.Id))
+            .Where(x => new int[] { 1, 3, 10 }.Contains(x.Id) && x.Id > minimum)
             .OrderBy(x => x.Id)
             .Select(x => x.Id);
 
@@ -79,12 +80,13 @@ public sealed class CachedValueListRawRecipeSqliteTests : IDisposable
             .Should().BeTrue("the ordinary plan cache must store a filter value-list shape");
         stored.Should().NotBeNull();
 
+        minimum = 3;
         var next = _db.From<CachedValue>()
-            .Where(x => new int[] { 1, 3, 10 }.Contains(x.Id))
+            .Where(x => new int[] { 1, 3, 10 }.Contains(x.Id) && x.Id > minimum)
             .OrderBy(x => x.Id)
             .Select(x => x.Id);
 
-        next.ToList().Should().Equal(1, 3, 10);
+        next.ToList().Should().Equal(10);
 
         QueryPlanStore.TryGet(typeof(SqliteDataContext), next.GetOrCreatePlanKey(null), out var reused, out _)
             .Should().BeTrue();
@@ -114,25 +116,17 @@ public sealed class CachedValueListRawRecipeSqliteTests : IDisposable
     [Fact]
     public void ScalarStringContainsAndToUpper_ShouldStayCorrectAndCacheable()
     {
-        var contains = _db.From<CachedValue>()
-            .Where(x => x.Name.Contains("et"))
-            .OrderBy(x => x.Id)
-            .Select(x => x.Id)
-            .ToList();
+        List<int> Contains(string fragment) => _db.From<CachedValue>()
+            .Where(x => x.Name.Contains(fragment))
+            .OrderBy(x => x.Id).Select(x => x.Id).ToList();
 
-        var containsAgain = _db.From<CachedValue>()
-            .Where(x => x.Name.Contains("et"))
-            .OrderBy(x => x.Id)
-            .Select(x => x.Id)
-            .ToList();
-
+        Contains("et").Should().Equal(3);
+        Contains("mm").Should().Equal(5);
         var upper = _db.From<CachedValue>()
             .OrderBy(x => x.Id)
             .Select(x => x.Name.ToUpper())
             .ToList();
 
-        contains.Should().Equal(3);
-        containsAgain.Should().Equal(3);
         upper.Should().Equal("ALPHA", "BETA", "GAMMA", "DELTA");
     }
 

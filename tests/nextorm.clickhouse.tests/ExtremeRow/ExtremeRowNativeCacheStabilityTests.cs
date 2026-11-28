@@ -29,16 +29,20 @@ public class ExtremeRowNativeCacheStabilityTests
         using var ctx = ClickHouseTestContext.Create();
         ctx.PurgeQueryCache();
 
-        var command = ctx.From<ExtremeNativeEntity>().SelectWhereMaxOld(x => x.K1).ToCommand();
+        var minimum = 0;
+        var command = ctx.From<ExtremeNativeEntity>().Where(row => row.K1 > minimum)
+            .SelectWhereMaxOld(x => x.K1).ToCommand();
         command.Cache.Should().BeTrue("the command starts cacheable");
 
-        var first = (DbPreparedQueryCommand<ExtremeNativeEntity>)Prepare(ctx, command);
-        var second = (DbPreparedQueryCommand<ExtremeNativeEntity>)Prepare(ctx, command);
+        var first = (BoundQueryInvocation<ExtremeNativeEntity>)Prepare(ctx, command);
+        minimum = 5;
+        var second = (BoundQueryInvocation<ExtremeNativeEntity>)Prepare(ctx, command);
 
-        first.DbCommand.CommandText.Should().Contain("argMax(tuple(");
-        first.DbCommand.CommandText.Should().Contain("having count() > 0");
-        ReferenceEquals(first, second).Should().BeTrue("the second preparation must reuse the cached plan");
-        second.DbCommand.CommandText.Should().Be(first.DbCommand.CommandText);
+        first.Plan.DbCommand.CommandText.Should().Contain("argMax(tuple(");
+        first.Plan.DbCommand.CommandText.Should().Contain("having count() > 0");
+        second.Plan.Should().BeSameAs(first.Plan);
+        first.Values.Should().Equal([0]);
+        second.Values.Should().Equal([5]);
         command.Cache.Should().BeTrue("the native extrema path must never mutate the sticky Cache flag");
     }
 
@@ -48,14 +52,16 @@ public class ExtremeRowNativeCacheStabilityTests
         using var ctx = ClickHouseTestContext.Create();
         ctx.PurgeQueryCache();
 
-        QueryCommand<ExtremeNativeEntity> Build()
-            => ctx.From<ExtremeNativeEntity>().SelectWhereMaxOld(x => x.K1).ToCommand();
+        QueryCommand<ExtremeNativeEntity> Build(int minimum)
+            => ctx.From<ExtremeNativeEntity>().Where(row => row.K1 > minimum)
+                .SelectWhereMaxOld(x => x.K1).ToCommand();
 
-        var first = Prepare(ctx, Build());
-        var second = Prepare(ctx, Build());
+        var first = (BoundQueryInvocation<ExtremeNativeEntity>)Prepare(ctx, Build(1));
+        var second = (BoundQueryInvocation<ExtremeNativeEntity>)Prepare(ctx, Build(9));
 
-        ReferenceEquals(first, second).Should()
-            .BeTrue("two equal native extrema shapes on the same context must share one cached plan");
+        second.Plan.Should().BeSameAs(first.Plan, "two equal native extrema shapes must share one cached plan");
+        first.Values.Should().Equal([1]);
+        second.Values.Should().Equal([9]);
     }
 
     [Fact]
@@ -68,14 +74,17 @@ public class ExtremeRowNativeCacheStabilityTests
         Prepare(ctx, extrema);
         extrema.Cache.Should().BeTrue();
 
-        var ordinary = ctx.From<ISimpleEntity>().Select(x => x.Id);
+        var minimum = 2;
+        var ordinary = ctx.From<ISimpleEntity>().Where(row => row.Id > minimum).Select(x => x.Id);
         ordinary.Cache.Should().BeTrue();
 
-        var first = Prepare(ctx, ordinary);
-        var second = Prepare(ctx, ordinary);
+        var first = (BoundQueryInvocation<int>)Prepare(ctx, ordinary);
+        minimum = 8;
+        var second = (BoundQueryInvocation<int>)Prepare(ctx, ordinary);
 
-        ReferenceEquals(first, second).Should()
-            .BeTrue("an ordinary query after a native extrema query must still hit the plan cache");
+        second.Plan.Should().BeSameAs(first.Plan, "an ordinary query after a native extrema must still hit the plan cache");
+        first.Values.Should().Equal([2]);
+        second.Values.Should().Equal([8]);
         ordinary.Cache.Should().BeTrue();
     }
 }

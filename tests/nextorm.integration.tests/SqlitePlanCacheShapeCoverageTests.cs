@@ -43,16 +43,16 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
         => entities.Where(x => x.Id > floor).Select(x => x.Id);
 
     // Two textual call sites compile into two distinct display classes, which the plan key includes.
-    private static QueryCommand<long> ComplexAboveAtSiteA(EntityBuilder<IComplexEntity> entities)
+    private static QueryCommand<long> ComplexAboveAtSiteA(EntityBuilder<IComplexEntity> entities, long floor)
     {
-        var floor = 1L;
-        return entities.Where(x => x.Id > floor).Select(x => x.Id);
+        var captured = floor;
+        return entities.Where(x => x.Id > captured).Select(x => x.Id);
     }
 
-    private static QueryCommand<long> ComplexAboveAtSiteB(EntityBuilder<IComplexEntity> entities)
+    private static QueryCommand<long> ComplexAboveAtSiteB(EntityBuilder<IComplexEntity> entities, long floor)
     {
-        var floor = 1L;
-        return entities.Where(x => x.Id > floor).Select(x => x.Id);
+        var captured = floor;
+        return entities.Where(x => x.Id > captured).Select(x => x.Id);
     }
 
     private static QueryCommand<long> ComplexByString(EntityBuilder<IComplexEntity> entities, string? name)
@@ -82,8 +82,8 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
     {
         ResetPlanCache();
 
-        var siteA = ComplexAboveAtSiteA(_sut.ComplexEntity);
-        var siteB = ComplexAboveAtSiteB(_sut.ComplexEntity);
+        var siteA = ComplexAboveAtSiteA(_sut.ComplexEntity, 1);
+        var siteB = ComplexAboveAtSiteB(_sut.ComplexEntity, 1);
 
         var preparedA = Prepare(siteA);
         Rows(preparedA).Should().Equal(2L, 3L);
@@ -96,6 +96,13 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
             .BeFalse("distinct closure sites are distinct plans even when the shape is identical");
 
         Rows(preparedB).Should().Equal(2L, 3L);
+
+        var warmA = Prepare(ComplexAboveAtSiteA(_sut.ComplexEntity, 2));
+        var warmB = Prepare(ComplexAboveAtSiteB(_sut.ComplexEntity, 0));
+        warmA.PlanOf().Should().BeSameAs(preparedA.PlanOf());
+        warmB.PlanOf().Should().BeSameAs(preparedB.PlanOf());
+        Rows(warmA).Should().Equal(3L);
+        Rows(warmB).Should().Equal(1L, 2L, 3L);
     }
 
     [Fact]
@@ -103,12 +110,26 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
     {
         ResetPlanCache();
 
-        var first = Prepare(_sut.ComplexEntity.Where(x => x.Id > 1).Select(x => x.Id));
+        var low = 1L;
+        var high = 3L;
+        var greaterQuery = _sut.ComplexEntity.Where(x => x.Id > low).OrderBy(x => x.Id).Select(x => x.Id);
+        var betweenQuery = _sut.ComplexEntity.Where(x => x.Id >= low + 1 && x.Id <= high)
+            .OrderBy(x => x.Id).Select(x => x.Id);
+        var first = Prepare(greaterQuery);
         Rows(first).Should().Equal(2L, 3L);
 
-        var changed = Prepare(_sut.ComplexEntity.Where(x => x.Id >= 2 && x.Id <= 3).Select(x => x.Id));
+        var changed = Prepare(betweenQuery);
         changed.PlanOf().Should().NotBeSameAs(first.PlanOf(), "a different predicate shape is a different plan");
         Rows(changed).Should().Equal(2L, 3L);
+
+        low = 2;
+        high = 2;
+        var warmGreater = Prepare(greaterQuery);
+        var warmBetween = Prepare(betweenQuery);
+        warmGreater.PlanOf().Should().BeSameAs(first.PlanOf());
+        warmBetween.PlanOf().Should().BeSameAs(changed.PlanOf());
+        Rows(warmGreater).Should().Equal(3L);
+        Rows(warmBetween).Should().BeEmpty();
     }
 
     [Fact]
@@ -190,16 +211,27 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
     {
         ResetPlanCache();
 
-        var inclusive = Prepare(_sut.ComplexEntity
+        var shift = 0L;
+        var inclusiveQuery = _sut.ComplexEntity
             .OrderBy(x => x.Id)
-            .Select(x => new { x.Id, Cnt = _sut.SimpleEntity.Where(s => s.Id <= x.Id).Count() }));
+            .Select(x => new { x.Id, Cnt = _sut.SimpleEntity.Where(s => s.Id <= x.Id + shift).Count() });
+        var shiftedQuery = _sut.ComplexEntity
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Cnt = _sut.SimpleEntity.Where(s => s.Id < x.Id + 1 + shift).Count() });
+        var inclusive = Prepare(inclusiveQuery);
         Rows(inclusive).Select(r => r.Cnt).Should().Equal(1, 2, 3);
 
-        var shifted = Prepare(_sut.ComplexEntity
-            .OrderBy(x => x.Id)
-            .Select(x => new { x.Id, Cnt = _sut.SimpleEntity.Where(s => s.Id < x.Id + 1).Count() }));
+        var shifted = Prepare(shiftedQuery);
         shifted.PlanOf().Should().NotBeSameAs(inclusive.PlanOf(), "the correlated subquery predicate is part of the plan");
         Rows(shifted).Select(r => r.Cnt).Should().Equal(1, 2, 3);
+
+        shift = 2;
+        var warmInclusive = Prepare(inclusiveQuery);
+        var warmShifted = Prepare(shiftedQuery);
+        warmInclusive.PlanOf().Should().BeSameAs(inclusive.PlanOf());
+        warmShifted.PlanOf().Should().BeSameAs(shifted.PlanOf());
+        Rows(warmInclusive).Select(r => r.Cnt).Should().Equal(3, 4, 5);
+        Rows(warmShifted).Select(r => r.Cnt).Should().Equal(3, 4, 5);
     }
 
     [Fact]

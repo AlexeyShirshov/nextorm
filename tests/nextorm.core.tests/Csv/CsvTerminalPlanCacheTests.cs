@@ -112,6 +112,14 @@ public class CsvTerminalPlanCacheTests
 
     private static string Utf8(MemoryStream stream) => Encoding.UTF8.GetString(stream.ToArray());
 
+    private static string ReadRow(SqliteDataContext context, CsvStreamOptions options, int id)
+    {
+        using var destination = new MemoryStream();
+        context.From<CsvCacheRow>().Where(row => row.Id == id).OrderBy(row => row.Id)
+            .WriteCsv(destination, options, CancellationToken.None);
+        return Utf8(destination);
+    }
+
     [Fact]
     public void WarmLookup_ShouldNotRecompile()
     {
@@ -119,15 +127,10 @@ public class CsvTerminalPlanCacheTests
         try
         {
             var options = new CsvStreamOptions();
-            using var firstDestination = new MemoryStream();
-            ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(firstDestination, options, CancellationToken.None);
-
-            using var secondDestination = new MemoryStream();
-            ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(secondDestination, options, CancellationToken.None);
-
+            ReadRow(ctx, options, 1).Should().Contain("alpha").And.NotContain("be,ta");
+            ReadRow(ctx, options, 2).Should().Contain("\"be,ta\"").And.NotContain("alpha");
             ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(1, "a warm hit must not recompile");
             ctx.TerminalPlanCacheForTesting.EntryCount.Should().Be(1);
-            firstDestination.ToArray().Should().Equal(secondDestination.ToArray(), "warm output must be byte-identical");
         }
         finally
         {
@@ -192,17 +195,13 @@ public class CsvTerminalPlanCacheTests
         var ctx = CreateDb(out var path);
         try
         {
-            var options = new CsvStreamOptions { ValueTransform = v => v?.ToString()?.ToUpperInvariant() };
-            byte[] firstBytes;
-            using (var d1 = new MemoryStream())
-            {
-                ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d1, options, CancellationToken.None);
-                firstBytes = d1.ToArray();
-            }
-            using (var d2 = new MemoryStream()) ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d2, options, CancellationToken.None);
+            var prefix = "first:";
+            var options = new CsvStreamOptions { ValueTransform = v => prefix + v?.ToString()?.ToUpperInvariant() };
+            ReadRow(ctx, options, 1).Should().Contain("first:ALPHA");
+            prefix = "second:";
+            ReadRow(ctx, options, 2).Should().Contain("second:BE,TA").And.NotContain("first:ALPHA");
 
             ctx.TerminalPlanCacheForTesting.EntryCount.Should().Be(0, "ValueTransform must not be published");
-            Encoding.UTF8.GetString(firstBytes).Should().Contain("ALPHA", "the transform must be applied");
         }
         finally
         {
@@ -217,18 +216,19 @@ public class CsvTerminalPlanCacheTests
         var ctx = CreateDb(out var path);
         try
         {
-            using (var d = new MemoryStream()) ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d, new CsvStreamOptions(), CancellationToken.None);
+            var options = new CsvStreamOptions();
+            ReadRow(ctx, options, 1).Should().Contain("alpha").And.NotContain("be,ta");
             ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(1);
             ctx.TerminalPlanCacheForTesting.EntryCount.Should().Be(1);
 
             DataContextCache.Clear();
-            using (var d = new MemoryStream()) ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d, new CsvStreamOptions(), CancellationToken.None);
+            ReadRow(ctx, options, 2).Should().Contain("be,ta").And.NotContain("alpha");
             ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(2, "a generation bump must recompile");
             ctx.TerminalPlanCacheForTesting.EntryCount.Should().Be(1);
 
             ctx.PurgeQueryCache();
             ctx.TerminalPlanCacheForTesting.EntryCount.Should().Be(0, "purge drops entries");
-            using (var d = new MemoryStream()) ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d, new CsvStreamOptions(), CancellationToken.None);
+            ReadRow(ctx, options, 1).Should().Contain("alpha").And.NotContain("be,ta");
             ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(3);
         }
         finally

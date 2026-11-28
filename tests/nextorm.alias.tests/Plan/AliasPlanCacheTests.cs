@@ -42,6 +42,15 @@ public class AliasPlanCacheTests
             var first = ctx.GetPreparedQueryCommand(commands[0], createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
             var second = ctx.GetPreparedQueryCommand(commands[0], createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
             second.Should().BeSameAs(first);
+
+            var offset = 3;
+            var buyer = chained.Select(p => p.Buyer.Id + offset);
+            var approver = chained.Select(p => p.Approver.Id + offset);
+            buyer.ToList().Should().Equal(AliasSqliteDatabase.BuyerId + 3);
+            approver.ToList().Should().Equal(AliasSqliteDatabase.ApproverId + 3);
+            offset = 7;
+            buyer.ToList().Should().Equal(AliasSqliteDatabase.BuyerId + 7);
+            approver.ToList().Should().Equal(AliasSqliteDatabase.ApproverId + 7);
         }
         finally
         {
@@ -84,6 +93,13 @@ public class AliasPlanCacheTests
             var second = ctx.GetPreparedQueryCommand(commands[0], createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
             second.Should().BeSameAs(first);
             commands[0].Cache.Should().BeTrue("a source-less alias preparation must not set the sticky _dontCache flag");
+
+            List<int> ReadBuyer(int offset) => chained.Select(p => p.Buyer.Id + offset).ToList();
+            List<int> ReadApprover(int offset) => chained.Select(p => p.Approver.Id + offset).ToList();
+            ReadBuyer(3).Should().Equal(AliasSqliteDatabase.BuyerId + 3);
+            ReadApprover(3).Should().Equal(AliasSqliteDatabase.ApproverId + 3);
+            ReadBuyer(7).Should().Equal(AliasSqliteDatabase.BuyerId + 7);
+            ReadApprover(7).Should().Equal(AliasSqliteDatabase.ApproverId + 7);
         }
         finally
         {
@@ -121,6 +137,14 @@ public class AliasPlanCacheTests
             var first = ctx.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
             var second = ctx.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
             second.Should().BeSameAs(first);
+
+            var buyerId = AliasSqliteDatabase.BuyerId;
+            var matchingRoot = rooted.Where(o => o.Root.BuyerId == buyerId);
+            matchingRoot.Any().Should().BeTrue();
+            buyerId = AliasSqliteDatabase.ApproverId;
+            matchingRoot.Any().Should().BeFalse();
+            ctx.AnyCommand!.Value.Should().BeSameAs(shared);
+            shared.Cache.Should().BeTrue();
         }
         finally
         {

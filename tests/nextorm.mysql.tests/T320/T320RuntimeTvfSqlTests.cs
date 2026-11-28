@@ -512,7 +512,9 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         // Same reasoning as the identity test above: reference identity of the prepared command is the
         // race-free oracle for plan sharing, an absolute store count is not.
         var one = Prepare(ctx, ctx.From(() => T320MyTvf.EquivalentOne(id)).Select(r => r.Id), true, out var oneValues);
-        var oneAgain = Prepare(ctx, ctx.From(() => T320MyTvf.EquivalentOne(id)).Select(r => r.Id), true);
+        id = 9;
+        var oneAgain = Prepare(ctx, ctx.From(() => T320MyTvf.EquivalentOne(id)).Select(r => r.Id), true, out var oneAgainValues);
+        id = 17;
         var two = Prepare(ctx, ctx.From(() => T320MyTvf.EquivalentTwo(id)).Select(r => r.Id), true, out var twoValues);
 
         output.WriteLine(
@@ -524,7 +526,8 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         ReferenceEquals(one, two).Should().BeTrue(
             "two distinct factories with the same SQL identity must reuse the cached plan instance");
         Normalize(two.DbCommand.CommandText).Should().Be(Normalize(one.DbCommand.CommandText));
-        ParametersOf(two, twoValues).Should().Equal(ParametersOf(one, oneValues));
-        ParametersOf(two, twoValues).Should().Equal("id=5");
+        ParametersOf(one, oneValues).Should().Equal("id=5");
+        ParametersOf(oneAgain, oneAgainValues).Should().Equal("id=9");
+        ParametersOf(two, twoValues).Should().Equal("id=17");
     }
 }

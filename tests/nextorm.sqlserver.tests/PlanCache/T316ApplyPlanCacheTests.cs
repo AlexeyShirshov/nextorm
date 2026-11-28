@@ -100,24 +100,28 @@ public class T316ApplyPlanCacheTests
 
         // Both lambdas are built in this one method scope so they share the same closure type for the
         // captured context; only the lambda parameter name differs.
-        var firstCommand = ctx.From<T316Marker>()
+        var minimum = 1;
+        var firstCommand = ctx.From<T316Marker>().Where(row => row.Grp > minimum)
             .JoinAlias<AliasJoin_P1_A2_Buyer<T316Marker, T316Line>, AliasProjection_P1_A2_Buyer<T316Marker, T316Line>, T316Line>(
                 static dc => new AliasJoin_P1_A2_Buyer<T316Marker, T316Line>(dc),
                 m => ctx.From<T316Line>().Where(l => l.MarkerId == m.Id),
                 JoinType.CrossApply)
             .Select(p => p.Buyer.Id);
-        var secondCommand = ctx.From<T316Marker>()
+        var secondCommand = ctx.From<T316Marker>().Where(row => row.Grp > minimum)
             .JoinAlias<AliasJoin_P1_A2_Buyer<T316Marker, T316Line>, AliasProjection_P1_A2_Buyer<T316Marker, T316Line>, T316Line>(
                 static dc => new AliasJoin_P1_A2_Buyer<T316Marker, T316Line>(dc),
                 marker => ctx.From<T316Line>().Where(l => l.MarkerId == marker.Id),
                 JoinType.CrossApply)
             .Select(p => p.Buyer.Id);
 
-        var first = Prepare(ctx, firstCommand, storeInCache: true);
-        var second = Prepare(ctx, secondCommand, storeInCache: true);
+        var first = (BoundQueryInvocation<int>)ctx.GetPreparedQueryCommand(firstCommand, false, true, CancellationToken.None);
+        minimum = 9;
+        var second = (BoundQueryInvocation<int>)ctx.GetPreparedQueryCommand(secondCommand, false, true, CancellationToken.None);
 
-        second.Should().BeSameAs(first,
+        second.Plan.Should().BeSameAs(first.Plan,
             "a structurally equivalent APPLY shape, including a different parameter name, must reuse the cached holder");
+        first.Values.Should().Equal([1]);
+        second.Values.Should().Equal([9]);
     }
 
     [Fact]

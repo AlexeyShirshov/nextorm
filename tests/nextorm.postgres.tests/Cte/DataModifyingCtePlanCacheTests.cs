@@ -32,30 +32,33 @@ public class DataModifyingCtePlanCacheTests
         using var ctx = PostgresTestContext.Create();
         ctx.PurgeQueryCache();
 
-        var dml = ctx.With("del", ctx.CreateDeleteBuilder<IMergeEntity>()
-                .Where(x => x.Id == 1)
+        QueryCommand<DmlRow> BuildDelete(long id) => ctx.With("del", ctx.CreateDeleteBuilder<IMergeEntity>()
+                .Where(x => x.Id == id)
                 .Returning(x => new { x.Id }))
             .From("del")
             .Select(r => new DmlRow { Id = r.Id });
 
-        // The same command prepared twice with storeInCache: true. A cached plan would be looked up on
-        // the second call and returned by reference; the data-modifying CTE must keep the local
-        // storeInCache false, so every preparation rebuilds.
-        var first = ctx.GetPreparedQueryCommand(dml, false, true, CancellationToken.None);
-        var second = ctx.GetPreparedQueryCommand(dml, false, true, CancellationToken.None);
+        var first = (DbPreparedQueryCommand<DmlRow>)ctx.GetPreparedQueryCommand(BuildDelete(1), false, true, CancellationToken.None);
+        var second = (DbPreparedQueryCommand<DmlRow>)ctx.GetPreparedQueryCommand(BuildDelete(2), false, true, CancellationToken.None);
 
         ReferenceEquals(first, second).Should()
             .BeFalse("a data-modifying CTE must never be looked up or stored in the plan cache");
-        ((DbPreparedQueryCommand<DmlRow>)first).DbCommand.CommandText.Should()
+        first.DbCommand.CommandText.Should()
             .StartWith("with del as (delete from merge_entity");
+        second.DbCommand.CommandText.Should().Be(first.DbCommand.CommandText);
+        Convert.ToInt64(first.DbCommand.Parameters[0].Value).Should().Be(1);
+        Convert.ToInt64(second.DbCommand.Parameters[0].Value).Should().Be(2);
 
         // The bypass must be call-local: the read plan cache on the same context still works.
-        var read = ctx.From<ISimpleEntity>().Select(x => x.Id);
-        var readFirst = ctx.GetPreparedQueryCommand(read, false, true, CancellationToken.None);
-        var readSecond = ctx.GetPreparedQueryCommand(read, false, true, CancellationToken.None);
+        var minimum = 0;
+        var read = ctx.From<ISimpleEntity>().Where(row => row.Id > minimum).Select(x => x.Id);
+        var readFirst = (BoundQueryInvocation<int>)ctx.GetPreparedQueryCommand(read, false, true, CancellationToken.None);
+        minimum = 10;
+        var readSecond = (BoundQueryInvocation<int>)ctx.GetPreparedQueryCommand(read, false, true, CancellationToken.None);
 
-        ReferenceEquals(readFirst, readSecond).Should()
-            .BeTrue("the DML bypass is local to the call and must not disable the plan cache for reads");
+        readSecond.Plan.Should().BeSameAs(readFirst.Plan, "the DML bypass is local to the call");
+        readFirst.Values.Should().Equal([0]);
+        readSecond.Values.Should().Equal([10]);
     }
 
     [Fact]
@@ -67,21 +70,26 @@ public class DataModifyingCtePlanCacheTests
         // The DML CTE is only declared on the body of the outer read CTE; PrepareCtes hoists it to the
         // top-level WITH during preparation, i.e. after the cache decision. HasDataModifyingCte must
         // still see it through the nested declaration tree.
+        var deletedId = 1L;
         var innerDml = ctx.With("del", ctx.CreateDeleteBuilder<IMergeEntity>()
-                .Where(x => x.Id == 1)
+                .Where(x => x.Id == deletedId)
                 .Returning(x => new { x.Id }))
             .From("del")
             .Select(r => new { r.Id });
         var outer = ctx.With("o", innerDml).From("o").Select(t => t["Id"].AsInt);
 
-        var first = ctx.GetPreparedQueryCommand(outer, false, true, CancellationToken.None);
-        var second = ctx.GetPreparedQueryCommand(outer, false, true, CancellationToken.None);
+        var first = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(outer, false, true, CancellationToken.None);
+        deletedId = 2;
+        var second = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(outer, false, true, CancellationToken.None);
 
         ReferenceEquals(first, second).Should()
             .BeFalse("a DML CTE hoisted out of a read CTE body must still bypass the plan cache");
-        ((DbPreparedQueryCommand<int>)first).DbCommand.CommandText.Should()
+        first.DbCommand.CommandText.Should()
             .StartWith("with del as (")
             .And.Contain("), o as (");
+        second.DbCommand.CommandText.Should().Be(first.DbCommand.CommandText);
+        Convert.ToInt64(first.DbCommand.Parameters[0].Value).Should().Be(1);
+        Convert.ToInt64(second.DbCommand.Parameters[0].Value).Should().Be(2);
     }
 
     [Fact]

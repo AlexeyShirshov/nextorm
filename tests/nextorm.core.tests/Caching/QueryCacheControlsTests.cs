@@ -96,6 +96,9 @@ public class QueryCacheControlsTests : IDisposable
 
         command.Cache.Should().BeTrue(
             "preparing a captured scalar Contains without caching must not mutate the persistent command policy");
+        values[0] = 2;
+        ctx.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: false, TestContext.Current.CancellationToken);
+        command.Cache.Should().BeTrue();
     }
 
     // An explicitly disabled caller policy is authoritative and must not be re-enabled by preparing a
@@ -112,6 +115,9 @@ public class QueryCacheControlsTests : IDisposable
 
         command.Cache.Should().BeFalse(
             "an explicitly disabled cache policy must not be re-enabled by preparing a captured scalar Contains");
+        values = [2, 3];
+        ctx.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
+        command.Cache.Should().BeFalse();
     }
 
     [Fact]

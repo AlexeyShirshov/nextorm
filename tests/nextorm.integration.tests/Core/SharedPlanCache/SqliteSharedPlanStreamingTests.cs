@@ -27,7 +27,7 @@ public sealed class SqliteSharedPlanStreamingTests
         contextReference.IsAlive.Should().BeFalse("a warm plan must not root the context that prepared it");
         using var connection = OpenSeededConnection();
         using var context = new SqliteDataContext(connection, new DataContextBuilder());
-        Query(context).ToEnumerable().Should().Equal(1, 2);
+        Query(context, 1).ToEnumerable().Should().Equal(2);
         FindCachedPlan().Should().BeSameAs(cachedPlan, "the original plan must remain warm throughout the test");
     }
 
@@ -36,10 +36,10 @@ public sealed class SqliteSharedPlanStreamingTests
     {
         using var connection = OpenSeededConnection();
         using var context = new SqliteDataContext(connection, new DataContextBuilder());
-        Query(context).ToList().Should().Equal(1, 2);
+        Query(context, 0).ToList().Should().Equal(1, 2);
         var cachedPlan = FindCachedPlan();
 
-        Query(context).ToEnumerable().Should().Equal(1, 2);
+        Query(context, 1).ToEnumerable().Should().Equal(2);
         FindCachedPlan().Should().BeSameAs(cachedPlan, "streaming reuses a plan first prepared for buffered execution");
         cachedPlan.StreamingEnabled.Should().BeTrue();
 
@@ -50,8 +50,8 @@ public sealed class SqliteSharedPlanStreamingTests
         .OfType<DbPreparedQueryCommand<int>>()
         .Single(plan => plan.CommandText.Contains(TableName, StringComparison.Ordinal));
 
-    private static QueryCommand<int> Query(SqliteDataContext context) =>
-        context.From<StreamRow>().OrderBy(row => row.Id).Select(row => row.Id);
+    private static QueryCommand<int> Query(SqliteDataContext context, int minimum) =>
+        context.From<StreamRow>().Where(row => row.Id > minimum).OrderBy(row => row.Id).Select(row => row.Id);
 
     private static SqliteConnection OpenSeededConnection()
     {

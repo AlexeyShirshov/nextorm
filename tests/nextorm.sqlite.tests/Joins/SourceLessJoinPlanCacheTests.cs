@@ -31,8 +31,8 @@ public class SourceLessJoinPlanCacheTests
 
     private static IDataContext Create() => SqliteTestContext.Create();
 
-    private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> command, bool storeInCache)
-        => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None);
+    private static BoundQueryInvocation<int> Prepare(IDataContext ctx, QueryCommand<int> command, bool storeInCache)
+        => (BoundQueryInvocation<int>)ctx.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None);
 
     // ---------- type-only CrossJoin ----------
 
@@ -44,8 +44,9 @@ public class SourceLessJoinPlanCacheTests
         ctx.From<SlpcParent>();
         ctx.From<SlpcChild>();
 
-        var explicitCmd = ctx.From<SlpcParent>().CrossJoin(ctx.From<SlpcChild>()).Select(p => p.Item1.Id);
-        var sourcelessCmd = ctx.From<SlpcParent>().CrossJoin<SlpcChild>().Select(p => p.Item1.Id);
+        var offset = 3;
+        var explicitCmd = ctx.From<SlpcParent>().CrossJoin(ctx.From<SlpcChild>()).Select(p => p.Item1.Id + offset);
+        var sourcelessCmd = ctx.From<SlpcParent>().CrossJoin<SlpcChild>().Select(p => p.Item1.Id + offset);
 
         explicitCmd.PrepareCommand(false, TestContext.Current.CancellationToken);
         sourcelessCmd.PrepareCommand(false, TestContext.Current.CancellationToken);
@@ -58,11 +59,13 @@ public class SourceLessJoinPlanCacheTests
         var countAfterExplicit = QueryPlanStore.Values.Count();
         countAfterExplicit.Should().Be(1, "the explicit form stores exactly one plan entry");
 
+        offset = 7;
         var second = Prepare(ctx, sourcelessCmd, true);
         QueryPlanStore.Values.Count().Should().Be(countAfterExplicit,
             "source-less CrossJoin<T> must not add a plan entry");
-        ReferenceEquals(first, second).Should().BeTrue(
-            "source-less CrossJoin<T> must hit the explicit plan instance");
+        second.Plan.Should().BeSameAs(first.Plan, "source-less CrossJoin<T> must hit the explicit plan instance");
+        first.Values.Should().Equal([3]);
+        second.Values.Should().Equal([7]);
 
         explicitCmd.Cache.Should().BeTrue();
         sourcelessCmd.Cache.Should().BeTrue();
@@ -116,12 +119,13 @@ public class SourceLessJoinPlanCacheTests
         using var ctx = Create();
         ctx.PurgeQueryCache();
 
+        var offset = 3;
         var explicitCmd = ctx.From<SlpcParent>()
             .Join(ctx.From("slpc_child"), (p, c) => p.Id == c["parent_id"].AsInt)
-            .Select(p => p.Item1.Id);
+            .Select(p => p.Item1.Id + offset);
         var sourcelessCmd = ctx.From<SlpcParent>()
             .Join("slpc_child", (p, c) => p.Id == c["parent_id"].AsInt)
-            .Select(p => p.Item1.Id);
+            .Select(p => p.Item1.Id + offset);
 
         explicitCmd.PrepareCommand(false, TestContext.Current.CancellationToken);
         sourcelessCmd.PrepareCommand(false, TestContext.Current.CancellationToken);
@@ -134,11 +138,13 @@ public class SourceLessJoinPlanCacheTests
         var countAfterExplicit = QueryPlanStore.Values.Count();
         countAfterExplicit.Should().Be(1, "the explicit form stores exactly one plan entry");
 
+        offset = 7;
         var second = Prepare(ctx, sourcelessCmd, true);
         QueryPlanStore.Values.Count().Should().Be(countAfterExplicit,
             "source-less Join(\"table\") must not add a plan entry");
-        ReferenceEquals(first, second).Should().BeTrue(
-            "source-less Join(\"table\") must hit the explicit plan instance");
+        second.Plan.Should().BeSameAs(first.Plan, "source-less Join(\"table\") must hit the explicit plan instance");
+        first.Values.Should().Equal([3]);
+        second.Values.Should().Equal([7]);
 
         explicitCmd.Cache.Should().BeTrue();
         sourcelessCmd.Cache.Should().BeTrue();
@@ -154,17 +160,20 @@ public class SourceLessJoinPlanCacheTests
         ctx.From<SlpcParent>();
         ctx.From<SlpcChild>();
 
-        var cmd = ctx.From<SlpcParent>().CrossJoin<SlpcChild>().Select(p => p.Item1.Id);
+        var offset = 3;
+        var cmd = ctx.From<SlpcParent>().CrossJoin<SlpcChild>().Select(p => p.Item1.Id + offset);
         cmd.Cache.Should().BeTrue();
 
-        _ = Prepare(ctx, cmd, false);
+        _ = ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
         cmd.Cache.Should().BeTrue("storeInCache:false must not set the sticky _dontCache flag");
 
         // caching still works afterwards
         ctx.PurgeQueryCache();
         var first = Prepare(ctx, cmd, true);
+        offset = 7;
         var second = Prepare(ctx, cmd, true);
-        ReferenceEquals(first, second).Should().BeTrue(
-            "caching stays enabled for later source-less queries on the same context");
+        second.Plan.Should().BeSameAs(first.Plan, "caching stays enabled for later source-less queries on the same context");
+        first.Values.Should().Equal([3]);
+        second.Values.Should().Equal([7]);
     }
 }

@@ -28,8 +28,8 @@ public class InListCacheTests
     private static QueryCommand<long> CapturedAtIn(EntityBuilder<IComplexEntity> e)
         => e.Where(c => SqlFunctions.Sql.@in(c.Id, CapturedValues)).Select(c => c.Id);
 
-    private static QueryCommand<long> CapturedAtInB(EntityBuilder<IComplexEntity> e)
-        => e.Where(c => SqlFunctions.Sql.@in(c.Id, CapturedValues)).Select(c => c.Id);
+    private static QueryCommand<long> CapturedAtIn(EntityBuilder<IComplexEntity> e, long[] values)
+        => e.Where(c => SqlFunctions.Sql.@in(c.Id, values)).Select(c => c.Id);
 
     private static Expression GetAtInValues(QueryCommand cmd)
     {
@@ -46,10 +46,14 @@ public class InListCacheTests
 
         // Before the shape fold a captured collection disabled the plan cache entirely; now the
         // evaluated length/null shape is part of the key, so two same-shape builds share one plan.
-        var first = ctx.GetPreparedQueryCommand(CapturedAtIn(e), false, true, CancellationToken.None);
-        var second = ctx.GetPreparedQueryCommand(CapturedAtInB(e), false, true, CancellationToken.None);
+        var first = (BoundQueryInvocation<long>)ctx.GetPreparedQueryCommand(
+            CapturedAtIn(e, [1, 3, 10]), false, true, CancellationToken.None);
+        var second = (BoundQueryInvocation<long>)ctx.GetPreparedQueryCommand(
+            CapturedAtIn(e, [2, 4, 20]), false, true, CancellationToken.None);
 
-        BoundQueryInvocation<long>.GetPlan(second).Should().BeSameAs(BoundQueryInvocation<long>.GetPlan(first));
+        second.Plan.Should().BeSameAs(first.Plan);
+        first.Values.Should().Equal([1L, 3L, 10L]);
+        second.Values.Should().Equal([2L, 4L, 20L]);
     }
 
     [Fact]

@@ -509,6 +509,7 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         var before = QueryPlanStore.Values.Count();
         var one = Prepare(ctx, ctx.From(() => T320MaTvf.EquivalentOne(id)).Select(r => r.Id), true, out var oneValues);
         var afterOne = QueryPlanStore.Values.Count();
+        id = 17;
         var two = Prepare(ctx, ctx.From(() => T320MaTvf.EquivalentTwo(id)).Select(r => r.Id), true, out var twoValues);
         var afterTwo = QueryPlanStore.Values.Count();
 
@@ -521,7 +522,7 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         ReferenceEquals(one, two).Should().BeTrue(
             "two distinct factories with the same SQL identity must reuse the cached plan instance");
         Normalize(two.DbCommand.CommandText).Should().Be(Normalize(one.DbCommand.CommandText));
-        ParametersOf(two, twoValues).Should().Equal(ParametersOf(one, oneValues));
-        ParametersOf(two, twoValues).Should().Equal("id=5");
+        ParametersOf(one, oneValues).Should().Equal("id=5");
+        ParametersOf(two, twoValues).Should().Equal("id=17");
     }
 }
