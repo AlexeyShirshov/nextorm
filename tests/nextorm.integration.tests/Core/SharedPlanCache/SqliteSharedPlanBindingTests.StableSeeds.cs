@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Linq.Expressions;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using NextORM.Sqlite;
@@ -7,6 +8,40 @@ namespace NextORM.Integration.Tests;
 
 public sealed partial class SqliteSharedPlanBindingTests
 {
+    [Fact]
+    public void ConstantValueList_MutatingTheCallerArrayDoesNotChangeThePublishedKey()
+    {
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        using var firstConnection = OpenSeededConnection();
+        using var secondConnection = OpenSeededConnection();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+        var authored = new[] { 1 };
+        var original = Execute(first, authored, 1);
+        firstTap.LastParameters.Should().Equal((0, "p0", 1));
+
+        authored[0] = 2;
+        var equal = Execute(second, [1], 1);
+        secondTap.LastParameters.Should().Equal((0, "p0", 1));
+        equal.Should().BeSameAs(original, "the key must keep the original literal shape");
+        var different = Execute(second, authored, 2);
+        secondTap.LastParameters.Should().Equal((0, "p0", 2));
+        different.Should().NotBeSameAs(original);
+
+        static DbPreparedQueryCommand<int> Execute(SqliteDataContext context, int[] values, int expected)
+        {
+            Expression<Func<BindingRow, bool>> template = row => Enumerable.Contains(new[] { 0 }, row.Id);
+            var contains = (MethodCallExpression)template.Body;
+            var predicate = Expression.Lambda<Func<BindingRow, bool>>(
+                contains.Update(contains.Object, [Expression.Constant(values), contains.Arguments[1]]), template.Parameters);
+            var query = context.From<BindingRow>().WithTag("constant value list key").Where(predicate).Select(row => row.Id);
+            var invocation = context.GetStreamingRowsQueryCommand(query, TestContext.Current.CancellationToken);
+            invocation.ToList(context).Should().Equal(expected);
+            return BoundQueryInvocation<int>.GetPlan(invocation)!;
+        }
+    }
+
     [Fact]
     public void InlineConvertedValues_BindAnIndependentBlobOnEachConnection()
     {

@@ -46,25 +46,41 @@ public sealed partial class SqliteSharedPlanBindingTests
         BoundQueryInvocation<int>.GetPlan(repeated).Should().BeSameAs(BoundQueryInvocation<int>.GetPlan(firstInvocation));
     }
 
-    [Fact]
-    public void NormalizedPlan_DoesNotRetainTheCustomNamingConvention()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Plan_DoesNotRetainTheCustomNamingConvention(bool rawRecipe)
     {
-        var (convention, holder) = Execute();
+        var (convention, holder) = Execute(rawRecipe);
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
-        convention.IsAlive.Should().BeFalse("the normalized cache key must not retain a caller's naming convention");
+        convention.IsAlive.Should().BeFalse("neither the normalized key nor the raw recipe may retain a caller's naming convention");
         QueryPlanStore.Values.Should().Contain(holder);
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        static (WeakReference Convention, DbPreparedQueryCommand<int> Holder) Execute()
+        static (WeakReference Convention, DbPreparedQueryCommand<int> Holder) Execute(bool rawRecipe)
         {
             using var connection = OpenNamingConnection();
             var convention = new EqualNamingConvention("right_value");
             using var context = CreateNamingContext(connection, convention);
-            var invocation = context.GetStreamingRowsQueryCommand(NamingQuery(context), TestContext.Current.CancellationToken);
+            var token = TestContext.Current.CancellationToken;
+            var invocation = rawRecipe
+                ? context.GetPreparedQueryCommand(NamingQuery(context), false, true, token)
+                : context.GetStreamingRowsQueryCommand(NamingQuery(context), token);
             invocation.ToList(context).Should().Equal(99);
-            return (new WeakReference(convention), BoundQueryInvocation<int>.GetPlan(invocation)!);
+            var holder = BoundQueryInvocation<int>.GetPlan(invocation)!;
+            if (rawRecipe)
+            {
+                using var otherConnection = OpenNamingConnection();
+                using var other = CreateNamingContext(otherConnection, convention);
+                var reuses = QueryPlanner.RecipeReuses;
+                var warm = other.GetPreparedQueryCommand(NamingQuery(other), false, true, token);
+                warm.ToList(other).Should().Equal(99);
+                QueryPlanner.RecipeReuses.Should().Be(reuses + 1);
+                BoundQueryInvocation<int>.GetPlan(warm).Should().BeSameAs(holder);
+            }
+            return (new WeakReference(convention), holder);
         }
     }
 

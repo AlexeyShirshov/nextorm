@@ -771,7 +771,7 @@ public sealed class CachedPreparationRecipeTests
     /// <summary>A client-evaluated call: folded into one parameter with no captured key.</summary>
     private static int ThresholdPlus(int offset) => offset + 1;
 
-    // --- 4. lifetime: Clear and thread separation -----------------------------------------------------
+    // --- 4. lifetime: Clear and thread hops -----------------------------------------------------------
 
     [Fact]
     public void Recipe_ClearDropsTheRawIndex()
@@ -794,7 +794,7 @@ public sealed class CachedPreparationRecipeTests
     }
 
     [Fact]
-    public void Recipe_ThreadSeparation_NoCrossThreadReuse()
+    public async Task Recipe_ReusesAcrossThreads()
     {
         ResetRecipeCache();
         using var ctx = CreateSqlServerContext();
@@ -802,14 +802,21 @@ public sealed class CachedPreparationRecipeTests
         var onThisThread = PrepareSql(ctx, SimpleShape(ctx));
         QueryPlanner.RecipePublishes.Should().Be(1);
 
-        string? onOtherThread = null;
-        var thread = new Thread(() => onOtherThread = PrepareSql(ctx, SimpleShape(ctx)));
-        thread.Start();
-        thread.Join();
+        var token = TestContext.Current.CancellationToken;
+        Task<string> turn;
+        using (ExecutionContext.SuppressFlow())
+        {
+            turn = Task.Factory.StartNew(() =>
+            {
+                using var other = CreateSqlServerContext();
+                return PrepareSql(other, SimpleShape(other));
+            }, token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        }
+        var onOtherThread = await turn.WaitAsync(TimeSpan.FromSeconds(10), token);
 
         onOtherThread.Should().Be(onThisThread);
-        QueryPlanner.RecipeReuses.Should().Be(0, "the raw index is thread-local");
-        QueryPlanner.RecipePublishes.Should().Be(2, "the other thread published in its own domain");
+        QueryPlanner.RecipeReuses.Should().Be(1, "the other thread should reuse the published recipe");
+        QueryPlanner.RecipePublishes.Should().Be(1);
     }
 
     // --- shared AnyCommand route + later cacheable hits ----------------------------------------------

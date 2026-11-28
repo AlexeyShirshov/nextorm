@@ -94,6 +94,7 @@ public interface IQueryComponentDescriptor
     int StructuralHash { get; }
 
     /// <summary>Determines structural equality with another prepared descriptor.</summary>
+    /// <remarks>Independent contexts can call this method concurrently on the same immutable descriptor.</remarks>
     bool StructurallyEquals(IQueryComponentDescriptor? other);
 }
 

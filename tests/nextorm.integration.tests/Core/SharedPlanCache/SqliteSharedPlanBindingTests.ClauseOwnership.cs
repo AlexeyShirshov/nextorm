@@ -1,12 +1,77 @@
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using FluentAssertions;
+using FluentAssertions.Execution;
 using NextORM.Sqlite;
 
 namespace NextORM.Integration.Tests;
 
 public sealed partial class SqliteSharedPlanBindingTests
 {
+    [Fact]
+    public void RawRecipe_DescribedDescriptorDoesNotTransferTheFirstCommand()
+    {
+        using var connection = OpenSeededConnection();
+        using var context = new SqliteDataContext(connection, new DataContextBuilder());
+        var fresh = Build(context);
+        var (priorCommand, priorContext) = WarmFirstPlan(context, fresh);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        using var assertions = new AssertionScope();
+        priorCommand.IsAlive.Should().BeFalse("a raw hit may not borrow the first component's prepared descriptor");
+        priorContext.IsAlive.Should().BeFalse();
+        fresh.PreparedComponents.Should().BeNull("only the SQL holder can be reused for an opaque raw hit");
+        fresh.PrepareCommand(TestContext.Current.CancellationToken);
+        var descriptor = fresh.PreparedComponents!.Single().Should().BeOfType<DescribedOwnerComponent.Descriptor>().Which;
+        ReferenceEquals(descriptor.Owner, fresh).Should().BeTrue();
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (WeakReference Command, WeakReference Context) WarmFirstPlan(SqliteDataContext context, QueryCommand<int> fresh)
+        {
+            using var priorConnection = OpenSeededConnection();
+            using var priorContext = new SqliteDataContext(priorConnection, new DataContextBuilder());
+            var prior = Build(priorContext);
+            var token = TestContext.Current.CancellationToken;
+            var cold = priorContext.GetPreparedQueryCommand(prior, false, true, token);
+            cold.ToList(priorContext).Should().Equal(1);
+            var reuses = QueryPlanner.RecipeReuses;
+            var warm = context.GetPreparedQueryCommand(fresh, false, true, token);
+            warm.ToList(context).Should().Equal(1);
+            QueryPlanner.RecipeReuses.Should().Be(reuses + 1);
+            BoundQueryInvocation<int>.GetPlan(warm).Should().BeSameAs(BoundQueryInvocation<int>.GetPlan(cold));
+            return (new WeakReference(prior), new WeakReference(priorContext));
+        }
+
+        static QueryCommand<int> Build(SqliteDataContext context)
+            => context.From<BindingRow>().WithTag("raw opaque descriptor ownership").Where(row => row.Id == 1)
+                .WithComponent(new DescribedOwnerComponent()).Select(row => row.Id);
+    }
+
+    private sealed class DescribedOwnerComponent : IQueryComponent, IQueryComponentShape
+    {
+        public Type Slot => typeof(DescribedOwnerComponent);
+        public QueryComponentContribution Contribution => QueryComponentContribution.AdditivePredicate;
+        public object? ShapeState => null;
+        public int ShapeSelectorCount => 0;
+        public LambdaExpression[] ShapeSelectors => [];
+        public LambdaExpression GetShapeSelector(int index) => throw new ArgumentOutOfRangeException(nameof(index));
+        public IQueryComponentDescriptor Prepare(IQueryComponentPrepareContext context) => new Descriptor(context.Command);
+        public void BuildQuery(IQueryComponentBuildContext context) { }
+
+        internal sealed class Descriptor(QueryCommand owner) : IQueryComponentDescriptor
+        {
+            internal QueryCommand Owner { get; } = owner;
+            public Type Slot => typeof(DescribedOwnerComponent);
+            public Type ComponentType => Slot;
+            public QueryComponentContribution Contribution => QueryComponentContribution.AdditivePredicate;
+            public string Discriminator => "described-owner";
+            public int StructuralHash => 517;
+            public bool StructurallyEquals(IQueryComponentDescriptor? other) => other is Descriptor;
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -191,6 +256,41 @@ public sealed partial class SqliteSharedPlanBindingTests
             int[] expected = useJoin ? [owner.JoinTarget] : firstCall ? [1, 2] : [2, 1];
             invocation.ToList(context).Should().Equal(expected);
             return (new WeakReference(owner), BoundQueryInvocation<int>.GetPlan(invocation));
+        }
+    }
+
+    [Fact]
+    public void CapturedObjectProjection_ReusesThePlanWithoutRetainingTheRecipeOwner()
+    {
+        using var firstConnection = OpenSeededConnection();
+        using var secondConnection = OpenSeededConnection();
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+
+        var (owner, plan) = Execute(first, 1);
+        firstTap.LastParameters.Should().Equal((0, "Target", 1));
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        owner.IsAlive.Should().BeFalse("an executable raw recipe must not retain the projection owner");
+        QueryPlanStore.Values.Should().Contain(plan);
+
+        var (_, secondPlan) = Execute(second, 2);
+        secondPlan.Should().BeSameAs(plan);
+        secondTap.LastParameters.Should().Equal((0, "Target", 2));
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (WeakReference Owner, DbPreparedQueryCommand<CteBindingRow> Plan) Execute(SqliteDataContext context, int offset)
+        {
+            var owner = new WhereOwner { Target = offset };
+            var command = context.From<BindingRow>().WithTag("raw object projection ownership").OrderBy(row => row.Id)
+                .Select(row => new CteBindingRow { Number = row.Id + owner.Target });
+            QueryCommand.CaptureRawShape(command).Should().NotBeNull();
+            var invocation = context.GetPreparedQueryCommand(command, false, true, TestContext.Current.CancellationToken);
+            invocation.ToList(context).Select(row => row.Number).Should().Equal(offset + 1, offset + 2);
+            return (new WeakReference(owner), BoundQueryInvocation<CteBindingRow>.GetPlan(invocation)!);
         }
     }
 

@@ -4216,6 +4216,7 @@ public partial class QueryCommand
         internal bool UseCurrentSorting { get; private set; }
         internal bool UseCurrentScalarProjection { get; private set; }
         internal bool UseCurrentWindows { get; private set; }
+        internal bool UseCurrentNaming { get; private set; }
         // Receiver identity at each captured-member occurrence, in traversal order. The same set of
         // owners is not enough: all occurrences must read the same owners as the staged expressions.
         internal object?[]? Closures;
@@ -4245,13 +4246,64 @@ public partial class QueryCommand
             return copy;
         }
 
-        internal RawShape? SnapshotRawClauseChildren(QueryCommand prepared)
+        internal RawShape? SnapshotForReplay(QueryCommand prepared)
         {
             if ((Ctes?.Length ?? 0) != (prepared._ctes?.Count ?? 0)
-                || (Union is null) != (prepared._union is null))
+                || (Union is null) != (prepared._union is null)
+                || prepared.OuterRegistry is not null
+                || prepared.Prep is { ReferencedQueries.Count: > 0 } or { OuterRefs.Count: > 0 }
+                || prepared.NavigationPaths is { Count: > 0 }
+                || prepared.NavigationChain is not null
+                || prepared.JunctionChildFilter is not null
+                || !IsPlainTableSource(prepared._from))
                 return null;
 
-            var union = Union is null ? null : prepared._union!.SnapshotRawClauses(Union);
+            if (prepared._joins is { } joins)
+            {
+                foreach (var join in joins)
+                {
+                    if (join.ApplySource is not null || !IsPlainTableSource(join.From))
+                        return null;
+                }
+            }
+
+            if (SnapshotComponents(prepared) is not { } replay)
+                return null;
+            if (Closures is { Length: > 0 })
+            {
+                // A structural match alone cannot let an executable snapshot own the capture.
+                // Unsupported clauses still use the ordinary normalized plan.
+                var detached = prepared.SnapshotRawClauses(replay);
+                if (detached is null)
+                    return null;
+                replay = detached;
+            }
+
+            if (prepared.ResolvedNamingConvention is not null and not SnakeCaseNamingConvention
+                || prepared.NamingConvention is not null and not SnakeCaseNamingConvention)
+            {
+                if (ReferenceEquals(replay, this))
+                    replay = (RawShape)MemberwiseClone();
+                replay._requiresStaging = true;
+                replay.UseCurrentNaming = true;
+            }
+
+            if (GroupingSets is not null || Settings is not null || Hints is not null || TableHints is not null
+                || IndexHints is not null || TablesInScopeHints is not null || Windows is not null)
+            {
+                if (ReferenceEquals(replay, this))
+                    replay = (RawShape)MemberwiseClone();
+                replay.GroupingSets = GroupingSets?.Select(static set => (int[])set.Clone()).ToArray();
+                replay.Settings = Settings?.ToArray();
+                replay.Hints = Hints?.ToArray();
+                replay.TableHints = TableHints?.ToArray();
+                replay.IndexHints = IndexHints?.ToArray();
+                replay.TablesInScopeHints = TablesInScopeHints?.ToArray();
+                if (!replay.UseCurrentWindows && Windows is { } windows)
+                    replay.Windows = RewriteWindowExpressions(windows);
+            }
+
+            var union = Union?.SnapshotForReplay(prepared._union!);
             if (Union is not null && union is null)
                 return null;
 
@@ -4263,7 +4315,7 @@ public partial class QueryCommand
                     var declaration = declarations[i];
                     // Prepared declarations keep their hoisted order. Pair bodies by name.
                     var preparedBody = prepared._ctes!.FirstOrDefault(cte => cte.Name == declaration.Name);
-                    var body = preparedBody?.Query.SnapshotRawClauses(declaration.Body);
+                    var body = preparedBody is null ? null : declaration.Body.SnapshotForReplay(preparedBody.Query);
                     if (body is null)
                         return null;
                     if (!ReferenceEquals(body, declaration.Body))
@@ -4275,9 +4327,9 @@ public partial class QueryCommand
             }
 
             if (ReferenceEquals(union, Union) && ctes is null)
-                return this;
+                return replay;
 
-            var copy = (RawShape)MemberwiseClone();
+            var copy = ReferenceEquals(replay, this) ? (RawShape)MemberwiseClone() : replay;
             copy.Union = union;
             copy.Ctes = ctes ?? Ctes;
             copy.HasCtesToStage |= ctes is not null;
@@ -4285,52 +4337,29 @@ public partial class QueryCommand
             return copy;
         }
 
-        internal RawShape SnapshotComponents(QueryCommand? prepared)
+        private RawShape? SnapshotComponents(QueryCommand prepared)
         {
-            var union = Union?.SnapshotComponents(prepared?._union);
-            var ctes = SnapshotCteComponents(prepared?._ctes);
-            if (Components.IsEmpty && ReferenceEquals(union, Union) && ReferenceEquals(ctes, Ctes))
+            if (Components.IsEmpty)
                 return this;
 
             var copy = (RawShape)MemberwiseClone();
-            copy.Union = union;
-            copy.Ctes = ctes;
-            copy.HasCtesToStage = HasCtesToStage || !ReferenceEquals(ctes, Ctes);
             copy._requiresStaging = true;
-            if (Components.IsEmpty)
-                return copy;
-
             var shapes = new ComponentShape[Components.Count];
             for (var i = 0; i < shapes.Length; i++)
             {
+                // The grouping component's raw contract uses the command's own projection. If it
+                // falls back to a projection supplied by the component, that shape isn't available here.
+                if (Exp is null && Components[i] is IRawGroupingComponent)
+                    return null;
+
                 var component = ReadComponentShape(i);
-                var selectors = prepared?.TryGetRawGroupingSelectors(this, component.Selectors);
+                var selectors = prepared.TryGetRawGroupingSelectors(this, component.Selectors);
                 copy.RebindGrouping |= selectors is not null;
                 shapes[i] = component with { Selectors = selectors ?? (LambdaExpression[])component.Selectors.Clone() };
             }
             copy._componentShapes = shapes;
             copy.Components = default;
             return copy;
-        }
-
-        private CteShape[]? SnapshotCteComponents(IReadOnlyList<CteDefinition>? preparedCtes)
-        {
-            if (Ctes is not { } ctes)
-                return null;
-
-            CteShape[]? snapshot = null;
-            for (var i = 0; i < ctes.Length; i++)
-            {
-                var declaration = ctes[i];
-                var prepared = preparedCtes?.FirstOrDefault(cte => cte.Name == declaration.Name);
-                var body = declaration.Body.SnapshotComponents(prepared?.Query);
-                if (!ReferenceEquals(body, declaration.Body))
-                {
-                    snapshot ??= (CteShape[])ctes.Clone();
-                    snapshot[i] = declaration.WithBody(body);
-                }
-            }
-            return snapshot ?? ctes;
         }
 
         internal RawShape? FindCteToStage(string name)
@@ -4838,7 +4867,8 @@ public partial class QueryCommand
         => from is null
             || (from.SubQuery is null && from.ColumnShape is null && from.Pivot is null
                 && from.XmlNodes is null && from.RawSqlSource is null && from.TemporarySource is null
-                && from.TableFunction is null && from.TableExpressionOverride is null);
+                && from.TableFunction is null && from.TableExpressionOverride is null
+                && from.LinqSource is null && from.DerivedFragment is null);
 
     /// <summary>
     /// Whether any source of a fresh command graph resolves at least one active global/builder query
@@ -5039,7 +5069,7 @@ public partial class QueryCommand
         {
             scan.ScanCommand(cmd);
             closures = scan.Snapshot();
-            return !scan.HasCapturedCommand;
+            return !scan.HasCapturedCommand && !scan.HasUnsupportedConstant;
         }
         finally
         {
@@ -5058,6 +5088,7 @@ public partial class QueryCommand
         private readonly List<object?> _closures = new();
         private ScanMember _member;
         internal bool HasCapturedCommand { get; private set; }
+        internal bool HasUnsupportedConstant { get; private set; }
 
         /// <summary>
         /// Whether the scanned graph carries a collection shape that needs fresh preparation:
@@ -5076,6 +5107,7 @@ public partial class QueryCommand
             _closures.Clear();
             IdentitiesHash = 0;
             HasCapturedCommand = false;
+            HasUnsupportedConstant = false;
             HasUnpublishableValueList = false;
             _member = ScanMember.Other;
         }
@@ -5208,13 +5240,16 @@ public partial class QueryCommand
 
         protected override Expression VisitConstant(ConstantExpression node)
         {
-            if (node.Value is QueryCommand)
-            {
-                HasCapturedCommand = true;
-                return node;
-            }
+            // An executable raw snapshot would own this literal object. The normalized key can
+            // snapshot known arrays and compare other payloads under weak ownership.
+            HasUnsupportedConstant |= !IsImmutableSqlConstant(node.Value);
+            return node;
+        }
 
-            return base.VisitConstant(node);
+        protected override Expression VisitExtension(Expression node)
+        {
+            HasUnsupportedConstant = true;
+            return node;
         }
 
         private void Add(object? value)
@@ -5327,7 +5362,7 @@ public partial class QueryCommand
         try
         {
             scan.ScanCommand(cmd);
-            if (scan.HasCapturedCommand || scan.HasUnpublishableValueList) return null;
+            if (scan.HasCapturedCommand || scan.HasUnsupportedConstant || scan.HasUnpublishableValueList) return null;
             closureHash = scan.IdentitiesHash;
         }
         finally
@@ -5562,11 +5597,19 @@ public partial class QueryCommand
         var currentUnion = _union;
         var currentCtes = _ctes;
         var currentWindows = _windows;
+        var currentNaming = NamingConvention;
         clone.CopyTo(this, copyAll: true);
         // Shape verification covers the component contract; BuildQuery must run on the caller's
         // own component when a parameter refresh needs to render.
         _components = components;
         _componentsView = componentsView;
+        if (shape is not null)
+            CopyClauseCollections();
+        if (shape?.UseCurrentNaming == true)
+        {
+            NamingConvention = currentNaming;
+            ResolvedNamingConvention = currentNaming ?? _dataContext?.NamingConvention;
+        }
         if (shape?.UseCurrentWindows == true)
             _windows = currentWindows;
         if (shape?.UnionToStage is { } unionShape)

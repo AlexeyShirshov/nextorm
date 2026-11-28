@@ -2762,7 +2762,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     public async Task<TResult?> SingleOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
         => await _executor.SingleOrDefaultAsync(preparedQueryCommand, @params, cancellationToken).ConfigureAwait(false);
 
-    /// <summary>Clears all cached query plans held by this context.</summary>
+    /// <summary>Clears the process-wide implicit SQL plan cache and this context's local query artifacts.</summary>
+    /// <remarks>Call when no affected queries are active.</remarks>
     public void PurgeQueryCache()
     {
         // The retained JSON writers reference no plan, but they belong to the same per-context cache

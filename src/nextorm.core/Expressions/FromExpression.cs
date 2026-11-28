@@ -274,12 +274,14 @@ public sealed class FromExpression
           BindOccurrenceByParameter = source.BindOccurrenceByParameter;
      }
 
-     private FromExpression(FromExpression source, RawSqlSourceExpression? raw, TableFunctionExpression? function, PivotExpression? pivot)
+     private FromExpression(FromExpression source, RawSqlSourceExpression? raw, TableFunctionExpression? function,
+          PivotExpression? pivot, XmlNodesExpression? xmlNodes)
           : this(source, null, null, null, null, null)
      {
           RawSqlSource = raw;
           TableFunction = function;
           Pivot = pivot;
+          XmlNodes = xmlNodes;
           ColumnShape = null;
      }
 
@@ -358,9 +360,18 @@ public sealed class FromExpression
      {
           var raw = RawSqlSource?.ForSqlPlanKey();
           var function = TableFunction?.ForSqlPlanKey(rewriter);
-          var pivot = Pivot?.WithInner(Pivot.Inner.ForSqlPlanKey(rewriter));
-          return ColumnShape is null && ReferenceEquals(raw, RawSqlSource) && ReferenceEquals(function, TableFunction) && ReferenceEquals(pivot, Pivot)
+          var pivot = Pivot?.ForSqlPlanKey(rewriter);
+          var xmlNodes = XmlNodes;
+          if (xmlNodes is not null)
+          {
+               var operand = rewriter.Visit(xmlNodes.Operand);
+               if (!ReferenceEquals(operand, xmlNodes.Operand))
+                    xmlNodes = new XmlNodesExpression(operand, xmlNodes.XPath);
+          }
+
+          return ColumnShape is null && ReferenceEquals(raw, RawSqlSource) && ReferenceEquals(function, TableFunction)
+               && ReferenceEquals(pivot, Pivot) && ReferenceEquals(xmlNodes, XmlNodes)
                ? this
-               : new FromExpression(this, raw, function, pivot);
+               : new FromExpression(this, raw, function, pivot, xmlNodes);
      }
 }

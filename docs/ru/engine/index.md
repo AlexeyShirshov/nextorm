@@ -23,7 +23,7 @@
 | [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) | Построитель запроса с набором методов в стиле LINQ (`Where`, `Join`, `Select`, ...); создаётся фабрикой `From*`. |
 | [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) | Построенный запрос — источник, проекция, фильтры, соединения, сортировка, хинты — и его терминалы. |
 | `QueryPreparer` | Превращает дерево выражений в подготовленные части запроса и хэши плана с помощью обходчиков выражений. |
-| `QueryPlan` / `QueryPlanStore` | Структурный ключ плана и неявный кэш, отдельный для каждого потока. |
+| `QueryPlan` / `QueryPlanStore` | Структурный ключ плана и общий для процесса неявный кэш SQL-планов. |
 | `SqlBuilder` + `ISqlDialect` | Формирует SQL с учётом диалекта провайдера и список параметров. |
 | `RowMapperFactory` / `RowMaterializer` | Компилирует преобразователь строки (`IDataRecord` → сущность / DTO). |
 | `DbCommand` (через `DataContext.CreateCommand`) | Провайдерная команда с SQL-текстом и привязанными параметрами. |

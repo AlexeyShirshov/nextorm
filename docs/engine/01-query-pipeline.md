@@ -18,7 +18,7 @@ To translate the recorded expressions, `QueryPreparer` uses expression visitors:
 
 ## The plan key
 
-A `QueryPlan` captures the *structural shape* of the query, not its runtime values. Two calls with different lambda instances but the same shape produce the same key, so the cache can reuse the plan while the runtime parameter values change independently. [`QueryPlanStore`](03-plan-cache-and-reuse.md) keeps plans in a per-thread cache keyed by `(context type, QueryPlan)`. To disable lookup for one command, use `QueryCommand<TResult>.Cache`; see [plan cache and reuse](03-plan-cache-and-reuse.md) for the rules.
+A `QueryPlan` captures the *structural shape* of the query. [`QueryPlanStore`](03-plan-cache-and-reuse.md) shares compatible implicit SQL plans across contexts and threads. Each call binds its own runtime values, and each connection has its own command state. To disable lookup for one command, use `QueryCommand<TResult>.Cache`; see [plan cache and reuse](03-plan-cache-and-reuse.md) for the rules.
 
 ## SQL generation
 

@@ -16,18 +16,18 @@ The two mechanisms can look alike from the outside, but differ in how you identi
 | | Implicit plan cache | Explicit [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) |
 |---|---|---|
 | Entry point | any terminal on [`EntityBuilder`](xref:NextORM.Core.EntityBuilder) / [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) ([`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})), [`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])), ...) | [`Prepare`](xref:NextORM.Core.QueryCommand`1.Prepare(NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) / `EntityBuilder<T>.Prepare()` |
-| Lookup key | structural hash of the query shape (for an APPLY join, including the APPLY source expression); never the rendered SQL | none - you hold the returned command |
-| Lifetime | until `PurgeQueryCache()` or process exit | as long as you keep the reference |
-| Scope | **per thread**, shared by every [`IDataContext`](xref:NextORM.Core.IDataContext) on that thread | the instance you keep |
+| Lookup key | compatible provider and mapping settings, plus the verified structure of the query | none — you hold the returned command |
+| Lifetime | until the plan cache is cleared or the process exits; some custom query shapes also need a live command for comparison | as long as you keep the reference |
+| Scope | **process-wide** for compatible SQL contexts | the instance you keep |
 | Populates the cache | yes | **no** |
-| Safe for concurrent use | yes, by construction (per-thread entry) | yes across **distinct** connections (one command per connection); on one connection, sequential executions only |
+| Concurrent use | independent contexts on **distinct** connections reuse a compatible plan | independent contexts on **distinct** connections reuse the prepared object |
 | Streamable (`IAsyncEnumerable`) | yes | only with `PrepareOptions { Streaming = true }` |
 
 Use this page to look up the API and caching rules. It does not repeat the measured cost of each option.
 
 ## Terminals on [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1)
 
-`Select(...)` produces a [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1), which declares the terminal operators. Choose a buffered or scalar terminal when you need a completed value, or a streaming terminal when you want to consume rows as you iterate. Every terminal in this section routes through the plan cache.
+`Select(...)` produces a [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1), which declares the terminal operators. Choose a buffered or scalar terminal when you need a completed value, or a streaming terminal when you want to consume rows as you iterate. The terminals in this section use the implicit cache when the query is eligible.
 
 Buffered / scalar:
 
@@ -69,7 +69,7 @@ select id
  from simple_entity
 ```
 
-The cache key represents query structure, not the lambda object's identity or parameter names. So calls with different lambda instances but the same shape reuse an entry, which makes the cache useful for queries written inline in a loop. An APPLY join adds its source expression to the shape: if that source changes, the query gets a different plan and SQL, even when the projection type stays the same. The key is never the rendered SQL:
+The cache compares query structure after it finds a matching hash. Different lambda instances with the same shape can reuse an entry. An APPLY join includes its source expression in the shape, so changing that expression can produce a different plan even when the projection type stays the same. The following loop reuses a plan while binding a different `entityId` for each call:
 
 ```csharp
 for (var i = 0; i < 2; i++)
@@ -169,13 +169,11 @@ A `Cache` value that is not defined in the enum is rejected by `Prepare` with an
 
 This separation allows concurrent use across connections: the same prepared object can run on two distinct connections at once, each with its own parameters and reader.
 
-**Same-connection restriction.** Two *overlapping* executions of one prepared object on the **same** connection fail fast with an `InvalidOperationException`, before either execution changes command state. This restriction does not affect other commands or the implicit plan cache on that connection; it is not a connection-wide scheduler. Sequential executions on the same connection are fine.
+**Same-connection restriction.** If an execution already holds the command state for a plan on a connection, another execution of that plan on the same connection fails with `InvalidOperationException` before it changes the command state. This guard covers that plan's command state. Other overlaps on a context or connection are unsupported and might not raise the same exception.
 
 **Stream lifetime.** Under `None`, the command belongs to one execution and is disposed with its reader or enumerator. Under `Connection`, disposing the reader releases the execution lease—the reservation for that command—and returns the command to that connection's state. A streaming result holds the lease until you dispose it, so an abandoned live stream keeps that connection busy for this prepared command.
 
-> **Sharing rules.** You can share a prepared command across threads and contexts when each execution uses its own connection. On one connection, execute it sequentially and dispose every streaming result.
->
-> Each execution owns its parameter values, transaction, and reader; the prepared object does not. The implicit cache follows a different rule: it is per thread.
+> **Sharing rules.** Run concurrent queries through independent contexts on distinct connections. Allow only one active operation per context and per connection, including when two contexts wrap the same connection. Sequential use can resume on a different thread after `await`. A streaming operation stays active until the reader or enumerator is exhausted or disposed.
 
 ### Inspecting and executing a prepared command
 
@@ -226,14 +224,14 @@ var implicitRows = ctx.From<ISimpleEntity>().Select(x => x.Id).ToList();
 
 ## Plan-cache scope and purging
 
-The implicit cache (`DataContext._queryPlanCache`) is a `[ThreadStatic]` dictionary keyed by `(ContextType, QueryPlan)`. In other words, each thread looks up a plan by both context type and query shape. For an APPLY join, the shape includes the APPLY source expression; it never uses the rendered SQL:
+The implicit SQL plan cache is shared within the process. To reuse a plan, contexts must agree on the provider and effective dialect, mappings, and SQL-generation options. The following rules apply to compatible queries:
 
-* **Per thread.** Thread B cannot see an entry created on thread A. After work moves to another thread-pool thread, the first call there misses until that thread has seen the shape.
-* **Per context type.** SQLite, PostgreSQL and SQL Server produce different SQL and different `DbCommand` implementations for the same shape, so they get separate entries.
-* **No automatic invalidation.** Entries live until you call `PurgeQueryCache()` or the process ends. After a schema change, purge the cache or recreate the context before reusing affected query shapes.
-* `QueryCommand<TResult>.Cache = false` disables hashing and lookup for that command. This is not a cheap "skip the cache" switch: it forces a full plan rebuild on every call.
+* **Plan reuse.** The lookup checks the query structure, including inputs that change the SQL shape, such as literals and `IN` list lengths. A physical thread, a connection, or an ordinary captured scalar doesn't split an otherwise compatible plan.
+* **Concurrent first use.** Two callers can build candidates for the same shape. The first published compatible plan is the one subsequent calls reuse.
+* **Execution state.** NextORM binds the current values for each invocation. Each exact `DbConnection` has its own command state for the plan, and each execution gets its own reader.
+* **Opt out for a command.** Set `QueryCommand<TResult>.Cache = false` to skip implicit lookup and publication for that command.
 
-To clear the plans for one context, call:
+To clear the shared SQL plans, call the following method on a SQL context after active database operations finish:
 
 ```csharp
 ctx.PurgeQueryCache();
@@ -251,9 +249,9 @@ ReferenceEquals(ctx.ExpressionsCache, DataContextCache.ExpressionsCache); // fal
 
 ## Cache controls
 
-`PurgeQueryCache()` clears plans for one context. The controls below clear process-wide caches or configure plan caching for a context. `QueryCommand<TResult>.Cache` is sticky: changing it changes the command's setting. These controls leave that flag alone, so disabling the cache this way does not leak onto the shared `Any` command:
+On a SQL context, `PurgeQueryCache()` clears the shared implicit SQL plans and that context's local query artifacts. On an in-memory context, it clears that instance's compiled queries. Run cache clears and mapping changes only when no affected queries are active. The following controls leave the command's `Cache` flag alone:
 
-* [`DataContextCache.Clear()`](xref:NextORM.Core.DataContextCache.Clear) empties every process-wide cache: metadata, select lists, compiled expression and in-list delegates, compiled `JoinInto` identity selectors, row mappers, projection aliases, and `FROM` sources. It also invalidates the thread-local plan cache. Identity selectors are rebuilt from current metadata on their next use, so a key configuration registered after the clear replaces stale data. Because the plan cache is `[ThreadStatic]`, a plan built on another thread is dropped when that thread next accesses the cache. Call `Clear()` after a schema change.
+* [`DataContextCache.Clear()`](xref:NextORM.Core.DataContextCache.Clear) clears the shared implicit SQL plans and process-wide metadata, mappers, and other translation caches. Call `Clear()` after a schema or mapping change. Later queries rebuild from the current metadata.
 
   `Clear()` also drops global query filters imported by the EF Core bridge. A bridge-bound context then fails closed with the documented `InvalidOperationException` on its next query or DML build instead of running unfiltered. Create or rebind a context through the bridge to recover (see [EF Core query-filter bridge](../advanced/integration-efcore.md#lifecycle-recovery-and-bounded-concurrency)).
 * [`DataContextBuilder.UseQueryCache(false)`](xref:NextORM.Core.DataContextBuilder.UseQueryCache(System.Boolean)) — or the `DataContext.QueryCacheEnabled` / `InMemoryDataContext.QueryCacheEnabled` property — rebuilds every plan instead of caching it. It is passed as `storeInCache: false` for the call and leaves `QueryCommand<TResult>.Cache` untouched.
@@ -266,7 +264,7 @@ using var ctx = new SqliteDataContext("Data Source=app.db", builder); // every t
 new DataContextBuilder().UseCacheSlidingExpiration(TimeSpan.FromMinutes(10)); // lazy eviction, process-wide
 
 DataContextCache.Clear(); // drop the process-wide caches and the plan cache
-ctx.PurgeQueryCache();    // drop this context's plans
+ctx.PurgeQueryCache();    // clear shared SQL plans and local query artifacts
 ```
 
 ## Captured `in`/`Contains` collections

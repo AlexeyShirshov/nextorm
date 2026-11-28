@@ -11,11 +11,10 @@ namespace NextORM.Core;
 /// The sharing scope of each cache in the code base is stated here explicitly, so that the lifetime
 /// of a cache is never a matter of archaeology:
 /// <list type="bullet">
-/// <item><description>this class and <c>MapperCache</c> — process-wide;</description></item>
+/// <item><description>this class, <c>MapperCache</c>, and the compatible implicit SQL plans in
+///   <see cref="QueryPlanStore"/> — process-wide;</description></item>
 /// <item><description><c>InMemoryDataContext.ExpressionsCache</c> — per context instance: its entries
 ///   embed <c>Expression.Constant(this)</c> and therefore must not be shared;</description></item>
-/// <item><description><c>DataContext._queryPlanCache</c> — per thread, keyed by
-///   <c>QueryPlanCacheKey(ContextType, Plan)</c> so that different providers do not collide.</description></item>
 /// </list>
 /// </remarks>
 public static class DataContextCache
@@ -133,9 +132,8 @@ public static class DataContextCache
     /// the thread-local plan cache. The next query rebuilds whatever it needs.
     /// </summary>
     /// <remarks>
-    /// The plan cache is <c>[ThreadStatic]</c>, so a plan created on another thread is dropped lazily
-    /// when that thread next touches the cache (the store is invalidated through a process-wide
-    /// generation counter). A context's per-instance caches (for example
+    /// Clears the implicit SQL plan store together with its lookup indices. Call when no affected
+    /// queries are active. A context's per-instance caches (for example
     /// <c>InMemoryDataContext.CommandIndex</c>) are not reached; clear those with
     /// <c>PurgeQueryCache()</c>. The context-owned JSON row-writer caches are invalidated here through
     /// the <see cref="JsonRowWriterCacheGeneration"/> counter: each of them drops its entries lazily on

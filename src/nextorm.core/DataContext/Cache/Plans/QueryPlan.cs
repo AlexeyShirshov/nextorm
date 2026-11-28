@@ -37,7 +37,7 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
     private readonly int? _forcedHash;
     private bool _isCacheVersion;
     internal bool NeedsSeparateRawRecipe { get; private set; }
-    internal bool HasOpaqueComponentDescriptors { get; private set; }
+    internal bool RequiresWeakOwner { get; private set; }
 
     /// <summary>
     /// Captures a canonical, hashable description of <paramref name="cmd"/> and computes its stable
@@ -188,7 +188,7 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
 
     private QueryPlan GetCacheVersion(bool detachSqlExpressions)
     {
-        // The same plan key can be stored more than once (the per-thread store is cleared and a
+        // The same plan key can be stored more than once (the shared store is cleared and a
         // reused command repopulates it), and after the first call the command is already the
         // detached cache clone — cloning again would be wasted work and a clone of a clone.
         if (_isCacheVersion)
@@ -197,8 +197,8 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
         var newCmd = QueryCommand.CloneForCache();
         if (detachSqlExpressions)
         {
-            NeedsSeparateRawRecipe = newCmd.DetachSqlPlanKey(out var hasOpaqueDescriptors);
-            HasOpaqueComponentDescriptors = hasOpaqueDescriptors;
+            NeedsSeparateRawRecipe = newCmd.DetachSqlPlanKey(out var requiresWeakOwner);
+            RequiresWeakOwner = requiresWeakOwner;
         }
         // Plan identity is behavioural: identical frozen hash and structural command equality (below), not comparer instance sharing.
         Debug.Assert(_hashPlan == ComputeHash(newCmd, _sql, _comparer), "Hash must be equals, if not see QueryCommand.CopyTo function");

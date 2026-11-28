@@ -7,16 +7,6 @@ public partial class QueryCommand
 {
     // If preparation left an authored clause intact, the next matching command already owns
     // its executable form. Keep only comparison syntax for that clause in the descriptor.
-    // More complex preparations keep the existing executable snapshot for now.
-    internal (RawShape Shape, QueryCommand Recipe)? TryDetachRawClauses(RawShape shape)
-    {
-        if (shape.Closures is not { Length: > 0 }
-            || SnapshotRawClauses(shape) is not { } replay || ReferenceEquals(shape, replay))
-            return null;
-
-        return (replay, CloneForRawRecipe(replay));
-    }
-
     private RawShape? SnapshotRawClauses(RawShape shape)
     {
         if (!SupportsRawWhereReplay(shape))
@@ -28,6 +18,9 @@ public partial class QueryCommand
             return null;
 
         var visitor = new RawClauseCaptureVisitor();
+        if (_components.Count != 0 && !CheckPreparedRawGrouping(shape, visitor))
+            return null;
+
         LambdaExpression? comparisonProjection = null;
         // For an unchanged scalar projection, the recipe needs only the prepared column metadata.
         // The matching command already has the executable selector and its own captures.
@@ -102,7 +95,26 @@ public partial class QueryCommand
         var replay = useCurrentWhere || useCurrentSorting || comparisonProjection is not null || comparisonWindows is not null
             ? shape.WithComparisonClauses(comparisonCondition, comparisonSorting, comparisonProjection, comparisonWindows)
             : shape;
-        return replay.SnapshotRawClauseChildren(this);
+        return replay;
+    }
+
+    private bool CheckPreparedRawGrouping(RawShape shape, RawClauseCaptureVisitor visitor)
+    {
+        if (!visitor.CheckColumns(GroupingList))
+            return false;
+        if (EffectiveGroupingKeys is { } keys)
+        {
+            foreach (var key in keys)
+                visitor.Visit(key);
+        }
+        if (!shape.RebindGrouping)
+        {
+            var component = (IQueryComponentShape)_components[0];
+            foreach (var selector in component.ShapeSelectors)
+                visitor.Visit(selector);
+            visitor.Visit(EffectiveHaving);
+        }
+        return visitor.Supported;
     }
 
     // Keep the inferred keys, but rebuild HAVING from the fresh component and projection. No
@@ -126,8 +138,6 @@ public partial class QueryCommand
 
         var visitor = new RawClauseCaptureVisitor();
         visitor.Visit(shape.Exp);
-        visitor.Visit(shape.Condition);
-        visitor.Visit(PreparedCondition);
         if (!visitor.CheckColumns(_selectList) || !visitor.CheckColumns(groupingColumns))
             return null;
         foreach (var key in keys)
@@ -195,12 +205,17 @@ public partial class QueryCommand
 
     private bool SupportsRawWhereReplay(RawShape shape)
         => SupportsSimpleRawReplay(shape)
-            && shape.Components.IsEmpty && _components.IsEmpty
             && Prep is
             {
-                PreparedComponents: null, EffectiveGroupingKeys: null, EffectiveHaving: null,
-                EffectiveSourcePredicate: null, GroupingList: null or { Length: 0 }
-            };
+                EffectiveSourcePredicate: null
+            } prepared
+            && (_components.IsEmpty && prepared is
+                {
+                    PreparedComponents: null, EffectiveGroupingKeys: null, EffectiveHaving: null,
+                    GroupingList: null or { Length: 0 }
+                }
+                || _components.Count == 1 && _components[0] is IRawGroupingComponent and IQueryComponentShape
+                    && prepared.PreparedComponents is [IQueryPreparationDescriptor]);
 
     private bool SupportsSimpleRawReplay(RawShape shape)
         => shape.Joins is null
@@ -226,8 +241,7 @@ public partial class QueryCommand
             };
 
     private static bool IsPlainRecipeSource(FromExpression? from)
-        => IsPlainTableSource(from)
-            && from?.LinqSource is null && from?.DerivedFragment is null && from?.SourceBinding is null;
+        => IsPlainTableSource(from) && from?.SourceBinding is null;
 
     private sealed class RawClauseCaptureVisitor : ExpressionVisitor
     {
@@ -295,7 +309,7 @@ public partial class QueryCommand
 
         protected override Expression VisitConstant(ConstantExpression node)
         {
-            if (node.Value is { } value && value is not string && !value.GetType().IsPrimitive && !value.GetType().IsEnum)
+            if (!IsImmutableSqlConstant(node.Value))
                 Supported = false;
             return node;
         }

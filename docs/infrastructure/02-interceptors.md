@@ -142,15 +142,15 @@ The connection is opened lazily and reused, so `ConnectionOpening`/`ConnectionOp
 ## Guarantees
 
 * **Registration order** is preserved; every interceptor of a type receives every event, in the order it was added, after the builder-configured ones.
-* **Thread safety**: interceptors must be thread-safe, because a context may execute concurrently. The interceptor list itself is a copy-on-write snapshot, so adding an interceptor while queries run is safe.
+* **Thread safety**: if you register the same interceptor instance on independent contexts, its callbacks can run concurrently. Keep only one active operation per context and per connection. Interceptor registration uses a snapshot so it doesn't change the callbacks already selected for an event.
 * **Zero cost when unused**: with no interceptor registered, the execution path takes a branch and calls the provider directly - no event objects, timestamps, delegates or async state machines are allocated.
 
 ## Limitations
 
-* **Do not change `CommandText`.** A query's command belongs to the cached plan and is reused across executions; rewriting its text would silently desynchronise the cache. `CommandInitialized` is intended for options that do not alter the SQL (a timeout, provider-specific flags).
+* **Do not change `CommandText`.** NextORM can reuse the `DbCommand` on that connection. Rewriting its text can break later executions. Use `CommandInitialized` for options that don't alter the SQL, such as a command timeout.
 * **Exception translation is out of scope.** There is no exception interceptor: wrap the explicit terminal call (or the repository method) in a `try`/`catch` to map a provider exception to a domain type. The one gap is deferred/streaming execution, where the failure surfaces during enumeration of an `IAsyncEnumerable` rather than at the call site.
 * **No interceptors for the in-memory provider.** [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) has no command or connection, so `AddInterceptor` only affects database-backed contexts.
-* **`CommandInitialized` and the shared plan cache.** The plan cache is shared per context type and thread, so a query whose plan was already built by another context raises `CommandInitialized` only on that first build.
+* **`CommandInitialized` and the shared plan cache.** The executing context raises this event when NextORM creates a `DbCommand`, including on a connection's first use of a plan warmed on another connection. Reusing an existing command on the same connection doesn't raise it again. `CommandExecuting` runs for each execution and receives the command with that invocation's bound values.
 
 ## See also
 

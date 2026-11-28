@@ -244,6 +244,23 @@ public partial class QueryCommand
             => columns is { Length: > 0 } ? Array.ConvertAll(columns, static column => column.Copy()) : columns;
     }
 
+    private void CopyClauseCollections()
+    {
+        _hints = _hints?.ToArray();
+        if (TableHints is { } tableHints)
+            TableHints = tableHints.ToArray();
+        if (IndexHints is { } indexHints)
+            IndexHints = indexHints.ToArray();
+        if (TablesInScopeHints is { } scopeHints)
+            TablesInScopeHints = scopeHints.ToArray();
+        if (Settings is { } settings)
+            Settings = settings.ToArray();
+        if (GroupingSets is { } sets)
+            GroupingSets = sets.Select(static set => (int[])set.Clone()).ToArray();
+        if (_windows is { } windows)
+            _windows = RewriteWindowExpressions(windows);
+    }
+
     /// <summary>Creates an empty command of the same concrete type for a live clone.</summary>
     /// <returns>A new command bound to this command's data context.</returns>
     protected virtual QueryCommand CreateSelf()
@@ -300,6 +317,7 @@ public partial class QueryCommand
         var cmd = CreateSelfForClone();
         CopyTo(cmd, false);
         cmd.CopyPreparedColumns();
+        cmd.CopyClauseCollections();
         return cmd;
     }
 
@@ -315,6 +333,11 @@ public partial class QueryCommand
         // The staged command and its descendants use their own components and authored clauses.
         _components = default;
         _componentsView = null;
+        if (shape.UseCurrentNaming)
+        {
+            NamingConvention = null;
+            ResolvedNamingConvention = null;
+        }
         if (shape.UseCurrentWhere)
             PreparedCondition = null;
         if (shape.UseCurrentSorting)
@@ -342,11 +365,11 @@ public partial class QueryCommand
 
     // SQL keys are compared, not rendered. Keep the legacy cache clone executable for raw recipe
     // adoption and for the in-memory route. Walk only command edges owned by the cache clone.
-    internal bool DetachSqlPlanKey(out bool hasOpaqueDescriptors)
+    internal bool DetachSqlPlanKey(out bool requiresWeakOwner)
     {
         var rewriter = new SqlKeyExpressionRewriter();
         DetachSqlPlanKey(rewriter);
-        hasOpaqueDescriptors = rewriter.HasOpaqueDescriptors;
+        requiresWeakOwner = rewriter.RequiresWeakOwner;
         return rewriter.Changed;
     }
 
@@ -372,6 +395,40 @@ public partial class QueryCommand
         }
 
         _having = (LambdaExpression?)rewriter.Visit(_having);
+        // PREWHERE comparison reads the prepared predicate. The authored predicate and the
+        // navigation graph exist only to prepare or execute the caller's command.
+        if (_preWhere is not null || NavigationPaths is not null || NavigationChain is not null || JunctionChildFilter is not null)
+        {
+            _preWhere = null;
+            NavigationPaths = null;
+            NavigationChain = null;
+            JunctionChildFilter = null;
+            rewriter.Changed = true;
+        }
+        if (LimitBy is { } limitBy)
+        {
+            var selector = (LambdaExpression)rewriter.Visit(limitBy.Expression);
+            if (!ReferenceEquals(selector, limitBy.Expression))
+                LimitBy = limitBy with { Expression = selector };
+        }
+        if (DistinctOn is { } distinctOn)
+        {
+            var selector = (LambdaExpression)rewriter.Visit(distinctOn.Expression);
+            if (!ReferenceEquals(selector, distinctOn.Expression))
+                DistinctOn = distinctOn with { Expression = selector };
+        }
+        if (ExtremeRow is { } extreme)
+        {
+            var value = (LambdaExpression)rewriter.Visit(extreme.ValueSelector);
+            var group = (LambdaExpression?)rewriter.Visit(extreme.GroupBy);
+            var projection = (LambdaExpression?)rewriter.Visit(extreme.Projection);
+            if (!ReferenceEquals(value, extreme.ValueSelector) || !ReferenceEquals(group, extreme.GroupBy)
+                || !ReferenceEquals(projection, extreme.Projection))
+                ExtremeRow = extreme with { ValueSelector = value, GroupBy = group, Projection = projection };
+        }
+        PerParentPartition = (LambdaExpression?)rewriter.Visit(PerParentPartition);
+        if (_arrayJoins is { Length: > 0 } arrayJoins)
+            _arrayJoins = Array.ConvertAll(arrayJoins, expression => (LambdaExpression)rewriter.Visit(expression));
         if (_windows is { Count: > 0 } windows)
         {
             _windows = RewriteWindowExpressions(windows, rewriter);
@@ -383,6 +440,14 @@ public partial class QueryCommand
             prepared.PreparedCondition = rewriter.Visit(prepared.PreparedCondition);
             prepared.PreparedHaving = rewriter.Visit(prepared.PreparedHaving);
             prepared.PreparedPreWhere = rewriter.Visit(prepared.PreparedPreWhere);
+            if (prepared.PreparedArrayJoin is not null || prepared.OuterRefBindings is not null)
+            {
+                prepared.PreparedArrayJoin = null;
+                prepared.OuterRefBindings = null;
+                rewriter.Changed = true;
+            }
+            if (prepared.OuterRefs is { Count: > 0 } references)
+                prepared.OuterRefs = references.ConvertAll(expression => rewriter.Visit(expression)!);
             RewriteColumns(prepared.GroupingList);
             RewriteColumns(prepared.LimitByColumns);
             RewriteColumns(prepared.DistinctOnColumns);
@@ -409,7 +474,7 @@ public partial class QueryCommand
                     else
                     {
                         comparison[i] = descriptor;
-                        rewriter.HasOpaqueDescriptors = true;
+                        rewriter.RequiresWeakOwner = true;
                     }
                 }
                 prepared.PreparedComponents = comparison;
@@ -496,7 +561,7 @@ public partial class QueryCommand
 
     // Both SQL keys and raw descriptors compare the authored window syntax. Neither snapshot
     // needs to execute the selectors or borrow the live collections of partition and order keys.
-    private static WindowDefinition[] RewriteWindowExpressions(IReadOnlyList<WindowDefinition> windows, ExpressionVisitor rewriter)
+    private static WindowDefinition[] RewriteWindowExpressions(IReadOnlyList<WindowDefinition> windows, ExpressionVisitor? rewriter = null)
     {
         var result = new WindowDefinition[windows.Count];
         for (var i = 0; i < result.Length; i++)
@@ -504,13 +569,13 @@ public partial class QueryCommand
             var window = windows[i];
             var partitions = new LambdaExpression[window.PartitionBy.Count];
             for (var p = 0; p < partitions.Length; p++)
-                partitions[p] = (LambdaExpression)rewriter.Visit(window.PartitionBy[p]);
+                partitions[p] = (LambdaExpression?)rewriter?.Visit(window.PartitionBy[p]) ?? window.PartitionBy[p];
 
             var orders = new NamedWindowOrderKey[window.OrderBy.Count];
             for (var o = 0; o < orders.Length; o++)
             {
                 var key = window.OrderBy[o];
-                orders[o] = new NamedWindowOrderKey((LambdaExpression)rewriter.Visit(key.Expression), key.Direction);
+                orders[o] = new NamedWindowOrderKey((LambdaExpression?)rewriter?.Visit(key.Expression) ?? key.Expression, key.Direction);
             }
 
             result[i] = new WindowDefinition(window.Name, partitions, orders, window.Frame);
@@ -519,10 +584,13 @@ public partial class QueryCommand
         return result;
     }
 
+    private static bool IsImmutableSqlConstant(object? value)
+        => value is Type || PreparedCommandFactory.IsShareableSeedValue(value);
+
     private sealed class SqlKeyExpressionRewriter : ExpressionVisitor
     {
         internal bool Changed { get; set; }
-        internal bool HasOpaqueDescriptors { get; set; }
+        internal bool RequiresWeakOwner { get; set; }
 
         protected override Expression VisitMember(MemberExpression node)
         {
@@ -538,7 +606,39 @@ public partial class QueryCommand
             return base.VisitMember(node);
         }
 
-        protected override Expression VisitExtension(Expression node) => node;
+        protected override Expression VisitConstant(ConstantExpression node)
+        {
+            if (IsImmutableSqlConstant(node.Value))
+                return node;
+
+            if (node.Value is Array { Rank: 1 } array)
+            {
+                var copy = (Array)array.Clone();
+                foreach (var value in copy)
+                {
+                    if (!IsImmutableSqlConstant(value))
+                    {
+                        RequiresWeakOwner = true;
+                        return node;
+                    }
+                }
+                // Constant array equality is structural. Freeze its values without changing their
+                // types or literal semantics, so later writes cannot change the published shape.
+                Changed = true;
+                return Expression.Constant(copy, node.Type);
+            }
+
+            // Arbitrary values can define equality. Use their real comparison under a live
+            // representative instead of rooting them or treating a hash as proof of equality.
+            RequiresWeakOwner = true;
+            return node;
+        }
+
+        protected override Expression VisitExtension(Expression node)
+        {
+            RequiresWeakOwner = true;
+            return node;
+        }
     }
 
     /// <summary>Returns a deep, independently mutable copy of this command.</summary>

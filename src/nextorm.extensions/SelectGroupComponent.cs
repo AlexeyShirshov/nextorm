@@ -167,7 +167,7 @@ public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryCompo
                 throw new QueryPreparationException("SelectGroup projection analysis is missing.");
         }
 
-        return new PreparationDescriptor(_projection, _condition, GetDescriptorHash(context.ExpressionComparer), contribution);
+        return new PreparationDescriptor(projection, _condition, GetDescriptorHash(projection, context.ExpressionComparer), contribution);
     }
 
     IQueryPreparationDescriptor IRawGroupingComponent.BindRawHaving(LambdaExpression projection,
@@ -176,15 +176,15 @@ public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryCompo
         var condition = SelectGroupConditionBinder.Bind<TEntity>(projection, _condition!);
         var contribution = new QueryPreparationContribution(groupingKeys, QueryPreparationHavingMode.Replace,
             condition, sourcePredicate: null, requireDistinct: false);
-        return new PreparationDescriptor(_projection, _condition, GetDescriptorHash(comparer), contribution);
+        return new PreparationDescriptor(projection, _condition, GetDescriptorHash(projection, comparer), contribution);
     }
 
-    private int GetDescriptorHash(IEqualityComparer<Expression> comparer)
+    private int GetDescriptorHash(LambdaExpression projection, IEqualityComparer<Expression> comparer)
     {
         var hash = new HashCode();
         hash.Add(Slot);
         hash.Add(GetType());
-        hash.Add(_projection, comparer);
+        hash.Add(projection, comparer);
         if (_condition is not null) hash.Add(_condition, comparer);
 
         return hash.ToHashCode();

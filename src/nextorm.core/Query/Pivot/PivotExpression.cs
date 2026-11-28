@@ -165,6 +165,19 @@ public sealed class PivotExpression
     internal PivotExpression CloneForCache()
         => WithInner(Inner.CloneForCache()!);
 
+    internal PivotExpression ForSqlPlanKey(ExpressionVisitor rewriter)
+    {
+        var inner = Inner.ForSqlPlanKey(rewriter);
+        var aggregate = (LambdaExpression?)rewriter.Visit(AggregateColumn);
+        var column = (LambdaExpression?)rewriter.Visit(ForColumn);
+        if (ReferenceEquals(inner, Inner) && ReferenceEquals(aggregate, AggregateColumn)
+            && ReferenceEquals(column, ForColumn))
+            return this;
+
+        return new PivotExpression(inner, InnerEntityType, IsUnpivot, Aggregate, aggregate, column,
+            Values, UnpivotValueColumn, UnpivotNameColumn, Columns);
+    }
+
     internal PivotExpression WithInner(FromExpression inner)
     {
         if (ReferenceEquals(inner, Inner))

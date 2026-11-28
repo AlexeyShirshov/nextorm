@@ -148,6 +148,41 @@ public sealed class SqliteSelectGroupPlanOwnershipTests
     }
 
     [Fact]
+    public void RawRecipe_DoesNotRetainTheUnusedGroupingProjection()
+    {
+        using var firstConnection = new SqliteConnection("Data Source=:memory:");
+        using var secondConnection = new SqliteConnection("Data Source=:memory:");
+        Seed(firstConnection);
+        Seed(secondConnection);
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder());
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder());
+
+        var (firstPlan, owner) = Execute(first);
+        var reuses = RecipeReuses();
+        var (secondPlan, _) = Execute(second);
+        secondPlan.Should().BeSameAs(firstPlan);
+        RecipeReuses().Should().Be(reuses + 1);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        owner.IsAlive.Should().BeFalse("the component's fallback selector is unused when the command supplies a projection");
+        GC.KeepAlive(firstPlan);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (DbPreparedQueryCommand<int> Plan, WeakReference Owner) Execute(SqliteDataContext context)
+        {
+            var owner = new HavingOwner(100);
+            Expression<Func<GroupRow, int>> fallback = row => row.Id + owner.Target;
+            var command = context.From<GroupRow>().WithTag("unused grouping projection")
+                .WithComponent(new SelectGroupComponent<GroupRow>(fallback)).Select(row => row.Id);
+            var invocation = context.GetPreparedQueryCommand(command, false, true, TestContext.Current.CancellationToken);
+            invocation.ToList(context).Should().BeEquivalentTo(new[] { 1, 2 });
+            return (PreparedPlanObservation.GetPlan(invocation), new WeakReference(owner));
+        }
+    }
+
+    [Fact]
     public void RawRecipe_RebindsHavingWithoutRetainingItsCapture()
     {
         using var firstConnection = new SqliteConnection("Data Source=:memory:");

@@ -878,22 +878,31 @@ internal sealed class QueryPlanner : IQueryPlanner
             }
             else if (QueryPlanStore.TryGetRaw(_contextType, recipeShape, queryCommand, out var rawCandidate))
             {
-                // Transactional apply: stage the owner's preparation data into this command, validate
-                // that the resulting key still describes the published owner, and on mismatch discard
-                // the staged state and run ordinary preparation of the input.
-                var rawGraph = queryCommand.CaptureRawGraph();
-                rawCandidate!.ApplyTo(queryCommand);
-                var recipePlan = rawCandidate.Plan;
-                var stagedKey = queryCommand.GetOrCreatePlanKey(null);
-                if (recipePlan.Equals(stagedKey) || stagedKey.Equals(recipePlan))
+                if (rawCandidate!.Plan.RequiresWeakOwner)
                 {
-                    Interlocked.Increment(ref _recipeReuses);
+                    // An opaque descriptor can own a previous invocation. Verify against a private
+                    // copy and use only the holder, as a native hit does. Any path that needs live
+                    // prepared state to bind parameters or mapping goes through ordinary preparation.
+                    if (rawCandidate.Holder is DbPreparedQueryCommand<TRow>
+                        { NeedsParamRefresh: false, RequiresInvocationMapper: false } opaquePlan)
+                    {
+                        var staged = queryCommand.Clone();
+                        rawCandidate.ApplyTo(staged);
+                        if (MatchesRawPlan(staged, rawCandidate.Plan))
+                        {
+                            if (createEnumerator)
+                                opaquePlan.EnableStreaming();
+                            return opaquePlan;
+                        }
+                    }
                 }
                 else
                 {
-                    Interlocked.Increment(ref _recipeRejections);
-                    Interlocked.Increment(ref _recipeApplyMismatches);
-                    queryCommand.DiscardStagedPreparation(rawGraph);
+                    // Discard the adoption if the resulting key does not describe the published owner.
+                    var rawGraph = queryCommand.CaptureRawGraph();
+                    rawCandidate.ApplyTo(queryCommand);
+                    if (!MatchesRawPlan(queryCommand, rawCandidate.Plan))
+                        queryCommand.DiscardStagedPreparation(rawGraph);
                 }
             }
         }
@@ -1121,9 +1130,9 @@ internal sealed class QueryPlanner : IQueryPlanner
                     && !queryCommand.HasTopLevelInValues
                     && !queryCommand.HasPreWhereInValues
                     && !queryCommand.HasUnkeyedTupleInValues
-                    && !queryCommand.HasUnkeyedScalarInValues)
+                    && !queryCommand.HasUnkeyedScalarInValues
+                    && QueryPlanStore.SetRaw(_contextType, storedKey, compiledQuery, recipeShape, queryCommand))
                 {
-                    QueryPlanStore.SetRaw(_contextType, storedKey, compiledQuery, recipeShape, queryCommand);
                     Interlocked.Increment(ref _recipePublishes);
                 }
             }
@@ -1172,6 +1181,20 @@ internal sealed class QueryPlanner : IQueryPlanner
             var sql = MakeSelect(queryCommand, false, @params, queryCommand, aliasProvider, sequentialAccess, suppressLobLocator, capture);
             return (sql, @params, capture);
         }
+    }
+
+    private static bool MatchesRawPlan(QueryCommand command, QueryPlan recipePlan)
+    {
+        var stagedKey = command.GetOrCreatePlanKey(null);
+        if (recipePlan.Equals(stagedKey) || stagedKey.Equals(recipePlan))
+        {
+            Interlocked.Increment(ref _recipeReuses);
+            return true;
+        }
+
+        Interlocked.Increment(ref _recipeRejections);
+        Interlocked.Increment(ref _recipeApplyMismatches);
+        return false;
     }
 
     // The statement's placeholder order is authoritative. As before, a same-count fallback is positional.
