@@ -4825,12 +4825,13 @@ public partial class QueryCommand
         // changed value into the same recipe while a different instance must build its own shape. A
         // captured QueryCommand can change the rendered statement without changing this shape, so it
         // stays ineligible exactly as before.
-        if (!TryCollectClosureKey(cmd, out var closures)) return null;
+        if (!TryScanClosureKey(cmd, capture: true, out var closureHash, out var closures)) return null;
         shape.Closures = closures;
 
         // The fingerprint is the same structural identity the warm hit derives from a fresh command, so
         // the published shape and a later probe can never disagree about which bucket they belong to.
-        if (ComputeRawFingerprint(cmd) is not int fingerprint) return null;
+        var comparers = new RawFingerprintComparers(cmd);
+        if (ComputeRawFingerprint(cmd, 0, ref comparers, closureHash) is not int fingerprint) return null;
         shape.Fingerprint = fingerprint;
         return shape;
     }
@@ -5061,15 +5062,16 @@ public partial class QueryCommand
     [ThreadStatic]
     private static ClosureKeyScan? _tlsClosureScan;
 
-    private static bool TryCollectClosureKey(QueryCommand cmd, out object?[]? closures)
+    private static bool TryScanClosureKey(QueryCommand cmd, bool capture, out int hash, out object?[]? closures)
     {
         var scan = _tlsClosureScan ??= new ClosureKeyScan();
         scan.Reset();
         try
         {
             scan.ScanCommand(cmd);
-            closures = scan.Snapshot();
-            return !scan.HasCapturedCommand && !scan.HasUnsupportedConstant;
+            hash = scan.IdentitiesHash;
+            closures = capture ? scan.Snapshot() : null;
+            return !scan.HasCapturedCommand && !scan.HasUnsupportedConstant && !scan.HasUnpublishableValueList;
         }
         finally
         {
@@ -5307,7 +5309,7 @@ public partial class QueryCommand
         }
     }
 
-    private static int? ComputeRawFingerprint(QueryCommand cmd, int depth, ref RawFingerprintComparers comparers)
+    private static int? ComputeRawFingerprint(QueryCommand cmd, int depth, ref RawFingerprintComparers comparers, int? capturedClosureHash = null)
     {
         // Deep/cyclic graphs and any already-mutated command are ineligible.
         if (depth > 8 || cmd._isPrepared) return null;
@@ -5356,19 +5358,9 @@ public partial class QueryCommand
 
         // Closure identities partition the bucket the same way the descriptor does, and a captured
         // command makes the graph ineligible. The scan is allocation-free (thread-static scanner).
-        var scan = _tlsClosureScan ??= new ClosureKeyScan();
-        scan.Reset();
-        int closureHash;
-        try
-        {
-            scan.ScanCommand(cmd);
-            if (scan.HasCapturedCommand || scan.HasUnsupportedConstant || scan.HasUnpublishableValueList) return null;
-            closureHash = scan.IdentitiesHash;
-        }
-        finally
-        {
-            scan.Reset();
-        }
+        var closureHash = capturedClosureHash.GetValueOrDefault();
+        if (!capturedClosureHash.HasValue && !TryScanClosureKey(cmd, capture: false, out closureHash, out _))
+            return null;
 
         var exp = comparers.Expression;
         XxHash32 hash = new();

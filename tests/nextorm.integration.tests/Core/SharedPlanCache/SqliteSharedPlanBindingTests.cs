@@ -550,8 +550,9 @@ public sealed partial class SqliteSharedPlanBindingTests
     private static IAsyncEnumerator<int> OrdinaryStream(SqliteDataContext context, int target, bool forceFallback, CancellationToken cancellationToken)
     {
         var builder = Filter(context, target);
+        // A simple column sort can use the binding recipe; a computed sort still takes the fallback.
         if (forceFallback)
-            builder = builder.OrderBy(row => row.Id);
+            builder = builder.OrderBy(row => row.Id + row.Id);
 
         return builder.Select(row => row.Id).CreateAsyncEnumerator(cancellationToken);
     }

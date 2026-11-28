@@ -87,9 +87,9 @@ internal readonly struct ShapeToken : IEquatable<ShapeToken>
 /// <summary>
 /// The non-expression dimensions of a native shape: the entity and result types, the provider context
 /// the plan belongs to and the terminal that will execute it. Two requests that differ in any of them
-/// must never share a plan, so they are the first tokens of every shape.
+/// must never share a plan, so the header is verified separately from the expression tokens.
 /// </summary>
-internal readonly struct ShapeHeader
+internal readonly record struct ShapeHeader
 {
     public ShapeHeader(Type? entityType, Type? resultType, Type? contextType, int terminal,
         NativeContextStamp renderStamp = default, NativeSourceStamp sourceStamp = default)
@@ -156,12 +156,16 @@ internal sealed class ShapeCapture
 /// </summary>
 internal sealed class ShapeKey
 {
-    public ShapeKey(ShapeToken[] tokens, ShapeCapture[] captures, int hash)
+    public ShapeKey(in ShapeHeader header, ShapeToken[] tokens, ShapeCapture[] captures, int hash)
     {
+        Header = header;
         Tokens = tokens;
         Captures = captures;
         Hash = hash;
     }
+
+    /// <summary>The non-expression compatibility dimensions.</summary>
+    public ShapeHeader Header { get; }
 
     /// <summary>The canonical token stream (types, members, literal values; never a closure).</summary>
     public ShapeToken[] Tokens { get; }
@@ -366,7 +370,7 @@ internal static class ShapeIdentity
                 return null;
         }
 
-        return visitor.ToKey();
+        return visitor.ToKey(header);
     }
 
     /// <summary>
@@ -379,8 +383,11 @@ internal static class ShapeIdentity
     /// <returns><see langword="true"/> when the shapes are identical, capture count included.</returns>
     public static bool Matches(ShapeKey key, in ShapeHeader header, params LambdaExpression?[] roots)
     {
+        if (key.Header != header)
+            return false;
+
         var visitor = GetVisitor();
-        visitor.BeginCompare(key, header);
+        visitor.BeginCompare(key);
         try
         {
             for (var i = 0; i < roots.Length; i++)
@@ -406,8 +413,11 @@ internal static class ShapeIdentity
     /// <returns><see langword="true"/> when the shape is identical, capture count included.</returns>
     public static bool Matches(ShapeKey key, in ShapeHeader header, LambdaExpression? root)
     {
+        if (key.Header != header)
+            return false;
+
         var visitor = GetVisitor();
-        visitor.BeginCompare(key, header);
+        visitor.BeginCompare(key);
         try
         {
             return ScanRoot(visitor, root) && !visitor.CompareMismatch && visitor.Complete;
@@ -435,8 +445,11 @@ internal static class ShapeIdentity
         LambdaExpression? root1,
         LambdaExpression? root2)
     {
+        if (key.Header != header)
+            return false;
+
         var visitor = GetVisitor();
-        visitor.BeginCompare(key, header);
+        visitor.BeginCompare(key);
         try
         {
             return ScanRoots(visitor, root0, root1, root2) && !visitor.CompareMismatch && visitor.Complete;
@@ -482,7 +495,7 @@ internal static class ShapeIdentity
     {
         var visitor = GetVisitor();
         visitor.BeginCreate(header);
-        return ScanRoots(visitor, root0, root1, root2) ? visitor.ToKey() : null;
+        return ScanRoots(visitor, root0, root1, root2) ? visitor.ToKey(header) : null;
     }
 
     /// <summary>Three-graph bind; no <c>params</c> array.</summary>
@@ -503,11 +516,11 @@ internal static class ShapeIdentity
         LambdaExpression? root1,
         LambdaExpression? root2)
     {
-        if (values.Length != binder.ParameterCount || binder.SlotCount != key.Captures.Length)
+        if (key.Header != header || values.Length != binder.ParameterCount || binder.SlotCount != key.Captures.Length)
             return false;
 
         var visitor = GetVisitor();
-        visitor.BeginBind(key, header, binder, values);
+        visitor.BeginBind(key, binder, values);
         try
         {
             return ScanRoots(visitor, root0, root1, root2) && !visitor.CompareMismatch && visitor.Complete;
@@ -544,11 +557,11 @@ internal static class ShapeIdentity
         object?[] values,
         LambdaExpression? root)
     {
-        if (values.Length != binder.ParameterCount || binder.SlotCount != key.Captures.Length)
+        if (key.Header != header || values.Length != binder.ParameterCount || binder.SlotCount != key.Captures.Length)
             return false;
 
         var visitor = GetVisitor();
-        visitor.BeginBind(key, header, binder, values);
+        visitor.BeginBind(key, binder, values);
         try
         {
             return ScanRoot(visitor, root) && !visitor.CompareMismatch && visitor.Complete;
@@ -595,7 +608,7 @@ internal static class ShapeIdentity
             _slot = 0;
             _binder = null;
             _values = null;
-            AddHeader(header);
+            _hash.Add(header.GetHashCode());
         }
 
         public void BeginHash(in ShapeHeader header)
@@ -608,12 +621,12 @@ internal static class ShapeIdentity
             _slot = 0;
             _binder = null;
             _values = null;
-            AddHeader(header);
+            _hash.Add(header.GetHashCode());
         }
 
         public int Hash => _hash.ToHashCode();
 
-        public void BeginCompare(ShapeKey key, in ShapeHeader header)
+        public void BeginCompare(ShapeKey key)
         {
             _expected = key;
             _cursor = 0;
@@ -621,10 +634,9 @@ internal static class ShapeIdentity
             _slot = 0;
             _binder = null;
             _values = null;
-            AddHeader(header);
         }
 
-        public void BeginBind(ShapeKey key, in ShapeHeader header, NativeBinder binder, object?[] values)
+        public void BeginBind(ShapeKey key, NativeBinder binder, object?[] values)
         {
             _expected = key;
             _cursor = 0;
@@ -632,7 +644,6 @@ internal static class ShapeIdentity
             _slot = 0;
             _binder = binder;
             _values = values;
-            AddHeader(header);
         }
 
         public void EndCompare()
@@ -640,34 +651,6 @@ internal static class ShapeIdentity
             _expected = null;
             _binder = null;
             _values = null;
-        }
-
-        private void AddHeader(in ShapeHeader header)
-        {
-            Add(ShapeTokenKind.Literal, header.EntityType);
-            Add(ShapeTokenKind.Literal, header.ResultType);
-            Add(ShapeTokenKind.Literal, header.ContextType);
-            Add(ShapeTokenKind.Literal, typeof(int), null, header.Terminal);
-            // Hashes index buckets; exact scalar/reference tokens verify compatibility within them.
-            var render = header.RenderStamp;
-            Add(ShapeTokenKind.Literal, typeof(bool), null, render.QuoteIdentifiers ? 1 : 0);
-            Add(ShapeTokenKind.Literal, typeof(INamingConvention), render.NamingIdentity);
-            Add(ShapeTokenKind.Literal, typeof(KeywordCase), null, (int)render.KeywordCase);
-            Add(ShapeTokenKind.Literal, render.CommandTimeout.HasValue ? typeof(int) : null, null,
-                render.CommandTimeout.GetValueOrDefault());
-            Add(ShapeTokenKind.Literal, typeof(IEntityMetadataProvider), render.Mapping.MetadataProvider);
-            Add(ShapeTokenKind.Literal, typeof(IEntityVariantResolver), render.Mapping.VariantResolver);
-            Add(ShapeTokenKind.Literal, typeof(ISqlDialect), render.Dialect);
-
-            var source = header.SourceStamp;
-            Add(ShapeTokenKind.Literal, typeof(string), source.Table);
-            Add(ShapeTokenKind.Literal, typeof(string), source.TableOverride);
-            Add(ShapeTokenKind.Literal, typeof(string), source.Schema);
-            Add(ShapeTokenKind.Literal, typeof(string), source.Database);
-            Add(ShapeTokenKind.Literal, typeof(string), source.Server);
-            Add(ShapeTokenKind.Literal, typeof(string), source.TableExpression);
-            Add(ShapeTokenKind.Literal, typeof(bool), null, source.AutoMapped ? 1 : 0);
-            Add(ShapeTokenKind.Literal, source.BindingEntity);
         }
 
         public bool Scan(Expression root)
@@ -683,8 +666,8 @@ internal static class ShapeIdentity
             }
         }
 
-        public ShapeKey? ToKey()
-            => _expected is not null || _hashOnly ? null : new ShapeKey(_tokens.ToArray(), _captures.ToArray(), _hash.ToHashCode());
+        public ShapeKey ToKey(in ShapeHeader header)
+            => new(header, _tokens.ToArray(), _captures.ToArray(), _hash.ToHashCode());
 
         public void Add(ShapeTokenKind kind, Type? type = null, object? payload = null, long bits = 0)
             => Add(new ShapeToken(kind, type, payload, bits));
@@ -767,7 +750,7 @@ internal static class ShapeIdentity
                     binder.Write(_slot, closure.Value, values);
                 }
 
-                if (!Comparing)
+                if (!Comparing && !_hashOnly)
                     _captures.Add(new ShapeCapture(closure.Type, node.Type, BuildPath(node), node.Member.Name));
 
                 _slot++;

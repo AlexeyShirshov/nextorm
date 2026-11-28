@@ -70,7 +70,8 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     internal DbParameterCollection DbCommandParams => PlanParameters;
 
     private CanonicalParameterCollection PlanParameters =>
-        LazyInitializer.EnsureInitialized(ref _canonicalParams, () => new CanonicalParameterCollection(DbCommand.Parameters));
+        Volatile.Read(ref _canonicalParams)
+        ?? LazyInitializer.EnsureInitialized(ref _canonicalParams, () => new CanonicalParameterCollection(DbCommand.Parameters));
 
     /// <summary>The statement text every per-connection command is created with.</summary>
     internal string CommandText => _factory.CommandText;
@@ -480,6 +481,11 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
         var memo = Volatile.Read(ref _memo);
         if (memo is not null && memo.TryGet(connection, out var cached))
             return cached!;
+
+        // On a shared plan, a warm lookup on another connection must not replace the memo.
+        // Alternating connections would allocate a new pair of weak references on every checkout.
+        if (_states.TryGetValue(connection, out var existing))
+            return existing;
 
         var state = _states.GetValue(connection, _createState);
         Volatile.Write(ref _memo, new Memo(connection, state));

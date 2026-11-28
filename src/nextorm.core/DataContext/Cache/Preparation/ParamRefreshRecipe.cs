@@ -19,8 +19,8 @@ namespace NextORM.Core;
 /// Only the provably-equivalent scalar subset is supported: every refreshed parameter must come from a
 /// captured member access whose root is a constant (typically a compiler-generated) closure, the member
 /// name must be the parameter name, no value converter/duration/stability/runtime parameter may be
-/// involved, and the command must have no joins, grouping, HAVING, PREWHERE, sorting, windows, array
-/// joins, CTEs, unions or outer references. A referenced subquery is supported only for the shared
+/// involved, and the command must have no joins, grouping, HAVING, PREWHERE, computed sort keys,
+/// windows, array joins, CTEs, unions or outer references. A referenced subquery is supported only for the shared
 /// terminal wrapper (Any/Count/All), whose captured predicate is rendered inside that subquery; the
 /// recipe then navigates the subquery's own roots on every bind. Anything else leaves the cached command
 /// without a recipe, and the original <c>ExtractParams</c> path runs unchanged.
@@ -359,8 +359,24 @@ internal sealed class ParamRefreshRecipe
         if (queryCommand.PreparedPreWhere is not null)
             return false;
 
-        if (queryCommand.Sorting is { Length: > 0 })
-            return false;
+        if (queryCommand.Sorting is { Length: > 0 } sorting)
+        {
+            foreach (ref readonly var sort in sorting.AsSpan())
+            {
+                // A plain row column adds no bind slot. Computed sort keys remain on the
+                // renderer, including keys that read captures or call a SQL function.
+                if (sort.PreparedExpression is not LambdaExpression { Parameters: [var row] } selector)
+                    return false;
+
+                var key = selector.Body;
+                if (key is UnaryExpression { NodeType: ExpressionType.Convert, Method: null, Type: var type } box
+                    && type == typeof(object))
+                    key = box.Operand;
+
+                if (key is not MemberExpression member || !ReferenceEquals(member.Expression, row))
+                    return false;
+            }
+        }
 
         if (queryCommand.Windows is { Count: > 0 })
             return false;

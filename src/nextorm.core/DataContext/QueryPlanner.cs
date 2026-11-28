@@ -1186,8 +1186,13 @@ internal sealed class QueryPlanner : IQueryPlanner
     private static bool MatchesRawPlan(QueryCommand command, QueryPlan recipePlan)
     {
         var stagedKey = command.GetOrCreatePlanKey(null);
-        if (recipePlan.Equals(stagedKey) || stagedKey.Equals(recipePlan))
+        var matchesStored = recipePlan.Equals(stagedKey);
+        if (matchesStored || stagedKey.Equals(recipePlan))
         {
+            // The store uses this same direction of comparison. Remember the verified key so
+            // the normalized lookup does not compare the staged expression graph a second time.
+            if (matchesStored && !recipePlan.RequiresWeakOwner && recipePlan.GetHashCode() == stagedKey.GetHashCode())
+                command.CacheStoredPlanKey(recipePlan, null);
             Interlocked.Increment(ref _recipeReuses);
             return true;
         }

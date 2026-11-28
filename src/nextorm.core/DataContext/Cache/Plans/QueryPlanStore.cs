@@ -197,7 +197,7 @@ internal static class QueryPlanStore
             var entries = bucket.Entries;
             foreach (var entry in entries)
             {
-                if (shape.Tokens.AsSpan().SequenceEqual(entry.Shape.Tokens))
+                if (shape.Header == entry.Shape.Header && shape.Tokens.AsSpan().SequenceEqual(entry.Shape.Tokens))
                     return;
             }
 
