@@ -53,8 +53,8 @@ public sealed class T302S3CompositeAllCacheTests : IDisposable
         command.ExecuteNonQuery();
     }
 
-    private static DbPreparedQueryCommand<T> Prepare<T>(DataContext context, QueryCommand<T> command, bool storeInCache = true)
-        => (DbPreparedQueryCommand<T>)context.GetPreparedQueryCommand(
+    private static IPreparedQueryCommand<T> Prepare<T>(DataContext context, QueryCommand<T> command, bool storeInCache = true)
+        => context.GetPreparedQueryCommand(
             command, createEnumerator: false, storeInCache: storeInCache, CancellationToken.None);
 
     private static object? ExtremeRowOf(QueryCommand<CacheRow> cmd)
@@ -113,14 +113,14 @@ public sealed class T302S3CompositeAllCacheTests : IDisposable
         foreach (var (command, expectedOccurrences) in new[] { (arity2, 3), (arity3, 4) })
         {
             var first = Prepare(_ctx, command, storeInCache: true);
-            var sql1 = first.DbCommand.CommandText;
-            var params1 = first.DbCommand.Parameters.Cast<DbParameter>()
-                .Select(p => (p.ParameterName, p.Value)).ToList();
+            var sql1 = first.PlanOf().CommandText;
+            var params1 = first.ObservedParameters()
+            .Select(p => (p.Descriptor.ParameterName, p.Value)).ToList();
 
             var second = Prepare(_ctx, command, storeInCache: false);
-            var sql2 = second.DbCommand.CommandText;
-            var params2 = second.DbCommand.Parameters.Cast<DbParameter>()
-                .Select(p => (p.ParameterName, p.Value)).ToList();
+            var sql2 = second.PlanOf().CommandText;
+            var params2 = second.ObservedParameters()
+            .Select(p => (p.Descriptor.ParameterName, p.Value)).ToList();
 
             sql2.Should().Be(sql1, "repeated composite renders must produce identical SQL");
             params2.Should().Equal(params1, "the parameter name/value sequence must be deterministic");
@@ -135,7 +135,7 @@ public sealed class T302S3CompositeAllCacheTests : IDisposable
             Regex.Matches(sql1, "\\$[A-Za-z_][A-Za-z0-9_]*")
                 .Select(m => m.Value).Distinct().Count()
                 .Should().Be(params1.Count, "the SQL placeholders and the extracted parameters must agree one-to-one");
-            params1.Select(p => p.Value).Should().Equal(new object?[] { 1, 7 });
+        params1.Select(p => p.Value).Should().Equal(1, 7);
         }
     }
 
@@ -156,7 +156,7 @@ public sealed class T302S3CompositeAllCacheTests : IDisposable
 
         capturedFlag = 0;
         var second = Prepare(_ctx, command);
-        ReferenceEquals(second, first).Should().BeTrue(
+        ReferenceEquals(second.PlanOf(), first.PlanOf()).Should().BeTrue(
             "the same composite logical form must reuse the cached plan");
         // flag == 0: (8,100), (9,2) -> the composite winner shifts to (9,2).
         _ctx.ToList(second).Select(r => r.Id).Should().Equal(3);
@@ -230,7 +230,7 @@ public sealed class T302S3CompositeAllCacheTests : IDisposable
 
         var second = Prepare(_ctx, warm);
         _ctx.ToList(second).Select(r => r.Id).Should().Equal(4);
-        ReferenceEquals(second, first).Should()
+        ReferenceEquals(second.PlanOf(), first.PlanOf()).Should()
             .BeTrue("the warm execution must reuse the very plan instance the cold call cached");
 
         QueryPlanStore.TryGetRaw(_ctx.GetType(), warmShape!, warm, out var planAfterHit)
@@ -288,7 +288,7 @@ public sealed class T302S3CompositeAllCacheTests : IDisposable
 
         capturedFlag = 0;
         var second = Prepare(_ctx, command);
-        ReferenceEquals(second, first).Should().BeTrue("the grouped composite form must reuse the cached plan");
+        ReferenceEquals(second.PlanOf(), first.PlanOf()).Should().BeTrue("the grouped composite form must reuse the cached plan");
 
         // Executed with the second invocation's captured value: the winners are re-evaluated, not stale.
         var secondRows = _ctx.ToList(second).OrderBy(r => r.Id).ToList();
@@ -317,7 +317,7 @@ public sealed class T302S3CompositeAllCacheTests : IDisposable
 
         capturedFlag = 0;
         var second = Prepare(_ctx, command);
-        ReferenceEquals(second, first).Should().BeTrue("the arity-3 composite form must reuse the cached plan");
+        ReferenceEquals(second.PlanOf(), first.PlanOf()).Should().BeTrue("the arity-3 composite form must reuse the cached plan");
 
         var secondRows = _ctx.ToList(second);
         secondRows.Should().ContainSingle();
@@ -384,7 +384,7 @@ public sealed class T302S3CompositeAllCacheTests : IDisposable
         firstRows.Select(r => r.Payload).Should().ContainInOrder(new int?[] { 10, 20 });
 
         var second = Prepare(_ctx, command);
-        ReferenceEquals(second, first).Should().BeTrue("the DISTINCT grouped form reuses its cached plan");
+        ReferenceEquals(second.PlanOf(), first.PlanOf()).Should().BeTrue("the DISTINCT grouped form reuses its cached plan");
         var secondRows = _ctx.ToList(second);
         secondRows.Select(r => r.Payload).Should().ContainInOrder(new int?[] { 10, 20 });
     }

@@ -174,15 +174,15 @@ public sealed class PlanEqualityDifferentialBranchCoverage4Tests : ProviderTestS
 
         var capturedFirst = Prepare(ByCaptured());
         Rows(capturedFirst).Should().Equal(3, 4);
-        Prepare(ByCaptured()).Should().BeSameAs(capturedFirst, "one closure site keeps one live plan");
+        Prepare(ByCaptured()).PlanOf().Should().BeSameAs(capturedFirst.PlanOf(), "one closure site keeps one live plan");
 
         var memberFirst = Prepare(ByMember());
         Rows(memberFirst).Should().Equal(3, 4);
-        Prepare(ByMember()).Should().BeSameAs(memberFirst, "the captured-object member keeps one plan");
+        Prepare(ByMember()).PlanOf().Should().BeSameAs(memberFirst.PlanOf(), "the captured-object member keeps one plan");
 
         probe.Floor = 0;
         var rebound = Prepare(ByMember());
-        rebound.Should().BeSameAs(memberFirst, "the member node is compared by name, not by its current value");
+        rebound.PlanOf().Should().BeSameAs(memberFirst.PlanOf(), "the member node is compared by name, not by its current value");
         Rows(rebound).Should().Equal(new[] { 1, 2, 3, 4 }, "the reused plan re-binds the current member value");
         probe.Floor = 2;
 
@@ -319,7 +319,7 @@ public sealed class PlanEqualityDifferentialBranchCoverage4Tests : ProviderTestS
         var hintedAgainPrepared = Prepare(hintedAgain);
         planComparer.Equals(hinted, hintedAgain).Should().BeTrue("an identical index-hint list is the same plan");
         planComparer.GetHashCode(hinted).Should().Be(planComparer.GetHashCode(hintedAgain));
-        hintedAgainPrepared.Should().BeSameAs(Prepare(hinted), "the equal hint list reuses one live plan");
+        hintedAgainPrepared.PlanOf().Should().BeSameAs(Prepare(hinted).PlanOf(), "the equal hint list reuses one live plan");
 
         planComparer.Equals(hinted, otherElement).Should().BeFalse("a different index-hint element is a different plan");
         planComparer.Equals(hinted, ignored).Should().BeFalse("a hint list of a different length is a different plan");
@@ -362,7 +362,7 @@ public sealed class PlanEqualityDifferentialBranchCoverage4Tests : ProviderTestS
 
         planComparer.Equals(oneSet, oneSetAgain).Should().BeTrue("an identical grouping-set list is the same plan");
         planComparer.GetHashCode(oneSet).Should().Be(planComparer.GetHashCode(oneSetAgain));
-        Prepare(oneSetAgain).Should().BeSameAs(Prepare(oneSet), "the equal set list reuses one plan");
+        Prepare(oneSetAgain).PlanOf().Should().BeSameAs(Prepare(oneSet).PlanOf(), "the equal set list reuses one plan");
 
         planComparer.Equals(oneSet, otherIndex).Should().BeFalse("a different set member index is a different plan");
         planComparer.Equals(oneSet, bothIndices).Should().BeFalse("a set of a different arity is a different plan");
@@ -514,13 +514,13 @@ public sealed class PlanEqualityDifferentialBranchCoverage4Tests : ProviderTestS
         var first = By(1);
         var firstPrepared = Prepare(first);
         Rows(firstPrepared).Should().Equal(2, 3, 4);
-        Prepare(first).Should().BeSameAs(firstPrepared, "re-preparing the same command on the context keeps one plan");
+        Prepare(first).PlanOf().Should().BeSameAs(firstPrepared.PlanOf(), "re-preparing the same command on the context keeps one plan");
 
         var second = By(1);
-        Prepare(second).Should().BeSameAs(firstPrepared, "a freshly built identical predicate reuses the plan");
+        Prepare(second).PlanOf().Should().BeSameAs(firstPrepared.PlanOf(), "a freshly built identical predicate reuses the plan");
 
         var changedPrepared = Prepare(By(2));
-        changedPrepared.Should().NotBeSameAs(firstPrepared, "a changed literal is a different plan");
+        changedPrepared.PlanOf().Should().NotBeSameAs(firstPrepared.PlanOf(), "a changed literal is a different plan");
         Rows(changedPrepared).Should().Equal(3, 4);
     }
 

@@ -206,7 +206,7 @@ public sealed class StructuralPlanBranchCoverage5Tests : ProviderTestSuite
         Rows(PrepareUncached(second)).Should().Equal(expectedRows, "the equal shape reads the same live rows on both sides");
 
         var cachedFirst = PrepareCached(first);
-        PrepareCached(second).Should().BeSameAs(cachedFirst, "an independently built equal shape must reuse the one cached plan");
+        PrepareCached(second).PlanOf().Should().BeSameAs(cachedFirst.PlanOf(), "an independently built equal shape must reuse the one cached plan");
         Rows(cachedFirst).Should().Equal(expectedRows, "the reused plan returns the same live rows");
     }
 
@@ -239,7 +239,7 @@ public sealed class StructuralPlanBranchCoverage5Tests : ProviderTestSuite
         Rows(PrepareUncached(second)).Should().Equal(secondRows, because);
 
         var cachedFirst = PrepareCached(first);
-        PrepareCached(second).Should().NotBeSameAs(cachedFirst, because);
+        PrepareCached(second).PlanOf().Should().NotBeSameAs(cachedFirst.PlanOf(), because);
     }
 
     /// <summary>
@@ -526,7 +526,7 @@ public sealed class StructuralPlanBranchCoverage5Tests : ProviderTestSuite
             scalarVersusEntity,
             entityCommand,
             "an entity projection and a scalar projection are different select-list plans");
-        PrepareCached(entityCommand).Should().NotBeSameAs(PrepareCached(scalarVersusEntity));
+        PrepareCached(entityCommand).PlanOf().Should().NotBeSameAs(PrepareCached(scalarVersusEntity).PlanOf());
 
         var scalarVersusMultiColumn = Scalar();
         Resolve(scalarVersusMultiColumn);
@@ -535,7 +535,7 @@ public sealed class StructuralPlanBranchCoverage5Tests : ProviderTestSuite
             scalarVersusMultiColumn,
             multiColumn,
             "a multi-column projection and a scalar projection are different select-list plans");
-        PrepareCached(multiColumn).Should().NotBeSameAs(PrepareCached(scalarVersusMultiColumn));
+        PrepareCached(multiColumn).PlanOf().Should().NotBeSameAs(PrepareCached(scalarVersusMultiColumn).PlanOf());
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -842,7 +842,7 @@ public sealed class StructuralPlanBranchCoverage5Tests : ProviderTestSuite
             namesA,
             codes,
             "a multi-column projection differing in exactly one component is a different select-list plan");
-        PrepareCached(codes).Should().NotBeSameAs(PrepareCached(namesA));
+        PrepareCached(codes).PlanOf().Should().NotBeSameAs(PrepareCached(namesA).PlanOf());
     }
 
     // ---------------------------------------------------------------------------------------------

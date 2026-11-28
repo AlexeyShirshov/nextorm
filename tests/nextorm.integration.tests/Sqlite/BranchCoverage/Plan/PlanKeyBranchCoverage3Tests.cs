@@ -131,22 +131,22 @@ public sealed class PlanKeyBranchCoverage3Tests : ProviderTestSuite
         var constantFirst = Prepare(constant);
         Rows(constantFirst).Should().Equal(2L, 3L);
         Rows(Prepare(constant)).Should().Equal(2L, 3L);
-        Prepare(constant).Should().BeSameAs(constantFirst, "an identical constant shape keeps one plan");
+        Prepare(constant).PlanOf().Should().BeSameAs(constantFirst.PlanOf(), "an identical constant shape keeps one plan");
 
         var captured = _sut.ComplexEntity.Where(byCaptured).Select(x => x.Id);
         var capturedFirst = Prepare(captured);
         Rows(capturedFirst).Should().Equal(2L, 3L);
-        Prepare(captured).Should().BeSameAs(capturedFirst, "the same closure site keeps one plan");
+        Prepare(captured).PlanOf().Should().BeSameAs(capturedFirst.PlanOf(), "the same closure site keeps one plan");
 
         var member = _sut.ComplexEntity.Where(byMember).Select(x => x.Id);
         var memberFirst = Prepare(member);
         Rows(memberFirst).Should().Equal(2L, 3L);
-        Prepare(member).Should().BeSameAs(memberFirst, "a captured-object member keeps one plan and rebinds its value");
+        Prepare(member).PlanOf().Should().BeSameAs(memberFirst.PlanOf(), "a captured-object member keeps one plan and rebinds its value");
 
         var convert = _sut.ComplexEntity.Where(byConvert).Select(x => x.Id);
         var convertFirst = Prepare(convert);
         Rows(convertFirst).Should().Equal(2L, 3L);
-        Prepare(convert).Should().BeSameAs(convertFirst, "a convert predicate keeps one plan");
+        Prepare(convert).PlanOf().Should().BeSameAs(convertFirst.PlanOf(), "a convert predicate keeps one plan");
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -164,9 +164,9 @@ public sealed class PlanKeyBranchCoverage3Tests : ProviderTestSuite
         var tagged = _sut.ComplexEntity.Where(x => x.Id <= 2).Select(x => x.Id).WithTag("pkb3_tag");
 
         Rows(Prepare(plain)).Should().Equal(1L, 2L);
-        Prepare(plainAgain).Should().BeSameAs(Prepare(plain), "an identical untagged shape shares one plan");
+        Prepare(plainAgain).PlanOf().Should().BeSameAs(Prepare(plain).PlanOf(), "an identical untagged shape shares one plan");
         Rows(Prepare(tagged)).Should().Equal(1L, 2L);
-        Prepare(tagged).Should().NotBeSameAs(Prepare(plain), "the tag text is part of the plan key");
+        Prepare(tagged).PlanOf().Should().NotBeSameAs(Prepare(plain).PlanOf(), "the tag text is part of the plan key");
 
         // Paging axis.
         var pageOne = _sut.ComplexEntity.OrderBy(x => x.Id).Limit(1).Select(x => x.Id);
@@ -174,7 +174,7 @@ public sealed class PlanKeyBranchCoverage3Tests : ProviderTestSuite
 
         Rows(Prepare(pageOne)).Should().Equal(1L);
         Rows(Prepare(pageTwo)).Should().Equal(1L, 2L);
-        Prepare(pageTwo).Should().NotBeSameAs(Prepare(pageOne), "a different page limit is a different plan key");
+        Prepare(pageTwo).PlanOf().Should().NotBeSameAs(Prepare(pageOne).PlanOf(), "a different page limit is a different plan key");
 
         // Distinct axis.
         var notDistinct = _sut.ComplexEntity.Select(x => x.Int);
@@ -182,7 +182,7 @@ public sealed class PlanKeyBranchCoverage3Tests : ProviderTestSuite
 
         Rows(Prepare(notDistinct)).Should().HaveCount(3);
         Rows(Prepare(distinct)).Should().HaveCount(2);
-        Prepare(distinct).Should().NotBeSameAs(Prepare(notDistinct), "the DISTINCT flag is part of the plan key");
+        Prepare(distinct).PlanOf().Should().NotBeSameAs(Prepare(notDistinct).PlanOf(), "the DISTINCT flag is part of the plan key");
 
         // Eager-shape axis: the same graph in SingleQuery and SplitQuery must not share the parent plan.
         var parent = NextEagerBase();
@@ -209,8 +209,8 @@ public sealed class PlanKeyBranchCoverage3Tests : ProviderTestSuite
             splitParents.Should().ContainSingle();
             splitParents[0].Children.Select(c => c.Id).Should().BeEquivalentTo([parent + 100, parent + 101]);
 
-            Prepare(single.ToCommand()).Should().NotBeSameAs(
-                Prepare(split.ToCommand()), "the resolved eager mode is part of the plan key");
+            Prepare(single.ToCommand()).PlanOf().Should().NotBeSameAs(
+                Prepare(split.ToCommand()).PlanOf(), "the resolved eager mode is part of the plan key");
         }
         finally
         {

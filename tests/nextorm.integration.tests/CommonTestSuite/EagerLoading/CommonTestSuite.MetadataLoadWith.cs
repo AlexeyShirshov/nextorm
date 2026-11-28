@@ -587,7 +587,7 @@ public abstract partial class CommonTestSuite
         var preparedCommand = Builder().ToCommand();
         var preparedWarm = ctx.GetPreparedQueryCommand(preparedCommand, createEnumerator: false, storeInCache: true, CancellationToken.None);
 
-        preparedWarm.Should().BeSameAs(preparedCold, "an equivalent metadata declaration reuses the prepared plan");
+        preparedWarm.PlanOf().Should().BeSameAs(preparedCold.PlanOf(), "an equivalent metadata declaration reuses the prepared plan");
     }
 
     [Fact]
@@ -611,7 +611,7 @@ public abstract partial class CommonTestSuite
 
         var inferred = ctx.GetPreparedQueryCommand(inferredCommand, createEnumerator: false, storeInCache: true, CancellationToken.None);
         var explicitPrepared = ctx.GetPreparedQueryCommand(explicitCommand, createEnumerator: false, storeInCache: true, CancellationToken.None);
-        explicitPrepared.Should().BeSameAs(inferred, "both frontends key the same plan entry");
+        explicitPrepared.PlanOf().Should().BeSameAs(inferred.PlanOf(), "both frontends key the same plan entry");
 
         var recorder = new StatementRecorder();
         ((DataContext)ctx).AddInterceptor(recorder);

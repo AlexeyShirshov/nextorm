@@ -178,8 +178,8 @@ public sealed class PostgresPreparationDifferentialBranchCoverage4Tests : Provid
             var first = Prepare(command, storeInCache: true);
             command.Cache.Should().BeTrue("the bypass is call-local; the sticky Cache flag is never mutated");
             Rows(first).Should().Equal(new[] { 5 });
-            Prepare(command, storeInCache: true).Should()
-                .NotBeSameAs(first, "a data-modifying statement never shares its plan");
+            Prepare(command, storeInCache: true).PlanOf().Should()
+                .NotBeSameAs(first.PlanOf(), "a data-modifying statement never shares its plan");
 
             var second = Context.With("pg4_ins_second", Context.CreateInsertBuilder<Pg4Marker>()
                     .Value(x => x.Id, 6)
@@ -248,11 +248,11 @@ public sealed class PostgresPreparationDifferentialBranchCoverage4Tests : Provid
             Rows(cached).Should().Equal(new[] { 1, 2 });
 
             var uncached = Prepare(Filtered(), storeInCache: false);
-            uncached.Should().NotBeSameAs(cached, "the uncached route builds a call-local plan");
+            uncached.PlanOf().Should().NotBeSameAs(cached.PlanOf(), "the uncached route builds a call-local plan");
             Rows(uncached).Should().Equal(new[] { 1, 2 }, "the uncached preparation reads the same rows");
 
-            Prepare(Filtered(), storeInCache: true).Should()
-                .BeSameAs(cached, "the third, cached preparation reuses the first holder");
+            Prepare(Filtered(), storeInCache: true).PlanOf().Should()
+                .BeSameAs(cached.PlanOf(), "the third, cached preparation reuses the first holder");
 
             ids.Add(3);
             Rows(Prepare(Filtered(), storeInCache: true)).Should()
@@ -261,7 +261,7 @@ public sealed class PostgresPreparationDifferentialBranchCoverage4Tests : Provid
             var groupedCached = Prepare(Grouped(), storeInCache: true);
             Rows(groupedCached).Should().Equal(new[] { 2, 3 });
             Rows(Prepare(Grouped(), storeInCache: false)).Should().Equal(new[] { 2, 3 });
-            Prepare(Grouped(), storeInCache: true).Should().BeSameAs(groupedCached);
+            Prepare(Grouped(), storeInCache: true).PlanOf().Should().BeSameAs(groupedCached.PlanOf());
         }
         finally
         {

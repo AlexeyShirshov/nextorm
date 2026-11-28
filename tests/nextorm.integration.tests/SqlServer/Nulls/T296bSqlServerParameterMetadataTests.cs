@@ -37,7 +37,7 @@ public sealed class T296bSqlServerParameterMetadataTests : ProviderTestSuite
             foreach (var step in new int?[] { null, 42, null })
             {
                 captured = step;
-                var prepared = (DbPreparedQueryCommand<long>)ctx.GetPreparedQueryCommand(
+                var prepared = ctx.GetPreparedQueryCommand(
                     ctx.From<IT296bMetaRow>().Where(x => x.N == captured).Select(x => x.Id),
                     createEnumerator: false,
                     storeInCache: true,
@@ -45,7 +45,9 @@ public sealed class T296bSqlServerParameterMetadataTests : ProviderTestSuite
 
                 // The metadata is read BEFORE the execution: on a cache hit the planner has already
                 // refreshed the value, and the provider type must not depend on it.
-                var parameter = prepared.DbCommand.Parameters.Cast<SqlParameter>().Should().ContainSingle().Subject;
+                var plan = prepared.PlanOf();
+                var parameter = plan.DbCommandParams.Cast<SqlParameter>().Should().ContainSingle().Subject;
+                var value = prepared.ParameterValue(0);
                 records.Add(new MetadataRecord(
                     step is null ? "null" : step.Value.ToString(),
                     parameter.ParameterName,
@@ -53,9 +55,9 @@ public sealed class T296bSqlServerParameterMetadataTests : ProviderTestSuite
                     parameter.SqlDbType.ToString(),
                     parameter.Precision,
                     parameter.Scale,
-                    parameter.Value is DBNull ? "DBNull" : parameter.Value?.ToString() ?? "null"));
+                    value is DBNull ? "DBNull" : value.ToString() ?? "null"));
 
-                preparedCommands.Add(prepared);
+                preparedCommands.Add(plan);
                 var ids = ctx.ToList(prepared);
                 ids.Should().Equal(step is null ? new[] { 1L } : step.Value == 42 ? new[] { 2L } : new[] { 3L },
                     "the transition execution must observe the current captured value");

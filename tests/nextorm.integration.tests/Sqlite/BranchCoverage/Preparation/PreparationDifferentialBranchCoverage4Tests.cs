@@ -395,11 +395,11 @@ public sealed class PreparationDifferentialBranchCoverage4Tests : ProviderTestSu
         Rows(filteredCached).Should().Equal(new[] { 1, 2 });
 
         var filteredUncached = Prepare(Filtered(), storeInCache: false);
-        filteredUncached.Should().NotBeSameAs(filteredCached, "the uncached route builds a call-local plan");
+        filteredUncached.PlanOf().Should().NotBeSameAs(filteredCached.PlanOf(), "the uncached route builds a call-local plan");
         Rows(filteredUncached).Should().Equal(new[] { 1, 2 }, "the uncached preparation reads the same rows");
 
-        Prepare(Filtered(), storeInCache: true).Should()
-            .BeSameAs(filteredCached, "the third, cached preparation reuses the first holder");
+        Prepare(Filtered(), storeInCache: true).PlanOf().Should()
+            .BeSameAs(filteredCached.PlanOf(), "the third, cached preparation reuses the first holder");
 
         ids.Add(3);
         Rows(Prepare(Filtered(), storeInCache: true)).Should()
@@ -408,12 +408,12 @@ public sealed class PreparationDifferentialBranchCoverage4Tests : ProviderTestSu
         var joinedCached = Prepare(Joined(), storeInCache: true);
         Rows(joinedCached).Should().Equal(new[] { 10, 11 }, "the group-1 markers join their two lines");
         Rows(Prepare(Joined(), storeInCache: false)).Should().Equal(new[] { 10, 11 });
-        Prepare(Joined(), storeInCache: true).Should().BeSameAs(joinedCached);
+        Prepare(Joined(), storeInCache: true).PlanOf().Should().BeSameAs(joinedCached.PlanOf());
 
         var groupedCached = Prepare(Grouped(), storeInCache: true);
         Rows(groupedCached).Should().Equal(new[] { 1, 2 });
         Rows(Prepare(Grouped(), storeInCache: false)).Should().Equal(new[] { 1, 2 });
-        Prepare(Grouped(), storeInCache: true).Should().BeSameAs(groupedCached);
+        Prepare(Grouped(), storeInCache: true).PlanOf().Should().BeSameAs(groupedCached.PlanOf());
     }
 
     /// <summary>Marker row of the class-owned <c>pd4_main</c> table.</summary>

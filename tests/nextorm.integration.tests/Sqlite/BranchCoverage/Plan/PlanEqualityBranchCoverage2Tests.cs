@@ -474,7 +474,7 @@ public sealed class PlanEqualityBranchCoverage2Tests : ProviderTestSuite
         planComparer.GetHashCode(literal).Should().NotBe(planComparer.GetHashCode(closureOne));
 
         var rebound = Prepare(Closure(_sut.ComplexEntity, 2));
-        rebound.Should().BeSameAs(closureOnePrepared, "one closure site keeps one plan and re-binds its value");
+        rebound.PlanOf().Should().BeSameAs(closureOnePrepared.PlanOf(), "one closure site keeps one plan and re-binds its value");
         Rows(rebound).Should().Equal(new[] { 3L }, "the reused plan re-binds the captured bound");
     }
 
@@ -501,11 +501,11 @@ public sealed class PlanEqualityBranchCoverage2Tests : ProviderTestSuite
         Rows(convertedPrepared).Should().Equal(2L, 3L);
 
         var memberPrepared = Prepare(member);
-        memberPrepared.Should().NotBeSameAs(convertedPrepared, "a different expression shape must not alias the plan");
+        memberPrepared.PlanOf().Should().NotBeSameAs(convertedPrepared.PlanOf(), "a different expression shape must not alias the plan");
         Rows(memberPrepared).Should().Equal(2L, 3L);
 
         var memberAgainPrepared = Prepare(memberAgain);
-        memberAgainPrepared.Should().BeSameAs(memberPrepared, "the identical member shape keeps one plan");
+        memberAgainPrepared.PlanOf().Should().BeSameAs(memberPrepared.PlanOf(), "the identical member shape keeps one plan");
 
         var planComparer = converted.GetQueryPlanEqualityComparer();
         planComparer.Equals(converted, member).Should().BeFalse("a convert condition and a member condition differ");

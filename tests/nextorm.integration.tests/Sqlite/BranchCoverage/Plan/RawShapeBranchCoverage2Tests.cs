@@ -168,7 +168,7 @@ public sealed class RawShapeBranchCoverage2Tests : ProviderTestSuite
             .Should().BeTrue("the same closure instance is the same raw key even when its value changed");
 
         var secondPrepared = Prepare(second);
-        secondPrepared.Should().BeSameAs(firstPrepared, "the raw hit serves the same prepared plan");
+        secondPrepared.PlanOf().Should().BeSameAs(firstPrepared.PlanOf(), "the raw hit serves the same prepared plan");
         Rows(secondPrepared).Should().Equal(new[] { 9, 10 }, "the reused plan re-binds the current closure value");
 
         // A different closure instance (same value) is a distinct key: identity, not value, is the key.

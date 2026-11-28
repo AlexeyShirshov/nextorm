@@ -44,8 +44,8 @@ public sealed class T302S1CacheTests : IDisposable
         command.ExecuteNonQuery();
     }
 
-    private static DbPreparedQueryCommand<CacheRow> Prepare(DataContext context, QueryCommand<CacheRow> command, bool storeInCache = true)
-        => (DbPreparedQueryCommand<CacheRow>)context.GetPreparedQueryCommand(
+    private static IPreparedQueryCommand<CacheRow> Prepare(DataContext context, QueryCommand<CacheRow> command, bool storeInCache = true)
+        => context.GetPreparedQueryCommand(
             command, createEnumerator: false, storeInCache: storeInCache, CancellationToken.None);
 
     private static object? ExtremeRowOf(QueryCommand<CacheRow> cmd)
@@ -84,7 +84,7 @@ public sealed class T302S1CacheTests : IDisposable
 
         capturedFlag = 0;
         var second = Prepare(_ctx, command);
-        ReferenceEquals(second, first).Should().BeTrue("the same logical form must reuse the cached plan");
+        second.PlanOf().Should().BeSameAs(first.PlanOf(), "the same logical form must reuse the cached plan");
         _ctx.ToList(second).Select(r => r.Score).Should().Equal(10);
     }
 
@@ -156,7 +156,7 @@ public sealed class T302S1CacheTests : IDisposable
 
         var second = Prepare(_ctx, warm);
         _ctx.ToList(second).Select(r => r.Score).Should().Equal(9, 9);
-        ReferenceEquals(second, first).Should()
+        ReferenceEquals(second.PlanOf(), first.PlanOf()).Should()
             .BeTrue("the warm execution must reuse the very plan instance the cold call cached");
 
         // The warm execution must not republish: the raw candidate still resolves the same plan.
@@ -206,14 +206,14 @@ public sealed class T302S1CacheTests : IDisposable
             .ToCommand();
 
         var first = Prepare(_ctx, command, storeInCache: true);
-        var sql1 = first.DbCommand.CommandText;
-        var params1 = first.DbCommand.Parameters.Cast<DbParameter>()
-            .Select(p => (p.ParameterName, p.Value)).ToList();
+            var sql1 = first.PlanOf().CommandText;
+            var params1 = first.ObservedParameters()
+                .Select(p => (p.Descriptor.ParameterName, p.Value)).ToList();
 
         var second = Prepare(_ctx, command, storeInCache: false);
-        var sql2 = second.DbCommand.CommandText;
-        var params2 = second.DbCommand.Parameters.Cast<DbParameter>()
-            .Select(p => (p.ParameterName, p.Value)).ToList();
+            var sql2 = second.PlanOf().CommandText;
+            var params2 = second.ObservedParameters()
+                .Select(p => (p.Descriptor.ParameterName, p.Value)).ToList();
 
         sql2.Should().Be(sql1, "repeated renders must produce identical SQL shape");
         params2.Should().Equal(params1, "repeated renders must produce identical parameter name/value sequence");

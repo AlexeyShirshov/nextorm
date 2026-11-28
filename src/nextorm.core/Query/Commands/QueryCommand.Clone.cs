@@ -440,9 +440,11 @@ public partial class QueryCommand
             prepared.PreparedCondition = rewriter.Visit(prepared.PreparedCondition);
             prepared.PreparedHaving = rewriter.Visit(prepared.PreparedHaving);
             prepared.PreparedPreWhere = rewriter.Visit(prepared.PreparedPreWhere);
-            if (prepared.PreparedArrayJoin is not null || prepared.OuterRefBindings is not null)
+            // The plan comparer hashes the prepared ARRAY JOIN expressions.
+            if (prepared.PreparedArrayJoin is { } preparedArrayJoin)
+                prepared.PreparedArrayJoin = Array.ConvertAll(preparedArrayJoin, expression => rewriter.Visit(expression)!);
+            if (prepared.OuterRefBindings is not null)
             {
-                prepared.PreparedArrayJoin = null;
                 prepared.OuterRefBindings = null;
                 rewriter.Changed = true;
             }

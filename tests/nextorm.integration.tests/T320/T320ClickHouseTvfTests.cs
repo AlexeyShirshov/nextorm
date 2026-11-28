@@ -70,11 +70,11 @@ public sealed class T320ClickHouseTvfTests(ITestOutputHelper output) : ProviderT
 
     private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
 
-    private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext context, QueryCommand<T> command, bool storeInCache)
-        => (DbPreparedQueryCommand<T>)context.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None);
+    private static IPreparedQueryCommand<T> Prepare<T>(IDataContext context, QueryCommand<T> command, bool storeInCache)
+        => context.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None);
 
-    private static List<string> ParametersOf<T>(DbPreparedQueryCommand<T> prepared)
-        => [.. prepared.DbCommandParams.Cast<DbParameter>().Select(p => $"{p.ParameterName}={p.Value ?? "null"}")];
+    private static List<string> ParametersOf<T>(IPreparedQueryCommand<T> prepared)
+        => [.. prepared.ObservedParameters().Select(p => $"{p.Descriptor.ParameterName}={p.Value}")];
 
     /// <summary>
     /// The leading result schema renders from the mapped row type and materialises: the structure is the
@@ -89,7 +89,7 @@ public sealed class T320ClickHouseTvfTests(ITestOutputHelper output) : ProviderT
         var command = Context.From(() => T320ChIntegrationTvf.Values("(1, 'x'), (2, 'y')"))
             .Select(r => new { r.A, r.B });
 
-        var sql = Normalize(Prepare(Context, command, storeInCache: false).DbCommand.CommandText);
+        var sql = Normalize(Prepare(Context, command, storeInCache: false).PlanOf().CommandText);
         output.WriteLine($"values sql: <<{sql}>>");
 
         sql.Should().Contain(
@@ -118,7 +118,7 @@ public sealed class T320ClickHouseTvfTests(ITestOutputHelper output) : ProviderT
             .Select(p => new { Number = p.Item1.Value, Id = p.Item2.Id })
             .OrderBy(x => x.Number);
 
-        var sql = Normalize(Prepare(Context, command, storeInCache: false).DbCommand.CommandText);
+        var sql = Normalize(Prepare(Context, command, storeInCache: false).PlanOf().CommandText);
         output.WriteLine($"join sql: <<{sql}>>");
 
         sql.Should().Contain("from (select toInt64(number) as number", "the TVF is the cast-wrapped FROM source");
@@ -178,7 +178,7 @@ public sealed class T320ClickHouseTvfTests(ITestOutputHelper output) : ProviderT
         QueryCommand<long> Build() => Context.From(() => T320ChIntegrationTvf.Numbers(capturedCount)).Select(r => r.Value);
 
         var first = Prepare(Context, Build(), storeInCache: true);
-        var firstSql = Normalize(first.DbCommand.CommandText);
+        var firstSql = Normalize(first.PlanOf().CommandText);
         var firstObserved = $"rendered statement: <<{firstSql}>>; parameters: [{string.Join(", ", ParametersOf(first))}]";
         output.WriteLine($"first run: {firstObserved}");
 
@@ -192,11 +192,11 @@ public sealed class T320ClickHouseTvfTests(ITestOutputHelper output) : ProviderT
         capturedCount = 5L;
 
         var second = Prepare(Context, Build(), storeInCache: true);
-        var secondSql = Normalize(second.DbCommand.CommandText);
+        var secondSql = Normalize(second.PlanOf().CommandText);
         var secondObserved = $"rendered statement: <<{secondSql}>>; parameters: [{string.Join(", ", ParametersOf(second))}]";
         output.WriteLine($"second run: {secondObserved}");
 
-        ReferenceEquals(first, second).Should().BeTrue(
+        ReferenceEquals(first.PlanOf(), second.PlanOf()).Should().BeTrue(
             $"the same shape must reuse the cached plan so the refresh path is exercised; {secondObserved}");
         secondSql.Should().Be(firstSql, $"a capture change must not re-render the statement; {secondObserved}");
         ParametersOf(second).Should().Equal(

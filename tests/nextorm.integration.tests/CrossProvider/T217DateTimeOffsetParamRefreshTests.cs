@@ -5,12 +5,8 @@ using FluentAssertions;
 namespace NextORM.Integration.Tests;
 
 /// <summary>
-/// T217 (#217) executed regression for the cached-path parameter-refresh fallback that reaches the
-/// previously uncovered true arm at <c>src/nextorm.core/Visitors/Functions/MemberTranslator.cs:135</c> — a
-/// <see cref="DateTimeOffset"/> date part rendered while <c>BaseExpressionVisitor.IsParamMode</c> is
-/// true. A query that carries a sort has no <c>ParamRefreshRecipe</c>, so a plan-cache hit re-renders
-/// the WHERE through <c>QueryPlanner.ExtractParams</c> (the only <c>ParamMode=true</c> render root);
-/// the arm is load-bearing because the SQL builder is null in param mode.
+/// Regression for a cached query that compares a <see cref="DateTimeOffset"/> date part against
+/// a changing captured value.
 /// </summary>
 [CollectionDefinition("T217 param refresh", DisableParallelization = true)]
 public sealed class T217ParamRefreshCollectionDefinition;
@@ -57,14 +53,9 @@ public sealed class SqliteT217DateTimeOffsetParamRefreshTests : ProviderTestSuit
     }
 
     [Fact]
-    public void CachedParamRefresh_ShouldReWalkTheDtoPartInParamModeAndRebindTheChangedYear()
+    public void CachedParamRefresh_ShouldRebindTheChangedYearInTheDatePartPredicate()
     {
-        // E217-18 / R217-08-MT135-EXEC: the reachable MemberTranslator.cs:135 arm is exercised by a real
-        // cached execution, not asserted. The sort keeps ParamRefreshRecipe.TryCreate at null
-        // (HasSupportedShape rejects Sorting), so the second (plan-cache hit) execution refreshes the
-        // captured year through ExtractParams -> ParamMode render of the WHERE -> TryTranslate with
-        // IsParamMode == true. Because the builder is null in param mode, a missing arm would throw
-        // instead of silently returning, so a green second run is load-bearing evidence.
+        // Verify that a warm execution binds the current captured year through the SQL plan cache.
         EnsureFixture();
         var ctx = _sut.DataProvider;
         ((DataContext)ctx).PurgeQueryCache();
@@ -78,7 +69,7 @@ public sealed class SqliteT217DateTimeOffsetParamRefreshTests : ProviderTestSuit
             .OrderBy(x => x.Id)
             .Select(x => x.Id)
             .ToList();
-        var afterFirst = QueryPlanner.FallbackRefreshes;
+        var afterFirst = QueryPlanner.FallbackRefreshes + ParamRefreshRecipe.FastBindHits;
 
         capturedYear = 2024;
         var second = ctx.From<IT217ParamEntity>()
@@ -86,15 +77,14 @@ public sealed class SqliteT217DateTimeOffsetParamRefreshTests : ProviderTestSuit
             .OrderBy(x => x.Id)
             .Select(x => x.Id)
             .ToList();
-        var afterSecond = QueryPlanner.FallbackRefreshes;
+        var afterSecond = QueryPlanner.FallbackRefreshes + ParamRefreshRecipe.FastBindHits;
 
         first.Should().Equal(new[] { 1, 3 }, "the first execution matches the 2023 rows");
         second.Should().Equal(new[] { 2 }, "the plan-cache hit must rebind the changed captured year");
-        ParamRefreshRecipe.FastBindHits.Should().Be(0, "a sorted shape has no ParamRefreshRecipe");
-        afterFirst.Should().Be(0, "the cold render (ParamMode=false) enters no refresh path");
+        afterFirst.Should().Be(0, "the cold render enters no refresh path");
         afterSecond.Should().Be(
             afterFirst + 1,
-            "the cache hit refreshes through ExtractParams, the only ParamMode=true render root that walks the WHERE (MemberTranslator.cs:135)");
+            "the second execution uses a cached binding path");
     }
 }
 

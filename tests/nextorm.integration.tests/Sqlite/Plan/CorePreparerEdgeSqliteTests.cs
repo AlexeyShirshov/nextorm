@@ -141,17 +141,15 @@ public sealed class CorePreparerEdgeSqliteTests : IDisposable
         minimum = 35.0;
         var second = _db.GetPreparedQueryCommand(Build(), createEnumerator: false, storeInCache: true, CancellationToken.None);
 
-        ReferenceEquals(prepared, second).Should().BeTrue(
+        prepared.PlanOf().Should().BeSameAs(second.PlanOf(),
             "the same shape resolves to the same cached plan for both captured values");
 
-        var firstRun = _db.ToList(prepared, new object?[] { 20.0 });
-        var secondRun = _db.ToList(second, new object?[] { 20.0 });
+        var firstRun = _db.ToList(prepared);
+        var secondRun = _db.ToList(second);
 
         firstRun.Should().NotBeEmpty("the prepared command executes with its bound value");
-        secondRun.Should().Equal(firstRun, "one plan instance returns the same rows on every execution");
-        // NOTE (campaign 13, C13-CLAIM): this overload executes the prepared command with its own
-        // captured value; passing a different value here does not rebind it, so the fact asserts the
-        // command's own re-executability rather than a value switch it does not support.
+        secondRun.Should().BeSubsetOf(firstRun).And.NotEqual(firstRun,
+            "the two invocations retain their own captured values when sharing the plan");
     }
 
     public void Dispose()

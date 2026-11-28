@@ -593,7 +593,7 @@ public sealed class PreparationBranchCoverage3Tests : ProviderTestSuite
         Rows(firstStable).Should().Equal(5);
 
         var secondStable = Prepare(StableQuery());
-        secondStable.Should().BeSameAs(firstStable, "an unchanged value-list shape reuses the stored plan");
+        secondStable.PlanOf().Should().BeSameAs(firstStable.PlanOf(), "an unchanged value-list shape reuses the stored plan");
         Rows(secondStable).Should().Equal(5);
 
         var uncached = new List<int> { 6, 7 };

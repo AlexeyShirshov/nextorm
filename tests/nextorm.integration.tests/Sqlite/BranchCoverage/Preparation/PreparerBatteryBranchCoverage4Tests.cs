@@ -500,7 +500,7 @@ public sealed class PreparerBatteryBranchCoverage4Tests : ProviderTestSuite
             .Should().BeTrue("the same closure instance is the same raw key even when its value changed");
 
         var threePrepared = Prepare(three);
-        threePrepared.Should().BeSameAs(twoPrepared, "the raw hit serves the same prepared plan");
+        threePrepared.PlanOf().Should().BeSameAs(twoPrepared.PlanOf(), "the raw hit serves the same prepared plan");
         Rows(threePrepared).Should().HaveCount(12, "three main rows times four line rows, rebound from the closure");
 
         // A fresh closure instance is a distinct key and still reads the correct rows.

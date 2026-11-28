@@ -73,7 +73,7 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
         Rows(first).Should().Equal(1L, 2L, 3L);
 
         var second = Prepare(ComplexAbove(_sut.ComplexEntity, 1));
-        second.Should().BeSameAs(first, "a captured value is not part of the plan key");
+        second.PlanOf().Should().BeSameAs(first.PlanOf(), "a captured value is not part of the plan key");
         Rows(second).Should().Equal(2L, 3L);
     }
 
@@ -89,7 +89,7 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
         Rows(preparedA).Should().Equal(2L, 3L);
 
         var preparedB = Prepare(siteB);
-        preparedB.Should().NotBeSameAs(preparedA,
+        preparedB.PlanOf().Should().NotBeSameAs(preparedA.PlanOf(),
             "each closure site owns a distinct display-class type in the key");
 
         siteA.GetQueryPlanEqualityComparer().Equals(siteA, siteB).Should()
@@ -107,7 +107,7 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
         Rows(first).Should().Equal(2L, 3L);
 
         var changed = Prepare(_sut.ComplexEntity.Where(x => x.Id >= 2 && x.Id <= 3).Select(x => x.Id));
-        changed.Should().NotBeSameAs(first, "a different predicate shape is a different plan");
+        changed.PlanOf().Should().NotBeSameAs(first.PlanOf(), "a different predicate shape is a different plan");
         Rows(changed).Should().Equal(2L, 3L);
     }
 
@@ -120,7 +120,7 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
         Rows(first).Should().Equal(1L, 2L, 3L);
 
         var projected = Prepare(_sut.ComplexEntity.OrderBy(x => x.Id).Select(x => new { x.Id, x.Int }));
-        projected.Should().NotBeSameAs(first, "a scalar projection and an anonymous projection are different plans");
+        projected.PlanOf().Should().NotBeSameAs(first.PlanOf(), "a scalar projection and an anonymous projection are different plans");
 
         var rows = Rows(projected);
         rows.Should().HaveCount(3);
@@ -136,7 +136,7 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
         Rows(first).Should().Equal(null, 1, 1);
 
         var coalesced = Prepare(_sut.ComplexEntity.OrderBy(x => x.Id).Select(x => x.Int ?? -1));
-        coalesced.Should().NotBeSameAs(first, "a nullable and a non-nullable projection are different plans");
+        coalesced.PlanOf().Should().NotBeSameAs(first.PlanOf(), "a nullable and a non-nullable projection are different plans");
         Rows(coalesced).Should().Equal(-1, 1, 1);
     }
 
@@ -149,7 +149,7 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
         Rows(first).Should().Equal(1L, 2L, 3L);
 
         var descending = Prepare(_sut.ComplexEntity.OrderByDescending(x => x.Id).Select(x => x.Id));
-        descending.Should().NotBeSameAs(first, "the sort direction is part of the plan");
+        descending.PlanOf().Should().NotBeSameAs(first.PlanOf(), "the sort direction is part of the plan");
         Rows(descending).Should().Equal(3L, 2L, 1L);
     }
 
@@ -162,7 +162,7 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
         Rows(first).Should().Equal(1L, 2L, 3L);
 
         var reversed = Prepare(_sut.ComplexEntity.OrderBy(x => x.Int).OrderByDescending(x => x.Id).Select(x => x.Id));
-        reversed.Should().NotBeSameAs(first, "the appended ordering key participates in the plan");
+        reversed.PlanOf().Should().NotBeSameAs(first.PlanOf(), "the appended ordering key participates in the plan");
         Rows(reversed).Should().Equal(1L, 3L, 2L);
     }
 
@@ -181,7 +181,7 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
             .Where(s => s.Id <= 3)
             .LeftJoin(_sut.ComplexEntity, (s, c) => s.Id == c.Id)
             .Select(p => p.Item2.Id));
-        left.Should().NotBeSameAs(inner, "the join kind is part of the plan");
+        left.PlanOf().Should().NotBeSameAs(inner.PlanOf(), "the join kind is part of the plan");
         Rows(left).OrderBy(x => x).Should().Equal(1L, 2L, 3L);
     }
 
@@ -198,7 +198,7 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
         var shifted = Prepare(_sut.ComplexEntity
             .OrderBy(x => x.Id)
             .Select(x => new { x.Id, Cnt = _sut.SimpleEntity.Where(s => s.Id < x.Id + 1).Count() }));
-        shifted.Should().NotBeSameAs(inclusive, "the correlated subquery predicate is part of the plan");
+        shifted.PlanOf().Should().NotBeSameAs(inclusive.PlanOf(), "the correlated subquery predicate is part of the plan");
         Rows(shifted).Select(r => r.Cnt).Should().Equal(1, 2, 3);
     }
 
@@ -218,7 +218,7 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
         var distinctKeys = Prepare(_sut.ComplexEntity
             .GroupBy(x => new { x.Int, x.String })
             .Select(g => new { g.Int, Count = SqlFunctions.Sql.count() }));
-        distinctKeys.Should().NotBeSameAs(scalar, "a grouping key with an extra member is a different plan");
+        distinctKeys.PlanOf().Should().NotBeSameAs(scalar.PlanOf(), "a grouping key with an extra member is a different plan");
         var distinctRows = Rows(distinctKeys);
         distinctRows.Should().HaveCount(3);
         distinctRows.Should().OnlyContain(r => r.Count == 1);
@@ -237,7 +237,7 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
         var summed = Prepare(_sut.ComplexEntity
             .GroupBy(x => x.Int)
             .Select(g => new { g.Int, Value = SqlFunctions.Sql.sum(g.Id) }));
-        summed.Should().NotBeSameAs(counted, "a different aggregate is a different plan");
+        summed.PlanOf().Should().NotBeSameAs(counted.PlanOf(), "a different aggregate is a different plan");
         var rows = Rows(summed);
         rows.Should().HaveCount(2);
         rows.Single(r => r.Int == null).Value.Should().Be(1L);
@@ -254,11 +254,11 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
             "a captured null uses the approved total comparison, so it matches the row whose string is NULL");
 
         var matched = Prepare(ComplexByString(_sut.ComplexEntity, "xxx"));
-        matched.Should().BeSameAs(first, "a null-to-value closure change keeps the same plan shape");
+        matched.PlanOf().Should().BeSameAs(first.PlanOf(), "a null-to-value closure change keeps the same plan shape");
         Rows(matched).Should().Equal(2L);
 
         var backToNull = Prepare(ComplexByString(_sut.ComplexEntity, null));
-        backToNull.Should().BeSameAs(first);
+        backToNull.PlanOf().Should().BeSameAs(first.PlanOf());
         Rows(backToNull).Should().Equal(3L);
     }
 
@@ -272,11 +272,11 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
             "a captured null uses the approved total comparison, so it matches the row whose int is NULL");
 
         var matched = Prepare(ComplexByNullableInt(_sut.ComplexEntity, 1));
-        matched.Should().BeSameAs(first, "a null-to-value closure change keeps the same plan shape");
+        matched.PlanOf().Should().BeSameAs(first.PlanOf(), "a null-to-value closure change keeps the same plan shape");
         Rows(matched).Should().Equal(2L, 3L);
 
         var other = Prepare(ComplexByNullableInt(_sut.ComplexEntity, 2));
-        other.Should().BeSameAs(first);
+        other.PlanOf().Should().BeSameAs(first.PlanOf());
         Rows(other).Should().BeEmpty();
     }
 
@@ -319,7 +319,7 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
             .OrderBy(o => o.Id)
             .LeftJoin(_sut.AliasPerson, (o, p) => o.BuyerId == p.Id)
             .Select(j => new { j.Item1.Id, j.Item2.Name }));
-        matches.Should().NotBeSameAs(noMatches, "a different join condition is a different plan");
+        matches.PlanOf().Should().NotBeSameAs(noMatches.PlanOf(), "a different join condition is a different plan");
 
         var names = Rows(matches).Select(r => r.Name).ToList();
         names.Should().Equal("Buyer", "Approver");
@@ -334,7 +334,7 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
         Rows(first).Should().Equal(1, 2);
 
         var secondPage = Prepare(Page(_sut.SimpleEntityAsClass, 2, 2));
-        secondPage.Should().NotBeSameAs(first, "limit and offset are part of the plan key");
+        secondPage.PlanOf().Should().NotBeSameAs(first.PlanOf(), "limit and offset are part of the plan key");
         Rows(secondPage).Should().Equal(3, 4);
     }
 
@@ -355,7 +355,7 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
             .Where(x => SqlFunctions.Sql.@in(x.Id, ids))
             .OrderBy(x => x.Id)
             .Select(x => x.Id));
-        grown.Should().NotBeSameAs(first, "a changed IN cardinality is a different plan shape");
+        grown.PlanOf().Should().NotBeSameAs(first.PlanOf(), "a changed IN cardinality is a different plan shape");
         Rows(grown).Should().Equal(1L, 2L, 3L);
     }
 
@@ -370,7 +370,7 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
 
         ids[0] = 3;
         var rebound = Prepare(_sut.ComplexEntity.Where(x => SqlFunctions.Sql.@in(x.Id, ids)).Select(x => x.Id));
-        rebound.Should().BeSameAs(first, "an unchanged IN cardinality is the same plan shape");
+        rebound.PlanOf().Should().BeSameAs(first.PlanOf(), "an unchanged IN cardinality is the same plan shape");
         Rows(rebound).Should().Equal(3L);
     }
 
@@ -386,7 +386,7 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
         Rows(preparedFirst).Should().Equal(1L, 2L, 3L);
 
         var preparedSecond = Prepare(second);
-        preparedSecond.Should().BeSameAs(preparedFirst);
+        preparedSecond.PlanOf().Should().BeSameAs(preparedFirst.PlanOf());
         Rows(preparedSecond).Should().Equal(3L);
 
         var comparer = first.GetQueryPlanEqualityComparer();
@@ -406,7 +406,7 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
         Rows(preparedScalar).Should().Equal(1L, 2L, 3L);
 
         var preparedAnonymous = Prepare(anonymous);
-        preparedAnonymous.Should().NotBeSameAs(preparedScalar);
+        preparedAnonymous.PlanOf().Should().NotBeSameAs(preparedScalar.PlanOf());
         Rows(preparedAnonymous).Should().HaveCount(3);
 
         anonymous.GetQueryPlanEqualityComparer().Equals(anonymous, scalar).Should()

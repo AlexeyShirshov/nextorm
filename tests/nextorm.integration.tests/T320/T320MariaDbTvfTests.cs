@@ -112,11 +112,11 @@ public sealed class T320MariaDbTvfTests : IDisposable
 
     private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
 
-    private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext context, QueryCommand<T> command, bool storeInCache)
-        => (DbPreparedQueryCommand<T>)context.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None);
+    private static IPreparedQueryCommand<T> Prepare<T>(IDataContext context, QueryCommand<T> command, bool storeInCache)
+        => context.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None);
 
-    private static List<string> ParametersOf<T>(DbPreparedQueryCommand<T> prepared)
-        => [.. prepared.DbCommandParams.Cast<DbParameter>().Select(p => $"{p.ParameterName}={p.Value ?? "null"}")];
+    private static List<string> ParametersOf<T>(IPreparedQueryCommand<T> prepared)
+        => [.. prepared.ObservedParameters().Select(p => $"{p.Descriptor.ParameterName}={p.Value}")];
 
     /// <summary>Creates the fixture once per process and returns the observed server version.</summary>
     private string EnsureFixture()
@@ -193,7 +193,7 @@ public sealed class T320MariaDbTvfTests : IDisposable
             .CrossApply(row => T320MaIntegrationTvf.Children(row.ChildrenJson))
             .Select(p => new { p.Item1.Id, p.Item1.Name, p.Item2.ChildId, p.Item2.Label });
 
-        var sql = Normalize(Prepare(_ctx, command, storeInCache: false).DbCommand.CommandText);
+        var sql = Normalize(Prepare(_ctx, command, storeInCache: false).PlanOf().CommandText);
         _output.WriteLine($"cross apply sql: <<{sql}>>");
 
         var rows = command.ToList();
@@ -224,7 +224,7 @@ public sealed class T320MariaDbTvfTests : IDisposable
             .OuterApply(row => T320MaIntegrationTvf.Children(row.ChildrenJson))
             .Select(p => new { p.Item1.Id, p.Item1.Name, p.Item2.ChildId, p.Item2.Label });
 
-        var sql = Normalize(Prepare(_ctx, command, storeInCache: false).DbCommand.CommandText);
+        var sql = Normalize(Prepare(_ctx, command, storeInCache: false).PlanOf().CommandText);
         _output.WriteLine($"outer apply sql: <<{sql}>>");
 
         var rows = command.ToList();
@@ -290,7 +290,7 @@ public sealed class T320MariaDbTvfTests : IDisposable
         QueryCommand<int?> Build() => _ctx.From(() => T320MaIntegrationTvf.Children(document)).Select(c => c.ChildId);
 
         var first = Prepare(_ctx, Build(), storeInCache: true);
-        var firstSql = Normalize(first.DbCommand.CommandText);
+        var firstSql = Normalize(first.PlanOf().CommandText);
         var firstParameters = ParametersOf(first);
         var firstObserved = $"rendered statement: <<{firstSql}>>; parameters: [{string.Join(", ", firstParameters)}]";
         _output.WriteLine($"first run: {firstObserved}");
@@ -305,12 +305,12 @@ public sealed class T320MariaDbTvfTests : IDisposable
         document = """[{"child_id":31,"label":"c31"},{"child_id":32,"label":"c32"},{"child_id":33,"label":"c33"}]""";
 
         var second = Prepare(_ctx, Build(), storeInCache: true);
-        var secondSql = Normalize(second.DbCommand.CommandText);
+        var secondSql = Normalize(second.PlanOf().CommandText);
         var secondParameters = ParametersOf(second);
         var secondObserved = $"rendered statement: <<{secondSql}>>; parameters: [{string.Join(", ", secondParameters)}]";
         _output.WriteLine($"second run: {secondObserved}");
 
-        ReferenceEquals(first, second).Should().BeTrue(
+        ReferenceEquals(first.PlanOf(), second.PlanOf()).Should().BeTrue(
             $"the same shape must reuse the cached plan so the refresh path is exercised; {secondObserved}");
         secondSql.Should().Be(firstSql, $"a capture change must not re-render the statement; {secondObserved}");
         secondParameters.Should().Equal(

@@ -291,7 +291,7 @@ public class TimedDictionaryEvictionTests
         var filterAccessors = (IDictionary<string, Func<IDataContext, object>>)typeof(DataContextCache)
             .GetField("_queryFilterContextAccessors", PrivateStatic)!
             .GetValue(null)!;
-        var generationField = typeof(QueryPlanStore).GetField("_generation", PrivateStatic)!;
+        var storeField = typeof(QueryPlanStore).GetField("_store", PrivateStatic)!;
 
         var accessor = (Func<IDataContext, object>)(_ => new object());
         plainMetadata.Clear();
@@ -301,7 +301,7 @@ public class TimedDictionaryEvictionTests
 
         var plainMetadataCount = plainMetadata.Count;
         var filterAccessorsCount = filterAccessors.Count;
-        var generationBefore = (long)generationField.GetValue(null)!;
+        var storeBefore = storeField.GetValue(null);
 
         var previous = WithWindow();
         try
@@ -321,7 +321,7 @@ public class TimedDictionaryEvictionTests
             filterAccessors["sentinel"].Should().BeSameAs(accessor);
 
             // QueryPlanStore is not invalidated by the hook.
-            ((long)generationField.GetValue(null)!).Should().Be(generationBefore);
+            storeField.GetValue(null).Should().BeSameAs(storeBefore);
 
             // The hook delegates only to the five timed stores (DataContextCache.cs:151-155).
         }

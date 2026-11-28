@@ -415,7 +415,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
             _ => throw new ArgumentOutOfRangeException(nameof(function), function, "unknown T261 byte-array function"),
         };
 
-        var prepared = (DbPreparedQueryCommand<byte[]?>)ctx.GetPreparedQueryCommand(command, false, true, ct);
+        var prepared = ctx.GetPreparedQueryCommand(command, false, true, ct);
 
         ctx.ToList(prepared).Single().Should().Equal(T261AbcOracle(function));
 
@@ -423,7 +423,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
         // Re-preparing the same command on the same context is a plan-cache hit: the refreshed array
         // must carry the current captured elements, not the values bound on the first execution.
-        var refreshed = (DbPreparedQueryCommand<byte[]?>)ctx.GetPreparedQueryCommand(command, false, true, ct);
+        var refreshed = ctx.GetPreparedQueryCommand(command, false, true, ct);
 
         ctx.ToList(refreshed).Single().Should().Equal(T261XyzOracle(function));
     }
@@ -445,14 +445,14 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
             _ => throw new ArgumentOutOfRangeException(nameof(function), function, "unknown T261 refresh function"),
         };
 
-        var prepared = (DbPreparedQueryCommand<byte[]?>)ctx.GetPreparedQueryCommand(command, false, true, ct);
+        var prepared = ctx.GetPreparedQueryCommand(command, false, true, ct);
 
         ctx.ToList(prepared).Single().Should().Equal(T261AbcOracle(function));
 
         data = new byte[] { 0x01, 0x02, 0x03 };
 
         // Same command, same context: the cache hit must re-read the reassigned captured array.
-        var refreshed = (DbPreparedQueryCommand<byte[]?>)ctx.GetPreparedQueryCommand(command, false, true, ct);
+        var refreshed = ctx.GetPreparedQueryCommand(command, false, true, ct);
 
         ctx.ToList(refreshed).Single().Should().Equal(
             Convert.FromHexString(function switch

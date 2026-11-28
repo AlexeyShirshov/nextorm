@@ -91,11 +91,11 @@ public sealed class T320SqlServerTvfTests(ITestOutputHelper output) : ProviderTe
 
     private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
 
-    private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext context, QueryCommand<T> command, bool storeInCache)
-        => (DbPreparedQueryCommand<T>)context.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None);
+    private static IPreparedQueryCommand<T> Prepare<T>(IDataContext context, QueryCommand<T> command, bool storeInCache)
+        => context.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None);
 
-    private static List<string> ParametersOf<T>(DbPreparedQueryCommand<T> prepared)
-        => [.. prepared.DbCommandParams.Cast<DbParameter>().Select(p => $"{p.ParameterName}={p.Value ?? "null"}")];
+    private static List<string> ParametersOf<T>(IPreparedQueryCommand<T> prepared)
+        => [.. prepared.ObservedParameters().Select(p => $"{p.Descriptor.ParameterName}={p.Value}")];
 
     /// <summary>
     /// Correlated inner APPLY: the function receives the outer key, so the zero-match parent produces no
@@ -111,7 +111,7 @@ public sealed class T320SqlServerTvfTests(ITestOutputHelper output) : ProviderTe
             .CrossApply(row => T320SsIntegrationTvf.Children(row.Id))
             .Select(p => new { p.Item1.Id, p.Item1.Name, p.Item2.ChildId, p.Item2.Label });
 
-        var sql = Normalize(Prepare(Context, command, storeInCache: false).DbCommand.CommandText);
+        var sql = Normalize(Prepare(Context, command, storeInCache: false).PlanOf().CommandText);
         output.WriteLine($"cross apply sql: <<{sql}>>");
 
         sql.Should().Contain("cross apply ", "SQL Server renders a correlated APPLY natively");
@@ -149,7 +149,7 @@ public sealed class T320SqlServerTvfTests(ITestOutputHelper output) : ProviderTe
             .OuterApply(row => T320SsIntegrationTvf.Children(row.Id))
             .Select(p => new { p.Item1.Id, p.Item1.Name, p.Item2.ChildId, p.Item2.Label });
 
-        var sql = Normalize(Prepare(Context, command, storeInCache: false).DbCommand.CommandText);
+        var sql = Normalize(Prepare(Context, command, storeInCache: false).PlanOf().CommandText);
         output.WriteLine($"outer apply sql: <<{sql}>>");
 
         sql.Should().Contain("outer apply ", "SQL Server renders a correlated OUTER APPLY natively");
@@ -187,7 +187,7 @@ public sealed class T320SqlServerTvfTests(ITestOutputHelper output) : ProviderTe
         QueryCommand<int?> Build() => Context.From(() => T320SsIntegrationTvf.Children(capturedId)).Select(c => c.ChildId);
 
         var first = Prepare(Context, Build(), storeInCache: true);
-        var firstSql = Normalize(first.DbCommand.CommandText);
+        var firstSql = Normalize(first.PlanOf().CommandText);
         var firstParameters = ParametersOf(first);
         var firstObserved = $"rendered statement: <<{firstSql}>>; parameters: [{string.Join(", ", firstParameters)}]";
         output.WriteLine($"first run: {firstObserved}");
@@ -202,12 +202,12 @@ public sealed class T320SqlServerTvfTests(ITestOutputHelper output) : ProviderTe
         capturedId = 3;
 
         var second = Prepare(Context, Build(), storeInCache: true);
-        var secondSql = Normalize(second.DbCommand.CommandText);
+        var secondSql = Normalize(second.PlanOf().CommandText);
         var secondParameters = ParametersOf(second);
         var secondObserved = $"rendered statement: <<{secondSql}>>; parameters: [{string.Join(", ", secondParameters)}]";
         output.WriteLine($"second run: {secondObserved}");
 
-        ReferenceEquals(first, second).Should().BeTrue(
+        ReferenceEquals(first.PlanOf(), second.PlanOf()).Should().BeTrue(
             $"the same shape must reuse the cached plan so the refresh path is exercised; {secondObserved}");
         secondSql.Should().Be(firstSql, $"a capture change must not re-render the statement; {secondObserved}");
         secondParameters.Should().Equal(

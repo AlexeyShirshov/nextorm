@@ -188,11 +188,12 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
         void Execute(string scenario, int? value, int expectedRowCount)
         {
             captured = value;
-            var current = (DbPreparedQueryCommand<int[]>)((DataContext)ctx).GetPreparedQueryCommand(
+            var invocation = ((DataContext)ctx).GetPreparedQueryCommand(
                 query,
                 createEnumerator: false,
                 storeInCache: true,
                 TestContext.Current.CancellationToken);
+            var current = invocation.PlanOf();
 
             if (prepared is null)
             {
@@ -218,7 +219,7 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
 
             template.Compose(new string?[template.OccurrenceCount]).Should().Be(canonicalText, scenario);
 
-            var rows = ctx.ToList(current);
+            var rows = ctx.ToList(invocation);
             rows.Should().HaveCount(expectedRowCount, scenario);
             foreach (var row in rows)
                 row.Should().Equal(expectedValue, scenario);

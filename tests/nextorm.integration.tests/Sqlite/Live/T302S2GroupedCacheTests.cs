@@ -45,8 +45,8 @@ public sealed class T302S2GroupedCacheTests : IDisposable
         command.ExecuteNonQuery();
     }
 
-    private static DbPreparedQueryCommand<CacheRow> Prepare(DataContext context, QueryCommand<CacheRow> command, bool storeInCache = true)
-        => (DbPreparedQueryCommand<CacheRow>)context.GetPreparedQueryCommand(
+    private static IPreparedQueryCommand<CacheRow> Prepare(DataContext context, QueryCommand<CacheRow> command, bool storeInCache = true)
+        => context.GetPreparedQueryCommand(
             command, createEnumerator: false, storeInCache: storeInCache, CancellationToken.None);
 
     private static object? ExtremeRowOf(QueryCommand<CacheRow> cmd)
@@ -86,7 +86,7 @@ public sealed class T302S2GroupedCacheTests : IDisposable
 
         capturedFlag = 0;
         var second = Prepare(_ctx, command);
-        ReferenceEquals(second, first).Should().BeTrue("the same grouped logical form must reuse the cached plan");
+        ReferenceEquals(second.PlanOf(), first.PlanOf()).Should().BeTrue("the same grouped logical form must reuse the cached plan");
         // flag == 0: only 'a' has rows and its winner changes to 10.
         var secondRows = _ctx.ToList(second);
         secondRows.Should().ContainSingle().Which.Score.Should().Be(10);
@@ -163,7 +163,7 @@ public sealed class T302S2GroupedCacheTests : IDisposable
 
         var second = Prepare(_ctx, warm);
         _ctx.ToList(second).Select(r => r.Score).OrderBy(v => v).Should().Equal(5, 7, 9, 9);
-        ReferenceEquals(second, first).Should()
+        ReferenceEquals(second.PlanOf(), first.PlanOf()).Should()
             .BeTrue("the warm execution must reuse the very plan instance the cold call cached");
 
         // The warm execution must not republish.
@@ -219,14 +219,14 @@ public sealed class T302S2GroupedCacheTests : IDisposable
         foreach (var command in new[] { maxCommand, minCommand })
         {
             var first = Prepare(_ctx, command, storeInCache: true);
-            var sql1 = first.DbCommand.CommandText;
-            var params1 = first.DbCommand.Parameters.Cast<DbParameter>()
-                .Select(p => (p.ParameterName, p.Value)).ToList();
+            var sql1 = first.PlanOf().CommandText;
+            var params1 = first.ObservedParameters()
+            .Select(p => (p.Descriptor.ParameterName, p.Value)).ToList();
 
             var second = Prepare(_ctx, command, storeInCache: false);
-            var sql2 = second.DbCommand.CommandText;
-            var params2 = second.DbCommand.Parameters.Cast<DbParameter>()
-                .Select(p => (p.ParameterName, p.Value)).ToList();
+            var sql2 = second.PlanOf().CommandText;
+            var params2 = second.ObservedParameters()
+            .Select(p => (p.Descriptor.ParameterName, p.Value)).ToList();
 
             sql2.Should().Be(sql1, "repeated grouped renders must produce identical SQL shape");
             params2.Should().Equal(params1, "repeated grouped renders must produce identical parameter name/value sequence");
@@ -236,7 +236,7 @@ public sealed class T302S2GroupedCacheTests : IDisposable
         }
 
         // Max and Min keep the same shape with the aggregate function swapped, never mixed.
-        Prepare(_ctx, maxCommand, storeInCache: false).DbCommand.CommandText.ToLowerInvariant().Should().Contain("max(");
-        Prepare(_ctx, minCommand, storeInCache: false).DbCommand.CommandText.ToLowerInvariant().Should().Contain("min(");
+        Prepare(_ctx, maxCommand, storeInCache: false).PlanOf().CommandText.ToLowerInvariant().Should().Contain("max(");
+        Prepare(_ctx, minCommand, storeInCache: false).PlanOf().CommandText.ToLowerInvariant().Should().Contain("min(");
     }
 }

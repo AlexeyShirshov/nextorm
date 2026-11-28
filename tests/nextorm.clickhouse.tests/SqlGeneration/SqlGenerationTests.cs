@@ -2848,6 +2848,25 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void ArrayJoinClause_ShouldRetainItsExpressionsInTheCachedPlanKey()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var entity = ctx.From<IArrayEntity>();
+
+        DbPreparedQueryCommand<T> Plan<T>(QueryCommand<T> query)
+            => BoundQueryInvocation<T>.GetPlan(ctx.GetPreparedQueryCommand(query, false, true, CancellationToken.None))!;
+
+        var tags = Plan(entity.ArrayJoin(x => x.Tags).Select(x => x.Id));
+        var sameTags = Plan(entity.ArrayJoin(x => x.Tags).Select(x => x.Id));
+        var numbers = Plan(entity.ArrayJoin(x => x.Nums).Select(x => x.Id));
+
+        sameTags.Should().BeSameAs(tags);
+        numbers.Should().NotBeSameAs(tags);
+        tags.CommandText.Should().Contain(" array join tags");
+        numbers.CommandText.Should().Contain(" array join nums");
+    }
+
+    [Fact]
     public void LeftArrayJoinClause_ShouldRenderLeftArrayJoin()
     {
         using var ctx = ClickHouseTestContext.Create();

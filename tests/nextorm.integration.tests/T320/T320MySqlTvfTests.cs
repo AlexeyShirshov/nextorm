@@ -118,11 +118,11 @@ public sealed class T320MySqlTvfTests(ITestOutputHelper output) : ProviderTestSu
 
     private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
 
-    private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext context, QueryCommand<T> command, bool storeInCache)
-        => (DbPreparedQueryCommand<T>)context.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None);
+    private static IPreparedQueryCommand<T> Prepare<T>(IDataContext context, QueryCommand<T> command, bool storeInCache)
+        => context.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None);
 
-    private static List<string> ParametersOf<T>(DbPreparedQueryCommand<T> prepared)
-        => [.. prepared.DbCommandParams.Cast<DbParameter>().Select(p => $"{p.ParameterName}={p.Value ?? "null"}")];
+    private static List<string> ParametersOf<T>(IPreparedQueryCommand<T> prepared)
+        => [.. prepared.ObservedParameters().Select(p => $"{p.Descriptor.ParameterName}={p.Value}")];
 
     /// <summary>
     /// Correlated CROSS APPLY over a runtime <c>JSON_TABLE</c> source: MySQL correlates an applied
@@ -140,7 +140,7 @@ public sealed class T320MySqlTvfTests(ITestOutputHelper output) : ProviderTestSu
             .CrossApply(row => T320MyIntegrationTvf.Children(row.ChildrenJson))
             .Select(p => new { p.Item1.Id, p.Item1.Name, p.Item2.ChildId, p.Item2.Label });
 
-        var sql = Normalize(Prepare(Context, command, storeInCache: false).DbCommand.CommandText);
+        var sql = Normalize(Prepare(Context, command, storeInCache: false).PlanOf().CommandText);
         output.WriteLine($"cross apply sql: <<{sql}>>");
 
         var rows = command.ToList();
@@ -170,7 +170,7 @@ public sealed class T320MySqlTvfTests(ITestOutputHelper output) : ProviderTestSu
             .OuterApply(row => T320MyIntegrationTvf.Children(row.ChildrenJson))
             .Select(p => new { p.Item1.Id, p.Item1.Name, p.Item2.ChildId, p.Item2.Label });
 
-        var sql = Normalize(Prepare(Context, command, storeInCache: false).DbCommand.CommandText);
+        var sql = Normalize(Prepare(Context, command, storeInCache: false).PlanOf().CommandText);
         output.WriteLine($"outer apply sql: <<{sql}>>");
 
         sql.Should().Contain(" left join json_table(t1.children_json", "the outer join applies the function itself, so an unmatched parent is null-extended without a derived wrapper");
@@ -210,7 +210,7 @@ public sealed class T320MySqlTvfTests(ITestOutputHelper output) : ProviderTestSu
         QueryCommand<int?> Build() => Context.From(() => T320MyIntegrationTvf.Children(document)).Select(c => c.ChildId);
 
         var first = Prepare(Context, Build(), storeInCache: true);
-        var firstSql = Normalize(first.DbCommand.CommandText);
+        var firstSql = Normalize(first.PlanOf().CommandText);
         var firstParameters = ParametersOf(first);
         var firstObserved = $"rendered statement: <<{firstSql}>>; parameters: [{string.Join(", ", firstParameters)}]";
         output.WriteLine($"first run: {firstObserved}");
@@ -225,12 +225,12 @@ public sealed class T320MySqlTvfTests(ITestOutputHelper output) : ProviderTestSu
         document = """[{"child_id":31,"label":"c31"},{"child_id":32,"label":"c32"},{"child_id":33,"label":"c33"}]""";
 
         var second = Prepare(Context, Build(), storeInCache: true);
-        var secondSql = Normalize(second.DbCommand.CommandText);
+        var secondSql = Normalize(second.PlanOf().CommandText);
         var secondParameters = ParametersOf(second);
         var secondObserved = $"rendered statement: <<{secondSql}>>; parameters: [{string.Join(", ", secondParameters)}]";
         output.WriteLine($"second run: {secondObserved}");
 
-        ReferenceEquals(first, second).Should().BeTrue(
+        ReferenceEquals(first.PlanOf(), second.PlanOf()).Should().BeTrue(
             $"the same shape must reuse the cached plan so the refresh path is exercised; {secondObserved}");
         secondSql.Should().Be(firstSql, $"a capture change must not re-render the statement; {secondObserved}");
         secondParameters.Should().Equal(

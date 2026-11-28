@@ -79,8 +79,8 @@ public sealed class T296bNullableCacheTests : IDisposable
         command.ExecuteNonQuery();
     }
 
-    private static DbPreparedQueryCommand<TResult> Prepare<TResult>(DataContext context, QueryCommand<TResult> command)
-        => (DbPreparedQueryCommand<TResult>)context.GetPreparedQueryCommand(
+    private static IPreparedQueryCommand<TResult> Prepare<TResult>(DataContext context, QueryCommand<TResult> command)
+        => context.GetPreparedQueryCommand(
             command, createEnumerator: false, storeInCache: true, CancellationToken.None);
 
     private static int CountPlaceholders(string sql, string placeholder)
@@ -203,7 +203,7 @@ public sealed class T296bNullableCacheTests : IDisposable
     {
         var prepared = Prepare(context, context.From<T296bCacheRow>().Where(x => x.N == captured).OrderBy(x => x.Id).Select(x => x.Id));
         var ids = context.ToList(prepared).ToArray();
-        return (prepared.DbCommand.CommandText, ids);
+        return (prepared.PlanOf().CommandText, ids);
     }
 
     private static (string Sql, long[] Ids) ColdCorrelated(DataContext context, int? captured)
@@ -218,7 +218,7 @@ public sealed class T296bNullableCacheTests : IDisposable
                 .Select(p => p.Id)
                 );
         var ids = context.ToList(prepared).ToArray();
-        return (prepared.DbCommand.CommandText, ids);
+        return (prepared.PlanOf().CommandText, ids);
     }
 
     private static (string Sql, (long Id, bool Match)[] Rows) ColdSelect(DataContext context, int? captured)
@@ -230,7 +230,7 @@ public sealed class T296bNullableCacheTests : IDisposable
                 .Select(x => new { x.Id, Match = x.N == captured })
                 );
         var rows = context.ToList(prepared).Select(r => (r.Id, r.Match)).ToArray();
-        return (prepared.DbCommand.CommandText, rows);
+        return (prepared.PlanOf().CommandText, rows);
     }
 
     private static (string Sql, string[] Pairs) ColdJoin(DataContext context, int? captured)
@@ -246,7 +246,7 @@ public sealed class T296bNullableCacheTests : IDisposable
             .Select(r => $"{r.Parent}:{r.Child}")
             .OrderBy(x => x, StringComparer.Ordinal)
             .ToArray();
-        return (prepared.DbCommand.CommandText, pairs);
+        return (prepared.PlanOf().CommandText, pairs);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -267,10 +267,10 @@ public sealed class T296bNullableCacheTests : IDisposable
             var first = ColdWherePlan(nullFirst, null);
             var second = ColdWherePlan(nullFirst, null);
 
-            ReferenceEquals(second, first).Should().BeTrue(
+            ReferenceEquals(second.PlanOf(), first.PlanOf()).Should().BeTrue(
                 "a repeated preparation inside one cold ordering must reuse the cached plan instance");
-            second.DbCommand.CommandText.Should().Be(first.DbCommand.CommandText);
-            nullFirstSql = first.DbCommand.CommandText;
+            second.PlanOf().CommandText.Should().Be(first.PlanOf().CommandText);
+            nullFirstSql = first.PlanOf().CommandText;
             Dump($"cold-identity ordering=null-first plan_reused=true sql={nullFirstSql}");
         }
         finally
@@ -286,10 +286,10 @@ public sealed class T296bNullableCacheTests : IDisposable
             var first = ColdWherePlan(valueFirst, 42);
             var second = ColdWherePlan(valueFirst, 42);
 
-            ReferenceEquals(second, first).Should().BeTrue(
+            ReferenceEquals(second.PlanOf(), first.PlanOf()).Should().BeTrue(
                 "a repeated preparation inside one cold ordering must reuse the cached plan instance");
-            second.DbCommand.CommandText.Should().Be(first.DbCommand.CommandText);
-            valueFirstSql = first.DbCommand.CommandText;
+            second.PlanOf().CommandText.Should().Be(first.PlanOf().CommandText);
+            valueFirstSql = first.PlanOf().CommandText;
             Dump($"cold-identity ordering=value-first plan_reused=true sql={valueFirstSql}");
         }
         finally
@@ -301,7 +301,7 @@ public sealed class T296bNullableCacheTests : IDisposable
         nullFirstSql.Should().Contain("is null", "the null-first shape keeps the approved total comparison");
     }
 
-    private static DbPreparedQueryCommand<long> ColdWherePlan(DataContext context, int? captured)
+    private static IPreparedQueryCommand<long> ColdWherePlan(DataContext context, int? captured)
     {
         var prepared = Prepare(
             context,
@@ -325,43 +325,43 @@ public sealed class T296bNullableCacheTests : IDisposable
         command.Cache.Should().BeTrue("a captured nullable comparison must stay cacheable");
 
         var first = Prepare(_ctx, command);
-        var sql = first.DbCommand.CommandText;
-        first.DbCommand.Parameters.Cast<DbParameter>().Should().ContainSingle();
+        var sql = first.PlanOf().CommandText;
+        first.PlanOf().DbCommandParams.Cast<DbParameter>().Should().ContainSingle();
         var nullRows = _ctx.ToList(first).ToArray();
         nullRows.Should().Equal(1L, 5L);
 
         captured = 42;
         var second = Prepare(_ctx, command);
-        ReferenceEquals(second, first).Should().BeTrue("the same command must hit the cached plan");
-        second.DbCommand.CommandText.Should().Be(sql);
-        second.DbCommand.Parameters[0].Value.Should().Be(42, "the cache hit must refresh the captured value");
+        ReferenceEquals(second.PlanOf(), first.PlanOf()).Should().BeTrue("the same command must hit the cached plan");
+        second.PlanOf().CommandText.Should().Be(sql);
+        second.ParameterValue(0).Should().Be(42, "the cache hit must refresh the captured value");
         var valueRows = _ctx.ToList(second).ToArray();
         valueRows.Should().Equal(2L, 4L);
         sql.Should().NotContain("42", "the captured value is never inlined");
 
         captured = null;
         var third = Prepare(_ctx, command);
-        ReferenceEquals(third, first).Should().BeTrue();
-        third.DbCommand.CommandText.Should().Be(sql);
-        third.DbCommand.Parameters[0].Value.Should().Be(DBNull.Value);
+        ReferenceEquals(third.PlanOf(), first.PlanOf()).Should().BeTrue();
+        third.PlanOf().CommandText.Should().Be(sql);
+        third.ParameterValue(0).Should().Be(DBNull.Value);
         var backToNullRows = _ctx.ToList(third).ToArray();
         backToNullRows.Should().Equal(new long[] { 1L, 5L }, "the null execution must not reuse the 42 row set");
 
         // A re-prepare through the caching path is still the same plan object.
-        ReferenceEquals(Prepare(_ctx, command), first).Should().BeTrue();
+        ReferenceEquals(Prepare(_ctx, command).PlanOf(), first.PlanOf()).Should().BeTrue();
 
         // A call-local non-caching preparation re-plans without touching the sticky flag or the entry.
-        var uncached = (DbPreparedQueryCommand<long>)_ctx.GetPreparedQueryCommand(
+        var uncached = _ctx.GetPreparedQueryCommand(
             command, createEnumerator: false, storeInCache: false, CancellationToken.None);
-        ReferenceEquals(uncached, first).Should().BeFalse("storeInCache:false bypasses the plan cache");
-        uncached.DbCommand.CommandText.Should().Be(sql);
+        ReferenceEquals(uncached.PlanOf(), first.PlanOf()).Should().BeFalse("storeInCache:false bypasses the plan cache");
+        uncached.PlanOf().CommandText.Should().Be(sql);
         _ctx.ToList(uncached).Should().Equal(1L, 5L);
         command.Cache.Should().BeTrue("storeInCache:false is call-local and must never flip QueryCommand.Cache");
-        ReferenceEquals(Prepare(_ctx, command), first).Should()
+        ReferenceEquals(Prepare(_ctx, command).PlanOf(), first.PlanOf()).Should()
             .BeTrue("the call-local non-caching preparation leaves the cached plan intact");
 
-        Dump($"warm position=where sql={sql} placeholders={CountPlaceholders(sql, PlaceholderOf(first.DbCommand.Parameters[0]))} " +
-             $"parameters={first.DbCommand.Parameters.Count} plan_identity=three_runs_and_cached_reprepare " +
+        Dump($"warm position=where sql={sql} placeholders={CountPlaceholders(sql, PlaceholderOf(first.PlanOf().DbCommandParams[0]))} " +
+             $"parameters={first.PlanOf().DbCommandParams.Count} plan_identity=three_runs_and_cached_reprepare " +
              $"rows=null:[{string.Join(",", nullRows)}];42:[{string.Join(",", valueRows)}];null:[{string.Join(",", backToNullRows)}] " +
              $"cache_flag={command.Cache} uncached_plan_distinct=true");
     }
@@ -383,27 +383,27 @@ public sealed class T296bNullableCacheTests : IDisposable
         var fallbacksBefore = QueryPlanner.FallbackRefreshes;
 
         var first = Prepare(_ctx, command);
-        var sql = first.DbCommand.CommandText;
+        var sql = first.PlanOf().CommandText;
         sql.Should().Contain("exists");
-        first.DbCommand.Parameters.Cast<DbParameter>().Should().ContainSingle();
-        first.ParamRecipe.Should().BeNull(
+        first.PlanOf().DbCommandParams.Cast<DbParameter>().Should().ContainSingle();
+        first.PlanOf().ParamRecipe.Should().BeNull(
             "a correlated shape with outer references is not modelled by the immutable refresh recipe, so every hit uses the ExtractParams fallback");
         var nullRows = _ctx.ToList(first).ToArray();
         nullRows.Should().Equal(1L, 3L);
 
         captured = 42;
         var second = Prepare(_ctx, command);
-        ReferenceEquals(second, first).Should().BeTrue();
-        second.DbCommand.CommandText.Should().Be(sql);
-        second.DbCommand.Parameters[0].Value.Should().Be(42);
+        ReferenceEquals(second.PlanOf(), first.PlanOf()).Should().BeTrue();
+        second.PlanOf().CommandText.Should().Be(sql);
+        second.ParameterValue(0).Should().Be(42);
         var valueRows = _ctx.ToList(second).ToArray();
         valueRows.Should().Equal(2L);
 
         captured = null;
         var third = Prepare(_ctx, command);
-        ReferenceEquals(third, first).Should().BeTrue();
-        third.DbCommand.CommandText.Should().Be(sql);
-        third.DbCommand.Parameters[0].Value.Should().Be(DBNull.Value);
+        ReferenceEquals(third.PlanOf(), first.PlanOf()).Should().BeTrue();
+        third.PlanOf().CommandText.Should().Be(sql);
+        third.ParameterValue(0).Should().Be(DBNull.Value);
         var backToNullRows = _ctx.ToList(third).ToArray();
         backToNullRows.Should().Equal(new long[] { 1L, 3L }, "the correlated outer value must never be stale");
 
@@ -428,26 +428,26 @@ public sealed class T296bNullableCacheTests : IDisposable
         command.Cache.Should().BeTrue();
 
         var first = Prepare(_ctx, command);
-        var sql = first.DbCommand.CommandText;
-        first.DbCommand.Parameters.Cast<DbParameter>().Should().ContainSingle();
+        var sql = first.PlanOf().CommandText;
+        first.PlanOf().DbCommandParams.Cast<DbParameter>().Should().ContainSingle();
         var nullRows = _ctx.ToList(first).Select(r => (r.Id, r.Match)).ToArray();
         nullRows.Should().Equal(
             (1L, true), (2L, false), (3L, false), (4L, false), (5L, true));
 
         captured = 42;
         var second = Prepare(_ctx, command);
-        ReferenceEquals(second, first).Should().BeTrue();
-        second.DbCommand.CommandText.Should().Be(sql);
-        second.DbCommand.Parameters[0].Value.Should().Be(42);
+        ReferenceEquals(second.PlanOf(), first.PlanOf()).Should().BeTrue();
+        second.PlanOf().CommandText.Should().Be(sql);
+        second.ParameterValue(0).Should().Be(42);
         var valueRows = _ctx.ToList(second).Select(r => (r.Id, r.Match)).ToArray();
         valueRows.Should().Equal(
             (1L, false), (2L, true), (3L, false), (4L, true), (5L, false));
 
         captured = null;
         var third = Prepare(_ctx, command);
-        ReferenceEquals(third, first).Should().BeTrue();
-        third.DbCommand.CommandText.Should().Be(sql);
-        third.DbCommand.Parameters[0].Value.Should().Be(DBNull.Value);
+        ReferenceEquals(third.PlanOf(), first.PlanOf()).Should().BeTrue();
+        third.PlanOf().CommandText.Should().Be(sql);
+        third.ParameterValue(0).Should().Be(DBNull.Value);
         var backToNullRows = _ctx.ToList(third).Select(r => (r.Id, r.Match)).ToArray();
         backToNullRows.Should().Equal(
             (1L, true), (2L, false), (3L, false), (4L, false), (5L, true));
@@ -477,24 +477,24 @@ public sealed class T296bNullableCacheTests : IDisposable
             => rows.Select(r => $"{r.Parent}:{r.Child}").OrderBy(x => x, StringComparer.Ordinal).ToArray();
 
         var first = Prepare(_ctx, command);
-        var sql = first.DbCommand.CommandText;
-        first.DbCommand.Parameters.Cast<DbParameter>().Should().ContainSingle();
+        var sql = first.PlanOf().CommandText;
+        first.PlanOf().DbCommandParams.Cast<DbParameter>().Should().ContainSingle();
         var nullPairs = Pairs(_ctx.ToList(first).Select(r => (r.Parent, r.Child)).ToList());
         nullPairs.Should().Equal("1:11", "3:31");
 
         captured = 42;
         var second = Prepare(_ctx, command);
-        ReferenceEquals(second, first).Should().BeTrue();
-        second.DbCommand.CommandText.Should().Be(sql);
-        second.DbCommand.Parameters[0].Value.Should().Be(42);
+        ReferenceEquals(second.PlanOf(), first.PlanOf()).Should().BeTrue();
+        second.PlanOf().CommandText.Should().Be(sql);
+        second.ParameterValue(0).Should().Be(42);
         var valuePairs = Pairs(_ctx.ToList(second).Select(r => (r.Parent, r.Child)).ToList());
         valuePairs.Should().Equal("2:21", "2:22");
 
         captured = null;
         var third = Prepare(_ctx, command);
-        ReferenceEquals(third, first).Should().BeTrue();
-        third.DbCommand.CommandText.Should().Be(sql);
-        third.DbCommand.Parameters[0].Value.Should().Be(DBNull.Value);
+        ReferenceEquals(third.PlanOf(), first.PlanOf()).Should().BeTrue();
+        third.PlanOf().CommandText.Should().Be(sql);
+        third.ParameterValue(0).Should().Be(DBNull.Value);
         var backToNullPairs = Pairs(_ctx.ToList(third).Select(r => (r.Parent, r.Child)).ToList());
         backToNullPairs.Should().Equal("1:11", "3:31");
 
@@ -521,8 +521,8 @@ public sealed class T296bNullableCacheTests : IDisposable
         command.Cache.Should().BeTrue();
 
         var first = Prepare(_ctx, command);
-        var sql = first.DbCommand.CommandText;
-        var parameter = first.DbCommand.Parameters.Cast<DbParameter>().Should().ContainSingle(
+        var sql = first.PlanOf().CommandText;
+        var parameter = first.PlanOf().DbCommandParams.Cast<DbParameter>().Should().ContainSingle(
             "all occurrences of the captured operand are one logical parameter").Subject;
         var placeholderCount = CountPlaceholders(sql, PlaceholderOf(parameter));
         placeholderCount.Should().Be(
@@ -532,22 +532,22 @@ public sealed class T296bNullableCacheTests : IDisposable
 
         captured = 42;
         var second = Prepare(_ctx, command);
-        ReferenceEquals(second, first).Should().BeTrue();
-        second.DbCommand.CommandText.Should().Be(sql);
-        second.DbCommand.Parameters[0].Value.Should().Be(42);
+        ReferenceEquals(second.PlanOf(), first.PlanOf()).Should().BeTrue();
+        second.PlanOf().CommandText.Should().Be(sql);
+        second.ParameterValue(0).Should().Be(42);
         var valueRows = _ctx.ToList(second).ToArray();
         valueRows.Should().Equal(new long[] { 1L, 3L, 5L }, "every occurrence must observe the current value");
 
         captured = null;
         var third = Prepare(_ctx, command);
-        ReferenceEquals(third, first).Should().BeTrue();
-        third.DbCommand.CommandText.Should().Be(sql);
-        third.DbCommand.Parameters[0].Value.Should().Be(DBNull.Value);
+        ReferenceEquals(third.PlanOf(), first.PlanOf()).Should().BeTrue();
+        third.PlanOf().CommandText.Should().Be(sql);
+        third.ParameterValue(0).Should().Be(DBNull.Value);
         var backToNullRows = _ctx.ToList(third).ToArray();
         backToNullRows.Should().Equal(2L, 3L, 4L);
         sql.Should().NotContain("42");
 
-        Dump($"warm position=where_inequality sql={sql} placeholders={placeholderCount} parameters={first.DbCommand.Parameters.Count} " +
+        Dump($"warm position=where_inequality sql={sql} placeholders={placeholderCount} parameters={first.PlanOf().DbCommandParams.Count} " +
              $"plan_identity=three_runs rows=null:[{string.Join(",", nullRows)}];42:[{string.Join(",", valueRows)}];null:[{string.Join(",", backToNullRows)}] " +
              $"cache_flag={command.Cache}");
     }
@@ -571,8 +571,8 @@ public sealed class T296bNullableCacheTests : IDisposable
 
         var forwardFirst = Prepare(_ctx, forward);
         var reversedFirst = Prepare(_ctx, reversed);
-        reversedFirst.DbCommand.CommandText.Should()
-            .Be(forwardFirst.DbCommand.CommandText, "both operand orders render the canonical column-first shape");
+        reversedFirst.PlanOf().CommandText.Should()
+            .Be(forwardFirst.PlanOf().CommandText, "both operand orders render the canonical column-first shape");
         var nullRows = _ctx.ToList(forwardFirst).ToArray();
         var nullRowsReversed = _ctx.ToList(reversedFirst).ToArray();
         nullRows.Should().Equal(1L);
@@ -581,32 +581,32 @@ public sealed class T296bNullableCacheTests : IDisposable
         captured = "alpha";
         var forwardSecond = Prepare(_ctx, forward);
         var reversedSecond = Prepare(_ctx, reversed);
-        ReferenceEquals(forwardSecond, forwardFirst).Should().BeTrue();
-        ReferenceEquals(reversedSecond, reversedFirst).Should().BeTrue();
-        forwardSecond.DbCommand.CommandText.Should().Be(forwardFirst.DbCommand.CommandText);
-        reversedSecond.DbCommand.CommandText.Should().Be(forwardFirst.DbCommand.CommandText);
-        forwardSecond.DbCommand.Parameters[0].Value.Should().Be("alpha");
-        reversedSecond.DbCommand.Parameters[0].Value.Should().Be("alpha");
+        ReferenceEquals(forwardSecond.PlanOf(), forwardFirst.PlanOf()).Should().BeTrue();
+        ReferenceEquals(reversedSecond.PlanOf(), reversedFirst.PlanOf()).Should().BeTrue();
+        forwardSecond.PlanOf().CommandText.Should().Be(forwardFirst.PlanOf().CommandText);
+        reversedSecond.PlanOf().CommandText.Should().Be(forwardFirst.PlanOf().CommandText);
+        forwardSecond.ParameterValue(0).Should().Be("alpha");
+        reversedSecond.ParameterValue(0).Should().Be("alpha");
         var alphaRows = _ctx.ToList(forwardSecond).ToArray();
         var alphaRowsReversed = _ctx.ToList(reversedSecond).ToArray();
         alphaRows.Should().Equal(2L, 4L);
         alphaRowsReversed.Should().Equal(2L, 4L);
-        forwardFirst.DbCommand.Parameters.Cast<DbParameter>().Should().ContainSingle();
-        forwardSecond.DbCommand.CommandText.Should().NotContain("alpha", "the captured string is never inlined");
+        forwardFirst.PlanOf().DbCommandParams.Cast<DbParameter>().Should().ContainSingle();
+        forwardSecond.PlanOf().CommandText.Should().NotContain("alpha", "the captured string is never inlined");
 
         captured = null;
         var forwardThird = Prepare(_ctx, forward);
-        ReferenceEquals(forwardThird, forwardFirst).Should().BeTrue();
-        forwardThird.DbCommand.Parameters[0].Value.Should().Be(DBNull.Value);
+        ReferenceEquals(forwardThird.PlanOf(), forwardFirst.PlanOf()).Should().BeTrue();
+        forwardThird.ParameterValue(0).Should().Be(DBNull.Value);
         var backToNullRows = _ctx.ToList(forwardThird).ToArray();
         backToNullRows.Should().Equal(1L);
         forward.Cache.Should().BeTrue();
         reversed.Cache.Should().BeTrue();
 
         Dump($"warm position=where_string operand_orders=forward,reversed shape_identical=true " +
-             $"parameters={forwardFirst.DbCommand.Parameters.Count} plan_identity=three_runs_each " +
+             $"parameters={forwardFirst.PlanOf().DbCommandParams.Count} plan_identity=three_runs_each " +
              $"rows=null:[{string.Join(",", nullRows)}];alpha:[{string.Join(",", alphaRows)}];null:[{string.Join(",", backToNullRows)}] " +
-             $"cache_flag={forward.Cache}/{reversed.Cache} sql={forwardFirst.DbCommand.CommandText}");
+             $"cache_flag={forward.Cache}/{reversed.Cache} sql={forwardFirst.PlanOf().CommandText}");
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -625,24 +625,25 @@ public sealed class T296bNullableCacheTests : IDisposable
 
         var records = new List<(string Step, System.Data.DbType DbType, byte Precision, byte Scale, string Value)>();
 
-        void Record(string step)
+        void Record(IPreparedQueryCommand<long> invocation, string step)
         {
-            var parameter = prepared.DbCommand.Parameters[0];
+            var parameter = invocation.PlanOf().DbCommandParams[0];
+            var value = invocation.ParameterValue(0);
             records.Add((step, parameter.DbType, parameter.Precision, parameter.Scale,
-                parameter.Value is DBNull ? "DBNull" : parameter.Value?.ToString() ?? "null"));
+                value is DBNull ? "DBNull" : value.ToString() ?? "null"));
         }
 
-        Record("null");
+        Record(prepared, "null");
         _ctx.ToList(prepared).Should().Equal(1L, 5L);
 
         captured = 42;
-        Prepare(_ctx, command);
-        Record("42");
+        prepared = Prepare(_ctx, command);
+        Record(prepared, "42");
         _ctx.ToList(prepared).Should().Equal(2L, 4L);
 
         captured = null;
-        Prepare(_ctx, command);
-        Record("null");
+        prepared = Prepare(_ctx, command);
+        Record(prepared, "null");
         _ctx.ToList(prepared).Should().Equal(1L, 5L);
 
         records.Select(r => r.DbType).Distinct().Should().ContainSingle()
@@ -655,7 +656,7 @@ public sealed class T296bNullableCacheTests : IDisposable
         Dump($"parameter_metadata position=where provider=sqlite steps=" +
              string.Join(";", records.Select(r =>
                  $"{r.Step}:DbType={r.DbType},Precision={r.Precision},Scale={r.Scale},Value={r.Value}")) +
-             $" sql={prepared.DbCommand.CommandText}");
+             $" sql={prepared.PlanOf().CommandText}");
     }
 
     // ---------------------------------------------------------------------------------------------
