@@ -1,3 +1,5 @@
+using System.Linq.Expressions;
+
 namespace NextORM.Core;
 
 /// <summary>
@@ -52,8 +54,12 @@ public partial class QueryCommand
             preparedTarget.PreparedHaving = prepared.PreparedHaving;
             preparedTarget.PreparedPreWhere = prepared.PreparedPreWhere;
             preparedTarget.PreWhereShapeHash = prepared.PreWhereShapeHash;
+            preparedTarget.WhereValueListShape = prepared.WhereValueListShape;
+            preparedTarget.PreWhereValueListShape = prepared.PreWhereValueListShape;
+            preparedTarget.HasTopLevelInValues = prepared.HasTopLevelInValues;
             preparedTarget.HasPreWhereInValues = prepared.HasPreWhereInValues;
-            preparedTarget.LookupPartitions = prepared.LookupPartitions;
+            // The normalized key needs the shape tokens, not the entries evaluated for execution.
+            preparedTarget.LookupPartitions = copyAll ? prepared.LookupPartitions : null;
             preparedTarget.ShapeScanned = prepared.ShapeScanned;
             preparedTarget.HasUnkeyedTupleInValues = prepared.HasUnkeyedTupleInValues;
             preparedTarget.HasUnkeyedScalarInValues = prepared.HasUnkeyedScalarInValues;
@@ -74,6 +80,12 @@ public partial class QueryCommand
         dst._dontCache = _dontCache;
         dst._filterScope = _filterScope;
         dst.MappingVariant = MappingVariant;
+        if (!copyAll)
+        {
+            dst._detachedPlanMapping = PlanMapping;
+            dst._detachedPlanDialect = PlanDialect;
+            dst._detachedPlanNamingIdentity = _detachedPlanNamingIdentity;
+        }
         dst.ColumnsPlanHash = ColumnsPlanHash;
         dst.JoinPlanHash = JoinPlanHash;
         dst.WherePlanHash = WherePlanHash;
@@ -203,13 +215,7 @@ public partial class QueryCommand
                 // so later re-preparation of the live command cannot mutate what the cache compares against.
                 // The typed-projection flag and the recursive reference travel with the declaration: a plan
                 // served from cache must keep the typed aliasing and the recursive shape validation.
-                dst._ctes = _ctes.Select(c => c.Mutation is not null
-                    ? new CteDefinition(c.Name, c.Query.CloneForCache(), c.Mutation)
-                    : new CteDefinition(c.Name, c.Query.CloneForCache(), c.Recursive, c.MaxRecursion)
-                    {
-                        TypedProjection = c.TypedProjection,
-                        RecursiveReference = c.RecursiveReference,
-                    }).ToList();
+                dst._ctes = _ctes.Select(c => c.WithQuery(c.Query.CloneForCache())).ToList();
             }
 
             if (Prep?.ReferencedQueries is { Count: > 0 } referencedQueries)
@@ -217,6 +223,42 @@ public partial class QueryCommand
                 dst.Prepared.ReferencedQueries = referencedQueries.Select(it => it.CloneForCache()).ToList();
             }
         }
+    }
+
+    // Call on a cache key or on a command adopting a cached recipe, never on an ordinary live clone.
+    // The descriptors are mutable even when the expression nodes they point at are shared.
+    private void CopyPreparedColumns()
+    {
+        _selectList = CopyColumns(_selectList);
+        if (_preparedState is { } prepared)
+        {
+            prepared.GroupingList = CopyColumns(prepared.GroupingList);
+            prepared.LimitByColumns = CopyColumns(prepared.LimitByColumns);
+            prepared.DistinctOnColumns = CopyColumns(prepared.DistinctOnColumns);
+            prepared.ExtremeRowColumns = CopyColumns(prepared.ExtremeRowColumns);
+            prepared.ExtremeRowGroupByColumns = CopyColumns(prepared.ExtremeRowGroupByColumns);
+            prepared.PerParentPartitionColumns = CopyColumns(prepared.PerParentPartitionColumns);
+        }
+
+        static SelectExpression[]? CopyColumns(SelectExpression[]? columns)
+            => columns is { Length: > 0 } ? Array.ConvertAll(columns, static column => column.Copy()) : columns;
+    }
+
+    private void CopyClauseCollections()
+    {
+        _hints = _hints?.ToArray();
+        if (TableHints is { } tableHints)
+            TableHints = tableHints.ToArray();
+        if (IndexHints is { } indexHints)
+            IndexHints = indexHints.ToArray();
+        if (TablesInScopeHints is { } scopeHints)
+            TablesInScopeHints = scopeHints.ToArray();
+        if (Settings is { } settings)
+            Settings = settings.ToArray();
+        if (GroupingSets is { } sets)
+            GroupingSets = sets.Select(static set => (int[])set.Clone()).ToArray();
+        if (_windows is { } windows)
+            _windows = RewriteWindowExpressions(windows);
     }
 
     /// <summary>Creates an empty command of the same concrete type for a live clone.</summary>
@@ -274,8 +316,331 @@ public partial class QueryCommand
     {
         var cmd = CreateSelfForClone();
         CopyTo(cmd, false);
+        cmd.CopyPreparedColumns();
+        cmd.CopyClauseCollections();
         return cmd;
     }
+
+    internal QueryCommand CloneForRawRecipe(RawShape shape)
+    {
+        var clone = CloneForCache();
+        clone.ClearReplayedRawState(shape);
+        return clone;
+    }
+
+    private void ClearReplayedRawState(RawShape shape)
+    {
+        // The staged command and its descendants use their own components and authored clauses.
+        _components = default;
+        _componentsView = null;
+        if (shape.UseCurrentNaming)
+        {
+            NamingConvention = null;
+            ResolvedNamingConvention = null;
+        }
+        if (shape.UseCurrentWhere)
+            PreparedCondition = null;
+        if (shape.UseCurrentSorting)
+            _sorting = null;
+        if (shape.UseCurrentScalarProjection)
+            _selectList![0].Expression = null;
+        if (shape.UseCurrentWindows)
+            _windows = null;
+        if (shape.RebindGrouping)
+        {
+            EffectiveHaving = null;
+            PreparedComponents = null;
+        }
+        if (shape.UnionToStage is { } unionShape)
+            _union!.ClearReplayedRawState(unionShape);
+        if (shape.HasCtesToStage && _ctes is { } ctes)
+        {
+            foreach (var definition in ctes)
+            {
+                if (shape.FindCteToStage(definition.Name) is { } body)
+                    definition.Query.ClearReplayedRawState(body);
+            }
+        }
+    }
+
+    // SQL keys are compared, not rendered. Keep the legacy cache clone executable for raw recipe
+    // adoption and for the in-memory route. Walk only command edges owned by the cache clone.
+    internal bool DetachSqlPlanKey(out bool requiresWeakOwner)
+    {
+        var rewriter = new SqlKeyExpressionRewriter();
+        DetachSqlPlanKey(rewriter);
+        requiresWeakOwner = rewriter.RequiresWeakOwner;
+        return rewriter.Changed;
+    }
+
+    private void DetachSqlPlanKey(SqlKeyExpressionRewriter rewriter)
+    {
+        if (NamingConvention is not null and not SnakeCaseNamingConvention
+            || ResolvedNamingConvention is not null and not SnakeCaseNamingConvention)
+        {
+            // Custom naming policy objects can carry request state. The key needs only identity;
+            // the live command (or the separate raw recipe) keeps the translator.
+            _detachedPlanNamingIdentity = PlanNamingIdentity;
+            NamingConvention = null;
+            ResolvedNamingConvention = null;
+            rewriter.Changed = true;
+        }
+
+        if (OuterRegistry is not null)
+        {
+            // The prepared registry slots and precomputed hashes carry plan identity. Following this
+            // reverse link would keep the live outer command (and potentially its context) alive.
+            OuterRegistry = null;
+            rewriter.Changed = true;
+        }
+
+        _having = (LambdaExpression?)rewriter.Visit(_having);
+        // PREWHERE comparison reads the prepared predicate. The authored predicate and the
+        // navigation graph exist only to prepare or execute the caller's command.
+        if (_preWhere is not null || NavigationPaths is not null || NavigationChain is not null || JunctionChildFilter is not null)
+        {
+            _preWhere = null;
+            NavigationPaths = null;
+            NavigationChain = null;
+            JunctionChildFilter = null;
+            rewriter.Changed = true;
+        }
+        if (LimitBy is { } limitBy)
+        {
+            var selector = (LambdaExpression)rewriter.Visit(limitBy.Expression);
+            if (!ReferenceEquals(selector, limitBy.Expression))
+                LimitBy = limitBy with { Expression = selector };
+        }
+        if (DistinctOn is { } distinctOn)
+        {
+            var selector = (LambdaExpression)rewriter.Visit(distinctOn.Expression);
+            if (!ReferenceEquals(selector, distinctOn.Expression))
+                DistinctOn = distinctOn with { Expression = selector };
+        }
+        if (ExtremeRow is { } extreme)
+        {
+            var value = (LambdaExpression)rewriter.Visit(extreme.ValueSelector);
+            var group = (LambdaExpression?)rewriter.Visit(extreme.GroupBy);
+            var projection = (LambdaExpression?)rewriter.Visit(extreme.Projection);
+            if (!ReferenceEquals(value, extreme.ValueSelector) || !ReferenceEquals(group, extreme.GroupBy)
+                || !ReferenceEquals(projection, extreme.Projection))
+                ExtremeRow = extreme with { ValueSelector = value, GroupBy = group, Projection = projection };
+        }
+        PerParentPartition = (LambdaExpression?)rewriter.Visit(PerParentPartition);
+        if (_arrayJoins is { Length: > 0 } arrayJoins)
+            _arrayJoins = Array.ConvertAll(arrayJoins, expression => (LambdaExpression)rewriter.Visit(expression));
+        if (_windows is { Count: > 0 } windows)
+        {
+            _windows = RewriteWindowExpressions(windows, rewriter);
+            rewriter.Changed = true;
+        }
+        RewriteColumns(_selectList);
+        if (_preparedState is { } prepared)
+        {
+            prepared.PreparedCondition = rewriter.Visit(prepared.PreparedCondition);
+            prepared.PreparedHaving = rewriter.Visit(prepared.PreparedHaving);
+            prepared.PreparedPreWhere = rewriter.Visit(prepared.PreparedPreWhere);
+            if (prepared.PreparedArrayJoin is not null || prepared.OuterRefBindings is not null)
+            {
+                prepared.PreparedArrayJoin = null;
+                prepared.OuterRefBindings = null;
+                rewriter.Changed = true;
+            }
+            if (prepared.OuterRefs is { Count: > 0 } references)
+                prepared.OuterRefs = references.ConvertAll(expression => rewriter.Visit(expression)!);
+            RewriteColumns(prepared.GroupingList);
+            RewriteColumns(prepared.LimitByColumns);
+            RewriteColumns(prepared.DistinctOnColumns);
+            RewriteColumns(prepared.ExtremeRowColumns);
+            RewriteColumns(prepared.ExtremeRowGroupByColumns);
+            RewriteColumns(prepared.PerParentPartitionColumns);
+            if (prepared.PreparedComponents is { Count: > 0 } descriptors)
+            {
+                // The normalized comparer uses prepared descriptors, not the raw components or their
+                // rendering inputs. A raw candidate still needs a separate executable copy.
+                _components = default;
+                _componentsView = null;
+                prepared.EffectiveGroupingKeys = null;
+                prepared.EffectiveHaving = null;
+                prepared.EffectiveSourcePredicate = null;
+                var comparison = new IQueryComponentDescriptor[descriptors.Count];
+                for (var i = 0; i < comparison.Length; i++)
+                {
+                    var descriptor = descriptors[i];
+                    if (descriptor is ISqlPlanComponentDescriptor detachable)
+                    {
+                        comparison[i] = detachable.ToSqlPlanKey(rewriter);
+                    }
+                    else
+                    {
+                        comparison[i] = descriptor;
+                        rewriter.RequiresWeakOwner = true;
+                    }
+                }
+                prepared.PreparedComponents = comparison;
+                prepared.PreparedComponentsView = Array.AsReadOnly(comparison);
+                rewriter.Changed = true;
+            }
+            if (prepared.ReferencedQueries is { } referenced)
+                foreach (var command in referenced)
+                    command.DetachSqlPlanKey(rewriter);
+        }
+
+        _from = DetachSource(_from);
+        if (_joins is { } joins)
+        {
+            foreach (var join in joins)
+            {
+                join.RewriteCacheExpressions(rewriter);
+                join.SetFrom(DetachSource(join.From)!);
+            }
+        }
+
+        if (_sorting is { } sorting)
+        {
+            for (var i = 0; i < sorting.Length; i++)
+            {
+                ref var sort = ref sorting[i];
+                var source = rewriter.Visit(sort.SortExpression);
+                var preparedSort = ReferenceEquals(sort.SortExpression, sort.PreparedExpression)
+                    ? source
+                    : rewriter.Visit(sort.PreparedExpression);
+                if (!ReferenceEquals(source, sort.SortExpression) || !ReferenceEquals(preparedSort, sort.PreparedExpression))
+                    sort = new Sorting(in sort, source, preparedSort);
+            }
+        }
+
+        if (_ctes is { } ctes)
+        {
+            CteDefinition[]? detached = null;
+            for (var i = 0; i < ctes.Count; i++)
+            {
+                var cte = ctes[i];
+                cte.Query.DetachSqlPlanKey(rewriter);
+                if (cte.RecursiveReference is not null)
+                {
+                    // The declaration and step were validated on the live command. The CTE body
+                    // and typed projection flag describe the SQL; the reference owns the live anchor.
+                    detached ??= ctes.ToArray();
+                    detached[i] = cte.WithQuery(cte.Query, keepRecursiveReference: false);
+                    rewriter.Changed = true;
+                }
+            }
+            if (detached is not null)
+                _ctes = detached;
+        }
+        _union?.DetachSqlPlanKey(rewriter);
+
+        void RewriteColumns(SelectExpression[]? columns)
+        {
+            if (columns is not null)
+            {
+                foreach (var column in columns)
+                {
+                    column.Expression = rewriter.Visit(column.Expression);
+                    rewriter.Changed |= column.DetachConverterForSqlPlanKey();
+                }
+            }
+        }
+
+        FromExpression? DetachSource(FromExpression? source)
+        {
+            if (source is null) return null;
+
+            var leaf = source;
+            while (leaf.Pivot is { } pivot)
+                leaf = pivot.Inner;
+            leaf.SubQuery?.DetachSqlPlanKey(rewriter);
+
+            var key = source.ForSqlPlanKey(rewriter);
+            if (!ReferenceEquals(key, source))
+                rewriter.Changed = true;
+            return key;
+        }
+    }
+
+    // Both SQL keys and raw descriptors compare the authored window syntax. Neither snapshot
+    // needs to execute the selectors or borrow the live collections of partition and order keys.
+    private static WindowDefinition[] RewriteWindowExpressions(IReadOnlyList<WindowDefinition> windows, ExpressionVisitor? rewriter = null)
+    {
+        var result = new WindowDefinition[windows.Count];
+        for (var i = 0; i < result.Length; i++)
+        {
+            var window = windows[i];
+            var partitions = new LambdaExpression[window.PartitionBy.Count];
+            for (var p = 0; p < partitions.Length; p++)
+                partitions[p] = (LambdaExpression?)rewriter?.Visit(window.PartitionBy[p]) ?? window.PartitionBy[p];
+
+            var orders = new NamedWindowOrderKey[window.OrderBy.Count];
+            for (var o = 0; o < orders.Length; o++)
+            {
+                var key = window.OrderBy[o];
+                orders[o] = new NamedWindowOrderKey((LambdaExpression?)rewriter?.Visit(key.Expression) ?? key.Expression, key.Direction);
+            }
+
+            result[i] = new WindowDefinition(window.Name, partitions, orders, window.Frame);
+        }
+
+        return result;
+    }
+
+    private static bool IsImmutableSqlConstant(object? value)
+        => value is Type || PreparedCommandFactory.IsShareableSeedValue(value);
+
+    private sealed class SqlKeyExpressionRewriter : ExpressionVisitor
+    {
+        internal bool Changed { get; set; }
+        internal bool RequiresWeakOwner { get; set; }
+
+        protected override Expression VisitMember(MemberExpression node)
+        {
+            // Plan equality compares the member and declared receiver type, not the receiver.
+            // QueryCommand-valued members are different: their hash resolves the referenced query.
+            if (node.Expression is ConstantExpression { Value: not null and not string } receiver
+                && !receiver.Type.IsValueType && !typeof(QueryCommand).IsAssignableFrom(node.Type))
+            {
+                Changed = true;
+                return node.Update(Expression.Constant(null, receiver.Type));
+            }
+
+            return base.VisitMember(node);
+        }
+
+        protected override Expression VisitConstant(ConstantExpression node)
+        {
+            if (IsImmutableSqlConstant(node.Value))
+                return node;
+
+            if (node.Value is Array { Rank: 1 } array)
+            {
+                var copy = (Array)array.Clone();
+                foreach (var value in copy)
+                {
+                    if (!IsImmutableSqlConstant(value))
+                    {
+                        RequiresWeakOwner = true;
+                        return node;
+                    }
+                }
+                // Constant array equality is structural. Freeze its values without changing their
+                // types or literal semantics, so later writes cannot change the published shape.
+                Changed = true;
+                return Expression.Constant(copy, node.Type);
+            }
+
+            // Arbitrary values can define equality. Use their real comparison under a live
+            // representative instead of rooting them or treating a hash as proof of equality.
+            RequiresWeakOwner = true;
+            return node;
+        }
+
+        protected override Expression VisitExtension(Expression node)
+        {
+            RequiresWeakOwner = true;
+            return node;
+        }
+    }
+
     /// <summary>Returns a deep, independently mutable copy of this command.</summary>
     /// <returns>The cloned command.</returns>
     public QueryCommand Clone()

@@ -94,7 +94,22 @@ public interface IQueryComponentDescriptor
     int StructuralHash { get; }
 
     /// <summary>Determines structural equality with another prepared descriptor.</summary>
+    /// <remarks>Independent contexts can call this method concurrently on the same immutable descriptor.</remarks>
     bool StructurallyEquals(IQueryComponentDescriptor? other);
+}
+
+// A packaged descriptor can provide just the immutable state needed for normalized SQL equality.
+// The expression visitor preserves comparison semantics; its output must never be executed.
+internal interface ISqlPlanComponentDescriptor
+{
+    IQueryComponentDescriptor ToSqlPlanKey(ExpressionVisitor rewriter);
+}
+
+// The grouping keys and mode have already been inferred. Bind only the current component's HAVING.
+internal interface IRawGroupingComponent
+{
+    IQueryPreparationDescriptor BindRawHaving(LambdaExpression projection, IReadOnlyList<LambdaExpression> groupingKeys,
+        IEqualityComparer<Expression> comparer);
 }
 
 /// <summary>

@@ -18,6 +18,51 @@ namespace NextORM.Core.Tests;
 public class DbPreparedQueryCommandFactoryTests
 {
     [Fact]
+    public void Factory_UsesParameterSnapshot_NotTheRenderParameter()
+    {
+        var renderParameter = new Parameter("original", 42) { DbType = DbType.Int32 };
+        var factory = new PreparedCommandFactory("select @original", null, [renderParameter]);
+
+        renderParameter.Name = "changed";
+        renderParameter.Value = 99;
+
+        var parameter = factory.CreatePlanParameters((name, value) => new MarkerParameter(name) { Value = value }).Should().ContainSingle().Subject;
+        parameter.ParameterName.Should().Be("original");
+        parameter.Value.Should().Be(42);
+        parameter.DbType.Should().Be(DbType.Int32);
+    }
+
+    [Fact]
+    public void FirstCheckout_PreservesProviderNormalization_WithoutSeedingThePlan()
+    {
+        const string sql = "select @captured";
+        var factory = new PreparedCommandFactory(sql, null, [new Parameter("captured", 1) { DbType = DbType.String }],
+            requiresInvocationValues: true);
+        var prepared = new DbPreparedQueryCommand<int>(factory,
+            factory.CreatePlanParameters(static (name, value) => new MarkerParameter(name) { Value = value }),
+            null, new PreparedCommandOptions(Sql: sql, NeedsParamRefresh: true));
+        using var connection = new StubConnection();
+
+        var lease = prepared.Acquire(connection,
+            static (_, name, value) => new MarkerParameter(name) { Value = $"provider:{value}" },
+            ReadOnlySpan<object?>.Empty, null, null, [2]);
+
+        try
+        {
+            var parameter = lease.Command.Parameters[0];
+            parameter.Value.Should().Be("provider:2");
+            parameter.DbType.Should().Be(DbType.String);
+        }
+        finally
+        {
+            lease.Dispose();
+        }
+
+        prepared.DbCommandParams[0].Value.Should().BeNull();
+        prepared.ParamSeeds[0].Value.Should().BeNull();
+    }
+
+    [Fact]
     public void Core_BothFactoriesNull_Throws()
     {
         var prepared = Prepared(out _);
@@ -196,7 +241,7 @@ public class DbPreparedQueryCommandFactoryTests
 
         protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel) => throw new NotSupportedException();
 
-        protected override DbCommand CreateDbCommand() => throw new NotSupportedException();
+        protected override DbCommand CreateDbCommand() => new StubCommand { Connection = this };
     }
 
     /// <summary>

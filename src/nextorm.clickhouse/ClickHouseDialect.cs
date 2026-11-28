@@ -62,6 +62,8 @@ public class ClickHouseDialect : SqlDialectBase
         _topKAggregates = new ClickHouseTopKAggregateRenderer(this);
         _clickHouseAggregates = new ClickHouseAggregateRenderer(this);
         _serverVersion = declaration.ServerVersion;
+        if (GetType() == typeof(ClickHouseDialect))
+            PlanDialectIdentity.Register(this, (typeof(ClickHouseDialect), _serverVersion));
         _scalarFunctions = _serverVersion is null
             ? ClickHouseScalarFunctions.Instance
             : new ClickHouseScalarFunctions(_serverVersion);

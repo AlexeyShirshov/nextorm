@@ -2521,6 +2521,7 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
     internal bool IsPlainScalarScope
         => _query is null
             && _condition is null
+            && !HasComponents
             && _filterScope.IsEmpty
             && _group is null
             && _limitBy is null
@@ -2566,6 +2567,8 @@ public partial class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource, 
             && Tag is null
             && CommandTimeout is null
             && Ctes is null;
+
+    internal bool HasComponents => _componentState is not null;
 
     /// <summary>
     /// Returns a copy of this builder without the <c>JoinInto</c> joins (and their stitching metadata),

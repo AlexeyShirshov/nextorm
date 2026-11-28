@@ -9,8 +9,8 @@ namespace NextORM.Core;
 /// wrapper, rebuilds the normalized plan key and re-renders the statement to refresh the captured
 /// value — roughly 3.8 KB per call for a predicate over one captured local. This route derives a
 /// value-agnostic shape from the builder instead, finds the compiled holder the miss published, binds
-/// the current closure values into its parameters and executes it. Nothing is built, prepared or
-/// re-rendered on a hit.
+/// the current closure values for the invocation and executes it. Nothing is prepared or re-rendered
+/// on a hit.
 /// </para>
 /// <para>
 /// Fail closed: only a plain entity source with a condition and none of the SQL-affecting modifiers is
@@ -41,10 +41,11 @@ internal static class NativeAnyRoute
         if (candidate.Holder is not DbPreparedQueryCommand<bool> prepared)
             return false;
 
-        if (!ShapeIdentity.TryBind(candidate.Shape, shapeHeader, candidate.Binder, prepared.DbCommandParams, builder.Condition))
+        var values = candidate.Binder.ParameterCount == 0 ? [] : new object?[candidate.Binder.ParameterCount];
+        if (values.Length != 0 && !ShapeIdentity.TryBind(candidate.Shape, shapeHeader, candidate.Binder, values, builder.Condition))
             return false;
 
-        result = context!.ExecuteScalar<bool>(prepared, @params, true);
+        result = context!.ExecuteScalar(BoundQueryInvocation<bool>.Create(prepared, values), @params, true);
         return true;
     }
 
@@ -71,10 +72,11 @@ internal static class NativeAnyRoute
         if (candidate.Holder is not DbPreparedQueryCommand<bool> prepared)
             return false;
 
-        if (!ShapeIdentity.TryBind(candidate.Shape, shapeHeader, candidate.Binder, prepared.DbCommandParams, builder.Condition))
+        var values = candidate.Binder.ParameterCount == 0 ? [] : new object?[candidate.Binder.ParameterCount];
+        if (values.Length != 0 && !ShapeIdentity.TryBind(candidate.Shape, shapeHeader, candidate.Binder, values, builder.Condition))
             return false;
 
-        result = context!.ExecuteScalar<bool>(prepared, @params, true, cancellationToken);
+        result = context!.ExecuteScalar(BoundQueryInvocation<bool>.Create(prepared, values), @params, true, cancellationToken);
         return true;
     }
 
@@ -85,10 +87,11 @@ internal static class NativeAnyRoute
     /// </summary>
     /// <typeparam name="TEntity">The queried entity type.</typeparam>
     /// <param name="builder">The builder the terminal was called on.</param>
+    /// <param name="command">The normalized command the ordinary route prepared.</param>
     /// <param name="prepared">The holder the legacy route compiled.</param>
-    internal static void Publish<TEntity>(EntityBuilder<TEntity> builder, IPreparedQueryCommand<bool> prepared)
+    internal static void Publish<TEntity>(EntityBuilder<TEntity> builder, QueryCommand<bool> command, IPreparedQueryCommand<bool> prepared)
     {
-        if (prepared is not DbPreparedQueryCommand<bool> holder)
+        if (BoundQueryInvocation<bool>.GetPlan(prepared) is not { } holder)
             return;
 
         if (!TryResolve(builder, ReadOnlySpan<object?>.Empty, out _, out var header) || header is not { } shapeHeader)
@@ -102,7 +105,7 @@ internal static class NativeAnyRoute
         if (binder is null)
             return;
 
-        QueryPlanStore.SetNative(shape, holder, binder);
+        QueryPlanStore.SetNative(shapeHeader.ContextType!, command.GetOrCreatePlanKey(null), shape, holder, binder);
     }
 
     /// <summary>
@@ -135,6 +138,7 @@ internal static class NativeAnyRoute
         // Only a plain entity source with a predicate: every other SQL-affecting member keeps the
         // legacy route. The list mirrors the ones the parent command transfer carries.
         if (builder.MappingVariant != MappingVariant.Default
+            || builder.HasComponents
             || builder.SourceFrom is not null
             || builder.Table is not null
             || builder.Sorting is { Count: > 0 }

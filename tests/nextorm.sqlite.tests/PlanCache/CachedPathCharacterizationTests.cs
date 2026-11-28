@@ -22,7 +22,14 @@ namespace NextORM.Sqlite.Tests;
 public class CachedPathCharacterizationTests
 {
     private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> cmd, bool cache = false)
-        => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, cache, CancellationToken.None);
+        => Prepare(ctx, cmd, out _, cache);
+
+    private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> cmd, out object?[]? values, bool cache = true)
+    {
+        var prepared = ctx.GetPreparedQueryCommand(cmd, false, cache, CancellationToken.None);
+        values = (prepared as BoundQueryInvocation<T>)?.Values;
+        return BoundQueryInvocation<T>.GetPlan(prepared)!;
+    }
 
     // ---------------------------------------------------------------------------------------------
     // Row 1: two closures of the same shape with different captured values.
@@ -52,14 +59,14 @@ public class CachedPathCharacterizationTests
         ctx.PurgeQueryCache();
         var e = ctx.From<IComplexEntity>();
 
-        var first = Prepare(ctx, WhereWithCaptured(e, 1), cache: true);
-        first.DbCommandParams[0].Value.Should().Be(1);
+        var first = Prepare(ctx, WhereWithCaptured(e, 1), out var firstValues);
+        firstValues.Should().Equal([1]);
         first.NeedsParamRefresh.Should().BeTrue("a captured local is not fixed by the expression shape");
 
-        var second = Prepare(ctx, WhereWithCaptured(e, 2), cache: true);
+        var second = Prepare(ctx, WhereWithCaptured(e, 2), out var values);
 
         ReferenceEquals(first, second).Should().BeTrue("the captured value is not part of the plan key");
-        second.DbCommandParams[0].Value.Should().Be(2, "the shared cached command re-binds the second closure's value");
+        values.Should().Equal([2], "the second invocation binds its own capture");
     }
 
     [Fact]
@@ -69,13 +76,13 @@ public class CachedPathCharacterizationTests
         ctx.PurgeQueryCache();
         var e = ctx.From<IComplexEntity>();
 
-        var first = Prepare(ctx, WhereAtSiteA(e), cache: true);
-        var second = Prepare(ctx, WhereAtSiteB(e), cache: true);
+        var first = Prepare(ctx, WhereAtSiteA(e), out var firstValues);
+        var second = Prepare(ctx, WhereAtSiteB(e), out var secondValues);
 
         ReferenceEquals(first, second).Should()
             .BeFalse("each closure site owns a distinct display-class type, which is part of the key");
-        first.DbCommandParams[0].Value.Should().Be(1);
-        second.DbCommandParams[0].Value.Should().Be(2);
+        firstValues.Should().Equal([1]);
+        secondValues.Should().Equal([2]);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -163,15 +170,15 @@ public class CachedPathCharacterizationTests
         var e = ctx.From<IComplexEntity>();
 
         var values = new long[] { 1 };
-        var first = Prepare(ctx, e.Where(x => SqlFunctions.Sql.@in(x.Id, values)).Select(x => x.Id), cache: true);
-        first.DbCommandParams[0].Value.Should().Be(1L);
+        var first = Prepare(ctx, e.Where(x => SqlFunctions.Sql.@in(x.Id, values)).Select(x => x.Id), out var firstValues);
+        firstValues.Should().Equal([1L]);
 
         ExpressionPlanEqualityComparer.ResetCounters();
         values[0] = 2;
-        var second = Prepare(ctx, e.Where(x => SqlFunctions.Sql.@in(x.Id, values)).Select(x => x.Id), cache: true);
+        var second = Prepare(ctx, e.Where(x => SqlFunctions.Sql.@in(x.Id, values)).Select(x => x.Id), out var boundValues);
 
         ReferenceEquals(first, second).Should().BeTrue("an unchanged IN cardinality is the same shape");
-        second.DbCommandParams[0].Value.Should().Be(2L, "the shared cached command re-binds the current value");
+        boundValues.Should().Equal([2L], "the second invocation binds the current value");
         ParamRefreshRecipe.FastBindHits.Should().Be(0, "a runtime pN placeholder is outside the recipe subset");
         QueryPlanner.FallbackRefreshes.Should().Be(1, "the value-list parameter refreshes through the extraction path");
     }
@@ -329,19 +336,19 @@ public class CachedPathCharacterizationTests
         var a = new CountingProbe { Value = 1 };
         var b = new CountingProbe { Value = 2 };
 
-        var first = Prepare(ctx, WhereProbe(e, a), cache: true);
-        first.DbCommandParams[0].Value.Should().Be(1);
+        var first = Prepare(ctx, WhereProbe(e, a), out var firstValues);
+        firstValues.Should().Equal([1]);
         first.NeedsParamRefresh.Should().BeTrue();
         first.ParamRecipe.Should().NotBeNull("a simple captured scalar is in the supported recipe subset");
 
         a.Reads = 0;
         b.Reads = 0;
-        var second = Prepare(ctx, WhereProbe(e, b), cache: true);
+        var second = Prepare(ctx, WhereProbe(e, b), out var values);
 
         ReferenceEquals(first, second).Should().BeTrue("the captured value is not part of the plan key");
         b.Reads.Should().Be(1, "the current closure is evaluated exactly once on the refresh");
         a.Reads.Should().Be(0, "the reusable recipe must not reuse the first closure");
-        second.DbCommandParams[0].Value.Should().Be(2, "the shared cached command re-binds the second closure's value");
+        values.Should().Equal([2], "the second execution binds its own capture");
     }
 
     // A real cache hit with a supported recipe takes the positional fast path: it reads the CURRENT
@@ -354,20 +361,20 @@ public class CachedPathCharacterizationTests
         var e = ctx.From<IComplexEntity>();
         var probe = new CountingProbe { Value = 1 };
 
-        var first = Prepare(ctx, WhereProbe(e, probe), cache: true);
+        var first = Prepare(ctx, WhereProbe(e, probe), out var firstValues);
         first.ParamRecipe.Should().NotBeNull("a simple captured scalar is in the supported recipe subset");
-        first.DbCommandParams[0].Value.Should().Be(1);
+        firstValues.Should().Equal([1]);
 
         probe.Reads = 0;
         probe.Value = 2;
         ExpressionPlanEqualityComparer.ResetCounters();
-        var second = Prepare(ctx, WhereProbe(e, probe), cache: true);
+        var second = Prepare(ctx, WhereProbe(e, probe), out var values);
 
         ReferenceEquals(first, second).Should().BeTrue("the captured value is not part of the plan key");
         ParamRefreshRecipe.FastBindHits.Should().Be(1);
         ParamRefreshRecipe.BindRejected.Should().Be(0);
         QueryPlanner.FallbackRefreshes.Should().Be(0);
-        second.DbCommandParams[0].Value.Should().Be(2, "the fast path binds the CURRENT closure value");
+        values.Should().Equal([2], "the fast path binds the current closure value");
         probe.Reads.Should().Be(1, "the fast path reads the captured member exactly once");
     }
 
@@ -386,12 +393,12 @@ public class CachedPathCharacterizationTests
 
         ExpressionPlanEqualityComparer.ResetCounters();
         captured = "x";
-        var second = Prepare(ctx, e.Where(x => x.String == captured).Select(x => x.Id), cache: true);
+        var second = Prepare(ctx, e.Where(x => x.String == captured).Select(x => x.Id), out var values);
 
         ReferenceEquals(first, second).Should().BeTrue();
         ParamRefreshRecipe.FastBindHits.Should().Be(1);
         QueryPlanner.FallbackRefreshes.Should().Be(0);
-        second.DbCommandParams[0].Value.Should().Be("x", "the null-to-value change is rebound by the fast path");
+        values.Should().Equal(["x"], "the null-to-value change is rebound by the fast path");
     }
 
     // The inverse transition exercises the writer's coalesce branch: a value capture that becomes null on
@@ -409,14 +416,13 @@ public class CachedPathCharacterizationTests
 
         ExpressionPlanEqualityComparer.ResetCounters();
         captured = null;
-        var second = Prepare(ctx, e.Where(x => x.String == captured).Select(x => x.Id), cache: true);
+        var second = Prepare(ctx, e.Where(x => x.String == captured).Select(x => x.Id), out var values);
 
         ReferenceEquals(first, second).Should().BeTrue("the captured value is not part of the plan key");
         ParamRefreshRecipe.FastBindHits.Should().Be(1);
         ParamRefreshRecipe.BindRejected.Should().Be(0);
         QueryPlanner.FallbackRefreshes.Should().Be(0);
-        second.DbCommandParams[0].Value.Should()
-            .Be(DBNull.Value, "the writer's null-coalesce branch normalizes a null capture to DBNull");
+        values.Should().Equal([DBNull.Value], "the recipe normalizes a null capture to DBNull");
     }
 
     // Converter and raw-SQL shapes are not in the scalar subset, so the plan carries no recipe and no
@@ -434,11 +440,11 @@ public class CachedPathCharacterizationTests
         var converterFirst = Prepare(ctx, converter.Where(x => x.State == captured).Select(x => x.Id), cache: true);
         converterFirst.ParamRecipe.Should().BeNull("a converter-normalized value is not in the scalar subset");
         ExpressionPlanEqualityComparer.ResetCounters();
-        var converterSecond = Prepare(ctx, converter.Where(x => x.State == captured).Select(x => x.Id), cache: true);
+        var converterSecond = Prepare(ctx, converter.Where(x => x.State == captured).Select(x => x.Id), out var converted);
         ReferenceEquals(converterFirst, converterSecond).Should().BeTrue();
         ParamRefreshRecipe.FastBindHits.Should().Be(0);
         QueryPlanner.FallbackRefreshes.Should().Be(1);
-        converterSecond.DbCommandParams[0].Value.Should().Be("Closed");
+        converted.Should().Equal(["Closed"]);
 
         var e = ctx.From<IComplexEntity>();
         const string sql = "select id from complex_entity where id = @id";
@@ -473,13 +479,13 @@ public class CachedPathCharacterizationTests
         a.Reads = 0;
         b.Reads = 0;
         ExpressionPlanEqualityComparer.ResetCounters();
-        var countHit = Prepare(ctx, WhereProbe(e, b), cache: true);
+        var countHit = Prepare(ctx, WhereProbe(e, b), out var countValues);
 
         ReferenceEquals(target, countHit).Should().BeTrue("the second WhereProbe hits the cached plan");
         QueryPlanner.FallbackRefreshes.Should().Be(1);
         ParamRefreshRecipe.FastBindHits.Should().Be(0);
         ParamRefreshRecipe.BindRejected.Should().Be(1);
-        countHit.DbCommandParams[0].Value.Should().Be(2, "the fallback extracts the current closure value");
+        countValues.Should().Equal([2], "the fallback extracts the current closure value");
         b.Reads.Should().Be(1, "the original extraction path evaluates the current closure exactly once");
         a.Reads.Should().Be(0, "the incompatible recipe never evaluates the stale closure");
 
@@ -491,13 +497,13 @@ public class CachedPathCharacterizationTests
         a.Reads = 0;
         b.Reads = 0;
         ExpressionPlanEqualityComparer.ResetCounters();
-        var nameHit = Prepare(ctx, WhereProbe(e, b), cache: true);
+        var nameHit = Prepare(ctx, WhereProbe(e, b), out var nameValues);
 
         ReferenceEquals(target, nameHit).Should().BeTrue();
         QueryPlanner.FallbackRefreshes.Should().Be(1);
         ParamRefreshRecipe.FastBindHits.Should().Be(0);
         ParamRefreshRecipe.BindRejected.Should().Be(1);
-        nameHit.DbCommandParams[0].Value.Should().Be(2);
+        nameValues.Should().Equal([2]);
         b.Reads.Should().Be(1);
         a.Reads.Should().Be(0);
     }

@@ -69,7 +69,7 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         // this branch the fallback below compared the two null subqueries and treated every raw source as
         // equal, letting unrelated FromSql queries share a cached plan.
         if (x.RawSqlSource is not null || y.RawSqlSource is not null)
-            return ReferenceEquals(x.RawSqlSource, y.RawSqlSource);
+            return ReferenceEquals(x.RawSqlSource?.PlanIdentity, y.RawSqlSource?.PlanIdentity);
 
         // An opaque derived fragment is identified by reference only: its render delegate is not
         // comparable and the fragment never enters a keyed command's source identity.
@@ -89,7 +89,10 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         // and a type-only APPLY source as equal, so the two joins shared one cached plan.
         if (string.IsNullOrEmpty(x.Table) != string.IsNullOrEmpty(y.Table)) return false;
 
-        if (!string.IsNullOrEmpty(x.Table) && x.Table == y.Table) return true;
+        if (!string.IsNullOrEmpty(x.Table))
+            return x.Table == y.Table && x.Schema == y.Schema
+                && x.IsAutoMapped == y.IsAutoMapped && x.SourceIsInterface == y.SourceIsInterface
+                && x.HasColumnShape == y.HasColumnShape;
 
         // A type-only source is identified by its CLR source type: the applied join renders from it,
         // so two different types must not fall through to the equal-null-subquery comparison. Equal
@@ -359,7 +362,7 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         if (obj.RawSqlSource is not null)
         {
             var rawHash = new System.HashCode();
-            rawHash.Add(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj.RawSqlSource));
+            rawHash.Add(obj.RawSqlSource.PlanIdentity);
             AddBindingHash(ref rawHash, obj.SourceBinding);
             return rawHash.ToHashCode();
         }
@@ -377,7 +380,7 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         if (obj.SourceBinding is not null)
         {
             var boundHash = new System.HashCode();
-            boundHash.Add(obj.Table, StringComparer.Ordinal);
+            AddNamedTableHash(ref boundHash, obj);
             AddBindingHash(ref boundHash, obj.SourceBinding);
             return boundHash.ToHashCode();
         }
@@ -400,7 +403,11 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         }
 
         if (!string.IsNullOrEmpty(obj.Table))
-            return StringComparer.Ordinal.GetHashCode(obj.Table);
+        {
+            var hash = new System.HashCode();
+            AddNamedTableHash(ref hash, obj);
+            return hash.ToHashCode();
+        }
         else
         {
             var subQueryHash = _equalityComparer.Value.GetHashCode(obj.SubQuery!);
@@ -425,5 +432,14 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
             hintHash.Add(obj.SubQueryHint);
             return hintHash.ToHashCode();
         }
+    }
+
+    private static void AddNamedTableHash(ref System.HashCode hash, FromExpression source)
+    {
+        hash.Add(source.Table, StringComparer.Ordinal);
+        hash.Add(source.Schema, StringComparer.Ordinal);
+        hash.Add(source.IsAutoMapped);
+        hash.Add(source.SourceIsInterface);
+        hash.Add(source.HasColumnShape);
     }
 }

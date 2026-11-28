@@ -28,6 +28,8 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     public Type PropertyType { get; set; }
     internal PropertyInfo? PropertyInfo { get; set; }
 
+    internal SelectExpression Copy() => (SelectExpression)MemberwiseClone();
+
     /// <summary>
     /// The CLR member the row materializer binds this column to when the projection has to be assembled
     /// member by member. It is populated by the projector from the projection expression (an anonymous
@@ -78,6 +80,20 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     /// <see langword="null"/> when the column is read as-is.
     /// </summary>
     public IPropertyValueConverter? Converter { get; set; }
+
+    private object? _planConverterIdentity;
+
+    internal object? PlanConverterIdentity => _planConverterIdentity ?? PlanObjectIdentity.For(Converter);
+
+    internal bool DetachConverterForSqlPlanKey()
+    {
+        if (Converter is null)
+            return false;
+
+        _planConverterIdentity = PlanObjectIdentity.For(Converter);
+        Converter = null;
+        return true;
+    }
 
     /// <summary>
     /// True when a SQL NULL in this column means "no row" (the projection came from a

@@ -47,9 +47,24 @@ public class ExpressionPlanEqualityComparerTests
         });
 
         // With a single visitor accumulating one XxHash32, concurrent calls interleaved their
-        // writes and returned hashes that didn't match the single-threaded result. One visitor
-        // per (thread, comparer) makes the result deterministic.
+        // writes and returned hashes that didn't match the single-threaded result. Scratch storage
+        // belongs to the current thread, not the shared comparer.
         mismatches.Should().Be(0);
+    }
+
+    [Fact]
+    public void GetHashCode_ReentrantCallDoesNotChangeOuterHash()
+    {
+        var value = new ReentrantConstant();
+        var outer = Expression.Constant(value);
+        var inner = Expression.Constant(42);
+        var expectedOuter = _sut.GetHashCode(outer);
+        var expectedInner = _sut.GetHashCode(inner);
+        int? actualInner = null;
+        value.OnHash = () => actualInner = _sut.GetHashCode(inner);
+
+        _sut.GetHashCode(outer).Should().Be(expectedOuter);
+        actualInner.Should().Be(expectedInner);
     }
 
     /// <summary>
@@ -122,5 +137,16 @@ public class ExpressionPlanEqualityComparerTests
 
         return Expression.Lambda<Func<int, int, int, int>>(
             Expression.Add(Expression.Invoke(inner, o0, o1, o2), o0), o0, o1, o2);
+    }
+
+    private sealed class ReentrantConstant
+    {
+        internal Action? OnHash { get; set; }
+
+        public override int GetHashCode()
+        {
+            OnHash?.Invoke();
+            return 17;
+        }
     }
 }

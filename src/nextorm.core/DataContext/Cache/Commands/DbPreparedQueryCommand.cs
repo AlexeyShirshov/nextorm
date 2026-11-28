@@ -50,6 +50,7 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     private CanonicalParameterCollection? _canonicalParams;
     private int _createdCommandCount;
     private int _disposedCommandCount;
+    private bool _streamingEnabled;
 
     /// <summary>
     /// The plan's command-shaped diagnostic view: SQL text, timeout and connection-free parameter
@@ -66,14 +67,17 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     /// index-by-binding access. Values are read and written through the same objects, so a refresh is
     /// visible here without copying.
     /// </summary>
-    internal DbParameterCollection DbCommandParams =>
-        LazyInitializer.EnsureInitialized(ref _canonicalParams, () => new CanonicalParameterCollection(DbCommand.Parameters));
+    internal DbParameterCollection DbCommandParams => PlanParameters;
+
+    private CanonicalParameterCollection PlanParameters =>
+        Volatile.Read(ref _canonicalParams)
+        ?? LazyInitializer.EnsureInitialized(ref _canonicalParams, () => new CanonicalParameterCollection(DbCommand.Parameters));
 
     /// <summary>The statement text every per-connection command is created with.</summary>
     internal string CommandText => _factory.CommandText;
 
     /// <summary>The plan-time parameter seeds, in placeholder order.</summary>
-    internal IReadOnlyList<Parameter> ParamSeeds => _factory.Seeds;
+    internal IReadOnlyList<PreparedCommandFactory.Seed> ParamSeeds => _factory.Seeds;
 
     /// <summary>
     /// The batch that must run before this command's rows can be read (a lazy temporary-table
@@ -140,13 +144,10 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     /// an enumerator; a cached plan first created for a buffered terminal is promoted on the first
     /// streaming request (the plan is reused, not rebuilt).
     /// </summary>
-    internal bool StreamingEnabled { get; private set; }
+    internal bool StreamingEnabled => Volatile.Read(ref _streamingEnabled);
 
-    /// <summary>
-    /// Creates a fresh execution-local enumerator. The factory captures this prepared command and the
-    /// logging switches only — never the planner, the context or a connection.
-    /// </summary>
-    internal Func<ResultSetEnumerator<TResult>>? EnumeratorFactory { get; private set; }
+    // The mapper closes over the live projection's converters and travels with the invocation.
+    internal bool RequiresInvocationMapper { get; init; }
 
     /// <summary>Number of execution commands this prepared command has created. Diagnostic only.</summary>
     internal int CreatedCommandCount => Volatile.Read(ref _createdCommandCount);
@@ -178,16 +179,18 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     /// <param name="planParameters">The connection-free plan parameter descriptors.</param>
     /// <param name="mapDelegate">Maps each <see cref="IDataRecord"/> to a result, or <see langword="null"/> when no projection is needed.</param>
     /// <param name="options">Prepared-command options such as the SQL text and parameter flags.</param>
+    /// <param name="trackConnectionLifetime">Whether this plan is published in the implicit store and needs connection cleanup.</param>
     internal DbPreparedQueryCommand(
         PreparedCommandFactory factory,
         DbParameter[] planParameters,
         Func<IDataRecord, TResult>? mapDelegate,
-        PreparedCommandOptions options)
+        PreparedCommandOptions options,
+        bool trackConnectionLifetime = false)
         : base(mapDelegate)
     {
         _factory = factory;
         _cachePolicy = options.Cache;
-        _createState = static _ => new CommandState();
+        _createState = trackConnectionLifetime ? CreateTrackedState : static _ => new CommandState();
         _planCommand = new PlanCommand(factory.CommandText, factory.CommandTimeout, planParameters);
 
         if (options.SingleRow)
@@ -218,12 +221,8 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     /// </summary>
     internal void SetParamRecipe(ParamRefreshRecipe? recipe) => ParamRecipe = recipe;
 
-    /// <summary>Enables streaming enumerators on this prepared command. Called once, by the planner.</summary>
-    internal void EnableStreaming(Func<ResultSetEnumerator<TResult>> factory)
-    {
-        EnumeratorFactory = factory;
-        StreamingEnabled = true;
-    }
+    /// <summary>Enables streaming on this plan without storing an executing context or its settings.</summary>
+    internal void EnableStreaming() => Volatile.Write(ref _streamingEnabled, true);
 
     /// <summary>
     /// Acquires this connection's execution lease and returns the bound command for exactly one
@@ -236,6 +235,7 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     /// <param name="params">Positional runtime parameter values, or <see langword="null"/> for none.</param>
     /// <param name="transaction">The transaction active for this execution, or <see langword="null"/>.</param>
     /// <param name="onCommandCreated">Raises the command-initialized event when a command is minted.</param>
+    /// <param name="boundValues">Invocation values in statement binding order, when supplied.</param>
     /// <returns>The lease; the caller must dispose (success) or fail (pre-transfer failure) it exactly once.</returns>
     /// <exception cref="InvalidOperationException">This prepared command is already executing on the same connection.</exception>
     internal CommandLease Acquire(
@@ -243,8 +243,9 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
         Func<DbCommand, string, object?, DbParameter> createParam,
         object[]? @params,
         DbTransaction? transaction,
-        Action<DbCommand>? onCommandCreated)
-        => Acquire(connection, createParam, @params is null ? ReadOnlySpan<object?>.Empty : @params, transaction, onCommandCreated);
+        Action<DbCommand>? onCommandCreated,
+        object?[]? boundValues = null)
+        => Acquire(connection, createParam, @params is null ? ReadOnlySpan<object?>.Empty : @params, transaction, onCommandCreated, boundValues);
 
     /// <summary>Span overload of the array-parameter <c>Acquire</c>.</summary>
     internal CommandLease Acquire(
@@ -252,8 +253,12 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
         Func<DbCommand, string, object?, DbParameter> createParam,
         ReadOnlySpan<object?> @params,
         DbTransaction? transaction,
-        Action<DbCommand>? onCommandCreated)
+        Action<DbCommand>? onCommandCreated,
+        object?[]? boundValues = null)
     {
+        if (_factory.RequiresInvocationValues && (boundValues is null || boundValues.Length != _factory.ParameterCount))
+            throw new InvalidOperationException("This cached query plan requires one invocation value per parameter.");
+
         var state = GetOrCreateState(connection);
         var token = NextLeaseToken(state);
         if (Interlocked.CompareExchange(ref state.LeaseOwner, token, 0) != 0)
@@ -273,7 +278,7 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
 
             if (nonePolicy)
             {
-                command = _factory.Create(connection, createParam);
+                command = _factory.Create(connection, createParam, boundValues);
                 created = true;
                 // The command is execution-local: the cached positional map belongs to the previous
                 // command on this connection and its collection indices no longer apply.
@@ -285,7 +290,7 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
             }
             else
             {
-                command = _factory.Create(connection, createParam);
+                command = _factory.Create(connection, createParam, boundValues);
                 state.Command = command;
                 state.Canonical ??= new CanonicalParameterCollection(command.Parameters);
                 created = true;
@@ -298,7 +303,7 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
                 onCommandCreated?.Invoke(command);
             }
 
-            Bind(command, state, createParam, @params, connection, transaction);
+            Bind(command, state, createParam, @params, connection, transaction, boundValues, created);
             return lease;
         }
         catch
@@ -319,7 +324,9 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
         Func<DbCommand, string, object?, DbParameter> createParam,
         ReadOnlySpan<object?> @params,
         DbConnection connection,
-        DbTransaction? transaction)
+        DbTransaction? transaction,
+        object?[]? boundValues,
+        bool created)
     {
         // A command-owned by the connection state carries restore bookkeeping; an execution-local
         // (None policy) command is canonical by construction and has nothing to restore.
@@ -338,10 +345,10 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
         // index-based access is valid.
         RestoreCanonicalCommand(command, bookkeeping);
 
-        // A cached plan's captured values are refreshed on the plan descriptors before execution; copy
-        // them onto this connection's own command.
-        if (NeedsParamRefresh)
-            ApplyPlanValues(command, state);
+        // A newly minted command already has its invocation values from the provider's factory.
+        // Don't overwrite its normalized values with the raw inputs (for example vector/range values).
+        if (boundValues is null ? NeedsParamRefresh : !created)
+            ApplyPlanValues(command, state, boundValues);
 
         if (!@params.IsEmpty)
             BindRuntimeParameters(command, state, bookkeeping, createParam, @params);
@@ -379,7 +386,7 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
             SpecializeMySql(template, command, bookkeeping);
     }
 
-    private void ApplyPlanValues(DbCommand command, CommandState state)
+    private void ApplyPlanValues(DbCommand command, CommandState state, object?[]? boundValues)
     {
         var planParameters = DbCommandParams;
         if (planParameters.Count == 0)
@@ -406,7 +413,7 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
             }
 
             if (idx >= 0)
-                parameters[idx].Value = planParameters[i].Value ?? DBNull.Value;
+                parameters[idx].Value = (boundValues is null ? planParameters[i].Value : boundValues[i]) ?? DBNull.Value;
         }
     }
 
@@ -475,9 +482,20 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
         if (memo is not null && memo.TryGet(connection, out var cached))
             return cached!;
 
+        // On a shared plan, a warm lookup on another connection must not replace the memo.
+        // Alternating connections would allocate a new pair of weak references on every checkout.
+        if (_states.TryGetValue(connection, out var existing))
+            return existing;
+
         var state = _states.GetValue(connection, _createState);
         Volatile.Write(ref _memo, new Memo(connection, state));
         return state;
+    }
+
+    private CommandState CreateTrackedState(DbConnection connection)
+    {
+        ImplicitCommandConnectionIndex.Register(connection, this);
+        return new CommandState();
     }
 
     private static int NextLeaseToken(CommandState state)
@@ -614,7 +632,9 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
         }
 
         var cmd = DbCommand;
-        diagnosticState.Canonical ??= new CanonicalParameterCollection(cmd.Parameters);
+        // Diagnostic-only runtime parameters must enter the same canonical collection exposed by
+        // DbCommandParams before specialization removes them from the command's collection.
+        diagnosticState.Canonical ??= PlanParameters;
 
         // Restore first: a previous checkout may have lowered text bindings into literals and removed
         // them from the driver collection. The canonical text and the complete canonical parameter set
@@ -749,10 +769,11 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
             if (occurrence.Role != SqlStringLiteralRole.Value)
                 continue;
 
-            if (occurrence.BindingId >= DbCommandParams.Count)
+            if (occurrence.BindingId >= canonical.Count)
                 continue;
 
-            var parameter = DbCommandParams[occurrence.BindingId];
+            // Specialize only after binding, from this execution's driver parameters.
+            var parameter = canonical[occurrence.BindingId];
             switch (parameter.Value)
             {
                 case string text:

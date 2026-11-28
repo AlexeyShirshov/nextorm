@@ -138,13 +138,14 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     private FromExpression _from = null!;
     /// <summary>The right-hand source being joined.</summary>
     public required FromExpression From { get => _from; init => _from = value; }
+    private LambdaExpression? _applySource;
     /// <summary>
     /// Set for a correlated <c>CROSS/OUTER APPLY</c> source: a lambda whose parameter is the
     /// left-hand row and whose body builds the applied query. The concrete derived query is built
     /// from it during preparation (<c>QueryCommand.QueryPreparer.PrepareJoin</c>) and installed as
     /// <see cref="From"/>; it is not part of the public surface.
     /// </summary>
-    internal LambdaExpression? ApplySource { get; init; }
+    internal LambdaExpression? ApplySource { get => _applySource; init => _applySource = value; }
     /// <summary>
     /// The left-row slots a correlated APPLY source may address, one entry per one-based slot (#324).
     /// Set at construction from the receiver's flat projection arity and rebuilt during preparation
@@ -275,6 +276,18 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
             EagerParentItemNumber = EagerParentItemNumber,
         };
     }
+
+    // Only the comparison-side clone calls this. The preparation snapshot keeps the original roots.
+    internal void RewriteCacheExpressions(ExpressionVisitor rewriter)
+    {
+        var condition = JoinCondition;
+        JoinCondition = (LambdaExpression?)rewriter.Visit(condition);
+        _originalJoinCondition = ReferenceEquals(_originalJoinCondition, condition)
+            ? JoinCondition
+            : (LambdaExpression?)rewriter.Visit(_originalJoinCondition);
+        _applySource = (LambdaExpression?)rewriter.Visit(_applySource);
+    }
+
     // public override int GetHashCode()
     // {
     //     unchecked

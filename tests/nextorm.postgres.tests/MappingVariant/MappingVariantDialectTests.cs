@@ -26,8 +26,8 @@ public sealed class MappingVariantDialectTests
         var query = scopedContext.From<ScopedRow>(new global::NextORM.Core.MappingVariant("tenant"))
             .Where(row => row.Id > minimum)
             .Select(row => row.Id);
-        var prepared = (DbPreparedQueryCommand<int>)scopedContext.GetPreparedQueryCommand(
-            query, false, true, CancellationToken.None);
+        var prepared = BoundQueryInvocation<int>.GetPlan(scopedContext.GetPreparedQueryCommand(
+            query, false, true, CancellationToken.None))!;
         var sql = prepared.DbCommand.CommandText;
 
         sql.Should().Contain("tenant_schema").And.Contain("tenant_rows").And.Contain("tenant_id");

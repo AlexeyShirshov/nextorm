@@ -1,6 +1,5 @@
 using System.Linq.Expressions;
 using System.Reflection;
-using Microsoft.Extensions.Logging;
 
 namespace NextORM.Core;
 
@@ -558,23 +557,9 @@ internal static class MemberTranslator
                 return node;
             }
 
-            var key = new ExpressionKey(node, visitor.QueryProvider);
-            if (!DataContextCache.ExpressionsCache.TryGetValue(key, out var del))
-            {
-                var body = Expression.Convert(node, typeof(object));
-                del = Expression.Lambda<Func<object>>(body).Compile();
-
-                DataContextCache.ExpressionsCache[key] = del;
-
-                if (visitor.Logger?.IsEnabled(LogLevel.Trace) ?? false)
-                {
-                    visitor.Logger.LogTrace("Expression cache miss on visit where. hashcode: {hash}, value: {value}", key.GetHashCode(), ((Func<object>)del)());
-                }
-                else if (visitor.Logger?.IsEnabled(LogLevel.Debug) ?? false) visitor.Logger.LogDebug("Expression cache miss on visit where");
-            }
-
             var parameterName = visitor.Options.ParameterNamePrefix + node.Member.Name;
-            var captured = visitor.TryAddCapturedParameter(parameterName, ((Func<object>)del)(), node);
+            var value = ValueExpressionAccessor.Evaluate(node, visitor.QueryProvider, visitor.Logger);
+            var captured = visitor.TryAddCapturedParameter(parameterName, value, node);
             visitor.EmitParameter(captured);
 
             return node;
@@ -684,30 +669,9 @@ internal static class MemberTranslator
                     && twoTypeVisitor.Target2!.Value is { } capturedOwner
                     && !capturedOwner.GetType().IsValueType)
                 {
-                    //var ce = twoTypeVisitor.Target2!;
-                    // Note: expression caching is currently unconditional (the CacheExpressions flag is not wired).
-                    var key = new ExpressionKey(node, visitor.QueryProvider);
-                    Delegate? del = null;
-                    DataContextCache.ExpressionsCache.TryGetValue(key, out del);
-
-                    if (del is null)
-                    {
-                        var p = Expression.Parameter(typeof(object));
-                        var replace = new ReplaceConstantExpressionVisitor(Expression.Convert(p, twoTypeVisitor.Target2!.Type));
-                        var body = Expression.Convert(replace.Visit(node), typeof(object));
-                        del = Expression.Lambda<Func<object?, object>>(body, p).Compile();
-
-                        DataContextCache.ExpressionsCache[key] = del;
-
-                        if (visitor.Logger?.IsEnabled(LogLevel.Trace) ?? false)
-                        {
-                            visitor.Logger.LogTrace("Expression cache miss on visit where. hashcode: {hash}, value: {value}", key.GetHashCode(), ((Func<object?, object>)del)(twoTypeVisitor.Target2.Value));
-                        }
-                        else if (visitor.Logger?.IsEnabled(LogLevel.Debug) ?? false) visitor.Logger.LogDebug("Expression cache miss on visit where");
-                    }
-                    // var value = 1;
                     var parameterName = visitor.Options.ParameterNamePrefix + node.Member.Name;
-                    var captured = visitor.TryAddCapturedParameter(parameterName, ((Func<object?, object>)del)(twoTypeVisitor.Target2!.Value), node);
+                    var value = ValueExpressionAccessor.Evaluate(node, visitor.QueryProvider, visitor.Logger);
+                    var captured = visitor.TryAddCapturedParameter(parameterName, value, node);
                     visitor.EmitParameter(captured);
 
                     return node;

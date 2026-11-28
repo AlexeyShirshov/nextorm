@@ -14,8 +14,8 @@ namespace NextORM.Core;
 /// Planning axis of a database-backed context: turns a <see cref="QueryCommand{TResult}"/> into a
 /// prepared command (SQL, compiled row mapper, bound parameters) and resolves table sources.
 /// Extracted out of <c>DataContext</c> so the context no longer owns the planning algorithm (SRP).
-/// Provider hooks (dialect, column-mapping policy, parameter factory) and the connection / logger /
-/// enumerator configuration arrive as constructor dependencies, so the planner never sees the
+/// Provider hooks (dialect, column-mapping policy, parameter factory) and the logging
+/// configuration arrive as constructor dependencies, so the planner never sees the
 /// concrete context (DIP).
 /// </summary>
 internal sealed class QueryPlanner : IQueryPlanner
@@ -29,9 +29,7 @@ internal sealed class QueryPlanner : IQueryPlanner
     private readonly Func<SelectExpression, Expression, Expression> _mapColumn;
     private readonly Func<DbCommand, string, object?, DbParameter> _createParam;
     private readonly Func<string, object?, DbParameter> _createParamSimple;
-    private readonly ILogger? _resultSetEnumeratorLogger;
     private readonly ILogger? _queryFilterLogger;
-    private readonly bool _logSensitiveData;
     private readonly Func<CteMutation, SqlBuildContext, string> _renderMutationBody;
 
     // Cached-path diagnostic counter for the plans that must fall back to the original extraction path
@@ -91,9 +89,7 @@ internal sealed class QueryPlanner : IQueryPlanner
         _mapColumn = hooks.MapColumn;
         _createParam = hooks.CreateParam;
         _createParamSimple = hooks.CreateParamSimple;
-        _resultSetEnumeratorLogger = logging.ResultSetEnumeratorLogger;
         _queryFilterLogger = logging.QueryFilterLogger;
-        _logSensitiveData = logging.LogSensitiveData;
         _renderMutationBody = RenderMutationBody;
     }
 
@@ -123,6 +119,11 @@ internal sealed class QueryPlanner : IQueryPlanner
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsRuntimeParam(string name) => NormParam.IsName(name);
 
+    // A stable expression can still produce mutable data, for example an inline IN element
+    // converted to a byte array. Only an immutable provider value can be a shared seed.
+    private static bool CanRetainPlanSeed(Parameter parameter)
+        => parameter.Stable && PreparedCommandFactory.IsShareableSeedValue(parameter.Value);
+
     /// <summary>
     /// Whether a plan that needs parameter refresh may join the raw recipe store: only when the raw
     /// shape carries a captured-closure identity and every refreshed parameter is a captured member.
@@ -138,7 +139,7 @@ internal sealed class QueryPlanner : IQueryPlanner
         for (var i = 0; i < parameters.Count; i++)
         {
             var parameter = parameters[i];
-            if (IsRuntimeParam(parameter.Name) || parameter.Stable) continue;
+            if (IsRuntimeParam(parameter.Name) || CanRetainPlanSeed(parameter)) continue;
             if (parameter.CapturedKey is null) return false;
         }
 
@@ -842,10 +843,9 @@ internal sealed class QueryPlanner : IQueryPlanner
 
         var ext = queryCommand.CustomData as RawSqlOverride;
 
-        // D201-3 pre-preparation reuse. The raw candidate is probed from the fresh command's structural
-        // fingerprint (no descriptor object is materialized on the hit path); the descriptor itself is
-        // captured only when the probe misses, because that is when it must be published. Anything whose
-        // raw graph cannot be proved keeps its ordinary route, and the shared terminal command is excluded
+        // D201-3 pre-preparation reuse. Verify the fresh descriptor before applying any stored state:
+        // a normalized key built after applying the owner's fields cannot prove they belonged to the caller.
+        // Anything whose raw graph cannot be proved keeps its ordinary route, and the shared terminal command is excluded
         // by ACTUAL INSTANCE identity of the context's QueryCache.AnyCommand — never by IsPrepared,
         // TResult or command shape.
         QueryCommand.RawShape? recipeShape = null;
@@ -869,38 +869,41 @@ internal sealed class QueryPlanner : IQueryPlanner
             // permissive-to-restrictive transfer leaks rows; the reverse drops the filter). Such a graph is
             // ineligible: skip the whole raw path and take the ordinary preparation route. Metadata-only —
             // no user filter function is invoked for the probe.
-            var recipeFingerprint = QueryCommand.ComputeRawFingerprint(queryCommand);
-            if (recipeFingerprint is null
-                || QueryCommand.HasApplicableFiltersInCommandGraph(queryCommand, queryCommand.DataContext))
+            if (!QueryCommand.HasApplicableFiltersInCommandGraph(queryCommand, queryCommand.DataContext))
+                recipeShape = QueryCommand.CaptureRawShape(queryCommand);
+
+            if (recipeShape is null)
             {
                 Interlocked.Increment(ref _recipeRejections);
             }
-            else if (QueryPlanStore.TryGetRawFingerprint(_contextType, recipeFingerprint.GetValueOrDefault(), out var recipePlan))
+            else if (QueryPlanStore.TryGetRaw(_contextType, recipeShape, queryCommand, out var rawCandidate))
             {
-                // Transactional apply: stage the owner's preparation data into this command, validate
-                // the staged normalized key through the existing normalized store, and on any key or
-                // owner mismatch discard the staged state and run ordinary preparation of the input.
-                var rawGraph = queryCommand.CaptureRawGraph();
-                queryCommand.ApplyPreparationFrom(recipePlan!.QueryCommand);
-                var stagedKey = queryCommand.GetOrCreatePlanKey(null);
-                if (recipePlan.Equals(stagedKey) || stagedKey.Equals(recipePlan))
+                if (rawCandidate!.Plan.RequiresWeakOwner)
                 {
-                    Interlocked.Increment(ref _recipeReuses);
+                    // An opaque descriptor can own a previous invocation. Verify against a private
+                    // copy and use only the holder, as a native hit does. Any path that needs live
+                    // prepared state to bind parameters or mapping goes through ordinary preparation.
+                    if (rawCandidate.Holder is DbPreparedQueryCommand<TRow>
+                        { NeedsParamRefresh: false, RequiresInvocationMapper: false } opaquePlan)
+                    {
+                        var staged = queryCommand.Clone();
+                        rawCandidate.ApplyTo(staged);
+                        if (MatchesRawPlan(staged, rawCandidate.Plan))
+                        {
+                            if (createEnumerator)
+                                opaquePlan.EnableStreaming();
+                            return opaquePlan;
+                        }
+                    }
                 }
                 else
                 {
-                    Interlocked.Increment(ref _recipeRejections);
-                    Interlocked.Increment(ref _recipeApplyMismatches);
-                    queryCommand.DiscardStagedPreparation(rawGraph);
+                    // Discard the adoption if the resulting key does not describe the published owner.
+                    var rawGraph = queryCommand.CaptureRawGraph();
+                    rawCandidate.ApplyTo(queryCommand);
+                    if (!MatchesRawPlan(queryCommand, rawCandidate.Plan))
+                        queryCommand.DiscardStagedPreparation(rawGraph);
                 }
-            }
-            else
-            {
-                // Miss: capture the descriptor for publication below, still before preparation mutates
-                // the raw graph. A graph the capture rejects is ineligible and stays on the ordinary path.
-                recipeShape = QueryCommand.CaptureRawShape(queryCommand);
-                if (recipeShape is null)
-                    Interlocked.Increment(ref _recipeRejections);
             }
         }
 
@@ -951,6 +954,20 @@ internal sealed class QueryPlanner : IQueryPlanner
             }
         }
 
+        // A raw override's key verifies the ordered names. Only this invocation reads its bag.
+        object?[]? boundValues = planCache is not null ? ext?.ReadValues() : null;
+        if (ext is null && planCache is DbPreparedQueryCommand<TRow> { NeedsParamRefresh: true } hit)
+        {
+            boundValues = ReadInvocationValues(queryCommand, hit);
+            if (boundValues is null)
+            {
+                // The rendered parameter layout disagrees with this candidate. Build an execution-
+                // local command rather than using stale values or replacing the published recipe.
+                planCache = null;
+                storeInCache = false;
+            }
+        }
+
         if (planCache is null)
         {
             if ((_logger?.IsEnabled(LogLevel.Debug) ?? false) && storeInCache && queryCommand.Cache)
@@ -995,7 +1012,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             // (RawSqlOverride) has no planner-owned emission and therefore never gets a template.
             var (sql, @params, capture) = ext is null
                 ? MakeSelectInternal()
-                : (ext.ManualSql, ext.MakeParams?.Invoke(), null);
+                : (ext.ManualSql, ext.MakeParams(), null);
 
             // A streaming row projection needs a compiled mapper (it materializes the row, including
             // the streaming column); the single-column LOB terminals keep the map-less path below.
@@ -1005,6 +1022,13 @@ internal sealed class QueryPlanner : IQueryPlanner
                     ? null
                     : BuildMap<TRow>(queryCommand, sql, false, boxed, boxedResultType);
 
+            var publish = storeInCache && queryCommand.Cache;
+            var convertedProjection = publish && queryCommand.SelectList is { } columns
+                && Array.Exists(columns, static column => column.Converter is not null);
+            var useInvocationMapper = publish && (convertedProjection || _context is DataContext { UsesContextBoundColumnMapping: true });
+            var invocationMapper = useInvocationMapper ? map : null;
+            var planMapper = useInvocationMapper ? null : map;
+            var generatedImplicitPlan = publish && ext is null;
             var noParams = !(@params?.Count > 0);
             var needsParamRefresh = false;
             if (!noParams)
@@ -1013,7 +1037,8 @@ internal sealed class QueryPlanner : IQueryPlanner
                 for (var i = 0; i < parameterList.Count; i++)
                 {
                     var parameter = parameterList[i];
-                    if (!IsRuntimeParam(parameter.Name) && !parameter.Stable)
+                    if (!IsRuntimeParam(parameter.Name)
+                        && !(generatedImplicitPlan ? CanRetainPlanSeed(parameter) : parameter.Stable))
                     {
                         needsParamRefresh = true;
                         break;
@@ -1021,15 +1046,17 @@ internal sealed class QueryPlanner : IQueryPlanner
                 }
             }
 
-            // The command itself is no longer minted at plan time: the immutable factory below carries
-            // the exact same SQL text, resolved timeout and parameter seeds (the former eager
-            // construction block, extracted verbatim as value data), and every execution connection
-            // mints its own command from it after winning that connection's lease. The plan-time
-            // parameter descriptors are minted connection-free for the guarded refresh recipe and the
-            // SQL-generation diagnostics.
+            // A published plan keeps caller-owned values out of both its factory and diagnostics.
+            // Uncached preparation retains the values belonging to that particular prepared command.
+            var requiresInvocationValues = publish && (ext is null ? needsParamRefresh : !noParams);
+            if (requiresInvocationValues)
+            {
+                boundValues = new object?[@params!.Count];
+                CopyInvocationValues(@params, boundValues);
+            }
+
             var commandTimeout = queryCommand.ResolvedCommandTimeout;
-            var seeds = @params is { Count: > 0 } seedList ? seedList.ToArray() : [];
-            var factory = new PreparedCommandFactory(sql!, commandTimeout, seeds);
+            var factory = new PreparedCommandFactory(sql!, commandTimeout, @params, requiresInvocationValues);
             var planParameters = factory.CreatePlanParameters(_createParamSimple);
 
             // Some drivers (ClickHouse) turn CommandBehavior.SingleRow into an extra LIMIT 1. The
@@ -1037,12 +1064,13 @@ internal sealed class QueryPlanner : IQueryPlanner
             // there to avoid a duplicated clause.
             var singleRow = queryCommand.SingleRow && _dialect().SupportsCommandBehaviorSingleRow;
 
-            var compiledQuery = new DbPreparedQueryCommand<TRow>(factory, planParameters, map, new PreparedCommandOptions(singleRow, ext is null ? sql! : null, noParams, needsParamRefresh)
+            var compiledQuery = new DbPreparedQueryCommand<TRow>(factory, planParameters, planMapper, new PreparedCommandOptions(singleRow, ext is null ? sql! : null, noParams, needsParamRefresh)
             {
                 SequentialAccess = sequentialAccess,
                 Cache = cache,
-            })
+            }, trackConnectionLifetime: publish)
             {
+                RequiresInvocationMapper = invocationMapper is not null,
                 MappingVariant = queryCommand.MappingVariant,
                 RouteEntityType = queryCommand.RouteEntityType,
                 RouteSources = CommandRouteSources.Collect(queryCommand),
@@ -1060,36 +1088,56 @@ internal sealed class QueryPlanner : IQueryPlanner
 
             // Build the immutable guarded refresh recipe once, on the miss. Unsupported shapes leave it
             // null and keep the original ExtractParams refresh on every hit.
-            if (needsParamRefresh)
+            if (ext is null && needsParamRefresh)
                 compiledQuery.SetParamRecipe(ParamRefreshRecipe.TryCreate(queryCommand, @params!));
 
             if (createEnumerator)
-                compiledQuery.EnableStreaming(BuildEnumeratorFactory(compiledQuery));
+                compiledQuery.EnableStreaming();
 
-            if (storeInCache && queryCommand.Cache)
+            if (publish)
             {
-                QueryPlanStore.Set(_contextType, queryPlan!.GetCacheVersion(), compiledQuery);
+                var (storedKey, holder) = QueryPlanStore.Set(_contextType, queryPlan!.GetSqlCacheVersion(), compiledQuery);
+                queryCommand.CacheStoredPlanKey(storedKey, ext?.ManualSql);
+                if (!ReferenceEquals(holder, compiledQuery))
+                {
+                    // This invocation already rendered its own values. Reuse them with the winning
+                    // holder only if the two render layouts agree, without evaluating the inputs again.
+                    if (holder is not DbPreparedQueryCommand<TRow> winner
+                        || winner.CommandText != compiledQuery.CommandText
+                        || winner.Behavior != compiledQuery.Behavior
+                        || winner.NeedsParamRefresh != compiledQuery.NeedsParamRefresh
+                        || winner.RequiresInvocationMapper != compiledQuery.RequiresInvocationMapper
+                        || !winner.ParamSeeds.SequenceEqual(compiledQuery.ParamSeeds))
+                    {
+                        return BoundQueryInvocation<TRow>.Create(compiledQuery, boundValues, invocationMapper);
+                    }
+
+                    compiledQuery = winner;
+                    if (createEnumerator)
+                        compiledQuery.EnableStreaming();
+                }
 
                 // Publication happens ONLY after ordinary preparation succeeded, the normalized key
-                // was constructed and the cacheable holder was stored through Set. A value-independent
-                // plan is always publishable; a plan with refreshed parameters is publishable only when
-                // the raw shape is keyed by the captured closure identities (a hit reads the same live
-                // closures, so it binds their current values), never for a captured-collection shape.
+                // was constructed and the cacheable holder was stored through Set. Staging must not
+                // supply the first projection's converter; prepare those projections on the live command.
+                // A plan with refreshed parameters needs the captured closure identities for a raw hit
+                // to read the current values. Captured-collection shapes cannot use that shortcut.
                 if (recipeShape is not null
+                    && !convertedProjection
                     && (!needsParamRefresh || CanPublishCapturedRecipe(recipeShape, @params))
                     && queryCommand.InValuesShapeHash == 0
                     && queryCommand.PreWhereShapeHash == 0
                     && !queryCommand.HasTopLevelInValues
                     && !queryCommand.HasPreWhereInValues
                     && !queryCommand.HasUnkeyedTupleInValues
-                    && !queryCommand.HasUnkeyedScalarInValues)
+                    && !queryCommand.HasUnkeyedScalarInValues
+                    && QueryPlanStore.SetRaw(_contextType, storedKey, compiledQuery, recipeShape, queryCommand))
                 {
-                    QueryPlanStore.SetRaw(_contextType, queryPlan!, compiledQuery, recipeShape, queryCommand);
                     Interlocked.Increment(ref _recipePublishes);
                 }
             }
 
-            return compiledQuery;
+            return BoundQueryInvocation<TRow>.Create(compiledQuery, boundValues, invocationMapper);
         }
         else
         {
@@ -1113,20 +1161,17 @@ internal sealed class QueryPlanner : IQueryPlanner
             {
                 Debug.Fail("SqlStmt must be not null");
             }
-            else
-            {
-                if (!compiledQuery.NoParams && compiledQuery.NeedsParamRefresh)
-                    RefreshParameters(queryCommand, compiledQuery);
-            }
 
             // A plan can be stored by a buffered terminal (createEnumerator: false) and later requested
-            // by a streaming one, so streaming has to be enabled on demand. The plan cache is
-            // [ThreadStatic], so this entry is only ever touched by the current thread. Enumerators
-            // themselves are execution-local: each consumption asks the factory for a fresh one.
+            // by a streaming one, so enable streaming on demand. The executor creates and configures
+            // a fresh enumerator for each consumption.
             if (createEnumerator && !compiledQuery.StreamingEnabled)
-                compiledQuery.EnableStreaming(BuildEnumeratorFactory(compiledQuery));
+                compiledQuery.EnableStreaming();
 
-            return compiledQuery;
+            var invocationMapper = compiledQuery.RequiresInvocationMapper
+                ? BuildMap<TRow>(queryCommand, compiledQuery.CommandText, streamingRows, boxed, boxedResultType)
+                : null;
+            return BoundQueryInvocation<TRow>.Create(compiledQuery, boundValues, invocationMapper);
         }
         (string?, List<Parameter>, SqlParameterTemplateCapture?) MakeSelectInternal()
         {
@@ -1138,35 +1183,50 @@ internal sealed class QueryPlanner : IQueryPlanner
         }
     }
 
-    // Refreshes the cached command's parameter values for the current command. A supported plan uses the
-    // immutable recipe (validated count/name/order and shape before any accessor runs); any mismatch
-    // falls through to the original ExtractParams path. The cached statement's placeholder set is
-    // authoritative: a same-count name/order difference is bound positionally exactly like the original
-    // Release extractor (whose name check was only a Debug.Assert), so a cache hit never crashes, while a
-    // count mismatch binds nothing (it would leave trailing cached values stale or reach past the
-    // collection) and invalidates the recipe so the next preparation re-plans.
-    private void RefreshParameters<TResult>(QueryCommand queryCommand, DbPreparedQueryCommand<TResult> compiledQuery)
+    private static bool MatchesRawPlan(QueryCommand command, QueryPlan recipePlan)
+    {
+        var stagedKey = command.GetOrCreatePlanKey(null);
+        var matchesStored = recipePlan.Equals(stagedKey);
+        if (matchesStored || stagedKey.Equals(recipePlan))
+        {
+            // The store uses this same direction of comparison. Remember the verified key so
+            // the normalized lookup does not compare the staged expression graph a second time.
+            if (matchesStored && !recipePlan.RequiresWeakOwner && recipePlan.GetHashCode() == stagedKey.GetHashCode())
+                command.CacheStoredPlanKey(recipePlan, null);
+            Interlocked.Increment(ref _recipeReuses);
+            return true;
+        }
+
+        Interlocked.Increment(ref _recipeRejections);
+        Interlocked.Increment(ref _recipeApplyMismatches);
+        return false;
+    }
+
+    // The statement's placeholder order is authoritative. As before, a same-count fallback is positional.
+    // A count mismatch rejects this candidate for the current invocation without changing the plan.
+    private object?[]? ReadInvocationValues<TResult>(QueryCommand queryCommand, DbPreparedQueryCommand<TResult> compiledQuery)
     {
         var dbCommandParams = compiledQuery.DbCommandParams;
+        var values = new object?[dbCommandParams.Count];
 
-        if (compiledQuery.ParamRecipe is { } recipe && recipe.TryBind(queryCommand, dbCommandParams))
-            return;
+        if (compiledQuery.ParamRecipe is { } recipe && recipe.TryReadValues(queryCommand, dbCommandParams, values))
+            return values;
 
         Interlocked.Increment(ref _fallbackRefreshes);
 
         var pp = ExtractParams(queryCommand);
 
         if (pp.Count != dbCommandParams.Count)
-        {
-            compiledQuery.SetParamRecipe(null);
-            return;
-        }
+            return null;
 
-        for (var i = 0; i < dbCommandParams.Count; i++)
-        {
-            // Normalize null to DBNull for providers that reject null parameter values.
-            dbCommandParams[i].Value = pp[i].Value ?? DBNull.Value;
-        }
+        CopyInvocationValues(pp, values);
+        return values;
+    }
+
+    private static void CopyInvocationValues(IReadOnlyList<Parameter> parameters, Span<object?> values)
+    {
+        for (var i = 0; i < values.Length; i++)
+            values[i] = parameters[i].Value ?? DBNull.Value;
     }
 
     public void ResetPreparation(QueryCommand queryCommand)
@@ -1190,7 +1250,7 @@ internal sealed class QueryPlanner : IQueryPlanner
 
     // A table source is immutable, so one instance can be shared by every query (and cached plan)
     // that selects from the entity. This removes a small allocation and a metadata lookup per join.
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(Type Type, MappingVariant Scope), FromExpression> _fromCache = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, FromExpression> _fromCache = new();
 
     internal static void ClearFromCache() => _fromCache.Clear();
 
@@ -1198,11 +1258,10 @@ internal sealed class QueryPlanner : IQueryPlanner
 
     private FromExpression GetFrom(Type t, MappingVariant variant)
     {
-        // The FROM cache is process-wide and keyed by (type, variant) only. A scoped table depends on the
-        // metadata provider that produced it, and two contexts may configure different topologies under
-        // the same shard id, so a non-default variant is resolved per plan instead of being shared.
-        var cacheable = variant == MappingVariant.Default;
-        if (cacheable && _fromCache.TryGetValue((t, variant), out var cached))
+        // Only the built-in default mapping is process-wide. A custom provider can supply a
+        // different physical source even for MappingVariant.Default.
+        var cacheable = variant == MappingVariant.Default && _metadataProvider is DefaultEntityMetadataProvider;
+        if (cacheable && _fromCache.TryGetValue(t, out var cached))
             return cached;
 
         // Keep the established registration boundary: resolving an arbitrary CLR type here must not
@@ -1218,7 +1277,7 @@ internal sealed class QueryPlanner : IQueryPlanner
         {
             var from = new FromExpression(entity.TableName, entity.Schema, entity.IsTableNameAuto, t.IsInterface);
             if (cacheable)
-                _fromCache.TryAdd((t, variant), from);
+                _fromCache.TryAdd(t, from);
             return from;
         }
 
@@ -1260,17 +1319,4 @@ internal sealed class QueryPlanner : IQueryPlanner
     {
         return RowMapperFactory.GetOrBuild<TResult>(queryCommand, sql, _contextType, _logger, _mapColumn, streaming);
     }
-
-    /// <summary>
-    /// Builds the factory that creates one fresh streaming enumerator per consumption. The delegate
-    /// captures the prepared command and the logging switches only — never the planner or the context —
-    /// so a cached plan does not root its planning context.
-    /// </summary>
-    private Func<ResultSetEnumerator<TResult>> BuildEnumeratorFactory<TResult>(DbPreparedQueryCommand<TResult> compiledQuery)
-        => () =>
-        {
-            var enumerator = new ResultSetEnumerator<TResult>(compiledQuery);
-            enumerator.InitEnvironment(_resultSetEnumeratorLogger, _logSensitiveData);
-            return enumerator;
-        };
 }

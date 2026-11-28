@@ -86,6 +86,19 @@ public sealed class T320SqliteTvfTests(ITestOutputHelper output) : ProviderTestS
     private static List<string> ParametersOf<T>(DbPreparedQueryCommand<T> prepared)
         => [.. prepared.DbCommandParams.Cast<DbParameter>().Select(p => $"{p.ParameterName}={p.Value ?? "null"}")];
 
+    private static BoundQueryInvocation<T> PrepareBound<T>(IDataContext context, QueryCommand<T> command)
+        => context.GetPreparedQueryCommand(command, false, true, TestContext.Current.CancellationToken)
+            .Should().BeOfType<BoundQueryInvocation<T>>().Which;
+
+    private static List<string> ParametersOf<T>(BoundQueryInvocation<T> invocation)
+    {
+        var descriptors = invocation.Plan.DbCommandParams;
+        var result = new List<string>(descriptors.Count);
+        for (var i = 0; i < descriptors.Count; i++)
+            result.Add($"{descriptors[i].ParameterName}={invocation.Values[i] ?? "null"}");
+        return result;
+    }
+
     /// <summary>
     /// A literal-argument runtime TVF executes on the file-based database and materialises every row the
     /// function returns.
@@ -177,8 +190,8 @@ public sealed class T320SqliteTvfTests(ITestOutputHelper output) : ProviderTestS
         var capturedJson = "[1,2]";
         QueryCommand<long> Build() => Context.From(() => T320SqIntegrationTvf.JsonEach(capturedJson)).Select(r => r.Value);
 
-        var first = Prepare(Context, Build(), storeInCache: true);
-        var firstSql = Normalize(first.DbCommand.CommandText);
+        var first = PrepareBound(Context, Build());
+        var firstSql = Normalize(first.Plan.DbCommand.CommandText);
         var firstObserved = $"rendered statement: <<{firstSql}>>; parameters: [{string.Join(", ", ParametersOf(first))}]";
         output.WriteLine($"first run: {firstObserved}");
 
@@ -186,24 +199,24 @@ public sealed class T320SqliteTvfTests(ITestOutputHelper output) : ProviderTestS
         firstSql.Should().Contain("json_each(", firstObserved);
         firstSql.Should().NotContain("[1,2]", $"a captured value is never inlined; {firstObserved}");
 
-        var firstRows = Build().ToList().OrderBy(x => x).ToArray();
+        var firstRows = Context.ToList(first).OrderBy(x => x).ToArray();
         firstRows.Should().Equal(new long[] { 1, 2 }, $"the captured document has two elements; {firstObserved}");
 
         capturedJson = "[3,4,5]";
 
-        var second = Prepare(Context, Build(), storeInCache: true);
-        var secondSql = Normalize(second.DbCommand.CommandText);
+        var second = PrepareBound(Context, Build());
+        var secondSql = Normalize(second.Plan.DbCommand.CommandText);
         var secondObserved = $"rendered statement: <<{secondSql}>>; parameters: [{string.Join(", ", ParametersOf(second))}]";
         output.WriteLine($"second run: {secondObserved}");
 
-        ReferenceEquals(first, second).Should().BeTrue(
+        ReferenceEquals(first.Plan, second.Plan).Should().BeTrue(
             $"the same shape must reuse the cached plan so the refresh path is exercised; {secondObserved}");
         secondSql.Should().Be(firstSql, $"a capture change must not re-render the statement; {secondObserved}");
         ParametersOf(second).Should().Equal(
             new[] { "capturedJson=[3,4,5]" },
             $"the cache hit must bind the new capture, never the stale document; {secondObserved}");
 
-        var secondRows = Build().ToList().OrderBy(x => x).ToArray();
+        var secondRows = Context.ToList(second).OrderBy(x => x).ToArray();
         secondRows.Should().Equal(
             new long[] { 3, 4, 5 },
             $"the refreshed capture selects three elements on the same context; {secondObserved}");
@@ -330,25 +343,23 @@ public sealed class T320SqliteTvfTests(ITestOutputHelper output) : ProviderTestS
         var jsonA = "[1,2]";
         var jsonB = "[7,8,9]";
 
-        var first = Prepare(
+        var first = PrepareBound(
             Context,
-            Context.From(() => T320SqIntegrationTvf.JsonEach(jsonA)).Select(row => row.Value),
-            storeInCache: true);
-        var second = Prepare(
+            Context.From(() => T320SqIntegrationTvf.JsonEach(jsonA)).Select(row => row.Value));
+        var second = PrepareBound(
             otherContext,
-            otherContext.From(() => T320SqIntegrationTvf.JsonEach(jsonB)).Select(row => row.Value),
-            storeInCache: true);
+            otherContext.From(() => T320SqIntegrationTvf.JsonEach(jsonB)).Select(row => row.Value));
 
-        var firstObserved = $"sql=<<{Normalize(first.DbCommand.CommandText)}>>; parameters: [{string.Join(", ", ParametersOf(first))}]";
-        var secondObserved = $"sql=<<{Normalize(second.DbCommand.CommandText)}>>; parameters: [{string.Join(", ", ParametersOf(second))}]";
+        var firstObserved = $"sql=<<{Normalize(first.Plan.DbCommand.CommandText)}>>; parameters: [{string.Join(", ", ParametersOf(first))}]";
+        var secondObserved = $"sql=<<{Normalize(second.Plan.DbCommand.CommandText)}>>; parameters: [{string.Join(", ", ParametersOf(second))}]";
         output.WriteLine($"context A consumer: {firstObserved}");
         output.WriteLine($"context B consumer: {secondObserved}");
 
         ParametersOf(first).Should().Equal(new[] { "jsonA=[1,2]" }, $"each consumer binds its own capture; {firstObserved}");
         ParametersOf(second).Should().Equal(new[] { "jsonB=[7,8,9]" }, $"the second context never sees the first capture; {secondObserved}");
 
-        var rowsA = Context.From(() => T320SqIntegrationTvf.JsonEach(jsonA)).Select(row => row.Value).ToList().OrderBy(value => value).ToArray();
-        var rowsB = otherContext.From(() => T320SqIntegrationTvf.JsonEach(jsonB)).Select(row => row.Value).ToList().OrderBy(value => value).ToArray();
+        var rowsA = Context.ToList(first).OrderBy(value => value).ToArray();
+        var rowsB = otherContext.ToList(second).OrderBy(value => value).ToArray();
         var rowsAAgain = Context.From(() => T320SqIntegrationTvf.JsonEach(jsonA)).Select(row => row.Value).ToList().OrderBy(value => value).ToArray();
         output.WriteLine(
             $"rows A: [{string.Join(", ", rowsA)}]; rows B: [{string.Join(", ", rowsB)}]; "
@@ -441,17 +452,17 @@ public sealed class T320SqliteTvfTests(ITestOutputHelper output) : ProviderTestS
         var json = "[2,4]";
 
         var plain = Context.From(() => T320SqIntegrationTvf.JsonEach(json)).Select(row => row.Value);
-        var plainPrepared = Prepare(Context, plain, storeInCache: true);
-        var plainSql = Normalize(plainPrepared.DbCommand.CommandText);
-        var plainRows = plain.ToList().OrderBy(value => value).ToArray();
+        var plainPrepared = PrepareBound(Context, plain);
+        var plainSql = Normalize(plainPrepared.Plan.DbCommand.CommandText);
+        var plainRows = Context.ToList(plainPrepared).OrderBy(value => value).ToArray();
 
         var hinted = Context.From(
                 () => T320SqIntegrationTvf.JsonEach(json),
                 options => options.WithSubQueryHint("NestLoop(t1)"))
             .Select(row => row.Value);
-        var hintedPrepared = Prepare(Context, hinted, storeInCache: true);
-        var hintedSql = Normalize(hintedPrepared.DbCommand.CommandText);
-        var hintedRows = hinted.ToList().OrderBy(value => value).ToArray();
+        var hintedPrepared = PrepareBound(Context, hinted);
+        var hintedSql = Normalize(hintedPrepared.Plan.DbCommand.CommandText);
+        var hintedRows = Context.ToList(hintedPrepared).OrderBy(value => value).ToArray();
 
         output.WriteLine(
             $"plain: sql=<<{plainSql}>>; rows=[{string.Join(", ", plainRows)}]; "
@@ -461,7 +472,7 @@ public sealed class T320SqliteTvfTests(ITestOutputHelper output) : ProviderTestS
         hintedSql.Should().NotContain("NestLoop", "the hint must not leak into the statement text");
         hintedRows.Should().Equal(plainRows, "the neutral option changes no row");
         plainRows.Should().Equal(new long[] { 2, 4 }, "the live source still returns its own rows");
-        ReferenceEquals(hintedPrepared, plainPrepared).Should().BeTrue(
+        ReferenceEquals(hintedPrepared.Plan, plainPrepared.Plan).Should().BeTrue(
             "the neutral option reuses the cached plan instance instead of forking the identity");
 
         Action locked = () => Context.From(

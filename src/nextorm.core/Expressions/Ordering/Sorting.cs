@@ -52,6 +52,15 @@ public struct Sorting
         _nullsPosition = NullsOrderingRenderer.Validate(nullsPosition);
     }
 
+    internal Sorting(in Sorting original, Expression? sortExpression, Expression? preparedExpression)
+    {
+        _expression = sortExpression;
+        _preparedExpression = preparedExpression;
+        _columnIdx = original._columnIdx;
+        _direction = original._direction;
+        _nullsPosition = original._nullsPosition;
+    }
+
     /// <summary>Ascending or descending.</summary>
     public OrderDirection Direction
     {

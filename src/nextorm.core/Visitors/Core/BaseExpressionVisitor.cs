@@ -723,39 +723,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     /// </summary>
     internal void EmitFoldedParameter(Expression node)
     {
-        object? value = null;
-        var keyCmd = new ExpressionKey(node, _queryProvider);
-        if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var d)
-            || !TryEvaluateCachedExpression(d, node, out value))
-        {
-            var rewriter = new UnstableConstantRewriter();
-            var rewritten = rewriter.Visit(node);
-            Delegate del;
-            if (rewriter.ValuesParameter is { } valuesParameter)
-            {
-                var arrayBody = rewritten.Type.IsValueType ? Expression.Convert(rewritten, typeof(object)) : rewritten;
-                var arrayDelegate = Expression.Lambda<Func<object?[], object>>(arrayBody, valuesParameter).Compile();
-                del = arrayDelegate;
-                value = arrayDelegate(rewriter.Values);
-            }
-            else
-            {
-                // A value-type body needs an explicit boxing conversion before it can be the body of a
-                // Func&lt;object&gt;; a reference-type body is already compatible.
-                var body = node.Type.IsValueType ? Expression.Convert(node, typeof(object)) : node;
-                var plainDelegate = Expression.Lambda<Func<object>>(body).Compile();
-                del = plainDelegate;
-                value = plainDelegate();
-            }
-            DataContextCache.ExpressionsCache[keyCmd] = del;
-
-            if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
-            {
-                _logger.LogTrace("Expression cache miss on visit method call. hashcode: {hash}, value: {value}", keyCmd.GetHashCode(), value);
-            }
-            else if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Expression cache miss on visit method call");
-        }
-
+        var value = ValueExpressionAccessor.Evaluate(node, _queryProvider, _logger);
         var paramName = _parameterProvider.GetParamName();
         var p = new Parameter(paramName, NormalizeParameterValue(value)) { Stable = InValues.IsStableValueExpression(node) };
         _params.Add(p);
@@ -778,76 +746,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         return EmitParameterPlaceholder(parameter);
     }
 
-    internal static bool TryEvaluateCachedExpression(Delegate? cached, Expression node, out object? value)
-    {
-        switch (cached)
-        {
-            case Func<object?[], object> arrayDelegate:
-            {
-                var rewriter = new UnstableConstantRewriter();
-                rewriter.Visit(node);
-                value = arrayDelegate(rewriter.Values);
-                return true;
-            }
-            case Func<object> plainDelegate:
-                value = plainDelegate();
-                return true;
-            default:
-                value = null;
-                return false;
-        }
-    }
-
-    /// <summary>
-    /// Rewrites a folded expression so that its unstable constants (non-null reference-typed constants
-    /// whose value is not fully determined by the expression shape, for example a captured dictionary or
-    /// the host of a global query filter) read from an <c>object?[]</c> parameter. The compiled delegate
-    /// is cached by expression shape, so the current constant values have to be supplied on every
-    /// invocation instead of being baked into the cached delegate.
-    /// </summary>
-    private sealed class UnstableConstantRewriter : ExpressionVisitor
-    {
-        private List<object?>? _values;
-
-        /// <summary>The parameter the rewritten expression reads the constant values from, or <c>null</c> when nothing was replaced.</summary>
-        public ParameterExpression? ValuesParameter { get; private set; }
-
-        /// <summary>The current constant values, in the order the rewritten expressions read them.</summary>
-        public object?[] Values => _values is null ? [] : [.. _values];
-
-        /// <inheritdoc/>
-        protected override Expression VisitConstant(ConstantExpression node)
-        {
-            if (node.Value is null || InValues.IsStableValueExpression(node))
-                return base.VisitConstant(node);
-
-            ValuesParameter ??= Expression.Parameter(typeof(object[]), "foldedValues");
-            _values ??= [];
-            var index = _values.Count;
-            _values.Add(node.Value);
-            return Expression.Convert(
-                Expression.ArrayIndex(ValuesParameter, Expression.Constant(index)),
-                node.Type);
-        }
-    }
-
     /// <summary>Compiles and evaluates a computed column expression to its string form (cached by expression key).</summary>
     private string CompileExpression(Expression exp)
-    {
-        var key = new ExpressionKey(exp, _queryProvider);
-        if (!DataContextCache.ExpressionsCache.TryGetValue(key, out var del))
-        {
-            del = Expression.Lambda<Func<string>>(exp).Compile();
-            DataContextCache.ExpressionsCache[key] = del;
-
-            if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
-            {
-                _logger.LogTrace("Select expression miss. hashcode: {hash}, value: {value}", key.GetHashCode(), ((Func<string>)del)());
-            }
-            else if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Select expression miss");
-        }
-        return ((Func<string>)del)();
-    }
+        => (string)ValueExpressionAccessor.Evaluate(exp, _queryProvider, _logger)!;
 
     /// <summary>Renders <paramref name="expression"/> into a fresh pooled builder (never in parameter mode).</summary>
     internal string VisitToString(Expression expression)

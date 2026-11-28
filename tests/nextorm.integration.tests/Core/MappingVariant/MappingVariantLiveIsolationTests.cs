@@ -1,6 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using FluentAssertions;
+using Microsoft.Data.Sqlite;
 using NextORM.Core;
 using NextORM.Postgres;
 using NextORM.Sqlite;
@@ -59,6 +61,115 @@ public sealed class SqliteMappingVariantLiveTests : ProviderTestSuite
     }
 
     [Fact]
+    public void ScopedQuery_UsesEachProvidersColumnEvenWhenProvidersCompareEqual()
+    {
+        const string sql = """
+            CREATE TABLE shared_scope_rows (first_id INTEGER NOT NULL, second_id INTEGER NOT NULL);
+            INSERT INTO shared_scope_rows VALUES (41, 99);
+            """;
+        using var firstConnection = Seed(sql);
+        using var secondConnection = Seed(sql);
+        var firstProvider = new EqualColumnMetadataProvider("first_id");
+        var secondProvider = new EqualColumnMetadataProvider("second_id");
+        firstProvider.Equals(secondProvider).Should().BeTrue();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().UseEntityMetadataProvider(firstProvider));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().UseEntityMetadataProvider(secondProvider));
+
+        Read(first).Should().Equal(41);
+        Read(second).Should().Equal(99);
+        Read(first).Should().Equal(41);
+
+        static List<int> Read(DataContext context)
+            => context.From<DefaultProviderRow>(Scope).OrderBy(row => row.Id).Select(row => row.Id).ToList();
+    }
+
+    [Fact]
+    public void ScopedQuery_DoesNotKeepItsMetadataProviderAlive()
+    {
+        using var connection = Seed("CREATE TABLE shared_scope_rows (first_id INTEGER NOT NULL); INSERT INTO shared_scope_rows VALUES (41);");
+        var provider = ExecuteAndGetProviderReference(connection);
+        for (var i = 0; i < 5 && provider.IsAlive; i++)
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+        }
+
+        provider.IsAlive.Should().BeFalse("the query plan and column-name caches should not root a caller's mapping service");
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static WeakReference ExecuteAndGetProviderReference(SqliteConnection connection)
+    {
+        var provider = new EqualColumnMetadataProvider("first_id");
+        using var context = new SqliteDataContext(connection, new DataContextBuilder().UseEntityMetadataProvider(provider));
+        context.From<DefaultProviderRow>(Scope).OrderBy(row => row.Id).Select(row => row.Id).ToList().Should().Equal(41);
+        return new WeakReference(provider);
+    }
+
+    [Fact]
+    public void DefaultVariant_UsesTheTableFromEachContextsMetadataProvider()
+    {
+        const string sql = """
+            CREATE TABLE first_rows (Id INTEGER NOT NULL);
+            INSERT INTO first_rows VALUES (41);
+            CREATE TABLE second_rows (Id INTEGER NOT NULL);
+            INSERT INTO second_rows VALUES (99);
+            """;
+        using var firstConnection = Seed(sql);
+        using var secondConnection = Seed(sql);
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder()
+            .UseEntityMetadataProvider(new LiveMetadataProvider("first_rows", "main")));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder()
+            .UseEntityMetadataProvider(new LiveMetadataProvider("second_rows", "main")));
+        first.From<DefaultProviderRow>().OrderBy(row => row.Id).Select(row => row.Id).ToList().Should().Equal(41);
+        second.From<DefaultProviderRow>().OrderBy(row => row.Id).Select(row => row.Id).ToList().Should().Equal(99);
+        first.From<DefaultProviderRow>().OrderBy(row => row.Id).Select(row => row.Id).ToList().Should().Equal(41);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DefaultVariant_UsesEachProvidersSchemaForTheSameTable(bool ordered)
+    {
+        const string sql = """
+            ATTACH DATABASE ':memory:' AS first_schema;
+            ATTACH DATABASE ':memory:' AS second_schema;
+            CREATE TABLE first_schema.shared_rows (Id INTEGER NOT NULL);
+            CREATE TABLE second_schema.shared_rows (Id INTEGER NOT NULL);
+            INSERT INTO first_schema.shared_rows VALUES (41);
+            INSERT INTO second_schema.shared_rows VALUES (99);
+            """;
+        using var firstConnection = Seed(sql);
+        using var secondConnection = Seed(sql);
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder()
+            .UseEntityMetadataProvider(new LiveMetadataProvider("shared_rows", "first_schema")));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder()
+            .UseEntityMetadataProvider(new LiveMetadataProvider("shared_rows", "second_schema")));
+        Read(first).Should().Equal(41);
+        Read(second).Should().Equal(99);
+        Read(first).Should().Equal(41);
+
+        List<int> Read(DataContext context)
+        {
+            var query = context.From<DefaultProviderRow>();
+            return ordered
+                ? query.OrderBy(row => row.Id).Select(row => row.Id).ToList()
+                : query.Select(row => row.Id).ToList();
+        }
+    }
+
+    private static SqliteConnection Seed(string sql)
+    {
+        var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.ExecuteNonQuery();
+        return connection;
+    }
+
+    [Fact]
     public void ScopedInsertUpdateDelete_OnlyMutateAttachedTarget()
     {
         using var context = (DataContext)SqliteTestProvider.Instance.CreateContext(DmlBuilder());
@@ -110,25 +221,40 @@ public sealed class SqliteMappingVariantLiveTests : ProviderTestSuite
         public string Name { get; set; } = "";
     }
 
-    private sealed class LiveMetadataProvider : IEntityMetadataProvider
+    private sealed class DefaultProviderRow { public int Id { get; set; } }
+
+    private sealed class LiveMetadataProvider(string? tableName = null, string schema = "scope_live") : IEntityMetadataProvider
     {
         private readonly DefaultEntityMetadataProvider _inner = new();
         public IEntityMetadata GetMetadata(Type entityType, in MappingVariant variant)
         {
             var metadata = _inner.GetMetadata(entityType, MappingVariant.Default);
-            return variant == Scope
-                ? new Metadata(metadata.Properties.Select(p => (IPropertyMetadata)new Property(p.PropertyInfo, "live_" + p.PropertyInfo.Name.ToLowerInvariant())).ToArray())
-                : metadata;
+            if (variant == Scope)
+                return new Metadata(tableName ?? "scope_rows", schema,
+                    metadata.Properties.Select(p => (IPropertyMetadata)new Property(p.PropertyInfo, "live_" + p.PropertyInfo.Name.ToLowerInvariant())).ToArray());
+
+            return tableName is null ? metadata : new Metadata(tableName, schema, metadata.Properties);
         }
         public string GetColumnName(PropertyInfo property, in MappingVariant variant, INamingConvention? convention)
             => variant == Scope ? "live_" + property.Name.ToLowerInvariant() : _inner.GetColumnName(property, variant, convention);
     }
 
-    private sealed class Metadata(IReadOnlyList<IPropertyMetadata> properties) : IEntityMetadata
+    private sealed class EqualColumnMetadataProvider(string columnName) : IEntityMetadataProvider
+    {
+        public IEntityMetadata GetMetadata(Type entityType, in MappingVariant variant)
+            => new Metadata("shared_scope_rows", "main", [new Property(entityType.GetProperty(nameof(DefaultProviderRow.Id))!, columnName)]);
+
+        public string GetColumnName(PropertyInfo property, in MappingVariant variant, INamingConvention? convention) => columnName;
+
+        public override bool Equals(object? obj) => obj is EqualColumnMetadataProvider;
+        public override int GetHashCode() => typeof(EqualColumnMetadataProvider).GetHashCode();
+    }
+
+    private sealed class Metadata(string tableName, string schema, IReadOnlyList<IPropertyMetadata> properties) : IEntityMetadata
     {
         public IReadOnlyList<IPropertyMetadata> Properties { get; } = properties;
-        public string? TableName => "scope_rows";
-        public string? Schema => "scope_live";
+        public string? TableName => tableName;
+        public string? Schema => schema;
     }
 
     private sealed class Property(PropertyInfo property, string columnName) : IPropertyMetadata

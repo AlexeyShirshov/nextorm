@@ -558,6 +558,59 @@ public class PlanKeyUniquenessTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ValueListHashCollision_DoesNotMatchAnotherShape(bool preWhere)
+    {
+        using var context = SqliteTestContext.Create();
+        int?[] values = [1, 2];
+        QueryCommand Build() => Row(preWhere
+            ? E(context).PreWhere(row => values.Contains(row.Int))
+            : E(context).Where(row => values.Contains(row.Int)));
+
+        var first = Build();
+        first.PrepareCommand(false, CancellationToken.None);
+        var published = new QueryPlan(first, null, 17).GetCacheVersion();
+        var memoized = first.GetOrCreatePlanKey(null);
+
+        values = [1, 2, null];
+        var other = Build();
+        other.PrepareCommand(false, CancellationToken.None);
+        first.RefreshInValuesShape();
+        // Simulate a collision at both levels: the per-clause hash and the enclosing plan hash.
+        other.InValuesShapeHash = first.InValuesShapeHash = published.QueryCommand.InValuesShapeHash;
+        other.PreWhereShapeHash = first.PreWhereShapeHash = published.QueryCommand.PreWhereShapeHash;
+
+        published.Equals(new QueryPlan(other, null, 17)).Should().BeFalse();
+        first.GetOrCreatePlanKey(null).Should().NotBeSameAs(memoized);
+    }
+
+    [Fact]
+    public void CacheKeyAndStagedRecipe_DoNotShareMutableQueryParts()
+    {
+        using var context = SqliteTestContext.Create();
+        var original = Build();
+        original.PrepareCommand(false, CancellationToken.None);
+        var stored = original.CloneForCache();
+        var fresh = Build();
+        fresh.ApplyPreparationFrom(stored);
+
+        original.Sorting.Should().NotBeSameAs(stored.Sorting);
+        fresh.Sorting.Should().NotBeSameAs(stored.Sorting);
+        fresh.Joins![0].Should().NotBeSameAs(stored.Joins![0]);
+        original.SelectList![0].Should().NotBeSameAs(stored.SelectList![0]);
+        fresh.SelectList![0].Should().NotBeSameAs(stored.SelectList[0]);
+
+        fresh.SelectList[0].Index = 99;
+        stored.SelectList[0].Index.Should().Be(0);
+
+        QueryCommand Build() => E(context)
+            .Join(context.From<ISimpleEntity>(), (left, right) => left.Id == right.Id)
+            .OrderBy(row => row.Item1.Id)
+            .Select(row => new PKRow { Id = row.Item1.Id, Int = row.Item2.Id });
+    }
+
     /// <summary>
     /// #173: the projection-item member is part of the plan key. Two commands with equal SQL, context
     /// type and every other shape input, differing only in <see cref="ProjectionEntityItem.Member"/>,
@@ -687,6 +740,29 @@ public class PlanKeyUniquenessTests
             .BeTrue("the equivalent direct projection must hit the cached plan");
         found.Should().BeSameAs(holder);
         stored.Should().BeSameAs(planFirst);
+    }
+
+    [Fact]
+    public void RawRecipe_FingerprintCollision_DoesNotAdoptAnotherCommandsTag()
+    {
+        using var context = SqliteTestContext.Create();
+        context.PurgeQueryCache();
+        var owner = E(context).WithTag("raw collision owner").Select(row => (long?)row.Id);
+        var fresh = E(context).WithTag("raw collision fresh").Select(row => (long?)row.Id);
+        var ownerShape = QueryCommand.CaptureRawShape(owner)!;
+        var freshShape = QueryCommand.CaptureRawShape(fresh)!;
+        var holder = (DbPreparedQueryCommand<long?>)context.GetPreparedQueryCommand(
+            owner, false, true, CancellationToken.None);
+        var ownerKey = owner.GetOrCreatePlanKey(null);
+
+        // Put an otherwise different descriptor in the bucket a real collision would probe.
+        ownerShape.Fingerprint = freshShape.Fingerprint;
+        QueryPlanStore.SetRaw(context.GetType(), ownerKey, holder, ownerShape, owner);
+
+        var result = (DbPreparedQueryCommand<long?>)context.GetPreparedQueryCommand(
+            fresh, false, true, CancellationToken.None);
+        result.Should().NotBeSameAs(holder);
+        result.CommandText.Should().Contain("raw collision fresh").And.NotContain("raw collision owner");
     }
 
     private sealed class StubCommandHolder : IDbCommandHolder

@@ -38,7 +38,10 @@ public class D193TupleInPlanCacheTests
     }
 
     private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> cmd)
-        => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, true, Ct);
+        => BoundQueryInvocation<T>.GetPlan(PrepareInvocation(ctx, cmd))!;
+
+    private static IPreparedQueryCommand<T> PrepareInvocation<T>(IDataContext ctx, QueryCommand<T> cmd)
+        => ctx.GetPreparedQueryCommand(cmd, false, true, Ct);
 
     private static int ParamCount<T>(DbPreparedQueryCommand<T> command)
         => command.DbCommandParams.Cast<DbParameter>().Count();
@@ -260,23 +263,25 @@ public class D193TupleInPlanCacheTests
             var e = ctx.From<IComplexEntity>();
 
             _tuples = [(1, 10), (3, 30)];
-            var first = Prepare(ctx, WhereFieldTuple(e));
-            ParamCount(first).Should().Be(4, "two two-component rows parameterise four cells");
+            var first = PrepareInvocation(ctx, WhereFieldTuple(e));
+            var firstPlan = BoundQueryInvocation<long>.GetPlan(first)!;
+            ParamCount(firstPlan).Should().Be(4, "two two-component rows parameterise four cells");
             ctx.ToList(first).OrderBy(x => x).Should().Equal(1L, 3L);
 
             // Same captured member / expression tree, different shape: the plan key changes, so the
             // second call must miss and rebuild rather than reuse the stale two-row SQL.
             _tuples = [(1, 10)];
-            var second = Prepare(ctx, WhereFieldTuple(e));
-            ParamCount(second).Should().Be(2, "the changed WHERE shape re-keys the plan and rebuilds the parameters");
-            second.DbCommand.CommandText.Replace("\r\n", "\n").Should().Contain("in (VALUES ($p0, $p1))");
-            ReferenceEquals(first, second).Should().BeFalse(
+            var second = PrepareInvocation(ctx, WhereFieldTuple(e));
+            var secondPlan = BoundQueryInvocation<long>.GetPlan(second)!;
+            ParamCount(secondPlan).Should().Be(2, "the changed WHERE shape re-keys the plan and rebuilds the parameters");
+            secondPlan.CommandText.Replace("\r\n", "\n").Should().Contain("in (VALUES ($p0, $p1))");
+            ReferenceEquals(firstPlan, secondPlan).Should().BeFalse(
                 "the WHERE shape is part of the plan key, so a changed shape is a cache miss");
             ctx.ToList(second).OrderBy(x => x).Should().Equal(1L);
 
             // The last shape is unchanged: the hit path returns the same cached command.
             var third = Prepare(ctx, WhereFieldTuple(e));
-            ReferenceEquals(second, third).Should().BeTrue("an unchanged WHERE tuple shape stays cacheable");
+            ReferenceEquals(secondPlan, third).Should().BeTrue("an unchanged WHERE tuple shape stays cacheable");
 
             // The tuple preparations must not poison the scalar path on the same context.
             var scalarFirst = Prepare(ctx, WhereScalar(e));
@@ -327,7 +332,7 @@ public class D193TupleInPlanCacheTests
             var tuples = new List<(long, int?)> { (2, null) };
 
             // Prepare (and execute) a tuple query first, then the shared Any command.
-            ctx.ToList(Prepare(ctx, WhereTuple(ctx.From<IComplexEntity>(), tuples)));
+            ctx.ToList(PrepareInvocation(ctx, WhereTuple(ctx.From<IComplexEntity>(), tuples)));
 
             var any = ctx.From<IComplexEntity>()
                 .Where(x => tuples.Contains(new ValueTuple<long, int?>(x.Id, x.Int)))

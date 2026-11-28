@@ -81,7 +81,7 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
             if (!object.Equals(xItem.Member, yItem.Member)) return false;
         }
 
-        if (!ReferenceEquals(x.Converter, y.Converter)) return false;
+        if (!ReferenceEquals(x.PlanConverterIdentity, y.PlanConverterIdentity)) return false;
 
         //_expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
         if (!_queryProvider.GetExpressionPlanEqualityComparer().Equals(x.Expression, y.Expression))
@@ -127,8 +127,8 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
             // contributes zero, so null/null hashes alike and null/non-null hashes apart.
             hash.Add(obj.ProjectionItem?.Member);
 
-            if (obj.Converter is not null)
-                hash.Add(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj.Converter));
+            if (obj.PlanConverterIdentity is { } converterIdentity)
+                hash.Add(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(converterIdentity));
 
             //_expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
             hash.Add(obj.Expression, _queryProvider.GetExpressionPlanEqualityComparer());

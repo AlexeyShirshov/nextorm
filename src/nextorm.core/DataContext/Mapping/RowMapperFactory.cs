@@ -3,7 +3,6 @@ using System.Data;
 using System.Data.Common;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
@@ -255,11 +254,12 @@ internal static class RowMapperFactory
         bool streaming = false)
     {
         var key = BuildKey(queryCommand, typeof(TResult), sql, providerType, streaming);
-        if (MapperCache.TryGet(key, out var cached))
+        var cache = MapperCache.ForColumns(queryCommand.SelectList, mapColumn.Target as DataContext);
+        if (cache.TryGet(key, out var cached))
             return (Func<IDataRecord, TResult>)cached;
 
         var map = Build<TResult>(queryCommand, logger, mapColumn, streaming);
-        MapperCache.Add(key, map);
+        cache.Add(key, map);
         return map;
     }
 
@@ -288,11 +288,12 @@ internal static class RowMapperFactory
         bool streaming = false)
     {
         var key = BuildKey(queryCommand, resultType, sql, providerType, streaming, boxed: true);
-        if (MapperCache.TryGet(key, out var cached))
+        var cache = MapperCache.ForColumns(queryCommand.SelectList, mapColumn.Target as DataContext);
+        if (cache.TryGet(key, out var cached))
             return (Func<IDataRecord, object?>)cached;
 
         var map = BuildBoxed(queryCommand, resultType, logger, mapColumn, streaming);
-        MapperCache.Add(key, map);
+        cache.Add(key, map);
         return map;
     }
 
@@ -316,12 +317,15 @@ internal static class RowMapperFactory
         bool oneColumn,
         Func<SelectExpression, Expression, Expression> mapColumn)
     {
-        var key = new MapperCacheKey(providerType, typeof(TResult), sql, BuildSignature(selectList), oneColumn, Streaming: false);
-        if (MapperCache.TryGet(key, out var cached))
+        var context = mapColumn.Target as DataContext;
+        var key = new MapperCacheKey(providerType, typeof(TResult), sql, MapperColumnShape.Create(selectList), oneColumn, Streaming: false,
+            Dialect: PlanDialectIdentity.For(context), Mapping: PlanMappingIdentity.For(context));
+        var cache = MapperCache.ForColumns(selectList, context);
+        if (cache.TryGet(key, out var cached))
             return (Func<IDataRecord, TResult>)cached;
 
         var map = Build<TResult>(selectList, oneColumn, null, mapColumn, streaming: false);
-        MapperCache.Add(key, map);
+        cache.Add(key, map);
         return map;
     }
 
@@ -361,11 +365,12 @@ internal static class RowMapperFactory
         string? recordSignature = null)
     {
         var key = new RawMapperCacheKey(providerType, resultType, oneColumn, columns, namingConventionType, recordKind, recordSignature);
-        if (MapperCache.TryGetRaw(key, out var cached))
+        var context = mapColumn.Target as DataContext;
+        if (MapperCache.TryGetRaw(key, context, out var cached))
             return (Func<IDataRecord, TResult>)cached;
 
         var map = Build<TResult>(buildSelectList(), oneColumn, null, mapColumn, streaming: false);
-        MapperCache.AddRaw(key, map);
+        MapperCache.AddRaw(key, map, context);
         return map;
     }
 
@@ -474,7 +479,8 @@ internal static class RowMapperFactory
         // A compile-time materializer for this shape wins over building and compiling a tree. The
         // one-column scalar path is left alone: its accessor carries provider-specific widening that
         // a generated factory would have to duplicate first.
-        if (!oneColumn && RowMaterializerRegistry.TryCreate(resultType, selectList, out var provided)
+        if (!oneColumn && mapColumn.Target is not DataContext { UsesContextBoundColumnMapping: true }
+            && RowMaterializerRegistry.TryCreate(resultType, selectList, out var provided)
             && provided is Func<IDataRecord, TResult> materializer)
         {
             return materializer;
@@ -557,18 +563,12 @@ internal static class RowMapperFactory
         => BuildKey(queryCommand, typeof(TResult), sql, providerType, streaming);
 
     /// <summary>
-    /// Builds a cheap cache key from the generated SQL plus a column signature. SQL is already
-    /// available at the call site, so this is far cheaper than hashing the expression tree.
+    /// Builds a cache key from SQL and materialization descriptors without retaining the projection.
     /// </summary>
     private static MapperCacheKey BuildKey(QueryCommand queryCommand, Type resultType, string? sql, Type providerType, bool streaming, bool boxed = false)
     {
-        var signature = BuildSignature(queryCommand.SelectList);
-        unchecked
-        {
-            signature = signature * 31 + (queryCommand.EntityType?.GetHashCode() ?? 0);
-        }
-
-        return new MapperCacheKey(providerType, resultType, sql ?? string.Empty, signature, queryCommand.OneColumn, streaming, boxed);
+        return new MapperCacheKey(providerType, resultType, sql ?? string.Empty, MapperColumnShape.Create(queryCommand.SelectList),
+            queryCommand.OneColumn, streaming, boxed, queryCommand.EntityType, queryCommand.PlanDialect, queryCommand.PlanMapping);
     }
 
     /// <summary>
@@ -621,34 +621,4 @@ internal static class RowMapperFactory
                 $"The streaming LOB column '{selectList[streamingIndex].PropertyName}' must be the last projected column, because sequential access reads columns in ordinal order; move it to the end of the projection.");
     }
 
-    private static int BuildSignature(SelectExpression[]? selectList)
-    {
-        var signature = 7;
-        if (selectList is not null)
-        {
-            unchecked
-            {
-                for (var i = 0; i < selectList.Length; i++)
-                {
-                    var column = selectList[i];
-                    signature = signature * 31 + column.Index;
-                    signature = signature * 31 + (column.PropertyType?.GetHashCode() ?? 0);
-                    signature = signature * 31 + (column.Nullable ? 1 : 0);
-                    signature = signature * 31 + (column.DefaultOnNull ? 1 : 0);
-                    signature = signature * 31 + (column.IsWideCountNarrowed ? 1 : 0);
-                    signature = signature * 31 + (column.PropertyName?.GetHashCode() ?? 0);
-                    signature = signature * 31 + (column.DurationUnit?.GetHashCode() ?? 0);
-                    signature = signature * 31 + (column.ProviderType?.GetHashCode() ?? 0);
-                    signature = signature * 31 + (column.ReaderType?.GetHashCode() ?? 0);
-                    signature = signature * 31 + (column.Converter is null ? 0 : RuntimeHelpers.GetHashCode(column.Converter));
-                    signature = signature * 31 + (column.ProjectionItem is { } item ? item.EntityType.GetHashCode() * 31 + item.Slot : 0);
-                    // #173: the target member is part of the materialized shape, so the compiled-mapper
-                    // key must include it. A null member (a constructor position) contributes zero.
-                    signature = signature * 31 + (column.ProjectionItem?.Member?.GetHashCode() ?? 0);
-                }
-            }
-        }
-
-        return signature;
-    }
 }

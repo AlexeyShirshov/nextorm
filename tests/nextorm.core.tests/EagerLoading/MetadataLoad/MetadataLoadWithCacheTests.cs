@@ -354,7 +354,8 @@ public sealed class MetadataLoadWithCacheTests
         var first = Prepare(context, Build(context, 10));
         var second = Prepare(context, Build(context, 20));
 
-        second.Should().BeSameAs(first, "a captured value is parameterized, never baked into the plan");
+        BoundQueryInvocation<Order>.GetPlan(second).Should().BeSameAs(BoundQueryInvocation<Order>.GetPlan(first),
+            "a captured value is parameterized, never part of plan identity");
         StoredPlans().Should().Be(1);
     }
 

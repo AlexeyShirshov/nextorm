@@ -300,29 +300,12 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 return ReplaceQueryCommand(node, outerCmd);
             }
 
-            QueryCommand cmd;
-
-            var keyCmd = new ExpressionKey(builderReceiver, _queryProvider);
-            if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
-            {
-                //var d = Expression.Lambda<Func<QueryCommand>>(Expression.Call(node.Object, ToCommandMI)).Compile();
-                var d = Expression.Lambda<Func<QueryCommand>>(AsCommandExpression(builderReceiver)).Compile();
-
-                DataContextCache.ExpressionsCache[keyCmd] = d;
-                cmd = d();
-
-                if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
-                {
-                    _logger.LogTrace("Subquery expression miss. hashcode: {hash}, value: {value}", keyCmd.GetHashCode(), d());
-                }
-                else if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Subquery expression miss");
-            }
-            else
-                cmd = ((Func<QueryCommand>)dCmd)();
-
+            // A captured builder belongs to this invocation. Share its accessor, not a compiled
+            // call that always reads the first expression's receiver.
+            var cmd = (QueryCommand)ValueExpressionAccessor.Evaluate(AsCommandExpression(builderReceiver), _queryProvider, _logger, subquery: true)!;
             return ReplaceQueryCommand(node, cmd);
         }
-        else if (node.Object?.Type.IsAssignableTo(typeof(QueryCommand)) ?? false)
+        else if (node.Object is { } receiver && receiver.Type.IsAssignableTo(typeof(QueryCommand)))
         {
             // A correlated scalar subquery: the inner query references a member of an outer parameter
             // (the immediate one, or - at correlation depth greater than one - a marker an ancestor
@@ -330,44 +313,17 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             // with an OuterRefMarker and registered on the root command; the non-correlated closure path
             // below would either leave the outer parameter free and fail at Compile(), or rewrite the
             // marker's index constant as a closure value and corrupt the marker.
-            if (_forPrepare && (IsCorrelatedWithEnclosing(node.Object) || ContainsOuterRefMarker(node.Object)))
+            if (_forPrepare && (IsCorrelatedWithEnclosing(receiver) || ContainsOuterRefMarker(receiver)))
             {
-                var outerCmd = GetQueryCommand(node.Object);
+                var outerCmd = GetQueryCommand(receiver);
                 return ReplaceQueryCommand(node, outerCmd);
             }
 
             var tv = new TypeExpressionVisitor<ParameterExpression, ConstantExpression>();
-            tv.Visit(node.Object);
-            if (tv.Has1)
-            {
-                //throw new NotImplementedException();
-            }
-
+            tv.Visit(receiver);
             if (tv.Has2)
             {
-                QueryCommand cmd;
-
-                var keyCmd = new ExpressionKey(node.Object, _queryProvider);
-                if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
-                {
-                    var p = Expression.Parameter(typeof(object));
-                    var replace = new ReplaceConstantExpressionVisitor(Expression.Convert(p, tv.Target2!.Type));
-                    var body = replace.Visit(node.Object);
-
-                    var d = Expression.Lambda<Func<object?, QueryCommand>>(body, p).Compile();
-
-                    DataContextCache.ExpressionsCache[keyCmd] = d;
-                    cmd = d(tv.Target2!.Value);
-
-                    if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
-                    {
-                        _logger.LogTrace("Subquery expression miss. hashcode: {hash}, value: {value}", keyCmd.GetHashCode(), d(tv.Target2!.Value));
-                    }
-                    else if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Subquery expression miss");
-                }
-                else
-                    cmd = ((Func<object?, QueryCommand>)dCmd)(tv.Target2!.Value);
-
+                var cmd = (QueryCommand)ValueExpressionAccessor.Evaluate(receiver, _queryProvider, _logger, subquery: true)!;
                 return ReplaceQueryCommand(node, cmd);
             }
         }
@@ -1537,6 +1493,14 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
     private QueryCommand GetQueryCommand(Expression exp)
     {
+        // A constant or a member chain rooted in a constant cannot reference an outer row.
+        // Read the current operand instead of caching its authored expression (and its owner).
+        var receiver = exp;
+        while (receiver is MemberExpression { Expression: { } owner })
+            receiver = owner;
+        if (receiver is ConstantExpression)
+            return (QueryCommand)ValueExpressionAccessor.Evaluate(exp, _queryProvider, _logger, subquery: true)!;
+
         // Nested commands resolve ReferencedQueries/OuterReferences against the root registry, so a
         // marker registered by an ancestor scope (correlation depth > 1) is looked up there too. A
         // marker that is already baked into `exp` is left in place; it stays valid because every
@@ -1562,9 +1526,6 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
             if (constRepl.Params.Count > 0)
             {
-                var pp = constRepl.Params.Select(it => it.Item1);
-                var args = constRepl.Params.Select(it => it.Item2).ToArray();
-
                 // A body that carries an outer reference bakes the marker index - a position in the
                 // *current* outer command's OuterReferences - into the compiled delegate. The same
                 // member can map to a different index on another command (depending on how many
@@ -1584,22 +1545,9 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 }
                 else
                 {
-                    var keyCmd = new ExpressionKey(exp, _queryProvider);
-                    if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
-                    {
-                        var d = Expression.Lambda(body, pp).Compile();
-
-                        DataContextCache.ExpressionsCache[keyCmd] = d;
-                        cmd = (QueryCommand)d.DynamicInvoke(args)!;
-
-                        if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
-                        {
-                            _logger.LogTrace("Subquery expression miss: {exp}", exp);
-                        }
-                        else if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Subquery expression miss");
-                    }
-                    else
-                        cmd = (QueryCommand)dCmd.DynamicInvoke(args)!;
+                    // No outer markers were introduced. Evaluate the original expression through
+                    // typed value slots so neither the key nor the accessor owns its captures.
+                    cmd = (QueryCommand)ValueExpressionAccessor.Evaluate(exp, _queryProvider, _logger, subquery: true)!;
                 }
             }
             else

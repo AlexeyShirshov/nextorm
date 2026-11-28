@@ -183,8 +183,8 @@ public sealed class MappingVariantIsolationTests
         var minimum = 3;
         var query = context.From<ScopedRow>(global::NextORM.Core.MappingVariant.Default)
             .Where(row => row.Id > minimum).Select(row => row.Id);
-        var prepared = (DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
-            query, false, true, CancellationToken.None);
+        var prepared = BoundQueryInvocation<int>.GetPlan(context.GetPreparedQueryCommand(
+            query, false, true, CancellationToken.None))!;
 
         prepared.DbCommand.CommandText.Should().Be("select Id\n from ScopedRow\n where (Id > $minimum)");
         prepared.DbCommand.Parameters.Cast<System.Data.Common.DbParameter>()
@@ -203,12 +203,12 @@ public sealed class MappingVariantIsolationTests
             .UseVariantResolver(new FixedVariantResolver());
         using var context = new SqliteDataContext("Data Source=:memory:", builder);
 
-        var defaultFirst = (DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
-            BuildScopedQuery(context, global::NextORM.Core.MappingVariant.Default, 3), false, true, CancellationToken.None);
-        var defaultAgain = (DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
-            BuildScopedQuery(context, global::NextORM.Core.MappingVariant.Default, 3), false, true, CancellationToken.None);
-        var alpha = (DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
-            BuildScopedQuery(context, new global::NextORM.Core.MappingVariant("alpha"), 3), false, true, CancellationToken.None);
+        var defaultFirst = BoundQueryInvocation<int>.GetPlan(context.GetPreparedQueryCommand(
+            BuildScopedQuery(context, global::NextORM.Core.MappingVariant.Default, 3), false, true, CancellationToken.None))!;
+        var defaultAgain = BoundQueryInvocation<int>.GetPlan(context.GetPreparedQueryCommand(
+            BuildScopedQuery(context, global::NextORM.Core.MappingVariant.Default, 3), false, true, CancellationToken.None));
+        var alpha = BoundQueryInvocation<int>.GetPlan(context.GetPreparedQueryCommand(
+            BuildScopedQuery(context, new global::NextORM.Core.MappingVariant("alpha"), 3), false, true, CancellationToken.None))!;
 
         defaultAgain.Should().BeSameAs(defaultFirst, "an identical default-scope query must be served by its cached plan");
         alpha.Should().NotBeSameAs(defaultFirst, "a non-default scope must not reuse the default-scope cache entry");
@@ -359,13 +359,17 @@ public sealed class MappingVariantIsolationTests
         }
     }
 
-    private static (string Sql, IReadOnlyList<System.Data.Common.DbParameter> Parameters) Prepare(
+    private static (string Sql, (string ParameterName, object? Value)[] Parameters) Prepare(
         SqliteDataContext context, global::NextORM.Core.MappingVariant variant, int minimum)
     {
         var command = BuildScopedQuery(context, variant, minimum);
-        var prepared = (DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
-            command, false, true, CancellationToken.None);
-        return (prepared.DbCommand.CommandText, prepared.DbCommand.Parameters.Cast<System.Data.Common.DbParameter>().ToArray());
+        var invocation = context.GetPreparedQueryCommand(command, false, true, CancellationToken.None);
+        var plan = BoundQueryInvocation<int>.GetPlan(invocation)!;
+        var values = (invocation as BoundQueryInvocation<int>)?.Values;
+        var parameters = plan.DbCommandParams.Cast<System.Data.Common.DbParameter>()
+            .Select((parameter, ordinal) => (parameter.ParameterName, values is null ? parameter.Value : values[ordinal]))
+            .ToArray();
+        return (plan.CommandText, parameters);
     }
 
     private static QueryCommand<int> BuildScopedQuery(

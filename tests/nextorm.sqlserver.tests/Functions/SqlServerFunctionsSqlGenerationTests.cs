@@ -949,26 +949,30 @@ public class SqlServerFunctionsSqlGenerationTests
             .OrderBy(x => x.Id)
             .Select(x => SqlFunctions.SqlServer.quotename(value, quote));
 
-        var first = (DbPreparedQueryCommand<string?>)ctx.GetPreparedQueryCommand(Command(), false, true, CancellationToken.None);
-        var firstSql = Normalize(first.DbCommand.CommandText);
-        var firstParams = first.DbCommand.Parameters.Cast<DbParameter>().ToDictionary(p => p.ParameterName);
+        var first = (BoundQueryInvocation<string?>)ctx.GetPreparedQueryCommand(Command(), false, true, CancellationToken.None);
+        var firstSql = Normalize(first.Plan.CommandText);
+        static Dictionary<string, object?> ValuesByName(BoundQueryInvocation<string?> invocation)
+            => invocation.Plan.DbCommandParams.Cast<DbParameter>()
+                .Select((parameter, ordinal) => (parameter.ParameterName, Value: invocation.Values[ordinal]))
+                .ToDictionary(binding => binding.ParameterName, binding => binding.Value);
+        var firstParams = ValuesByName(first);
 
         firstSql.Should().Contain("quotename(@value, @quote)");
         firstSql.Should().NotContain("O''Brien", "the value is bound, never spliced into the statement");
-        firstParams["value"].Value.Should().Be("O'Brien");
-        firstParams["quote"].Value.Should().Be("'");
+        firstParams["value"].Should().Be("O'Brien");
+        firstParams["quote"].Should().Be("'");
 
         // The ORDER BY keeps this shape off the positional refresh recipe, so the cache hit re-renders the
         // parameter-extraction pass with ParamMode = true: a literal emitted on that pass would either
         // corrupt the command or null-reference the absent builder.
         value = "O'Brien's";
         quote = "[";
-        var second = (DbPreparedQueryCommand<string?>)ctx.GetPreparedQueryCommand(Command(), false, true, CancellationToken.None);
-        second.Should().BeSameAs(first, "the second execution must hit the cached plan");
-        Normalize(second.DbCommand.CommandText).Should().Be(firstSql, "parameter mode must not splice or re-render values");
-        var secondParams = second.DbCommand.Parameters.Cast<DbParameter>().ToDictionary(p => p.ParameterName);
-        secondParams["value"].Value.Should().Be("O'Brien's", "the bound value stays raw; escaping is a SQL-literal concern only");
-        secondParams["quote"].Value.Should().Be("[");
+        var second = (BoundQueryInvocation<string?>)ctx.GetPreparedQueryCommand(Command(), false, true, CancellationToken.None);
+        second.Plan.Should().BeSameAs(first.Plan, "the second invocation must hit the cached plan");
+        Normalize(second.Plan.CommandText).Should().Be(firstSql, "parameter mode must not splice or re-render values");
+        var secondParams = ValuesByName(second);
+        secondParams["value"].Should().Be("O'Brien's", "the bound value stays raw; escaping is a SQL-literal concern only");
+        secondParams["quote"].Should().Be("[");
 
         // A null capture binds as a null parameter, never as the text 'null'.
         string? nullValue = null;

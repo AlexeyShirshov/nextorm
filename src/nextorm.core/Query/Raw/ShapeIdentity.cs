@@ -87,11 +87,12 @@ internal readonly struct ShapeToken : IEquatable<ShapeToken>
 /// <summary>
 /// The non-expression dimensions of a native shape: the entity and result types, the provider context
 /// the plan belongs to and the terminal that will execute it. Two requests that differ in any of them
-/// must never share a plan, so they are the first tokens of every shape.
+/// must never share a plan, so the header is verified separately from the expression tokens.
 /// </summary>
-internal readonly struct ShapeHeader
+internal readonly record struct ShapeHeader
 {
-    public ShapeHeader(Type? entityType, Type? resultType, Type? contextType, int terminal, int renderStamp = 0, int sourceStamp = 0)
+    public ShapeHeader(Type? entityType, Type? resultType, Type? contextType, int terminal,
+        NativeContextStamp renderStamp = default, NativeSourceStamp sourceStamp = default)
     {
         EntityType = entityType;
         ResultType = resultType;
@@ -115,14 +116,14 @@ internal readonly struct ShapeHeader
     /// rendered text, so the resolved options are part of the identity — see
     /// <see cref="NativeContextStamp"/>.
     /// </summary>
-    public int RenderStamp { get; }
+    public NativeContextStamp RenderStamp { get; }
 
     /// <summary>
     /// The physical source identity (table name, qualifiers, entity binding). A source name is rendered
     /// into the statement but carried outside the expression graphs, so without it <c>From("a")</c> and
     /// <c>From("b")</c> would be one shape — see <see cref="NativeSourceStamp"/>.
     /// </summary>
-    public int SourceStamp { get; }
+    public NativeSourceStamp SourceStamp { get; }
 }
 
 /// <summary>One captured value slot of a shape: the member path from the closure to the value.</summary>
@@ -155,12 +156,16 @@ internal sealed class ShapeCapture
 /// </summary>
 internal sealed class ShapeKey
 {
-    public ShapeKey(ShapeToken[] tokens, ShapeCapture[] captures, int hash)
+    public ShapeKey(in ShapeHeader header, ShapeToken[] tokens, ShapeCapture[] captures, int hash)
     {
+        Header = header;
         Tokens = tokens;
         Captures = captures;
         Hash = hash;
     }
+
+    /// <summary>The non-expression compatibility dimensions.</summary>
+    public ShapeHeader Header { get; }
 
     /// <summary>The canonical token stream (types, members, literal values; never a closure).</summary>
     public ShapeToken[] Tokens { get; }
@@ -173,27 +178,20 @@ internal sealed class ShapeKey
 }
 
 /// <summary>
-/// Binds the current closure values of a fresh graph into the cached plan's parameters, without
-/// building a command. Built once on the miss from the published capture slots and the parameter
-/// names the render produced; every entry is a compiled writer, so a hit reads the closure and
-/// assigns the parameter without reflection or allocation.
+/// Reads the current closure values into invocation-owned slots, without building a command.
+/// Built once on the miss from the published capture slots and the parameter names the render produced.
 /// </summary>
 internal sealed class NativeBinder
 {
-    // Resolved once: the member is a fixed property of the closed BCL DbParameter type, so this is a
-    // static reflection lookup, not a per-shape one.
-    private static readonly PropertyInfo ValueProperty =
-        typeof(DbParameter).GetProperty(nameof(DbParameter.Value))!;
-
     private readonly int[] _slotStarts;
     private readonly int[] _parameterIndices;
-    private readonly Action<object?, DbParameter>[] _writers;
+    private readonly Func<object?, object?>[] _readers;
 
-    private NativeBinder(int[] slotStarts, int[] parameterIndices, Action<object?, DbParameter>[] writers, int parameterCount)
+    private NativeBinder(int[] slotStarts, int[] parameterIndices, Func<object?, object?>[] readers, int parameterCount)
     {
         _slotStarts = slotStarts;
         _parameterIndices = parameterIndices;
-        _writers = writers;
+        _readers = readers;
         ParameterCount = parameterCount;
     }
 
@@ -218,7 +216,8 @@ internal sealed class NativeBinder
 
         var start = new int[shape.Captures.Length + 1];
         var parameterIndices = new List<int>(parameters.Count);
-        var writers = new List<Action<object?, DbParameter>>(parameters.Count);
+        var readers = new List<Func<object?, object?>>(shape.Captures.Length);
+        var used = new bool[parameters.Count];
 
         for (var slot = 0; slot < shape.Captures.Length; slot++)
         {
@@ -231,17 +230,22 @@ internal sealed class NativeBinder
                 if (!string.Equals(parameters[i].ParameterName, capture.Name, StringComparison.Ordinal))
                     continue;
 
-                var writer = CompileWriter(capture);
-                if (writer is null)
+                if (used[i])
                     return null;
 
+                used[i] = true;
                 parameterIndices.Add(i);
-                writers.Add(writer);
                 matched = true;
             }
 
             if (!matched)
                 return null;
+
+            var reader = CompileReader(capture);
+            if (reader is null)
+                return null;
+
+            readers.Add(reader);
         }
 
         start[shape.Captures.Length] = parameterIndices.Count;
@@ -250,22 +254,23 @@ internal sealed class NativeBinder
         if (parameterIndices.Count != parameters.Count)
             return null;
 
-        return new NativeBinder(start, parameterIndices.ToArray(), writers.ToArray(), parameters.Count);
+        return new NativeBinder(start, parameterIndices.ToArray(), readers.ToArray(), parameters.Count);
     }
 
     /// <summary>
     /// Writes the value of <paramref name="slot"/> (read from <paramref name="closure"/>) into every
-    /// parameter bound to it. Allocation-free.
+    /// invocation value slot bound to it.
     /// </summary>
-    public void Write(int slot, object? closure, DbParameterCollection parameters)
+    public void Write(int slot, object? closure, object?[] values)
     {
         var from = _slotStarts[slot];
         var to = _slotStarts[slot + 1];
+        var value = _readers[slot](closure);
         for (var i = from; i < to; i++)
-            _writers[i](closure, parameters[_parameterIndices[i]]);
+            values[_parameterIndices[i]] = value;
     }
 
-    private static Action<object?, DbParameter>? CompileWriter(ShapeCapture capture)
+    private static Func<object?, object?>? CompileReader(ShapeCapture capture)
     {
         try
         {
@@ -274,16 +279,8 @@ internal sealed class NativeBinder
             foreach (var member in capture.Path)
                 value = Expression.MakeMemberAccess(value, member);
 
-            var parameter = Expression.Parameter(typeof(DbParameter), "parameter");
             var boxed = Expression.Convert(value, typeof(object));
-            var normalized = Expression.Coalesce(boxed, Expression.Constant(DBNull.Value, typeof(object)));
-            var assign = Expression.Assign(
-                // The PropertyInfo overload, not the name-based one: the latter is annotated
-                // RequiresUnreferencedCode because it resolves the member by string. The member here is a
-                // fixed BCL property on the closed DbParameter type, resolved once at static init.
-                Expression.Property(parameter, ValueProperty),
-                normalized);
-            return Expression.Lambda<Action<object?, DbParameter>>(assign, closure, parameter).Compile();
+            return Expression.Lambda<Func<object?, object?>>(boxed, closure).Compile();
         }
         catch (Exception)
         {
@@ -326,6 +323,13 @@ internal static class ShapeIdentity
 {
     [ThreadStatic] private static Visitor? _visitor;
 
+    private static Visitor GetVisitor()
+    {
+        var visitor = _visitor ??= new Visitor();
+        // A captured property getter can execute a query while the outer graph is being bound.
+        return visitor.IsBinding ? new Visitor() : visitor;
+    }
+
     /// <summary>
     /// Computes the structural hash of a fresh graph without materialising the token stream or the
     /// capture slots. This is the index probe: the candidate is then verified by
@@ -338,7 +342,7 @@ internal static class ShapeIdentity
     /// <returns><see langword="false"/> when the graph is not keyable (fail closed).</returns>
     public static bool TryHash(in ShapeHeader header, LambdaExpression? root, out int hash)
     {
-        var visitor = _visitor ??= new Visitor();
+        var visitor = GetVisitor();
         visitor.BeginHash(header);
         var ok = ScanRoot(visitor, root);
         hash = ok ? visitor.Hash : 0;
@@ -351,7 +355,7 @@ internal static class ShapeIdentity
     /// <returns>The identity, or <see langword="null"/> for a graph that must stay on the legacy route.</returns>
     public static ShapeKey? TryCreate(in ShapeHeader header, params LambdaExpression?[] roots)
     {
-        var visitor = _visitor ??= new Visitor();
+        var visitor = GetVisitor();
         visitor.BeginCreate(header);
 
         for (var i = 0; i < roots.Length; i++)
@@ -366,7 +370,7 @@ internal static class ShapeIdentity
                 return null;
         }
 
-        return visitor.ToKey();
+        return visitor.ToKey(header);
     }
 
     /// <summary>
@@ -379,8 +383,11 @@ internal static class ShapeIdentity
     /// <returns><see langword="true"/> when the shapes are identical, capture count included.</returns>
     public static bool Matches(ShapeKey key, in ShapeHeader header, params LambdaExpression?[] roots)
     {
-        var visitor = _visitor ??= new Visitor();
-        visitor.BeginCompare(key, header);
+        if (key.Header != header)
+            return false;
+
+        var visitor = GetVisitor();
+        visitor.BeginCompare(key);
         try
         {
             for (var i = 0; i < roots.Length; i++)
@@ -406,8 +413,11 @@ internal static class ShapeIdentity
     /// <returns><see langword="true"/> when the shape is identical, capture count included.</returns>
     public static bool Matches(ShapeKey key, in ShapeHeader header, LambdaExpression? root)
     {
-        var visitor = _visitor ??= new Visitor();
-        visitor.BeginCompare(key, header);
+        if (key.Header != header)
+            return false;
+
+        var visitor = GetVisitor();
+        visitor.BeginCompare(key);
         try
         {
             return ScanRoot(visitor, root) && !visitor.CompareMismatch && visitor.Complete;
@@ -435,8 +445,11 @@ internal static class ShapeIdentity
         LambdaExpression? root1,
         LambdaExpression? root2)
     {
-        var visitor = _visitor ??= new Visitor();
-        visitor.BeginCompare(key, header);
+        if (key.Header != header)
+            return false;
+
+        var visitor = GetVisitor();
+        visitor.BeginCompare(key);
         try
         {
             return ScanRoots(visitor, root0, root1, root2) && !visitor.CompareMismatch && visitor.Complete;
@@ -461,7 +474,7 @@ internal static class ShapeIdentity
         LambdaExpression? root2,
         out int hash)
     {
-        var visitor = _visitor ??= new Visitor();
+        var visitor = GetVisitor();
         visitor.BeginHash(header);
         var ok = ScanRoots(visitor, root0, root1, root2);
         hash = ok ? visitor.Hash : 0;
@@ -480,16 +493,16 @@ internal static class ShapeIdentity
         LambdaExpression? root1,
         LambdaExpression? root2)
     {
-        var visitor = _visitor ??= new Visitor();
+        var visitor = GetVisitor();
         visitor.BeginCreate(header);
-        return ScanRoots(visitor, root0, root1, root2) ? visitor.ToKey() : null;
+        return ScanRoots(visitor, root0, root1, root2) ? visitor.ToKey(header) : null;
     }
 
     /// <summary>Three-graph bind; no <c>params</c> array.</summary>
     /// <param name="key">The published identity.</param>
     /// <param name="header">The non-expression dimensions of the fresh request.</param>
     /// <param name="binder">The published binder.</param>
-    /// <param name="parameters">The cached statement's parameter collection.</param>
+    /// <param name="values">The invocation-owned array in placeholder order.</param>
     /// <param name="root0">The filter graph, or <see langword="null"/>.</param>
     /// <param name="root1">The grouping graph, or <see langword="null"/>.</param>
     /// <param name="root2">The projection graph, or <see langword="null"/>.</param>
@@ -498,16 +511,16 @@ internal static class ShapeIdentity
         ShapeKey key,
         in ShapeHeader header,
         NativeBinder binder,
-        DbParameterCollection parameters,
+        object?[] values,
         LambdaExpression? root0,
         LambdaExpression? root1,
         LambdaExpression? root2)
     {
-        if (parameters.Count != binder.ParameterCount || binder.SlotCount != key.Captures.Length)
+        if (key.Header != header || values.Length != binder.ParameterCount || binder.SlotCount != key.Captures.Length)
             return false;
 
-        var visitor = _visitor ??= new Visitor();
-        visitor.BeginBind(key, header, binder, parameters);
+        var visitor = GetVisitor();
+        visitor.BeginBind(key, binder, values);
         try
         {
             return ScanRoots(visitor, root0, root1, root2) && !visitor.CompareMismatch && visitor.Complete;
@@ -530,65 +543,25 @@ internal static class ShapeIdentity
         return true;
     }
 
-    /// <summary>
-    /// Binds the current closure values of the fresh graph into the cached parameters. The caller must
-    /// have established <see cref="Matches(ShapeKey, in ShapeHeader, LambdaExpression?)"/> first; the walk is the same, so the slots line up. All
-    /// parameter writes happen only after the whole walk matched a token (a mismatch rejects before any
-    /// closure is read).
-    /// </summary>
+    /// <summary>Single-graph bind. The caller has already verified the shape with <see cref="Matches(ShapeKey, in ShapeHeader, LambdaExpression?)"/>.</summary>
     /// <param name="key">The published identity.</param>
     /// <param name="header">The non-expression dimensions of the fresh request.</param>
     /// <param name="binder">The published binder.</param>
-    /// <param name="parameters">The cached statement's parameter collection.</param>
-    /// <param name="roots">The fresh expression graphs, in canonical order.</param>
-    /// <returns><see langword="true"/> when every value was written.</returns>
-    public static bool TryBind(
-        ShapeKey key,
-        in ShapeHeader header,
-        NativeBinder binder,
-        DbParameterCollection parameters,
-        params LambdaExpression?[] roots)
-    {
-        if (parameters.Count != binder.ParameterCount || binder.SlotCount != key.Captures.Length)
-            return false;
-
-        var visitor = _visitor ??= new Visitor();
-        visitor.BeginBind(key, header, binder, parameters);
-        try
-        {
-            for (var i = 0; i < roots.Length; i++)
-            {
-                if (!ScanRoot(visitor, roots[i]))
-                    return false;
-            }
-
-            return !visitor.CompareMismatch && visitor.Complete;
-        }
-        finally
-        {
-            visitor.EndCompare();
-        }
-    }
-
-    /// <summary>Single-graph overload that takes no <c>params</c> array (allocation-free hit).</summary>
-    /// <param name="key">The published identity.</param>
-    /// <param name="header">The non-expression dimensions of the fresh request.</param>
-    /// <param name="binder">The published binder.</param>
-    /// <param name="parameters">The cached statement's parameter collection.</param>
+    /// <param name="values">The invocation-owned array in placeholder order.</param>
     /// <param name="root">The fresh expression graph.</param>
     /// <returns><see langword="true"/> when every value was written.</returns>
     public static bool TryBind(
         ShapeKey key,
         in ShapeHeader header,
         NativeBinder binder,
-        DbParameterCollection parameters,
+        object?[] values,
         LambdaExpression? root)
     {
-        if (parameters.Count != binder.ParameterCount || binder.SlotCount != key.Captures.Length)
+        if (key.Header != header || values.Length != binder.ParameterCount || binder.SlotCount != key.Captures.Length)
             return false;
 
-        var visitor = _visitor ??= new Visitor();
-        visitor.BeginBind(key, header, binder, parameters);
+        var visitor = GetVisitor();
+        visitor.BeginBind(key, binder, values);
         try
         {
             return ScanRoot(visitor, root) && !visitor.CompareMismatch && visitor.Complete;
@@ -613,9 +586,11 @@ internal static class ShapeIdentity
         private bool _mismatch;
         private int _slot;
         private NativeBinder? _binder;
-        private DbParameterCollection? _parameters;
+        private object?[]? _values;
 
         private bool Comparing => _expected is not null;
+
+        public bool IsBinding => _binder is not null;
 
         public bool CompareMismatch => _mismatch;
 
@@ -632,8 +607,8 @@ internal static class ShapeIdentity
             _mismatch = false;
             _slot = 0;
             _binder = null;
-            _parameters = null;
-            AddHeader(header);
+            _values = null;
+            _hash.Add(header.GetHashCode());
         }
 
         public void BeginHash(in ShapeHeader header)
@@ -645,49 +620,37 @@ internal static class ShapeIdentity
             _mismatch = false;
             _slot = 0;
             _binder = null;
-            _parameters = null;
-            AddHeader(header);
+            _values = null;
+            _hash.Add(header.GetHashCode());
         }
 
         public int Hash => _hash.ToHashCode();
 
-        public void BeginCompare(ShapeKey key, in ShapeHeader header)
+        public void BeginCompare(ShapeKey key)
         {
             _expected = key;
             _cursor = 0;
             _mismatch = false;
             _slot = 0;
             _binder = null;
-            _parameters = null;
-            AddHeader(header);
+            _values = null;
         }
 
-        public void BeginBind(ShapeKey key, in ShapeHeader header, NativeBinder binder, DbParameterCollection parameters)
+        public void BeginBind(ShapeKey key, NativeBinder binder, object?[] values)
         {
             _expected = key;
             _cursor = 0;
             _mismatch = false;
             _slot = 0;
             _binder = binder;
-            _parameters = parameters;
-            AddHeader(header);
+            _values = values;
         }
 
         public void EndCompare()
         {
             _expected = null;
             _binder = null;
-            _parameters = null;
-        }
-
-        private void AddHeader(in ShapeHeader header)
-        {
-            Add(ShapeTokenKind.Literal, header.EntityType);
-            Add(ShapeTokenKind.Literal, header.ResultType);
-            Add(ShapeTokenKind.Literal, header.ContextType);
-            Add(ShapeTokenKind.Literal, typeof(int), null, header.Terminal);
-            Add(ShapeTokenKind.Literal, typeof(int), null, header.RenderStamp);
-            Add(ShapeTokenKind.Literal, typeof(int), null, header.SourceStamp);
+            _values = null;
         }
 
         public bool Scan(Expression root)
@@ -703,8 +666,8 @@ internal static class ShapeIdentity
             }
         }
 
-        public ShapeKey? ToKey()
-            => _expected is not null || _hashOnly ? null : new ShapeKey(_tokens.ToArray(), _captures.ToArray(), _hash.ToHashCode());
+        public ShapeKey ToKey(in ShapeHeader header)
+            => new(header, _tokens.ToArray(), _captures.ToArray(), _hash.ToHashCode());
 
         public void Add(ShapeTokenKind kind, Type? type = null, object? payload = null, long bits = 0)
             => Add(new ShapeToken(kind, type, payload, bits));
@@ -779,15 +742,15 @@ internal static class ShapeIdentity
 
                 Add(ShapeTokenKind.CapturedMember, node.Type, node.Member);
 
-                if (_binder is { } binder && _parameters is { } parameters)
+                if (_binder is { } binder && _values is { } values)
                 {
                     if (_slot >= binder.SlotCount)
                         throw new UnsupportedShapeException();
 
-                    binder.Write(_slot, closure.Value, parameters);
+                    binder.Write(_slot, closure.Value, values);
                 }
 
-                if (!Comparing)
+                if (!Comparing && !_hashOnly)
                     _captures.Add(new ShapeCapture(closure.Type, node.Type, BuildPath(node), node.Member.Name));
 
                 _slot++;

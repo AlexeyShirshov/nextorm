@@ -56,13 +56,19 @@ public static class D362SqlParity
 
     private static void Print<T>(SqliteDataContext ctx, string scenario, QueryCommand<T> command)
     {
-        var prepared = (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(
+        var invocation = ctx.GetPreparedQueryCommand(
             command, false, true, CancellationToken.None);
+        var prepared = BoundQueryInvocation<T>.GetPlan(invocation)!;
+        var values = (invocation as BoundQueryInvocation<T>)?.Values;
         var sql = (prepared.SqlStmt ?? string.Empty).Replace("\r\n", "\n");
         var parameters = string.Join(
             ";",
             prepared.DbCommand.Parameters.Cast<DbParameter>()
-                .Select(p => p.ParameterName + "=" + (p.Value is DBNull ? "NULL" : p.Value)));
+                .Select((parameter, ordinal) =>
+                {
+                    var value = values is null ? parameter.Value : values[ordinal];
+                    return parameter.ParameterName + "=" + (value is DBNull ? "NULL" : value);
+                }));
 
         Console.WriteLine("## scenario=" + scenario);
         Console.WriteLine(sql);

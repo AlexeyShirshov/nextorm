@@ -366,8 +366,8 @@ public class PlanCacheTests
             var nested = ctx.GetPreparedQueryCommand(cmdNested, false, true, TestContext.Current.CancellationToken);
             var chained = ctx.GetPreparedQueryCommand(cmdChained, false, true, TestContext.Current.CancellationToken);
 
-            ReferenceEquals(nested, chained).Should()
-                .BeTrue("the nested form and the equivalent chained form must share one cached plan");
+            BoundQueryInvocation<int>.GetPlan(chained).Should().BeSameAs(BoundQueryInvocation<int>.GetPlan(nested),
+                "the nested form and the equivalent chained form must share one cached plan");
             nested.ToList(ctx).Should().Equal(42);
             chained.ToList(ctx).Should().Equal(42);
 

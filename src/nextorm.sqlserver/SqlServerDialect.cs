@@ -83,6 +83,7 @@ public sealed class SqlServerDialect : SqlDialectBase
         _serverMajorVersion = serverVersion?.Major;
         _engineEdition = engineEdition;
         _vectorSearchSyntax = vectorSearchSyntax;
+        PlanDialectIdentity.Register(this, (typeof(SqlServerDialect), _serverMajorVersion, _engineEdition, _vectorSearchSyntax));
         _pivot = new SqlServerPivotRenderer(this);
         _sqlServerFunctions = new SqlServerSpecificFunctions(this);
     }

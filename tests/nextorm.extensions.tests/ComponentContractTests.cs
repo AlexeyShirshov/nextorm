@@ -37,7 +37,7 @@ public class ComponentContractTests
     private static SqliteDataContext Ctx() => new("Data Source=:memory:", new DataContextBuilder());
 
     private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> cmd)
-        => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
+        => NextORM.Tests.PreparedPlanObservation.GetPlan(ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None));
 
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
         => Prepare(ctx, cmd).SqlStmt!.Replace("\r\n", "\n");
@@ -191,6 +191,7 @@ public class ComponentContractTests
         var comparer = c1.GetQueryPlanEqualityComparer();
         comparer.GetHashCode(c1).Should().Be(comparer.GetHashCode(c2));
         comparer.Equals(c1, c2).Should().BeFalse();
+        Prepare(ctx, c1).Should().NotBeSameAs(Prepare(ctx, c2));
     }
 
     [Fact]
@@ -207,6 +208,7 @@ public class ComponentContractTests
 
         var comparer = c1.GetQueryPlanEqualityComparer();
         comparer.Equals(c1, c2).Should().BeTrue();
+        Prepare(ctx, c1).Should().BeSameAs(Prepare(ctx, c2));
     }
 
     // B5: clones carry components and prepared state
@@ -433,17 +435,18 @@ public class ComponentContractTests
             .Where(x => x.Score > threshold)
 , x => x.Score);
 
-        var prepared = Prepare(ctx, command);
+        var prepared = ctx.GetPreparedQueryCommand(command, false, true, CancellationToken.None);
+        var plan = NextORM.Tests.PreparedPlanObservation.GetPlan(prepared);
         ctx.ToList(prepared);
 
         threshold = 10;
-        var warm1 = Prepare(ctx, command);
-        warm1.SqlStmt.Should().BeSameAs(prepared.SqlStmt, "a warm hit must reuse the built SQL");
+        var warm1 = ctx.GetPreparedQueryCommand(command, false, true, CancellationToken.None);
+        NextORM.Tests.PreparedPlanObservation.GetPlan(warm1).Should().BeSameAs(plan, "a warm hit must reuse the built plan");
         ctx.ToList(warm1).Should().ContainSingle().Which.Score.Should().Be(20);
 
         threshold = 19;
-        var warm2 = Prepare(ctx, command);
-        warm2.SqlStmt.Should().BeSameAs(prepared.SqlStmt, "a second warm hit must reuse the same built SQL");
+        var warm2 = ctx.GetPreparedQueryCommand(command, false, true, CancellationToken.None);
+        NextORM.Tests.PreparedPlanObservation.GetPlan(warm2).Should().BeSameAs(plan, "a second warm hit must reuse the same plan");
         ctx.ToList(warm2).Should().ContainSingle().Which.Score.Should().Be(20);
     }
 

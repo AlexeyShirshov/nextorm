@@ -16,6 +16,9 @@ namespace NextORM.Core;
 /// </summary>
 internal static class NormSqlTranslator
 {
+    private static readonly PropertyInfo ReferencedQueriesProperty = typeof(IQueryRegistry).GetProperty(nameof(IQueryRegistry.ReferencedQueries))!;
+    private static readonly PropertyInfo ReferencedQueryItem = typeof(IReadOnlyList<QueryCommand>).GetProperty("Item")!;
+
     /// <summary>
     /// Returns <c>false</c> for a call whose declaring type is neither <see cref="SqlFunctions"/> nor
     /// <see cref="CommonFunctions"/>; otherwise translates it (or throws, like the original branches)
@@ -200,6 +203,39 @@ internal static class NormSqlTranslator
     }
 
     /// <summary>Emits the <see cref="CommonFunctions"/> built-ins; an unrecognised method throws.</summary>
+    private static QueryCommand ReadSubqueryOperand(BaseExpressionVisitor visitor, Expression operand)
+    {
+        // Normalization emits a typed lookup into the active registry. The index is the whole
+        // accessor; it does not need a compiled delegate or an entry in the expression cache.
+        var lookup = operand is UnaryExpression { NodeType: ExpressionType.Convert, Method: null } conversion
+            ? conversion.Operand
+            : operand;
+        var registry = visitor.QueryProvider;
+        if (lookup is IndexExpression
+            {
+                Indexer: { } item,
+                Object: MemberExpression { Expression: ParameterExpression parameter } references,
+                Arguments: [ConstantExpression { Value: int index }]
+            }
+            && item == ReferencedQueryItem && references.Member == ReferencedQueriesProperty
+            && parameter.Type == typeof(IQueryRegistry))
+        {
+            var referenced = registry.ReferencedQueries[index];
+            if (operand.Type.IsInstanceOfType(referenced))
+                return referenced;
+        }
+
+        // A component can supply an operand at render time. Closed operands use typed value slots;
+        // unusual registry expressions evaluate locally so their bindings cannot cross callers.
+        if (!operand.Has<ParameterExpression>())
+            return (QueryCommand)ValueExpressionAccessor.Evaluate(operand, registry, visitor.Logger, subquery: true)!;
+
+        var parameters = new ReplaceConstantsExpressionVisitor(registry);
+        var body = parameters.Visit(operand);
+        var accessor = Expression.Lambda(body, parameters.Params.Select(static pair => pair.Item1)).Compile();
+        return (QueryCommand)accessor.DynamicInvoke(parameters.Params.Select(static pair => pair.Item2).ToArray())!;
+    }
+
     private static void TranslateNormSql(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
         // A window function is only valid once it has been given a specification; emitting the bare
@@ -255,10 +291,6 @@ internal static class NormSqlTranslator
             )
             && node.Arguments is [Expression exp] && exp.Type.IsAssignableTo(typeof(QueryCommand)))
         {
-            QueryCommand innerQuery;
-            var expVisitor = new TypeExpressionVisitor<ParameterExpression, ConstantExpression>();
-            expVisitor.Visit(exp);
-
             var predicateKeyword = node.Method.Name switch
             {
                 nameof(CommonFunctions.exists) => visitor.Kw("exists"),
@@ -267,61 +299,8 @@ internal static class NormSqlTranslator
                 _ => throw new NotImplementedException()
             };
 
-            var keyCmd = new ExpressionKey(exp, visitor.QueryProvider);
-            if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
-            {
-                object? paramValue;
-                Expression body;
-                ParameterExpression pExp;
-                if (expVisitor.Has1)
-                {
-                    pExp = Expression.Parameter(typeof(object));
-                    var replParam = new ReplaceParameterExpressionVisitor(Expression.Convert(pExp, typeof(IQueryRegistry)));
-                    body = replParam.Visit(exp);
-                    paramValue = visitor.QueryProvider;
-                }
-                else if (expVisitor.Has2)
-                {
-                    pExp = Expression.Parameter(typeof(object));
-                    var ce = expVisitor.Target2;
-                    var replace = new ReplaceConstantExpressionVisitor(Expression.Convert(pExp, ce!.Type));
-                    paramValue = ce.Value;
-                    body = replace.Visit(exp);
-                }
-                else
-                    throw new InvalidOperationException();
-
-                var d = Expression.Lambda<Func<object?, object>>(body, pExp).Compile();
-                DataContextCache.ExpressionsCache[keyCmd] = d;
-                innerQuery = (QueryCommand)d(paramValue);
-
-                if (visitor.Logger?.IsEnabled(LogLevel.Trace) ?? false)
-                {
-                    visitor.Logger.LogTrace("Expression cache miss on visit exists. hashcode: {hash}, value: {value}", keyCmd.GetHashCode(), d(paramValue));
-                }
-                else if (visitor.Logger?.IsEnabled(LogLevel.Debug) ?? false) visitor.Logger.LogDebug("Expression cache miss on visit exists");
-            }
-            else
-            {
-                object? paramValue;
-
-                if (expVisitor.Has1)
-                {
-                    paramValue = visitor.QueryProvider;
-                }
-                else if (expVisitor.Has2)
-                {
-                    var ce = expVisitor.Target2;
-                    paramValue = ce!.Value;
-                }
-                else
-                    throw new InvalidOperationException();
-
-                innerQuery = (QueryCommand)((Func<object?, object>)dCmd)(paramValue);
-            }
-
             var sqlBuilder = new SqlBuilder(visitor.Options);
-            var sql = sqlBuilder.MakeSelect(innerQuery);
+            var sql = sqlBuilder.MakeSelect(ReadSubqueryOperand(visitor, exp));
 
             if (!visitor.IsParamMode)
             {
@@ -351,36 +330,8 @@ internal static class NormSqlTranslator
             if (!visitor.IsParamMode)
                 visitor.Builder!.Append(negated ? visitor.Kw(" not in (") : globalIn ? " global in (" : " in (");
 
-            var constRepl = new ReplaceConstantsExpressionVisitor(visitor.QueryProvider);
-            var body = constRepl.Visit(cmdExp);
-
-            QueryCommand innerQuery;
-
-            if (constRepl.Params.Count > 0)
-            {
-                var keyCmd = new ExpressionKey(cmdExp, visitor.QueryProvider);
-                if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
-                {
-                    var d = Expression.Lambda(body, constRepl.Params.Select(it => it.Item1)).Compile();
-
-                    DataContextCache.ExpressionsCache[keyCmd] = d;
-                    innerQuery = (QueryCommand)d.DynamicInvoke(constRepl.Params.Select(it => it.Item2).ToArray())!;
-
-                    if (visitor.Logger?.IsEnabled(LogLevel.Trace) ?? false)
-                    {
-                        visitor.Logger.LogTrace("Subquery expression miss: {exp}", cmdExp);
-                    }
-                    else if (visitor.Logger?.IsEnabled(LogLevel.Debug) ?? false) visitor.Logger.LogDebug("Subquery expression miss");
-                }
-                else
-                    innerQuery = (QueryCommand)dCmd.DynamicInvoke(constRepl.Params.Select(it => it.Item2).ToArray())!;
-
-            }
-            else
-                throw new InvalidOperationException();
-
             var sqlBuilder = new SqlBuilder(visitor.Options);
-            var sql = sqlBuilder.MakeSelect(innerQuery);
+            var sql = sqlBuilder.MakeSelect(ReadSubqueryOperand(visitor, cmdExp));
 
             if (!visitor.IsParamMode)
             {

@@ -380,11 +380,11 @@ public sealed class CachedPreparationRecipeTests
 
     /// <summary>Builds a placeholder-connection context. No connection is ever opened.</summary>
     private static string PrepareSql<T>(IDataContext ctx, QueryCommand<T> command, bool storeInCache = true)
-        => ((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None))
+        => BoundQueryInvocation<T>.GetPlan(ctx.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None))!
             .DbCommand.CommandText.Replace("\r\n", "\n");
 
     private static DbPreparedQueryCommand<T> PrepareCommand<T>(IDataContext ctx, QueryCommand<T> command, bool storeInCache = true)
-        => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None);
+        => BoundQueryInvocation<T>.GetPlan(ctx.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None))!;
 
     private static void ResetRecipeCache()
     {
@@ -719,8 +719,9 @@ public sealed class CachedPreparationRecipeTests
         using var ctx = CreateSqlServerContext();
 
         var threshold = 10;
-        var first = PrepareCommand(ctx, ctx.From<SimpleEntity>().Where(x => x.Id > threshold).Select(x => x.Id));
-        first.DbCommand.Parameters[0].Value.Should().Be(10);
+        var first = (BoundQueryInvocation<int>)ctx.GetPreparedQueryCommand(
+            ctx.From<SimpleEntity>().Where(x => x.Id > threshold).Select(x => x.Id), false, true, CancellationToken.None);
+        first.Values.Should().Equal([10]);
 
         // P5a policy: a closure-bearing graph is a provable raw identity — the shape carries the closure
         // instances, so a hit is possible only for those very instances and the captured members are read
@@ -731,11 +732,11 @@ public sealed class CachedPreparationRecipeTests
             .Should().NotBeNull("the closure identity is a provable raw identity");
 
         threshold = 99;
-        var second = PrepareCommand(ctx, ctx.From<SimpleEntity>().Where(x => x.Id > threshold).Select(x => x.Id));
+        var second = (BoundQueryInvocation<int>)ctx.GetPreparedQueryCommand(
+            ctx.From<SimpleEntity>().Where(x => x.Id > threshold).Select(x => x.Id), false, true, CancellationToken.None);
         QueryPlanner.RecipeReuses.Should().Be(1, "the same closure instance reuses the published recipe");
-        second.Should().BeSameAs(first, "the raw hit serves the published prepared command");
-        second.DbCommand.Parameters[0].Value.Should().Be(
-            99, "the hit must rebind the fresh captured value, never serve the stale one");
+        second.Plan.Should().BeSameAs(first.Plan, "the raw hit serves the published plan");
+        second.Values.Should().Equal([99], "the hit must bind the fresh capture");
     }
 
     /// <summary>
@@ -752,23 +753,25 @@ public sealed class CachedPreparationRecipeTests
         using var ctx = CreateSqlServerContext();
 
         var offset = 5;
-        var first = PrepareCommand(ctx, ctx.From<SimpleEntity>().Where(x => x.Id > ThresholdPlus(offset)).Select(x => x.Id));
-        first.DbCommand.Parameters[0].Value.Should().Be(6);
+        var first = (BoundQueryInvocation<int>)ctx.GetPreparedQueryCommand(
+            ctx.From<SimpleEntity>().Where(x => x.Id > ThresholdPlus(offset)).Select(x => x.Id), false, true, CancellationToken.None);
+        first.Values.Should().Equal([6]);
         QueryCommand.CaptureRawShape(ctx.From<SimpleEntity>().Where(x => x.Id > ThresholdPlus(offset)).Select(x => x.Id))
             .Should().NotBeNull("the closure identity alone is a provable raw identity");
         QueryPlanner.RecipePublishes.Should().Be(
             0, "a refresh parameter with no captured key cannot be rebound by identity");
 
         offset = 50;
-        var second = PrepareCommand(ctx, ctx.From<SimpleEntity>().Where(x => x.Id > ThresholdPlus(offset)).Select(x => x.Id));
-        second.DbCommand.Parameters[0].Value.Should().Be(51);
+        var second = (BoundQueryInvocation<int>)ctx.GetPreparedQueryCommand(
+            ctx.From<SimpleEntity>().Where(x => x.Id > ThresholdPlus(offset)).Select(x => x.Id), false, true, CancellationToken.None);
+        second.Values.Should().Equal([51]);
         QueryPlanner.RecipeReuses.Should().Be(0);
     }
 
     /// <summary>A client-evaluated call: folded into one parameter with no captured key.</summary>
     private static int ThresholdPlus(int offset) => offset + 1;
 
-    // --- 4. lifetime: Clear and thread separation -----------------------------------------------------
+    // --- 4. lifetime: Clear and thread hops -----------------------------------------------------------
 
     [Fact]
     public void Recipe_ClearDropsTheRawIndex()
@@ -791,7 +794,7 @@ public sealed class CachedPreparationRecipeTests
     }
 
     [Fact]
-    public void Recipe_ThreadSeparation_NoCrossThreadReuse()
+    public async Task Recipe_ReusesAcrossThreads()
     {
         ResetRecipeCache();
         using var ctx = CreateSqlServerContext();
@@ -799,14 +802,21 @@ public sealed class CachedPreparationRecipeTests
         var onThisThread = PrepareSql(ctx, SimpleShape(ctx));
         QueryPlanner.RecipePublishes.Should().Be(1);
 
-        string? onOtherThread = null;
-        var thread = new Thread(() => onOtherThread = PrepareSql(ctx, SimpleShape(ctx)));
-        thread.Start();
-        thread.Join();
+        var token = TestContext.Current.CancellationToken;
+        Task<string> turn;
+        using (ExecutionContext.SuppressFlow())
+        {
+            turn = Task.Factory.StartNew(() =>
+            {
+                using var other = CreateSqlServerContext();
+                return PrepareSql(other, SimpleShape(other));
+            }, token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        }
+        var onOtherThread = await turn.WaitAsync(TimeSpan.FromSeconds(10), token);
 
         onOtherThread.Should().Be(onThisThread);
-        QueryPlanner.RecipeReuses.Should().Be(0, "the raw index is thread-local");
-        QueryPlanner.RecipePublishes.Should().Be(2, "the other thread published in its own domain");
+        QueryPlanner.RecipeReuses.Should().Be(1, "the other thread should reuse the published recipe");
+        QueryPlanner.RecipePublishes.Should().Be(1);
     }
 
     // --- shared AnyCommand route + later cacheable hits ----------------------------------------------

@@ -99,10 +99,19 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
     private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
 
     private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> command, bool storeInCache)
-        => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None);
+        => Prepare(ctx, command, storeInCache, out _);
 
-    private static List<string> ParametersOf<T>(DbPreparedQueryCommand<T> prepared)
-        => [.. prepared.DbCommandParams.Cast<DbParameter>().Select(p => $"{p.ParameterName}={p.Value ?? "null"}")];
+    private static DbPreparedQueryCommand<T> Prepare<T>(
+        IDataContext ctx, QueryCommand<T> command, bool storeInCache, out object?[]? values)
+    {
+        var prepared = ctx.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None);
+        values = (prepared as BoundQueryInvocation<T>)?.Values;
+        return BoundQueryInvocation<T>.GetPlan(prepared)!;
+    }
+
+    private static List<string> ParametersOf<T>(DbPreparedQueryCommand<T> prepared, object?[]? values = null)
+        => [.. prepared.DbCommandParams.Cast<DbParameter>()
+            .Select((p, i) => $"{p.ParameterName}={(values is null ? p.Value : values[i]) ?? "null"}")];
 
     [Fact]
     public void RuntimeTvf_WithLiteralArgument_ShouldRenderTheSameStatementAsTheLegacyTvf()
@@ -235,14 +244,14 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         ctx.PurgeQueryCache();
         var id = 5;
 
-        var one = Prepare(ctx, ctx.From(() => T320ProbeTvf.EquivalentOne(id)).Select(r => r.Id), true);
-        var two = Prepare(ctx, ctx.From(() => T320ProbeTvf.EquivalentTwo(id)).Select(r => r.Id), true);
+        var one = Prepare(ctx, ctx.From(() => T320ProbeTvf.EquivalentOne(id)).Select(r => r.Id), true, out var oneValues);
+        var two = Prepare(ctx, ctx.From(() => T320ProbeTvf.EquivalentTwo(id)).Select(r => r.Id), true, out var twoValues);
 
         Normalize(two.DbCommand.CommandText).Should().Be(
             Normalize(one.DbCommand.CommandText),
             "equivalent runtime metadata and argument shapes must render the same statement");
-        ParametersOf(two).Should().Equal(ParametersOf(one), "the equivalent sources bind the same parameter");
-        ParametersOf(two).Should().Equal("id=5");
+        ParametersOf(two, twoValues).Should().Equal(ParametersOf(one, oneValues), "the equivalent sources bind the same parameter");
+        ParametersOf(two, twoValues).Should().Equal("id=5");
     }
 
     /// <summary>
@@ -292,17 +301,17 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
 
         QueryCommand<int> Build() => ctx.From(() => T320ProbeTvf.ProbeTvf(id)).Select(r => r.Id);
 
-        var first = Prepare(ctx, Build(), true);
+        var first = Prepare(ctx, Build(), true, out var firstValues);
         var firstSql = Normalize(first.DbCommand.CommandText);
-        var firstParameters = ParametersOf(first);
+        var firstParameters = ParametersOf(first, firstValues);
         output.WriteLine(
             $"refresh run 1: sql=<<{firstSql}>>; parameters=[{string.Join(", ", firstParameters)}]; "
             + $"plan identity hash={RuntimeHelpers.GetHashCode(first)}");
         firstParameters.Should().Equal("id=1");
 
         id = 2;
-        var second = Prepare(ctx, Build(), true);
-        var secondParameters = ParametersOf(second);
+        var second = Prepare(ctx, Build(), true, out var secondValues);
+        var secondParameters = ParametersOf(second, secondValues);
         output.WriteLine(
             $"refresh run 2: sql=<<{Normalize(second.DbCommand.CommandText)}>>; "
             + $"parameters=[{string.Join(", ", secondParameters)}]; "
@@ -312,8 +321,8 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         ReferenceEquals(first, second).Should().BeTrue(
             "the same context and query shape must reuse the cached plan so the refresh path is exercised");
         Normalize(second.DbCommand.CommandText).Should().Be(firstSql, "a capture change must not re-render the statement");
-        ParametersOf(second).Should().Equal(new[] { "id=2" }, "the cache hit must bind the new capture, never the stale 1");
-        ParametersOf(second).Should().ContainSingle("the parameter name and slot count stay unchanged");
+        secondParameters.Should().Equal(new[] { "id=2" }, "the cache hit must bind the new capture, never the stale 1");
+        secondParameters.Should().ContainSingle("the parameter name and slot count stay unchanged");
     }
 
     [Fact]
@@ -328,17 +337,17 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
             .Join(() => T320ProbeTvf.InnerSource(innerId), (left, right) => left.Id == right.Id)
             .Select(p => p.Item1.Id);
 
-        var first = Prepare(ctx, Build(), true);
+        var first = Prepare(ctx, Build(), true, out var firstValues);
         var firstSql = Normalize(first.DbCommand.CommandText);
-        ParametersOf(first).Should().Equal("outerId=1", "innerId=2");
+        ParametersOf(first, firstValues).Should().Equal("outerId=1", "innerId=2");
         firstSql.Should().Contain("join_probe").And.Contain("inner_probe");
 
         outerId = 5;
-        var second = Prepare(ctx, Build(), true);
+        var second = Prepare(ctx, Build(), true, out var secondValues);
 
         ReferenceEquals(first, second).Should().BeTrue("the two-source shape must reuse the cached plan");
         Normalize(second.DbCommand.CommandText).Should().Be(firstSql, "the statement must not change when a capture changes");
-        ParametersOf(second).Should().Equal(
+        ParametersOf(second, secondValues).Should().Equal(
             new[] { "outerId=5", "innerId=2" },
             "the refresh must update exactly the changed slot and keep the other one");
     }
@@ -354,16 +363,16 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
             .Join(() => T320ProbeTvf.JoinSource(joinId), (left, right) => left.Id == right.Id)
             .Select(p => p.Item1.Id);
 
-        var first = Prepare(ctx, Build(), true);
+        var first = Prepare(ctx, Build(), true, out var firstValues);
         var firstSql = Normalize(first.DbCommand.CommandText);
-        ParametersOf(first).Should().Equal("joinId=3");
+        ParametersOf(first, firstValues).Should().Equal("joinId=3");
 
         joinId = 4;
-        var second = Prepare(ctx, Build(), true);
+        var second = Prepare(ctx, Build(), true, out var secondValues);
 
         ReferenceEquals(first, second).Should().BeTrue("an ordinary join over a runtime TVF must reuse its cached plan");
         Normalize(second.DbCommand.CommandText).Should().Be(firstSql);
-        ParametersOf(second).Should().Equal(new[] { "joinId=4" }, "the join-source capture must refresh on a cache hit");
+        ParametersOf(second, secondValues).Should().Equal(new[] { "joinId=4" }, "the join-source capture must refresh on a cache hit");
     }
 
     [Fact]
@@ -382,11 +391,11 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         var id = 11;
         QueryCommand<int> Build(IDataContext context) => context.From(() => T320ProbeTvf.ProbeTvf(id)).Select(r => r.Id);
 
-        var a1 = ParametersOf(Prepare(ctxA, Build(ctxA), true));
+        var a1 = ParametersOf(Prepare(ctxA, Build(ctxA), true, out var a1Values), a1Values);
         id = 22;
-        var b1 = ParametersOf(Prepare(ctxB, Build(ctxB), true));
+        var b1 = ParametersOf(Prepare(ctxB, Build(ctxB), true, out var b1Values), b1Values);
         id = 11;
-        var a2 = ParametersOf(Prepare(ctxA, Build(ctxA), true));
+        var a2 = ParametersOf(Prepare(ctxA, Build(ctxA), true, out var a2Values), a2Values);
 
         output.WriteLine(
             $"two contexts: A run 1=[{string.Join(", ", a1)}]; B run 1=[{string.Join(", ", b1)}]; "
@@ -633,12 +642,12 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
     // ---- MX-CHAIN / AC05: the argument survives every supported copy path -------------------------
 
     /// <summary>
-    /// A byte-for-byte identical parameter list for the same captured value: a null value is kept as a
-    /// parameter slot with a <c>DBNull</c> value (unlike a *literal* null, which is an inline SQL NULL).
+    /// Reads invocation values in parameter order. A captured null still has a parameter slot;
+    /// a literal null renders as SQL NULL without a slot.
     /// </summary>
-    private static List<string> ParameterValues<T>(DbPreparedQueryCommand<T> prepared)
+    private static List<string> ParameterValues<T>(DbPreparedQueryCommand<T> prepared, object?[] values)
         => [.. prepared.DbCommandParams.Cast<DbParameter>()
-            .Select(p => p.Value is null or DBNull ? $"{p.ParameterName}=<null>" : $"{p.ParameterName}={p.Value}")];
+            .Select((p, i) => values[i] is null or DBNull ? $"{p.ParameterName}=<null>" : $"{p.ParameterName}={values[i]}")];
 
     /// <summary>
     /// MX-CHAIN (AC05): SQLite expresses no lateral source, so the only correlation a runtime TVF argument
@@ -709,15 +718,15 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         var aId = 11;
         var bId = 22;
 
-        var consumerA = Prepare(ctxA, ctxA.From(() => T320ProbeTvf.ProbeTvf(aId)).Select(r => r.Id), true);
-        var consumerB = Prepare(ctxB, ctxB.From(() => T320ProbeTvf.ProbeTvf(bId)).Select(r => r.Id), true);
+        var consumerA = Prepare(ctxA, ctxA.From(() => T320ProbeTvf.ProbeTvf(aId)).Select(r => r.Id), true, out var consumerAValues);
+        var consumerB = Prepare(ctxB, ctxB.From(() => T320ProbeTvf.ProbeTvf(bId)).Select(r => r.Id), true, out var consumerBValues);
 
         var cloneA = (EntityBuilder<ISimpleEntity>)ctxA.From(() => T320ProbeTvf.ProbeTvf(aId)).Clone();
-        var clonedA = Prepare(ctxA, cloneA.Select(r => r.Id), true);
+        var clonedA = Prepare(ctxA, cloneA.Select(r => r.Id), true, out var clonedAValues);
 
-        var parametersA = ParametersOf(consumerA);
-        var parametersB = ParametersOf(consumerB);
-        var parametersClonedA = ParametersOf(clonedA);
+        var parametersA = ParametersOf(consumerA, consumerAValues);
+        var parametersB = ParametersOf(consumerB, consumerBValues);
+        var parametersClonedA = ParametersOf(clonedA, clonedAValues);
         output.WriteLine(
             $"two consumers: A=[{string.Join(", ", parametersA)}] sql=<<{Normalize(consumerA.DbCommand.CommandText)}>>; "
             + $"B=[{string.Join(", ", parametersB)}] sql=<<{Normalize(consumerB.DbCommand.CommandText)}>>; "
@@ -765,18 +774,18 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         var hinted = Prepare(
             ctx,
             ctx.From(() => T320ProbeTvf.ProbeTvf(id), options => options.WithSubQueryHint("NestLoop(t1)")).Select(r => r.Id),
-            true);
+            true, out var hintedValues);
         var hintedSql = Normalize(hinted.DbCommand.CommandText);
-        output.WriteLine($"FromOptions hint: sql=<<{hintedSql}>>; parameters=[{string.Join(", ", ParametersOf(hinted))}]");
+        output.WriteLine($"FromOptions hint: sql=<<{hintedSql}>>; parameters=[{string.Join(", ", ParametersOf(hinted, hintedValues))}]");
 
         // TableSample: a table sample applies to a physical table, not to a function source, so it is
         // dropped for the same reason and stays plan-neutral.
         var sampled = Prepare(
             ctx,
             ctx.From(() => T320ProbeTvf.ProbeTvf(id), options => options.TableSample(50)).Select(r => r.Id),
-            true);
+            true, out var sampledValues);
         var sampledSql = Normalize(sampled.DbCommand.CommandText);
-        output.WriteLine($"FromOptions sample: sql=<<{sampledSql}>>; parameters=[{string.Join(", ", ParametersOf(sampled))}]");
+        output.WriteLine($"FromOptions sample: sql=<<{sampledSql}>>; parameters=[{string.Join(", ", ParametersOf(sampled, sampledValues))}]");
 
         hintedSql.Should().Be(plainSql, "a derived-table hint is SQL-identity-neutral on a function source");
         sampledSql.Should().Be(plainSql, "a table sample is SQL-identity-neutral on a function source");
@@ -784,8 +793,8 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         ReferenceEquals(hinted, plain).Should().BeTrue("a neutral option must reuse the same plan instance, not fork the identity");
         ReferenceEquals(sampled, plain).Should().BeTrue("a neutral option must reuse the same plan instance, not fork the identity");
         QueryPlanStore.Values.Count().Should().Be(plansAfterPlain, "no neutral option may add a plan entry");
-        ParametersOf(hinted).Should().Equal(new[] { "id=42" });
-        ParametersOf(sampled).Should().Equal(new[] { "id=42" });
+        ParametersOf(hinted, hintedValues).Should().Equal(new[] { "id=42" });
+        ParametersOf(sampled, sampledValues).Should().Equal(new[] { "id=42" });
 
         // A source-level lock is not neutral: SQLite cannot express it on any source, so it fails closed
         // instead of silently sharing the unlocked plan.
@@ -815,28 +824,32 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
 
         QueryCommand<int> Build() => ctx.From(() => T320ProbeTvf.ProbeTvfText(text)).Select(r => r.Id);
 
-        var first = Prepare(ctx, Build(), true);
+        var first = Prepare(ctx, Build(), true, out var firstValues);
         var firstSql = Normalize(first.DbCommand.CommandText);
-        ParameterValues(first).Should().Equal(new[] { "text=<null>" }, "a captured null is a bound slot with a DBNull value");
+        var firstParameters = ParameterValues(first, firstValues!);
+        firstParameters.Should().Equal(new[] { "text=<null>" }, "a captured null still occupies one parameter slot");
 
         text = "abc";
-        var second = Prepare(ctx, Build(), true);
-        ParameterValues(second).Should().Equal(new[] { "text=abc" }, "the value transition replaces the parameter value");
+        var second = Prepare(ctx, Build(), true, out var secondValues);
+        var secondParameters = ParameterValues(second, secondValues!);
+        secondParameters.Should().Equal(new[] { "text=abc" }, "the value transition replaces the parameter value");
 
         text = null;
-        var third = Prepare(ctx, Build(), true);
-        ParameterValues(third).Should().Equal(
+        var third = Prepare(ctx, Build(), true, out var thirdValues);
+        var thirdParameters = ParameterValues(third, thirdValues!);
+        thirdParameters.Should().Equal(
             new[] { "text=<null>" },
             "the return transition must clear the slot again, never keep the stale 'abc'");
 
         text = "xyz";
-        var fourth = Prepare(ctx, Build(), true);
-        ParameterValues(fourth).Should().Equal(new[] { "text=xyz" }, "a later transition replaces the slot again");
+        var fourth = Prepare(ctx, Build(), true, out var fourthValues);
+        var fourthParameters = ParameterValues(fourth, fourthValues!);
+        fourthParameters.Should().Equal(new[] { "text=xyz" }, "a later transition replaces the slot again");
 
         output.WriteLine(
-            $"null transitions: sql=<<{firstSql}>>; run1=[{string.Join(", ", ParameterValues(first))}]; "
-            + $"run2=[{string.Join(", ", ParameterValues(second))}]; run3=[{string.Join(", ", ParameterValues(third))}]; "
-            + $"run4=[{string.Join(", ", ParameterValues(fourth))}]; "
+            $"null transitions: sql=<<{firstSql}>>; run1=[{string.Join(", ", firstParameters)}]; "
+            + $"run2=[{string.Join(", ", secondParameters)}]; run3=[{string.Join(", ", thirdParameters)}]; "
+            + $"run4=[{string.Join(", ", fourthParameters)}]; "
             + $"refEq12={ReferenceEquals(first, second)}; refEq13={ReferenceEquals(first, third)}; "
             + $"refEq14={ReferenceEquals(first, fourth)}; planStore={QueryPlanStore.Values.Count()}; "
             + $"anyCache={ctx.AnyCommand!.Value.Cache}");

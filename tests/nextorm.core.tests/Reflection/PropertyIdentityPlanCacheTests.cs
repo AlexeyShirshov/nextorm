@@ -45,11 +45,11 @@ public sealed class PropertyIdentityPlanCacheTests
 
         var first = Prepare(ctx, WhereCaptured(entity, 1));
         ExpressionPlanEqualityComparer.ResetCounters();
-        var second = Prepare(ctx, WhereCaptured(entity, 2));
+        var second = (BoundQueryInvocation<int>)Prepare(ctx, WhereCaptured(entity, 2));
 
-        ReferenceEquals(first, second).Should().BeTrue("captured values are not part of the plan key");
+        second.Plan.Should().BeSameAs(BoundQueryInvocation<int>.GetPlan(first), "captured values are not part of the plan key");
         ParamRefreshRecipe.FastBindHits.Should().Be(1);
-        second.DbCommandParams[0].Value.Should().Be(2, "a warm hit must bind the new closure value");
+        second.Values.Should().Equal([2], "a warm hit must bind the new closure value");
     }
 
     [Fact]
@@ -61,12 +61,13 @@ public sealed class PropertyIdentityPlanCacheTests
 
         var first = Prepare(ctx, WhereInheritedCaptured(entity, 1));
         ExpressionPlanEqualityComparer.ResetCounters();
-        var second = Prepare(ctx, WhereInheritedCaptured(entity, 2));
+        var second = (BoundQueryInvocation<int>)Prepare(ctx, WhereInheritedCaptured(entity, 2));
 
-        ReferenceEquals(first, second).Should().BeTrue("the inherited property's captured value is not part of the plan key");
+        second.Plan.Should().BeSameAs(BoundQueryInvocation<int>.GetPlan(first),
+            "the inherited property's captured value is not part of the plan key");
         ParamRefreshRecipe.FastBindHits.Should().Be(1);
-        second.DbCommandParams[0].Value.Should().Be(2, "the warm plan binds the new closure value");
-        second.CommandText.Should().Contain("InheritedValue", "the inherited property must resolve to its mapped column");
+        second.Values.Should().Equal([2], "the warm invocation binds the new closure value");
+        second.Plan.CommandText.Should().Contain("InheritedValue", "the inherited property must resolve to its mapped column");
     }
 
     [Fact]
@@ -110,6 +111,6 @@ public sealed class PropertyIdentityPlanCacheTests
     private static QueryCommand<int> WhereInheritedCaptured(EntityBuilder<DerivedEntity> entity, int value)
         => entity.Where(x => x.InheritedValue > value).Select(x => x.InheritedValue);
 
-    private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext context, QueryCommand<T> command)
-        => (DbPreparedQueryCommand<T>)context.GetPreparedQueryCommand(command, false, true, CancellationToken.None);
+    private static IPreparedQueryCommand<T> Prepare<T>(IDataContext context, QueryCommand<T> command)
+        => context.GetPreparedQueryCommand(command, false, true, CancellationToken.None);
 }

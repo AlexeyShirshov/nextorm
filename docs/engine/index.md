@@ -23,7 +23,7 @@ Use this map to see which component handles each part of the route:
 | [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) | The query builder: fluent LINQ surface (`Where`, `Join`, `Select`, ...), created by a `From*` factory. |
 | [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) | The built query — source, projection, filters, joins, sorting, hints — and its terminals. |
 | `QueryPreparer` | Turns the expression tree into prepared clause pieces and plan hashes (via expression visitors). |
-| `QueryPlan` / `QueryPlanStore` | The structural plan key and the per-thread implicit plan cache. |
+| `QueryPlan` / `QueryPlanStore` | The structural plan key and the process-wide implicit SQL plan cache. |
 | `SqlBuilder` + `ISqlDialect` | Renders the dialect-specific SQL text and the parameter list. |
 | `RowMapperFactory` / `RowMaterializer` | Compiles the row mapper (`IDataRecord` → entity / DTO). |
 | `DbCommand` (via `DataContext.CreateCommand`) | The provider command carrying the SQL text and the bound parameters. |

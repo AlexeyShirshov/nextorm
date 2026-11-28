@@ -55,12 +55,18 @@ public abstract class SelectGroupSqlGenerationTestsBase
 
     private static (string Sql, string Parameters) Prepare<T>(IDataContext ctx, QueryCommand<T> cmd)
     {
-        var prepared = (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
+        var invocation = ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
+        var prepared = BoundQueryInvocation<T>.GetPlan(invocation)!;
+        var values = (invocation as BoundQueryInvocation<T>)?.Values;
         var sql = (prepared.SqlStmt ?? string.Empty).Replace("\r\n", "\n");
         var parameters = string.Join(
             ";",
             prepared.DbCommand.Parameters.Cast<DbParameter>()
-                .Select(p => p.ParameterName + "=" + (p.Value is DBNull ? "NULL" : p.Value)));
+                .Select((parameter, ordinal) =>
+                {
+                    var value = values is null ? parameter.Value : values[ordinal];
+                    return parameter.ParameterName + "=" + (value is DBNull ? "NULL" : value);
+                }));
         return (sql, parameters);
     }
 

@@ -205,8 +205,9 @@ public class Iteration14CteLookupTests
         var outer = BuildNestedReadTyped(ctx, "read_inner", "read_outer", threshold);
         outer.HasDataModifyingCte.Should().BeFalse();
 
-        var first = (DbPreparedQueryCommand<CteIdRow>)ctx.GetPreparedQueryCommand(outer, false, true, CancellationToken.None);
-        var second = (DbPreparedQueryCommand<CteIdRow>)ctx.GetPreparedQueryCommand(outer, false, true, CancellationToken.None);
+        var cold = (BoundQueryInvocation<CteIdRow>)ctx.GetPreparedQueryCommand(outer, false, true, CancellationToken.None);
+        var first = cold.Plan;
+        var second = BoundQueryInvocation<CteIdRow>.GetPlan(ctx.GetPreparedQueryCommand(outer, false, true, CancellationToken.None));
 
         ReferenceEquals(first, second).Should().BeTrue("a read-only nested CTE must keep the warm plan-cache instance");
 
@@ -219,7 +220,7 @@ public class Iteration14CteLookupTests
 
         var parameters = first.DbCommandParams.Cast<DbParameter>().ToArray();
         parameters.Should().ContainSingle("the nested-read CTE captures exactly one value");
-        parameters[0].Value.Should().Be(threshold);
+        cold.Values.Should().Equal([threshold]);
         parameters[0].ParameterName.Should().Be("threshold");
 
         // Independent expected snapshot: prepare a structurally identical nested-read CTE through a
@@ -232,9 +233,8 @@ public class Iteration14CteLookupTests
 
         parameters.Select(p => p.ParameterName)
             .Should().Equal(expectedParams.Select(p => p.ParameterName), "parameter names and order are provider-independent");
-        parameters.Select(p => p.Value)
-            .Should().Equal(expectedParams.Select(p => p.Value), "parameter values are provider-independent");
-        parameters.Select(p => p.Value!.GetType())
+        cold.Values.Should().Equal(expectedParams.Select(p => p.Value), "parameter values are provider-independent");
+        cold.Values.Select(value => value!.GetType())
             .Should().Equal(expectedParams.Select(p => p.Value!.GetType()), "parameter value CLR types are provider-independent");
     }
 
@@ -268,7 +268,8 @@ public class Iteration14CteLookupTests
             "the shared warm lookup policy must allocate nothing");
 
         var again = ctx.GetPreparedQueryCommand(outer, createEnumerator: false, storeInCache: true, CancellationToken.None);
-        ReferenceEquals(warm, again).Should().BeTrue("all terminal families share one warm plan identity");
+        BoundQueryInvocation<CteIdRow>.GetPlan(again).Should().BeSameAs(BoundQueryInvocation<CteIdRow>.GetPlan(warm),
+            "all terminal families share one warm plan identity");
     }
 
     [Fact]

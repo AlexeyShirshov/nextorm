@@ -549,30 +549,30 @@ internal static class InValues
     /// <param name="condition">The prepared condition to scan.</param>
     /// <param name="command">The command whose plan key the shape belongs to.</param>
     /// <param name="partitions">The evaluated value-list partitions, or <c>null</c>.</param>
-    /// <param name="hasMatch">Whether the condition contained any value-list or lookup node.</param>
+    /// <param name="shape">The exact, value-free collection shape, or <c>null</c> if no node matched.</param>
     /// <param name="valuesStable">
     /// Whether every matched value list and lookup collection is shape-stable (an inline array of
     /// immutable values or a value-type <c>new</c> expression). A stable shape cannot change between
     /// two executions of a cached plan, so its partitions and hash need not be re-evaluated on reuse.
     /// </param>
     /// <returns>The shape hash, or <c>0</c> when nothing matched.</returns>
-    public static int ComputeShapeHash(Expression condition, QueryCommand command, out Dictionary<Expression, InValuesPartition>? partitions, out bool hasMatch, out bool valuesStable)
+    public static int ComputeShapeHash(Expression condition, QueryCommand command, out Dictionary<Expression, InValuesPartition>? partitions, out InValuesShape? shape, out bool valuesStable)
     {
         var visitor = new ShapeVisitor(command);
         visitor.Visit(condition);
         partitions = visitor.Partitions;
-        hasMatch = visitor.HasMatch;
         valuesStable = visitor.AllValuesStable;
-        return visitor.HasMatch ? visitor.Hash : 0;
+        shape = visitor.Tokens is { } tokens ? new InValuesShape(tokens) : null;
+        return shape?.GetHashCode() ?? 0;
     }
 
     private sealed class ShapeVisitor(QueryCommand command) : ExpressionVisitor
     {
-        private XxHash32 _hash = new();
+        private enum ShapeKind { Scalar, Tuple, Lookup }
+
         public Dictionary<Expression, InValuesPartition>? Partitions { get; private set; }
-        public bool HasMatch { get; private set; }
         public bool AllValuesStable { get; private set; } = true;
-        public int Hash => _hash.ToHashCode();
+        public List<int>? Tokens { get; private set; }
 
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
@@ -587,24 +587,25 @@ internal static class InValues
                 // A tuple value list is shaped by its arity, row count and per-cell null layout (never by
                 // the runtime values), so two collections that produce the same SQL share a plan while a
                 // changed null layout re-keys it.
+                var tokens = Tokens ??= [];
                 if (partition.Tuple is { } tuple)
                 {
-                    _hash.Add(tuple.Arity);
-                    _hash.Add(tuple.Rows.Count);
+                    tokens.Add((int)ShapeKind.Tuple);
+                    tokens.Add(tuple.Arity);
+                    tokens.Add(tuple.Rows.Count);
                     for (var r = 0; r < tuple.Rows.Count; r++)
                     {
                         var row = tuple.Rows[r];
                         for (var c = 0; c < row.Length; c++)
-                            _hash.Add(row[c] is null);
+                            tokens.Add(row[c] is null ? 1 : 0);
                     }
                 }
                 else
                 {
-                    _hash.Add(partition.NonNull.Count);
-                    _hash.Add(partition.HasNull);
+                    tokens.Add((int)ShapeKind.Scalar);
+                    tokens.Add(partition.NonNull.Count);
+                    tokens.Add(partition.HasNull ? 1 : 0);
                 }
-
-                HasMatch = true;
             }
 
             CheckLookup(node);
@@ -640,8 +641,9 @@ internal static class InValues
             var entries = DictionaryLookup.Evaluate(collectionExp, command);
             command.LookupPartitions ??= new Dictionary<Expression, List<LookupEntry>>(ReferenceEqualityComparer.Instance);
             command.LookupPartitions[node] = entries;
-            _hash.Add(entries.Count);
-            HasMatch = true;
+            var tokens = Tokens ??= [];
+            tokens.Add((int)ShapeKind.Lookup);
+            tokens.Add(entries.Count);
         }
     }
 

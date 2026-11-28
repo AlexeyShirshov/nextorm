@@ -5,8 +5,9 @@ namespace NextORM.Core;
 /// <summary>
 /// Immutable recipe that mints the ADO.NET command a prepared query executes on a given connection.
 /// It is the context-free extraction of the planner's former eager command-construction block: the
-/// same SQL text, the same optional command timeout and the same ordered parameter seeds, bound with
-/// the executing context's command-aware parameter factory.
+/// same SQL text, optional command timeout, and ordered parameter layout, bound with the executing
+/// context's command-aware parameter factory. An implicit plan gets its captured values from the
+/// invocation, not from this recipe.
 /// <para>
 /// It stores value data only — never a connection, a context, an interceptor or a command — so a
 /// prepared command can keep it for the lifetime of a cached plan without rooting either the planning
@@ -15,13 +16,21 @@ namespace NextORM.Core;
 /// </summary>
 internal readonly struct PreparedCommandFactory
 {
-    private readonly Parameter[] _seeds;
+    private readonly Seed[] _seeds;
 
-    internal PreparedCommandFactory(string commandText, int? commandTimeout, Parameter[] seeds)
+    internal PreparedCommandFactory(string commandText, int? commandTimeout, IReadOnlyList<Parameter>? parameters, bool requiresInvocationValues = false)
     {
         CommandText = commandText;
         CommandTimeout = commandTimeout;
-        _seeds = seeds;
+        RequiresInvocationValues = requiresInvocationValues;
+        _seeds = parameters is { Count: > 0 } ? new Seed[parameters.Count] : [];
+        for (var i = 0; i < _seeds.Length; i++)
+        {
+            var parameter = parameters![i];
+            // CapturedKey belongs to the render: it can reach the live expression and query registry.
+            var value = requiresInvocationValues ? null : parameter.Value;
+            _seeds[i] = new Seed(parameter.Name, value, parameter.DbType, parameter.Precision, parameter.Scale);
+        }
     }
 
     /// <summary>The statement text the command is created with.</summary>
@@ -30,14 +39,32 @@ internal readonly struct PreparedCommandFactory
     /// <summary>The resolved timeout, or <see langword="null"/> to keep the provider default.</summary>
     internal int? CommandTimeout { get; }
 
+    internal bool RequiresInvocationValues { get; }
+
+    internal int ParameterCount => _seeds.Length;
+
     /// <summary>The plan-time parameter seeds, in placeholder order.</summary>
-    internal IReadOnlyList<Parameter> Seeds => _seeds;
+    internal IReadOnlyList<Seed> Seeds => _seeds;
+
+    internal readonly record struct Seed(string Name, object? Value, System.Data.DbType? DbType, byte? Precision, byte? Scale);
+
+    internal static bool IsShareableSeedValue(object? value)
+    {
+        if (value is null or DBNull or string or decimal or DateTime or DateTimeOffset or TimeSpan
+            or DateOnly or TimeOnly or Guid or Half or Int128 or UInt128)
+        {
+            return true;
+        }
+
+        var type = value.GetType();
+        return type.IsPrimitive || type.IsEnum;
+    }
 
     /// <summary>
     /// Creates a command on <paramref name="connection"/> and seeds its parameters. The caller owns the
     /// returned command and must dispose it when it is not transferred to a state or a reader owner.
     /// </summary>
-    internal DbCommand Create(DbConnection connection, Func<DbCommand, string, object?, DbParameter> createParam)
+    internal DbCommand Create(DbConnection connection, Func<DbCommand, string, object?, DbParameter> createParam, object?[]? values)
     {
         var command = connection.CreateCommand();
         try
@@ -49,7 +76,7 @@ internal readonly struct PreparedCommandFactory
             for (var i = 0; i < _seeds.Length; i++)
             {
                 var seed = _seeds[i];
-                var dbParameter = createParam(command, seed.Name, seed.Value);
+                var dbParameter = createParam(command, seed.Name, values is null ? seed.Value : values[i]);
                 ApplyParameterType(dbParameter, seed);
                 command.Parameters.Add(dbParameter);
             }
@@ -93,7 +120,7 @@ internal readonly struct PreparedCommandFactory
     /// Every command is minted per connection from the same seeds, so each one carries the same
     /// provider type.
     /// </summary>
-    private static void ApplyParameterType(DbParameter dbParameter, Parameter parameter)
+    private static void ApplyParameterType(DbParameter dbParameter, Seed parameter)
     {
         if (parameter.DbType is { } dbType)
             dbParameter.DbType = dbType;

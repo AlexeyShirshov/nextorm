@@ -1,0 +1,504 @@
+using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
+using FluentAssertions;
+using FluentAssertions.Execution;
+using NextORM.Sqlite;
+
+namespace NextORM.Integration.Tests;
+
+public sealed partial class SqliteSharedPlanBindingTests
+{
+    [Fact]
+    public void RawRecipe_DescribedDescriptorDoesNotTransferTheFirstCommand()
+    {
+        using var connection = OpenSeededConnection();
+        using var context = new SqliteDataContext(connection, new DataContextBuilder());
+        var fresh = Build(context);
+        var (priorCommand, priorContext) = WarmFirstPlan(context, fresh);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        using var assertions = new AssertionScope();
+        priorCommand.IsAlive.Should().BeFalse("a raw hit may not borrow the first component's prepared descriptor");
+        priorContext.IsAlive.Should().BeFalse();
+        fresh.PreparedComponents.Should().BeNull("only the SQL holder can be reused for an opaque raw hit");
+        fresh.PrepareCommand(TestContext.Current.CancellationToken);
+        var descriptor = fresh.PreparedComponents!.Single().Should().BeOfType<DescribedOwnerComponent.Descriptor>().Which;
+        ReferenceEquals(descriptor.Owner, fresh).Should().BeTrue();
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (WeakReference Command, WeakReference Context) WarmFirstPlan(SqliteDataContext context, QueryCommand<int> fresh)
+        {
+            using var priorConnection = OpenSeededConnection();
+            using var priorContext = new SqliteDataContext(priorConnection, new DataContextBuilder());
+            var prior = Build(priorContext);
+            var token = TestContext.Current.CancellationToken;
+            var cold = priorContext.GetPreparedQueryCommand(prior, false, true, token);
+            cold.ToList(priorContext).Should().Equal(1);
+            var reuses = QueryPlanner.RecipeReuses;
+            var warm = context.GetPreparedQueryCommand(fresh, false, true, token);
+            warm.ToList(context).Should().Equal(1);
+            QueryPlanner.RecipeReuses.Should().Be(reuses + 1);
+            BoundQueryInvocation<int>.GetPlan(warm).Should().BeSameAs(BoundQueryInvocation<int>.GetPlan(cold));
+            return (new WeakReference(prior), new WeakReference(priorContext));
+        }
+
+        static QueryCommand<int> Build(SqliteDataContext context)
+            => context.From<BindingRow>().WithTag("raw opaque descriptor ownership").Where(row => row.Id == 1)
+                .WithComponent(new DescribedOwnerComponent()).Select(row => row.Id);
+    }
+
+    private sealed class DescribedOwnerComponent : IQueryComponent, IQueryComponentShape
+    {
+        public Type Slot => typeof(DescribedOwnerComponent);
+        public QueryComponentContribution Contribution => QueryComponentContribution.AdditivePredicate;
+        public object? ShapeState => null;
+        public int ShapeSelectorCount => 0;
+        public LambdaExpression[] ShapeSelectors => [];
+        public LambdaExpression GetShapeSelector(int index) => throw new ArgumentOutOfRangeException(nameof(index));
+        public IQueryComponentDescriptor Prepare(IQueryComponentPrepareContext context) => new Descriptor(context.Command);
+        public void BuildQuery(IQueryComponentBuildContext context) { }
+
+        internal sealed class Descriptor(QueryCommand owner) : IQueryComponentDescriptor
+        {
+            internal QueryCommand Owner { get; } = owner;
+            public Type Slot => typeof(DescribedOwnerComponent);
+            public Type ComponentType => Slot;
+            public QueryComponentContribution Contribution => QueryComponentContribution.AdditivePredicate;
+            public string Discriminator => "described-owner";
+            public int StructuralHash => 517;
+            public bool StructurallyEquals(IQueryComponentDescriptor? other) => other is Descriptor;
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RawRecipe_DoesNotShareMutableNestedCommandsBetweenCallers(bool useCte)
+    {
+        using var connection = OpenSeededConnection();
+        using var context = new SqliteDataContext(connection, new DataContextBuilder());
+        var token = TestContext.Current.CancellationToken;
+        var cold = context.GetPreparedQueryCommand(Build(), false, true, token);
+        var before = QueryPlanner.RecipeReuses;
+        var first = Build();
+        var firstWarm = context.GetPreparedQueryCommand(first, false, true, token);
+        var second = Build();
+        var secondWarm = context.GetPreparedQueryCommand(second, false, true, token);
+        QueryPlanner.RecipeReuses.Should().Be(before + 2);
+        BoundQueryInvocation<int>.GetPlan(firstWarm).Should().BeSameAs(BoundQueryInvocation<int>.GetPlan(cold));
+        BoundQueryInvocation<int>.GetPlan(secondWarm).Should().BeSameAs(BoundQueryInvocation<int>.GetPlan(cold));
+
+        var firstBody = Body(first);
+        var secondBody = Body(second);
+        firstBody.Should().NotBeSameAs(secondBody, "a raw hit must own its mutable nested command");
+        firstBody.ResetPreparation();
+        secondBody.IsPrepared.Should().BeTrue();
+        secondWarm.ToList(context).Should().BeEquivalentTo(useCte ? [2] : new[] { 1, 2 });
+
+        QueryCommand Body(QueryCommand<int> command)
+            => useCte ? command.Ctes!.Single().Query : command.UnionQuery!;
+
+        QueryCommand<int> Build()
+        {
+            var body = context.From<BindingRow>().Where(row => row.Id == 2).Select(row => row.Id);
+            return useCte
+                ? context.With("issue16_owned_raw_body", body).From("issue16_owned_raw_body").Select(row => row["Id"].AsInt)
+                : context.From<BindingRow>().WithTag("raw nested body identity").Where(row => row.Id == 1)
+                    .Select(row => row.Id).UnionAll(body);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RawRecipe_RebindsNestedWhereWithoutRetainingItsCapture(bool useCte)
+    {
+        using var firstConnection = OpenSeededConnection();
+        using var secondConnection = OpenSeededConnection();
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+        var (holder, capture) = Execute(first, second, useCte);
+
+        firstTap.LastParameters.Should().Contain((useCte ? 0 : 1, "Target", 2));
+        secondTap.LastParameters.Should().Contain((useCte ? 0 : 1, "Target", 1));
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        capture.IsAlive.Should().BeFalse("the nested WHERE recipe and descriptor must release their first capture");
+        QueryPlanStore.Values.Should().Contain(holder);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (DbPreparedQueryCommand<int> Holder, WeakReference Capture) Execute(
+            SqliteDataContext first, SqliteDataContext second, bool useCte)
+        {
+            var owner = new WhereOwner { Target = 2 };
+            Expression<Func<BindingRow, bool>> nestedFilter = row => row.Id == owner.Target;
+            var (entityFilter, cteFilter) = OuterFilters(1, 0);
+            var token = TestContext.Current.CancellationToken;
+
+            QueryCommand<int> Build(SqliteDataContext context)
+            {
+                var body = context.From<BindingRow>().Where(nestedFilter).Select(row => row.Id);
+                if (useCte)
+                {
+                    const string name = "issue16_nested_raw_where";
+                    return context.With(name, body).From(name).Where(cteFilter).Select(row => row["Id"].AsInt);
+                }
+
+                return context.From<BindingRow>().WithTag("nested raw where ownership")
+                    .Where(entityFilter).Select(row => row.Id).UnionAll(body);
+            }
+
+            var cold = first.GetPreparedQueryCommand(Build(first), false, true, token);
+            cold.ToList(first).Should().BeEquivalentTo(useCte ? [2] : new[] { 1, 2 });
+            owner.Target = 1;
+            var reuses = QueryPlanner.RecipeReuses;
+            var warm = second.GetPreparedQueryCommand(Build(second), false, true, token);
+            warm.ToList(second).Should().BeEquivalentTo(useCte ? [1] : new[] { 1, 1 });
+            QueryPlanner.RecipeReuses.Should().Be(reuses + 1, "the second call must stage the nested recipe");
+            var holder = BoundQueryInvocation<int>.GetPlan(cold)!;
+            BoundQueryInvocation<int>.GetPlan(warm).Should().BeSameAs(holder);
+            return (holder, new WeakReference(owner));
+        }
+
+        static (Expression<Func<BindingRow, bool>>, Expression<Func<TableAlias, bool>>) OuterFilters(int outerId, int lowerBound)
+            => (row => row.Id == outerId, row => row["Id"].AsInt > lowerBound);
+    }
+
+    [Fact]
+    public void RawRecipe_RebindsScalarProjectionWithoutRetainingTheFirstOwner()
+    {
+        var tap = new BindingTap();
+        using var connection = OpenSeededConnection();
+        using var context = new SqliteDataContext(connection, new DataContextBuilder().AddInterceptor(tap));
+
+        var (owner, holder) = Execute(context, tap);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        owner.IsAlive.Should().BeFalse("the raw projection must not keep the first capture alive");
+        QueryPlanStore.Values.Should().Contain(holder);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (WeakReference Owner, DbPreparedQueryCommand<int> Holder) Execute(SqliteDataContext context, BindingTap tap)
+        {
+            var owner = new WhereOwner { Target = 10 };
+            QueryCommand<int> Build() => context.From<BindingRow>().WithTag("raw scalar projection ownership")
+                .Where(row => row.Id == 1).Select(row => row.Id + owner.Target);
+
+            var token = TestContext.Current.CancellationToken;
+            var cold = context.GetPreparedQueryCommand(Build(), false, true, token);
+            cold.ToList(context).Should().Equal(11);
+            tap.LastParameters.Should().Equal((0, "Target", 10));
+
+            owner.Target = 20;
+            var fresh = Build();
+            var reuses = QueryPlanner.RecipeReuses;
+            var warm = context.GetPreparedQueryCommand(fresh, false, true, token);
+            warm.ToList(context).Should().Equal(21);
+            tap.LastParameters.Should().Equal((0, "Target", 20));
+            QueryPlanner.RecipeReuses.Should().BeGreaterThan(reuses, "the raw preparation path must still be used");
+            var holder = BoundQueryInvocation<int>.GetPlan(cold)!;
+            BoundQueryInvocation<int>.GetPlan(warm).Should().BeSameAs(holder);
+            return (new WeakReference(owner), holder);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ClausePlan_ReusesItsHolderWithoutRetainingTheFirstOwner(bool join)
+    {
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        using var firstConnection = OpenSeededConnection();
+        using var secondConnection = OpenSeededConnection();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+
+        var (firstOwner, firstPlan) = Execute(first, useJoin: join, firstCall: true);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        firstOwner.IsAlive.Should().BeFalse("the normalized key must not retain the authored clause owner");
+
+        var (_, secondPlan) = Execute(second, useJoin: join, firstCall: false);
+        secondPlan.Should().BeSameAs(firstPlan);
+        if (join)
+        {
+            firstTap.LastParameters.Should().Equal((0, "JoinTarget", 1));
+            secondTap.LastParameters.Should().Equal((0, "JoinTarget", 2));
+        }
+        else
+        {
+            firstTap.LastParameters.Should().Equal((0, "SortDirection", 1));
+            secondTap.LastParameters.Should().Equal((0, "SortDirection", -1));
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (WeakReference Owner, DbPreparedQueryCommand<int>? Plan) Execute(
+            SqliteDataContext context, bool useJoin, bool firstCall)
+        {
+            var owner = new ClauseOwner(firstCall ? 1 : 2, firstCall ? 1 : -1);
+            var command = useJoin
+                ? context.From<BindingRow>()
+                    .Join(context.From<CorrelationRow>(), (left, right) => left.Id == right.Id && right.Id == owner.JoinTarget)
+                    .Select(pair => pair.Item1.Id)
+                : context.From<BindingRow>().OrderBy(row => row.Id * owner.SortDirection).Select(row => row.Id);
+            // Cache the ordinary plan without publishing an executable raw recipe for this graph.
+            var invocation = context.GetStreamingRowsQueryCommand(command, TestContext.Current.CancellationToken);
+            int[] expected = useJoin ? [owner.JoinTarget] : firstCall ? [1, 2] : [2, 1];
+            invocation.ToList(context).Should().Equal(expected);
+            return (new WeakReference(owner), BoundQueryInvocation<int>.GetPlan(invocation));
+        }
+    }
+
+    [Fact]
+    public void CapturedObjectProjection_ReusesThePlanWithoutRetainingTheRecipeOwner()
+    {
+        using var firstConnection = OpenSeededConnection();
+        using var secondConnection = OpenSeededConnection();
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+
+        var (owner, plan) = Execute(first, 1);
+        firstTap.LastParameters.Should().Equal((0, "Target", 1));
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        owner.IsAlive.Should().BeFalse("an executable raw recipe must not retain the projection owner");
+        QueryPlanStore.Values.Should().Contain(plan);
+
+        var (_, secondPlan) = Execute(second, 2);
+        secondPlan.Should().BeSameAs(plan);
+        secondTap.LastParameters.Should().Equal((0, "Target", 2));
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (WeakReference Owner, DbPreparedQueryCommand<CteBindingRow> Plan) Execute(SqliteDataContext context, int offset)
+        {
+            var owner = new WhereOwner { Target = offset };
+            var command = context.From<BindingRow>().WithTag("raw object projection ownership").OrderBy(row => row.Id)
+                .Select(row => new CteBindingRow { Number = row.Id + owner.Target });
+            QueryCommand.CaptureRawShape(command).Should().NotBeNull();
+            var invocation = context.GetPreparedQueryCommand(command, false, true, TestContext.Current.CancellationToken);
+            invocation.ToList(context).Select(row => row.Number).Should().Equal(offset + 1, offset + 2);
+            return (new WeakReference(owner), BoundQueryInvocation<CteBindingRow>.GetPlan(invocation)!);
+        }
+    }
+
+    [Fact]
+    public void RawRecipe_FingerprintCollision_DoesNotAdoptAnotherSortExpression()
+    {
+        using var connection = OpenSeededConnection();
+        using var context = new SqliteDataContext(connection, new DataContextBuilder());
+        var token = TestContext.Current.CancellationToken;
+        var source = context.From<BindingRow>().WithTag("raw sort collision");
+        var owner = source.OrderBy(row => row.Id).Select(row => row.Id);
+        var fresh = source.OrderBy(row => -row.Id).Select(row => row.Id);
+        var ownerShape = QueryCommand.CaptureRawShape(owner)!;
+        var freshShape = QueryCommand.CaptureRawShape(fresh)!;
+        var ownerInvocation = context.GetPreparedQueryCommand(owner, false, true, token);
+        ownerInvocation.ToList(context).Should().Equal(1, 2);
+
+        ownerShape.Fingerprint = freshShape.Fingerprint;
+        QueryPlanStore.SetRaw(context.GetType(), owner.GetOrCreatePlanKey(null),
+            BoundQueryInvocation<int>.GetPlan(ownerInvocation)!, ownerShape, owner);
+
+        var rawMatch = QueryPlanStore.TryGetRaw(context.GetType(), freshShape, fresh, out _);
+        context.GetPreparedQueryCommand(fresh, false, true, token).ToList(context).Should().Equal(2, 1);
+        rawMatch.Should().BeFalse("raw comparison must check the authored sort expression inside the bucket");
+    }
+
+    private sealed record ClauseOwner(int JoinTarget, int SortDirection);
+
+    [Fact]
+    public void NamedWindowPlan_RebindsWithoutRetainingItsFirstOrderKeyOwner()
+    {
+        var firstTap = new BindingTap();
+        var secondTap = new BindingTap();
+        using var firstConnection = OpenSeededConnection();
+        using var secondConnection = OpenSeededConnection();
+        using var first = new SqliteDataContext(firstConnection, new DataContextBuilder().AddInterceptor(firstTap));
+        using var second = new SqliteDataContext(secondConnection, new DataContextBuilder().AddInterceptor(secondTap));
+
+        var (firstOwner, firstPlan) = Execute(first, 1, [1, 2]);
+        var (_, secondPlan) = Execute(second, -1, [2, 1]);
+        secondPlan.Should().BeSameAs(firstPlan);
+        firstTap.LastParameters.Should().Equal((0, "Direction", 1));
+        secondTap.LastParameters.Should().Equal((0, "Direction", -1));
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        firstOwner.IsAlive.Should().BeFalse("the normalized window definition must not own the first order key capture");
+        QueryPlanStore.Values.Should().Contain(firstPlan);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (WeakReference Owner, DbPreparedQueryCommand<int> Plan) Execute(SqliteDataContext context,
+            int direction, int[] expected)
+        {
+            var owner = new SortOwner { Direction = direction };
+            var source = context.From<BindingRow>();
+            var command = source.Window("binding_order", orderBy: [source.Asc(row => row.Id * owner.Direction)])
+                .OrderBy(row => row.Id).Select(row => SqlFunctions.Sql.row_number().Over("binding_order"));
+            var invocation = context.GetStreamingRowsQueryCommand(command, TestContext.Current.CancellationToken);
+            invocation.ToList(context).Should().Equal(expected);
+            return (new WeakReference(owner), BoundQueryInvocation<int>.GetPlan(invocation)!);
+        }
+    }
+
+    [Fact]
+    public void RawRecipe_UsesTheFreshNamedWindowWithoutRetainingItsOwner()
+    {
+        var tap = new BindingTap();
+        using var connection = OpenSeededConnection();
+        using var context = new SqliteDataContext(connection, new DataContextBuilder().AddInterceptor(tap));
+        var (owner, holder) = Execute(context, tap);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        owner.IsAlive.Should().BeFalse("neither the raw descriptor nor its recipe should retain the named window capture");
+        QueryPlanStore.Values.Should().Contain(holder);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (WeakReference Owner, DbPreparedQueryCommand<int> Plan) Execute(SqliteDataContext context, BindingTap tap)
+        {
+            var owner = new SortOwner { Direction = 1 };
+            var source = context.From<BindingRow>().WithTag("raw named window ownership");
+            QueryCommand<int> Build() => source.Window("binding_order", orderBy: [source.Asc(row => row.Id * owner.Direction)])
+                .OrderBy(row => row.Id).Select(row => SqlFunctions.Sql.row_number().Over("binding_order"));
+            var token = TestContext.Current.CancellationToken;
+            var cold = context.GetPreparedQueryCommand(Build(), false, true, token);
+            cold.ToList(context).Should().Equal(1, 2);
+            tap.LastParameters.Should().Equal((0, "Direction", 1));
+
+            owner.Direction = -1;
+            var fresh = Build();
+            var windows = fresh.Windows;
+            var reuses = QueryPlanner.RecipeReuses;
+            var warm = context.GetPreparedQueryCommand(fresh, false, true, token);
+            warm.ToList(context).Should().Equal(2, 1);
+            tap.LastParameters.Should().Equal((0, "Direction", -1));
+            QueryPlanner.RecipeReuses.Should().BeGreaterThan(reuses);
+            fresh.Windows.Should().BeSameAs(windows);
+            var holder = BoundQueryInvocation<int>.GetPlan(cold)!;
+            BoundQueryInvocation<int>.GetPlan(warm).Should().BeSameAs(holder);
+            return (new WeakReference(owner), holder);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RawRecipe_UsesTheFreshWhereWithoutRetainingItsFirstOwner(bool compound)
+    {
+        var tap = new BindingTap();
+        using var connection = OpenSeededConnection();
+        using var context = new SqliteDataContext(connection, new DataContextBuilder().AddInterceptor(tap));
+
+        var (owner, holder, usedFreshWhere) = Warm(context, tap, compound);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        owner.IsAlive.Should().BeFalse("the live raw recipe and descriptor must not keep the first WHERE owner");
+        usedFreshWhere.Should().BeTrue("staging should install the current command's own predicate");
+        QueryPlanStore.Values.Should().Contain(holder);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (WeakReference Owner, DbPreparedQueryCommand<int> Holder, bool UsedFreshWhere) Warm(
+            SqliteDataContext context, BindingTap tap, bool compound)
+        {
+            var owner = new WhereOwner { Target = 1 };
+            QueryCommand<int> Build()
+            {
+                var source = context.From<BindingRow>().WithTag("raw where ownership");
+                var filtered = compound
+                    ? source.Where(row => row.Id > 0 && (row.Id < 0 || row.Id == owner.Target))
+                    : source.Where(row => row.Id == owner.Target);
+                return filtered.OrderBy(row => row.Id).Select(row => row.Id);
+            }
+
+            var token = TestContext.Current.CancellationToken;
+            var first = context.GetPreparedQueryCommand(Build(), false, true, token);
+            first.ToList(context).Should().Equal(1);
+            tap.LastParameters.Should().Equal((0, "Target", 1));
+
+            owner.Target = 2;
+            var fresh = Build();
+            var shape = QueryCommand.CaptureRawShape(fresh)!;
+            QueryPlanStore.TryGetRaw(context.GetType(), shape, fresh, out _).Should().BeTrue();
+            var reuses = QueryPlanner.RecipeReuses;
+            var repeated = context.GetPreparedQueryCommand(fresh, false, true, token);
+            repeated.ToList(context).Should().Equal(2);
+            tap.LastParameters.Should().Equal((0, "Target", 2));
+            QueryPlanner.RecipeReuses.Should().BeGreaterThan(reuses, "the existing raw fast path must still be used");
+            var holder = BoundQueryInvocation<int>.GetPlan(first)!;
+            BoundQueryInvocation<int>.GetPlan(repeated).Should().BeSameAs(holder);
+            return (new WeakReference(owner), holder, ReferenceEquals(fresh.PreparedCondition, shape.Condition));
+        }
+    }
+
+    private sealed class WhereOwner
+    {
+        public int Target { get; set; }
+    }
+
+    [Fact]
+    public void RawRecipe_RebindsSortWithoutRetainingTheFirstOwner()
+    {
+        var tap = new BindingTap();
+        using var connection = OpenSeededConnection();
+        using var context = new SqliteDataContext(connection, new DataContextBuilder().AddInterceptor(tap));
+
+        var (firstOwner, holder, usesFreshSort) = Warm(context, tap);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        QueryPlanStore.Values.Should().Contain(holder);
+        usesFreshSort.Should().BeTrue("staging should use the fresh sort expression");
+        firstOwner.IsAlive.Should().BeFalse("the raw ORDER BY descriptor and recipe must not own the capture");
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (WeakReference Owner, DbPreparedQueryCommand<int> Holder, bool UsesFreshSort) Warm(
+            SqliteDataContext context, BindingTap tap)
+        {
+            var owner = new SortOwner { Direction = 1 };
+            QueryCommand<int> Build() => context.From<BindingRow>().WithTag("raw sort ownership")
+                .OrderBy(row => row.Id * owner.Direction).Select(row => row.Id);
+
+            var token = TestContext.Current.CancellationToken;
+            var first = context.GetPreparedQueryCommand(Build(), false, true, token);
+            first.ToList(context).Should().Equal(1, 2);
+            tap.LastParameters.Should().Equal((0, "Direction", 1));
+
+            owner.Direction = -1;
+            var reuses = QueryPlanner.RecipeReuses;
+            var fresh = Build();
+            var sort = fresh.Sorting![0].SortExpression;
+            var raw = QueryCommand.CaptureRawShape(fresh)!;
+            QueryPlanStore.TryGetRaw(context.GetType(), raw, fresh, out var rawCandidate).Should().BeTrue();
+            rawCandidate!.Recipe.Sorting.Should().BeNull("a replayable key must not be stored as executable syntax");
+            var second = context.GetPreparedQueryCommand(fresh, false, true, token);
+            second.ToList(context).Should().Equal(2, 1);
+            tap.LastParameters.Should().Equal((0, "Direction", -1));
+            QueryPlanner.RecipeReuses.Should().BeGreaterThan(reuses, "the check must keep the raw fast path active");
+            var holder = BoundQueryInvocation<int>.GetPlan(first)!;
+            BoundQueryInvocation<int>.GetPlan(second).Should().BeSameAs(holder);
+            return (new WeakReference(owner), holder, ReferenceEquals(fresh.Sorting![0].PreparedExpression, sort));
+        }
+    }
+
+    private sealed class SortOwner
+    {
+        public int Direction { get; set; }
+    }
+}

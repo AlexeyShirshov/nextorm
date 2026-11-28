@@ -49,7 +49,7 @@ public class InListCacheTests
         var first = ctx.GetPreparedQueryCommand(CapturedAtIn(e), false, true, CancellationToken.None);
         var second = ctx.GetPreparedQueryCommand(CapturedAtInB(e), false, true, CancellationToken.None);
 
-        ReferenceEquals(first, second).Should().BeTrue();
+        BoundQueryInvocation<long>.GetPlan(second).Should().BeSameAs(BoundQueryInvocation<long>.GetPlan(first));
     }
 
     [Fact]
@@ -157,7 +157,7 @@ public class InListCacheTests
     /// <summary>
     /// A captured collection can change between two executions of the same cached plan, so its
     /// parameters must keep being refreshed on a cache hit (<c>NeedsParamRefresh == true</c>) and the
-    /// new value must reach the shared command.
+    /// new value must reach the invocation without changing the shared plan.
     /// </summary>
     [Fact]
     public void In_CapturedCollection_CachedSameShape_ShouldRefreshChangedValue()
@@ -167,18 +167,18 @@ public class InListCacheTests
         var e = ctx.From<IComplexEntity>();
 
         var values = new long[] { 1 };
-        var first = (DbPreparedQueryCommand<long>)ctx.GetPreparedQueryCommand(
+        var first = (BoundQueryInvocation<long>)ctx.GetPreparedQueryCommand(
             e.Where(c => SqlFunctions.Sql.@in(c.Id, values)).Select(c => c.Id), false, true, CancellationToken.None);
 
-        first.NeedsParamRefresh.Should().BeTrue("a captured collection is not fixed by the expression shape");
-        first.DbCommandParams[0].Value.Should().Be(1L);
+        first.Plan.NeedsParamRefresh.Should().BeTrue("a captured collection is not fixed by the expression shape");
+        first.Values.Should().Equal([1L]);
 
         // Same length => same shape hash => the same cached plan, but the value changed.
         values[0] = 2;
-        var second = (DbPreparedQueryCommand<long>)ctx.GetPreparedQueryCommand(
+        var second = (BoundQueryInvocation<long>)ctx.GetPreparedQueryCommand(
             e.Where(c => SqlFunctions.Sql.@in(c.Id, values)).Select(c => c.Id), false, true, CancellationToken.None);
 
-        ReferenceEquals(first, second).Should().BeTrue();
-        second.DbCommandParams[0].Value.Should().Be(2L);
+        second.Plan.Should().BeSameAs(first.Plan);
+        second.Values.Should().Equal([2L]);
     }
 }

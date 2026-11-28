@@ -85,6 +85,15 @@ public sealed class CteDefinition
     /// </summary>
     internal CteReference? RecursiveReference { get; init; }
 
+    internal CteDefinition WithQuery(QueryCommand query, bool keepRecursiveReference = true)
+        => Mutation is { } mutation
+            ? new CteDefinition(Name, query, mutation)
+            : new CteDefinition(Name, query, Recursive, MaxRecursion)
+            {
+                TypedProjection = TypedProjection,
+                RecursiveReference = keepRecursiveReference ? RecursiveReference : null,
+            };
+
     /// <summary>
     /// Rejects a legacy recursive declaration whose body is a distinct <c>UNION</c> on a dialect that
     /// requires <c>UNION ALL</c> in a recursive CTE (SQL Server). The typed recursive API always builds

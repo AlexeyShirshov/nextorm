@@ -75,10 +75,18 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
     private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
 
     private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> command, bool storeInCache)
-        => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None);
+        => Prepare(ctx, command, storeInCache, out _);
 
-    private static List<string> ParametersOf<T>(DbPreparedQueryCommand<T> prepared)
-        => [.. prepared.DbCommandParams.Cast<DbParameter>().Select(p => $"{p.ParameterName}={p.Value ?? "null"}")];
+    private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> command, bool storeInCache, out object?[]? values)
+    {
+        var invocation = ctx.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None);
+        values = (invocation as BoundQueryInvocation<T>)?.Values;
+        return BoundQueryInvocation<T>.GetPlan(invocation)!;
+    }
+
+    private static List<string> ParametersOf<T>(DbPreparedQueryCommand<T> prepared, object?[]? values = null)
+        => [.. prepared.DbCommandParams.Cast<DbParameter>()
+            .Select((p, i) => $"{p.ParameterName}={(values is null ? p.Value : values[i]) ?? "null"}")];
 
     // ---- L/C/N/X: the four argument shapes --------------------------------------------------------
 
@@ -340,22 +348,22 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
 
         QueryCommand<int> Build() => ctx.From(() => T320ChTvf.Echo(id)).Select(r => r.Id);
 
-        var first = Prepare(ctx, Build(), true);
+        var first = Prepare(ctx, Build(), true, out var firstValues);
         var firstSql = Normalize(first.DbCommand.CommandText);
-        output.WriteLine($"refresh run 1: sql=<<{firstSql}>>; parameters=[{string.Join(", ", ParametersOf(first))}]");
-        ParametersOf(first).Should().Equal("id=1");
+        output.WriteLine($"refresh run 1: sql=<<{firstSql}>>; parameters=[{string.Join(", ", ParametersOf(first, firstValues))}]");
+        ParametersOf(first, firstValues).Should().Equal("id=1");
 
         id = 2L;
-        var second = Prepare(ctx, Build(), true);
+        var second = Prepare(ctx, Build(), true, out var secondValues);
         var secondSql = Normalize(second.DbCommand.CommandText);
         output.WriteLine(
-            $"refresh run 2: sql=<<{secondSql}>>; parameters=[{string.Join(", ", ParametersOf(second))}]; "
+            $"refresh run 2: sql=<<{secondSql}>>; parameters=[{string.Join(", ", ParametersOf(second, secondValues))}]; "
             + $"ReferenceEquals(run1, run2)={ReferenceEquals(first, second)}");
 
         ReferenceEquals(first, second).Should().BeTrue(
             "the same source shape must reuse the cached plan so the refresh path is exercised");
         secondSql.Should().Be(firstSql, "a capture change must not re-render the statement");
-        ParametersOf(second).Should().Equal(new[] { "id=2" }, "the cache hit binds the new capture, never the stale 1");
+        ParametersOf(second, secondValues).Should().Equal(new[] { "id=2" }, "the cache hit binds the new capture, never the stale 1");
     }
 
     [Fact]
@@ -404,9 +412,9 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         // Equivalent identity across two distinct factories: same statement and one shared plan entry.
         var id = 5L;
         var beforeEquivalent = QueryPlanStore.Values.Count();
-        var one = Prepare(ctx, ctx.From(() => T320ChTvf.EquivalentOne(id)).Select(r => r.Id), true);
+        var one = Prepare(ctx, ctx.From(() => T320ChTvf.EquivalentOne(id)).Select(r => r.Id), true, out var oneValues);
         var afterOne = QueryPlanStore.Values.Count();
-        var two = Prepare(ctx, ctx.From(() => T320ChTvf.EquivalentTwo(id)).Select(r => r.Id), true);
+        var two = Prepare(ctx, ctx.From(() => T320ChTvf.EquivalentTwo(id)).Select(r => r.Id), true, out var twoValues);
         var afterTwo = QueryPlanStore.Values.Count();
 
         output.WriteLine(
@@ -418,7 +426,7 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         ReferenceEquals(one, two).Should().BeTrue(
             "two distinct factories with the same SQL identity must reuse the cached plan instance");
         Normalize(two.DbCommand.CommandText).Should().Be(Normalize(one.DbCommand.CommandText));
-        ParametersOf(two).Should().Equal(ParametersOf(one));
-        ParametersOf(two).Should().Equal("id=5");
+        ParametersOf(two, twoValues).Should().Equal(ParametersOf(one, oneValues));
+        ParametersOf(two, twoValues).Should().Equal("id=5");
     }
 }

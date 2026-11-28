@@ -109,8 +109,8 @@ public sealed class ShardingDialectTests
 
     private static string PrepareSelect(DataContext context, QueryCommand<int> query)
     {
-        var prepared = (DbPreparedQueryCommand<int>)context.GetPreparedQueryCommand(
-            query, false, true, CancellationToken.None);
+        var prepared = BoundQueryInvocation<int>.GetPlan(context.GetPreparedQueryCommand(
+            query, false, true, CancellationToken.None))!;
         return prepared.DbCommand.CommandText;
     }
 

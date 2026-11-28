@@ -55,6 +55,7 @@ internal readonly struct SqlBuilder
                 return new SqlBuilder(_ctx).MakeSelect(builtShape, selectInto);
 
             var rebuilt = cmd.Clone();
+            rebuilt.IgnoreColumns = cmd.IgnoreColumns;
             rebuilt.Components = null;
             rebuilt.PreparedComponents = cmd.PreparedComponents;
             foreach (var component in components)

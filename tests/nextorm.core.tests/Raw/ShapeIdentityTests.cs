@@ -152,6 +152,24 @@ public class ShapeIdentityTests
     }
 
     [Fact]
+    public void TryHash_ShouldNotAllocateCaptureDescriptors()
+    {
+        var fresh = CapturedGreater(2);
+        var published = Create(fresh);
+        for (var i = 0; i < 20; i++)
+            _ = ShapeIdentity.TryHash(Header, fresh, out _);
+
+        var matches = true;
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (var i = 0; i < 100; i++)
+            matches &= ShapeIdentity.TryHash(Header, fresh, out var hash) && hash == published.Hash;
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        matches.Should().BeTrue();
+        allocated.Should().Be(0, "only publication needs the capture descriptors");
+    }
+
+    [Fact]
     public void Matches_ShouldBeAllocationFree()
     {
         var published = Create(CapturedGreater(1));
@@ -181,7 +199,28 @@ public class ShapeIdentityTests
 
         key.Should().NotBeNull("a null root is a stable empty shape, not an unkeyable graph");
         key!.Captures.Should().BeEmpty();
-        key.Tokens.Should().HaveCountGreaterThan(1, "the header tokens are always present");
+        key.Header.Should().Be(Header);
+        key.Tokens.Should().ContainSingle("only the null root contributes an expression token");
+    }
+
+    [Fact]
+    public void Matches_ShouldVerifyThePhysicalSourceAndCommandTimeout()
+    {
+        var firstSource = NativeSourceStamp.For(new FromExpression("items", "first", false, false));
+        var render = new NativeContextStamp(false, null, KeywordCase.Lower, 7);
+        var header = new ShapeHeader(typeof(ShapeEntity), typeof(int), typeof(object), 2, render, firstSource);
+        var key = ShapeIdentity.TryCreate(header, (LambdaExpression?)null)!;
+
+        var otherSource = new ShapeHeader(typeof(ShapeEntity), typeof(int), typeof(object), 2, render,
+            NativeSourceStamp.For(new FromExpression("items", "second", false, false)));
+        var otherTimeout = new ShapeHeader(typeof(ShapeEntity), typeof(int), typeof(object), 2,
+            render with { CommandTimeout = 19 }, firstSource);
+
+        // Match is the equality check inside a hash bucket. It must reject these headers without
+        // looking at their hashes, even though their expression graphs are identical.
+        ShapeIdentity.Matches(key, otherSource, (LambdaExpression?)null).Should().BeFalse();
+        ShapeIdentity.Matches(key, otherTimeout, (LambdaExpression?)null).Should().BeFalse();
+        ShapeIdentity.Matches(key, header, (LambdaExpression?)null).Should().BeTrue();
     }
 
     private sealed class ShapeDto

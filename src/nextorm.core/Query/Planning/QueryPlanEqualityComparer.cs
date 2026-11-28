@@ -137,6 +137,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (x.PreWhereShapeHash != y.PreWhereShapeHash) return false;
 
+        if (!object.Equals(x.Prep?.PreWhereValueListShape, y.Prep?.PreWhereValueListShape)) return false;
+
         if (x.ArrayJoinKind != y.ArrayJoinKind) return false;
 
         if (x.BindArrayJoinElement != y.BindArrayJoinElement) return false;
@@ -196,6 +198,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
         // explicitly to keep a shorter/longer list from reusing a stale plan.
         if (x.InValuesShapeHash != y.InValuesShapeHash) return false;
 
+        if (!object.Equals(x.Prep?.WhereValueListShape, y.Prep?.WhereValueListShape)) return false;
+
         if (!_joinComparer.Equals(x.Joins, y.Joins)) return false;
 
         if (!_sortComparer.ValueEquals(x.Sorting, y.Sorting)) return false;
@@ -214,7 +218,7 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (x.ResolvedQuoteIdentifiers != y.ResolvedQuoteIdentifiers) return false;
 
-        if (!ReferenceEquals(x.ResolvedNamingConvention, y.ResolvedNamingConvention)) return false;
+        if (!ReferenceEquals(x.PlanNamingIdentity, y.PlanNamingIdentity)) return false;
 
         if (x.ResolvedKeywordCase != y.ResolvedKeywordCase) return false;
 
@@ -396,6 +400,7 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             if (a.Name != b.Name) return false;
             if (a.Recursive != b.Recursive) return false;
             if (a.MaxRecursion != b.MaxRecursion) return false;
+            if (a.TypedProjection != b.TypedProjection) return false;
             // A data-modifying CTE's plan is never cached (its insert body is not part of the query
             // shape), so compare the bodies by reference and the read CTE queries structurally.
             if (a.IsDataModifying || b.IsDataModifying)
@@ -627,7 +632,7 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
             hash.Add(obj.ResolvedQuoteIdentifiers);
 
-            hash.Add(obj.ResolvedNamingConvention);
+            hash.Add(obj.PlanNamingIdentity);
 
             hash.Add(obj.ResolvedKeywordCase);
 

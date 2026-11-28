@@ -199,11 +199,15 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
         // The planning axis gets the provider hooks as delegates and invokes them lazily: calling the
         // abstract/virtual members here would run derived code before the derived constructor.
+        Func<SelectExpression, Expression, Expression> mapColumn = MapColumnExpression;
+        var mapperMethod = mapColumn.Method;
+        UsesContextBoundColumnMapping = mapperMethod.DeclaringType != typeof(DataContext)
+            && !mapperMethod.IsDefined(typeof(ContextIndependentColumnMappingAttribute), inherit: false);
         _planner = new QueryPlanner(
             this,
             GetDialect,
             GetType(),
-            new ProviderHooks(MapColumn, _createParam, _createParamSimple),
+            new ProviderHooks(mapColumn, _createParam, _createParamSimple),
             new LoggingOptions(_environment.Logger, _environment.ResultSetEnumeratorLogger, _environment.LogSensitiveData, QueryFilterLogger: _environment.QueryFilterLogger),
             EntityMetadataProvider,
             EntityVariantResolver);
@@ -237,7 +241,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     // Late-bound provider hooks: only the delegates are created in the constructor, never the values.
     private ISqlDialect GetDialect() => Dialect;
 
-    private Expression MapColumn(SelectExpression column, Expression param) => MapColumnExpression(column, param);
+    internal bool UsesContextBoundColumnMapping { get; }
 
     /// <summary>
     /// SQL dialect used to render queries. Supplied by the provider; SQL generation depends on this
@@ -799,7 +803,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <summary>
     /// Prepares <paramref name="queryCommand"/> against the current dialect, optionally building a
     /// streaming enumerator and storing the plan in the cache. When <paramref name="storeInCache"/> is
-    /// set, later calls return the cached plan instead of re-planning.
+    /// set, later calls can reuse the cached plan with separate parameter values for each invocation.
     /// </summary>
     /// <typeparam name="TResult">The projected result type.</typeparam>
     /// <param name="queryCommand">The command to prepare.</param>
@@ -2758,7 +2762,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     public async Task<TResult?> SingleOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
         => await _executor.SingleOrDefaultAsync(preparedQueryCommand, @params, cancellationToken).ConfigureAwait(false);
 
-    /// <summary>Clears all cached query plans held by this context.</summary>
+    /// <summary>Clears the process-wide implicit SQL plan cache and this context's local query artifacts.</summary>
+    /// <remarks>Call when no affected queries are active.</remarks>
     public void PurgeQueryCache()
     {
         // The retained JSON writers reference no plan, but they belong to the same per-context cache

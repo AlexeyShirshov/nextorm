@@ -9,10 +9,11 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
 {
     /// <summary>
     /// The query command this plan describes. Replaced by an equal clone when
-    /// <see cref="GetCacheVersion"/> is called.
+    /// <see cref="GetCacheVersion()"/> is called.
     /// </summary>
     public QueryCommand QueryCommand;
     private readonly string? _sql;
+    private readonly ReadOnlyMemory<string> _rawParameterNames;
     private QueryPlanEqualityComparer _comparer;
     // QueryPlan is used as a dictionary key (DataContext.QueryPlanCache, InMemoryDataContext._cmdIdx).
     // The hash is captured from the state at construction and then frozen: GetCacheVersion() swaps
@@ -20,6 +21,8 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
     // and therefore the hash — must not change. Keeping it in a readonly field makes GetHashCode
     // stable even after GetCacheVersion() mutates the plan, which a dictionary key requires.
     private readonly int _hashPlan;
+    private readonly PlanMappingIdentity _mapping;
+    private readonly object? _dialect;
     // The resolved eager-load strategy and the structural eager-load graph are captured here (not only
     // read back from the command) so plan identity stays stable after GetCacheVersion swaps in an equal
     // clone, exactly like _hashPlan.
@@ -33,6 +36,8 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
     // forced collision; production plans leave it null and hash structurally as before.
     private readonly int? _forcedHash;
     private bool _isCacheVersion;
+    internal bool NeedsSeparateRawRecipe { get; private set; }
+    internal bool RequiresWeakOwner { get; private set; }
 
     /// <summary>
     /// Captures a canonical, hashable description of <paramref name="cmd"/> and computes its stable
@@ -41,10 +46,18 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
     /// <param name="cmd">The command to describe.</param>
     /// <param name="sql">The generated SQL, which participates in the hash when known.</param>
     public QueryPlan(QueryCommand cmd, string? sql)
+        : this(cmd, sql, default(ReadOnlyMemory<string>))
+    {
+    }
+
+    internal QueryPlan(QueryCommand cmd, string? sql, ReadOnlyMemory<string> rawParameterNames)
     {
         QueryCommand = cmd;
         _sql = sql;
+        _rawParameterNames = rawParameterNames;
         _comparer = cmd.GetQueryPlanEqualityComparer();
+        _mapping = cmd.PlanMapping;
+        _dialect = cmd.PlanDialect;
         _eagerLoadMode = cmd.ResolvedEagerLoadMode;
         _eagerLoadShape = cmd.EagerLoadShape;
         _collectionSlotShape = cmd.CollectionSlotShape;
@@ -67,6 +80,8 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
         QueryCommand = cmd;
         _sql = sql;
         _comparer = cmd.GetQueryPlanEqualityComparer();
+        _mapping = cmd.PlanMapping;
+        _dialect = cmd.PlanDialect;
         _forcedHash = forcedHash;
         _eagerLoadMode = cmd.ResolvedEagerLoadMode;
         _eagerLoadShape = cmd.EagerLoadShape;
@@ -108,6 +123,10 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
                         hash.Add(component.GetHashCode());
                 }
                 hash.Add(sql);
+                foreach (var name in _rawParameterNames.Span)
+                {
+                    hash.Add(name);
+                }
                 return hash.ToHashCode();
             }
         }
@@ -116,7 +135,7 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
 
     /// <summary>
     /// Returns the hash captured when the plan was constructed, keeping plan identity stable even
-    /// after <see cref="GetCacheVersion"/> swaps in an equal command clone.
+    /// after <see cref="GetCacheVersion()"/> swaps in an equal command clone.
     /// </summary>
     /// <returns>The stable plan hash.</returns>
     public override int GetHashCode() => _hashPlan;
@@ -145,11 +164,17 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
         if (obj is null) return false;
 
         return _sql == obj._sql
+            && HasRawParameterNames(obj._rawParameterNames)
+            && _mapping == obj._mapping
+            && Equals(_dialect, obj._dialect)
             && _eagerLoadMode == obj._eagerLoadMode
             && _eagerLoadShape.Equals(obj._eagerLoadShape)
             && _collectionSlotShape.Equals(obj._collectionSlotShape)
             && _comparer.Equals(QueryCommand, obj.QueryCommand);
     }
+
+    internal bool HasRawParameterNames(ReadOnlyMemory<string> names)
+        => _rawParameterNames.Equals(names) || _rawParameterNames.Span.SequenceEqual(names.Span);
 
     /// <summary>
     /// Replaces <see cref="QueryCommand"/> with an equal clone whose build-time state has been
@@ -157,15 +182,24 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
     /// The plan's hash is unchanged, preserving its identity as a dictionary key.
     /// </summary>
     /// <returns>This plan, after the command has been swapped for its cache clone.</returns>
-    public QueryPlan GetCacheVersion()
+    public QueryPlan GetCacheVersion() => GetCacheVersion(detachSqlExpressions: false);
+
+    internal QueryPlan GetSqlCacheVersion() => GetCacheVersion(detachSqlExpressions: true);
+
+    private QueryPlan GetCacheVersion(bool detachSqlExpressions)
     {
-        // The same plan key can be stored more than once (the per-thread store is cleared and a
+        // The same plan key can be stored more than once (the shared store is cleared and a
         // reused command repopulates it), and after the first call the command is already the
         // detached cache clone — cloning again would be wasted work and a clone of a clone.
         if (_isCacheVersion)
             return this;
 
         var newCmd = QueryCommand.CloneForCache();
+        if (detachSqlExpressions)
+        {
+            NeedsSeparateRawRecipe = newCmd.DetachSqlPlanKey(out var requiresWeakOwner);
+            RequiresWeakOwner = requiresWeakOwner;
+        }
         // Plan identity is behavioural: identical frozen hash and structural command equality (below), not comparer instance sharing.
         Debug.Assert(_hashPlan == ComputeHash(newCmd, _sql, _comparer), "Hash must be equals, if not see QueryCommand.CopyTo function");
         Debug.Assert(_comparer.Equals(newCmd, QueryCommand), "QueryCommands must be equals, if not see QueryCommand.CopyTo function");

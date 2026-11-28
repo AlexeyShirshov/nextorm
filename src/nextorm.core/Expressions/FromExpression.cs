@@ -1,3 +1,5 @@
+using System.Linq.Expressions;
+
 namespace NextORM.Core;
 
 /// <summary>
@@ -69,6 +71,7 @@ public sealed class FromExpression
      {
           Table = table;
           ColumnShape = columnShape;
+          HasColumnShape = true;
      }
       /// <summary>Creates a source from a deferred temporary table or view.</summary>
       /// <param name="temporarySource">The temporary object to create and read.</param>
@@ -132,6 +135,8 @@ public sealed class FromExpression
      /// provider so member access resolves against the returned columns.
      /// </summary>
      internal readonly QueryCommand? ColumnShape;
+     // The comparison-only copy keeps the source kind without retaining the defining command.
+     internal bool HasColumnShape { get; }
      /// <summary>
      /// Set when the source is a table-valued function. Mutually exclusive with <see cref="Table"/>
      /// and <see cref="SubQuery"/>.
@@ -249,6 +254,7 @@ public sealed class FromExpression
           TemporarySource = source.TemporarySource;
           SourceType = source.SourceType;
           ColumnShape = source.ColumnShape;
+          HasColumnShape = source.HasColumnShape;
           TableFunction = source.TableFunction;
           Pivot = source.Pivot;
           LinqSource = source.LinqSource;
@@ -266,6 +272,17 @@ public sealed class FromExpression
           RecursiveOwner = source.RecursiveOwner;
           IsTableVariableSource = source.IsTableVariableSource;
           BindOccurrenceByParameter = source.BindOccurrenceByParameter;
+     }
+
+     private FromExpression(FromExpression source, RawSqlSourceExpression? raw, TableFunctionExpression? function,
+          PivotExpression? pivot, XmlNodesExpression? xmlNodes)
+          : this(source, null, null, null, null, null)
+     {
+          RawSqlSource = raw;
+          TableFunction = function;
+          Pivot = pivot;
+          XmlNodes = xmlNodes;
+          ColumnShape = null;
      }
 
      /// <summary>
@@ -326,8 +343,8 @@ public sealed class FromExpression
      // }
      internal FromExpression? CloneForCache()
      {
-          // A table function's call expression is immutable and never mutated during preparation,
-          // so it can be shared with the cached plan (like Table/SourceType) instead of cloned.
+          // This clone still supports raw preparation. SQL comparison removes runtime source state
+          // separately, after cloning the graph that owns the derived commands.
           if (Pivot is not null)
           {
                var pivot = Pivot.CloneForCache();
@@ -337,5 +354,24 @@ public sealed class FromExpression
           if (!string.IsNullOrEmpty(Table) || SourceType is not null || TableFunction is not null || LinqSource is not null || RawSqlSource is not null || XmlNodes is not null || DerivedFragment is not null) return this;
 
           return new FromExpression(SubQuery!.CloneForCache()) { SubQueryHint = SubQueryHint, SourceBinding = SourceBinding, SourceLock = SourceLock, BindOccurrenceByParameter = BindOccurrenceByParameter };// { TableAlias = TableAlias };
+     }
+
+     internal FromExpression ForSqlPlanKey(ExpressionVisitor rewriter)
+     {
+          var raw = RawSqlSource?.ForSqlPlanKey();
+          var function = TableFunction?.ForSqlPlanKey(rewriter);
+          var pivot = Pivot?.ForSqlPlanKey(rewriter);
+          var xmlNodes = XmlNodes;
+          if (xmlNodes is not null)
+          {
+               var operand = rewriter.Visit(xmlNodes.Operand);
+               if (!ReferenceEquals(operand, xmlNodes.Operand))
+                    xmlNodes = new XmlNodesExpression(operand, xmlNodes.XPath);
+          }
+
+          return ColumnShape is null && ReferenceEquals(raw, RawSqlSource) && ReferenceEquals(function, TableFunction)
+               && ReferenceEquals(pivot, Pivot) && ReferenceEquals(xmlNodes, XmlNodes)
+               ? this
+               : new FromExpression(this, raw, function, pivot, xmlNodes);
      }
 }

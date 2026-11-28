@@ -269,8 +269,11 @@ public class T324ApplyCacheTests
             .CrossApply((Projection<T320MatrixRow, T320MatrixRow> p) => T320MatrixTvf.EchoPair(p.Item1.Id, capture))
             .Select(q => new T324FlatRow { S1 = q.Item1.Id, S2 = q.Item2.Id, S3 = q.Item3.Id });
 
-    private static DbPreparedQueryCommand<T324FlatRow> PrepareTvfCached(IDataContext ctx, QueryCommand<T324FlatRow> command)
-        => (DbPreparedQueryCommand<T324FlatRow>)PrepareCached(ctx, command);
+    private static (DbPreparedQueryCommand<T324FlatRow> Plan, object?[]? Values) PrepareTvfCached(IDataContext ctx, QueryCommand<T324FlatRow> command)
+    {
+        var prepared = PrepareCached(ctx, command);
+        return (BoundQueryInvocation<T324FlatRow>.GetPlan(prepared)!, (prepared as BoundQueryInvocation<T324FlatRow>)?.Values);
+    }
 
     private static List<string> ParametersOf<T>(DbPreparedQueryCommand<T> prepared)
         => [.. prepared.DbCommandParams.Cast<DbParameter>().Select(p => $"{p.ParameterName}={p.Value ?? "null"}")];
@@ -288,13 +291,14 @@ public class T324ApplyCacheTests
         // outer parameter and the closure are fresh instances.
         var firstPrepared = PrepareTvfCached(ctx, JoinWithRuntimeTvfApply(ctx, capture));
         CacheEntryCount().Should().Be(1, "the first preparation stores exactly one plan for the shape");
-        ParametersOf(firstPrepared).Should().Equal(new[] { "capture=3" }, "the capture travels as one bound parameter");
+        firstPrepared.Plan.DbCommandParams[0].ParameterName.Should().Be("capture");
+        firstPrepared.Values.Should().Equal([3], "the capture travels as one bound parameter");
 
         var secondPrepared = PrepareTvfCached(ctx, JoinWithRuntimeTvfApply(ctx, capture));
         CacheEntryCount().Should().Be(1, "an equal joined + runtime-TVF apply structure must reuse the stored plan");
-        secondPrepared.Should().BeSameAs(firstPrepared, "structurally equal joined+TVF apply commands share the prepared command");
+        secondPrepared.Plan.Should().BeSameAs(firstPrepared.Plan, "structurally equal joined+TVF apply commands share one plan");
 
-        var sql = T324ApplyFixture.Normalize(secondPrepared.DbCommand.CommandText);
+        var sql = T324ApplyFixture.Normalize(secondPrepared.Plan.CommandText);
         sql.Should().Contain("cross apply ", "the runtime factory is applied through the flat transition");
         sql.Should().Contain("echo_rows_pair", "the factory call stays the applied source");
         sql.Should().MatchRegex(@"echo_rows_pair\([^)]*t1\.Id", "the correlated argument addresses slot 1, this command's FROM source");
@@ -303,10 +307,11 @@ public class T324ApplyCacheTests
         // A changed captured argument keeps the same shape (so the same plan) but must bind the new value:
         // returning the previous one would be the stale correlation the regression is about.
         var changedPrepared = PrepareTvfCached(ctx, JoinWithRuntimeTvfApply(ctx, 11));
-        changedPrepared.Should().BeSameAs(firstPrepared, "the capture is a parameter, so the shape still shares one plan");
+        changedPrepared.Plan.Should().BeSameAs(firstPrepared.Plan, "the capture is a parameter, so the shape still shares one plan");
         CacheEntryCount().Should().Be(1, "a capture change must not add a plan entry");
-        ParametersOf(changedPrepared).Should().Equal(new[] { "capture=11" }, "the cache hit binds the new capture, never the previous 3");
-        T324ApplyFixture.Normalize(changedPrepared.DbCommand.CommandText).Should().Be(sql, "a capture change must not re-render the statement");
+        changedPrepared.Plan.DbCommandParams[0].ParameterName.Should().Be("capture");
+        changedPrepared.Values.Should().Equal([11], "the invocation binds the new capture, never the previous 3");
+        T324ApplyFixture.Normalize(changedPrepared.Plan.CommandText).Should().Be(sql, "a capture change must not re-render the statement");
     }
     // ---------------------------------------------------------------------------------------------
     // Builders — every call evaluates a fresh lambda literal, so every parameter instance is fresh.

@@ -1,5 +1,3 @@
-using System.Runtime.CompilerServices;
-
 namespace NextORM.Core;
 
 /// <summary>
@@ -18,31 +16,14 @@ namespace NextORM.Core;
 /// run on every probe.
 /// </para>
 /// </remarks>
-internal static class NativeSourceStamp
+internal readonly record struct NativeSourceStamp(
+    string? Table, string? TableOverride, string? Schema, string? Database,
+    string? Server, string? TableExpression, bool AutoMapped, Type? BindingEntity)
 {
     /// <summary>Computes the stamp of <paramref name="from"/>.</summary>
     /// <param name="from">The resolved source of the command, or <see langword="null"/>.</param>
     /// <returns>A stable value for one physical source identity.</returns>
-    internal static int For(FromExpression? from)
-    {
-        if (from is null)
-            return 0;
-
-        unchecked
-        {
-            var stamp = Hash(from.Table);
-            stamp = stamp * 31 + Hash(from.TableNameOverride);
-            stamp = stamp * 31 + Hash(from.SchemaOverride);
-            stamp = stamp * 31 + Hash(from.DatabaseOverride);
-            stamp = stamp * 31 + Hash(from.ServerOverride);
-            stamp = stamp * 31 + Hash(from.TableExpressionOverride);
-            stamp = stamp * 31 + (from.IsAutoMapped ? 1 : 0);
-
-            var binding = from.SourceBinding;
-            stamp = stamp * 31 + (binding is null ? 0 : RuntimeHelpers.GetHashCode(binding.EntityType));
-            return stamp;
-        }
-    }
-
-    private static int Hash(string? value) => value is { Length: > 0 } ? StringComparer.Ordinal.GetHashCode(value) : 0;
+    internal static NativeSourceStamp For(FromExpression? from) => from is null ? default : new(
+        from.Table, from.TableNameOverride, from.SchemaOverride ?? from.Schema, from.DatabaseOverride,
+        from.ServerOverride, from.TableExpressionOverride, from.IsAutoMapped, from.SourceBinding?.EntityType);
 }

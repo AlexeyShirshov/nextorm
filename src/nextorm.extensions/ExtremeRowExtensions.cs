@@ -356,8 +356,7 @@ public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyA
         if (_groupBy is not null)
             hash.Add(_groupBy, comparer);
 
-        var captured = new CapturedState(_kind, _ties, _valueSelector, _groupBy, comparer);
-        return new Descriptor(this, captured, hash.ToHashCode());
+        return new Descriptor(_kind, _ties, _valueSelector, _groupBy, hash.ToHashCode());
     }
 
     /// <summary>
@@ -861,56 +860,27 @@ public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyA
         return Expression.New(ctor, exprs);
     }
 
-    private sealed class CapturedState
+    private sealed class Descriptor(ExtremeKind kind, ExtremeRowTies ties, Expression valueSelector, Expression? groupBy, int hash)
+        : IQueryComponentDescriptor, ISqlPlanComponentDescriptor
     {
-        public CapturedState(ExtremeKind kind, ExtremeRowTies ties, Expression valueSelector, Expression? groupBy, IEqualityComparer<Expression> comparer)
-        {
-            Kind = kind;
-            Ties = ties;
-            ValueSelector = valueSelector;
-            GroupBy = groupBy;
-            Comparer = comparer;
-        }
+        private readonly ExtremeKind _kind = kind;
+        private readonly ExtremeRowTies _ties = ties;
+        private readonly Expression _valueSelector = valueSelector;
+        private readonly Expression? _groupBy = groupBy;
 
-        public ExtremeKind Kind { get; }
-        public ExtremeRowTies Ties { get; }
-        public Expression ValueSelector { get; }
-        public Expression? GroupBy { get; }
-        public IEqualityComparer<Expression> Comparer { get; }
-    }
-
-    private sealed class Descriptor : IQueryComponentDescriptor
-    {
-        private readonly ExtremeRowComponent<TEntity> _component;
-        private readonly CapturedState _state;
-
-        public Descriptor(ExtremeRowComponent<TEntity> component, CapturedState state, int hash)
-        {
-            _component = component;
-            _state = state;
-            StructuralHash = hash;
-        }
-
-        public Type Slot => _component.Slot;
-        public Type ComponentType => _component.GetType();
-        public QueryComponentContribution Contribution => _component.Contribution;
-        public string Discriminator => _state.Kind == ExtremeKind.Min ? "Min" : "Max";
-        public int StructuralHash { get; }
+        public Type Slot => typeof(ExtremeRowComponent<TEntity>);
+        public Type ComponentType => typeof(ExtremeRowComponent<TEntity>);
+        public QueryComponentContribution Contribution => QueryComponentContribution.ExclusiveRowSource;
+        public string Discriminator => _kind == ExtremeKind.Min ? "Min" : "Max";
+        public int StructuralHash { get; } = hash;
 
         public bool StructurallyEquals(IQueryComponentDescriptor? other)
-        {
-            if (other is not Descriptor rhs)
-                return false;
-            if (Slot != rhs.Slot || ComponentType != rhs.ComponentType || Contribution != rhs.Contribution)
-                return false;
-            if (Discriminator != rhs.Discriminator || _state.Ties != rhs._state.Ties)
-                return false;
-            if (!_state.Comparer.Equals(_state.ValueSelector, rhs._state.ValueSelector))
-                return false;
-            if (_state.GroupBy is null || rhs._state.GroupBy is null)
-                return _state.GroupBy is null && rhs._state.GroupBy is null;
-            return _state.Comparer.Equals(_state.GroupBy, rhs._state.GroupBy);
-        }
+            => other is Descriptor rhs && Discriminator == rhs.Discriminator && _ties == rhs._ties
+                && ExpressionPlanEqualityComparer.AreEqual(_valueSelector, rhs._valueSelector)
+                && ExpressionPlanEqualityComparer.AreEqual(_groupBy, rhs._groupBy);
+
+        public IQueryComponentDescriptor ToSqlPlanKey(ExpressionVisitor rewriter)
+            => new Descriptor(_kind, _ties, rewriter.Visit(_valueSelector), rewriter.Visit(_groupBy), StructuralHash);
     }
 
     /// <summary>
