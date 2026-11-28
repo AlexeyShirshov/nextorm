@@ -366,15 +366,13 @@ internal static class NativeProjectionRoute
                 || BoundQueryInvocation<TResult>.GetPlan(prepared) is not { RequiresInvocationMapper: false } holder)
                 return;
 
-            // A value list rendered in a clause whose shape is not part of the key (IN/PREWHERE at any
-            // depth) makes the statement follow the captured collection, so the plan is not reusable —
-            // exactly the shapes the ordinary route keeps out of the cache.
+            // The native key does not track computed identifiers or the shape of value lists.
             if (command.InValuesShapeHash != 0
                 || command.PreWhereShapeHash != 0
                 || command.HasTopLevelInValues
                 || command.HasPreWhereInValues
                 || command.HasUnkeyedTupleInValues
-                || command.HasUnkeyedScalarInValues)
+                || command.HasUnkeyedSqlShape)
             {
                 return;
             }

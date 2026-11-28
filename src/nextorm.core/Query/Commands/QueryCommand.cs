@@ -284,21 +284,14 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         set => Prepared.HasUnkeyedTupleInValues = value;
     }
     /// <summary>
-    /// Whether a scalar-valued (non-tuple) captured-collection <c>IN</c>/<c>Contains</c> appears in a
-    /// clause whose captured-collection shape is <b>not</b> folded into the plan key, including the
-    /// WHERE/PREWHERE of a descendant command rendered through this one (for example the referenced query
-    /// swapped into the context-shared <c>Any</c>/<c>Count</c> command). The rendered SQL of such a clause
-    /// depends on the collection's current shape, so reusing a cached plan built for another shape would be
-    /// wrong; the planner reads this flag and suppresses the call-local cache instead of mutating the
-    /// sticky <see cref="Cache"/> flag. It is set during preparation, recomputed when a shared command's
-    /// referenced query is swapped (<see cref="ReplaceCommand"/>) and cleared by
-    /// <see cref="ResetPreparation"/>. A false positive only forgoes caching (harmless); a false negative
-    /// would be a wrong result.
+    /// Whether SQL depends on a computed column name or scalar value list shape that the plan key
+    /// does not capture. The planner suppresses caching for this execution without changing <see cref="Cache"/>.
+    /// Recomputed when <see cref="ReplaceCommand"/> swaps the shared terminal's referenced query.
     /// </summary>
-    internal bool HasUnkeyedScalarInValues
+    internal bool HasUnkeyedSqlShape
     {
-        get => Prep?.HasUnkeyedScalarInValues ?? false;
-        set => Prepared.HasUnkeyedScalarInValues = value;
+        get => Prep?.HasUnkeyedSqlShape ?? false;
+        set => Prepared.HasUnkeyedSqlShape = value;
     }
     private QueryPlanEqualityComparer? _queryPlanComparer;
     private ExpressionPlanEqualityComparer? _expressionPlanComparer;
@@ -1647,7 +1640,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
             preparedState.ShapeScanned = false;
             preparedState.ShapeValuesStable = false;
             preparedState.HasUnkeyedTupleInValues = false;
-            preparedState.HasUnkeyedScalarInValues = false;
+            preparedState.HasUnkeyedSqlShape = false;
             preparedState.ReferencedQueries = null;
             preparedState.OuterRefs = null;
             preparedState.OuterRefBindings = null;
@@ -1690,11 +1683,9 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         if (_referencedQueries is null) throw new InvalidOperationException("Referenced queries must be initialized");
 
         _referencedQueries[idx] = cmd;
-        // The scalar unkeyed flag was computed against the previous referenced graph. A swapped-in
-        // referenced query can add or remove a scalar captured Contains in its WHERE/PREWHERE, which is
-        // not re-keyed by the swap, so recompute the flag now to keep the planner's call-local suppression
-        // in step with the current graph.
-        HasUnkeyedScalarInValues = QueryPreparer.ScanUnkeyedScalarInValues(this);
+        // The replacement can add or remove computed identifiers or an unkeyed value list.
+        // Recompute cache eligibility for the current referenced graph.
+        HasUnkeyedSqlShape = QueryPreparer.ScanUnkeyedSqlShape(this);
         // The shared Any/Count command swaps its referenced subquery in place between executions
         // without resetting: the plan key it was prepared under no longer describes the query.
         InvalidatePlanKey();

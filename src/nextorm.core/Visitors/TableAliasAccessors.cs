@@ -58,6 +58,11 @@ internal static class TableAliasAccessors
     /// </summary>
     internal static bool AllowsExpression(string methodName) => methodName == s_getColumn;
 
+    internal static bool HasComputedColumnName(MethodCallExpression call)
+        => call.Method.DeclaringType == typeof(TableAlias)
+            && AllowsExpression(call.Method.Name)
+            && call.Arguments[0] is not ConstantExpression;
+
     private static FrozenSet<string> BuildAccessors()
     {
         var names = new HashSet<string>(StringComparer.Ordinal);

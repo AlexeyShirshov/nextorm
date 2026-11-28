@@ -29,6 +29,44 @@ public class SqlGenerationTests
     private static string RawSqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Prepare(ctx, cmd).DbCommand.CommandText;
 
     [Fact]
+    public void GetColumn_ShouldUseTheColumnCapturedByEachQuery()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        string ReadSql(string column, bool cache)
+        {
+            var query = ctx.From("issue_424").Select(row => (string)row.GetColumn(column));
+            var prepared = (DbPreparedQueryCommand<string>)ctx.GetPreparedQueryCommand(query, false, cache, CancellationToken.None);
+            return Normalize(prepared.DbCommand.CommandText);
+        }
+
+        ReadSql("label", false).Should().Be("select label\n from issue_424");
+        ReadSql("vec", false).Should().Be("select vec\n from issue_424");
+        ReadSql("label", true).Should().Be("select label\n from issue_424");
+        ReadSql("vec", true).Should().Be("select vec\n from issue_424");
+    }
+
+    [Fact]
+    public void GetColumn_ShouldUseTheCurrentNameWhenQueryIsReused()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var column = "label";
+
+        QueryCommand<string> BuildQuery() => ctx.From("issue_424_reused").Select(row => (string)row.GetColumn(column));
+        string ReadSql(QueryCommand<string> query)
+        {
+            var prepared = (DbPreparedQueryCommand<string>)ctx.GetPreparedQueryCommand(query, false, true, CancellationToken.None);
+            return Normalize(prepared.DbCommand.CommandText);
+        }
+
+        var query = BuildQuery();
+        ReadSql(query).Should().Be("select label\n from issue_424_reused");
+        column = "vec";
+        ReadSql(BuildQuery()).Should().Be("select vec\n from issue_424_reused");
+        ReadSql(query).Should().Be("select vec\n from issue_424_reused");
+    }
+
+    [Fact]
     public void QueryTag_ShouldRenderBlockCommentAfterSelect()
     {
         using var ctx = PostgresTestContext.Create();

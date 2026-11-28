@@ -910,14 +910,9 @@ internal sealed class QueryPlanner : IQueryPlanner
         if (!queryCommand.IsPrepared) queryCommand.PrepareCommand(!storeInCache, cancellationToken);
         else queryCommand.RefreshInValuesShape();
 
-        // A tuple value list in a clause whose shape is not part of the plan key (HAVING / JOIN ON /
-        // SELECT / a nested subquery) renders a SQL/parameter shape that follows the captured collection.
-        // The same holds for a scalar value list (HasUnkeyedScalarInValues), including the WHERE/PREWHERE
-        // of a descendant query rendered through this command. Suppress the call-local cache for this call
-        // rather than mutating the sticky QueryCommand.Cache flag, which would disable plan caching for a
-        // shared command (the context-wide Any/Count command) on every later query. Both the lookup and
-        // store gates below test storeInCache, so they skip.
-        if (queryCommand.HasUnkeyedTupleInValues || queryCommand.HasUnkeyedScalarInValues)
+        // Computed GetColumn names and unkeyed value lists can change the SQL without changing
+        // the plan key. Skip both lookup and publication without mutating the shared command's Cache flag.
+        if (queryCommand.HasUnkeyedTupleInValues || queryCommand.HasUnkeyedSqlShape)
             storeInCache = false;
 
         // A row enumeration that projects a live Stream/TextReader member needs the same sequential
@@ -1130,7 +1125,7 @@ internal sealed class QueryPlanner : IQueryPlanner
                     && !queryCommand.HasTopLevelInValues
                     && !queryCommand.HasPreWhereInValues
                     && !queryCommand.HasUnkeyedTupleInValues
-                    && !queryCommand.HasUnkeyedScalarInValues
+                    && !queryCommand.HasUnkeyedSqlShape
                     && QueryPlanStore.SetRaw(_contextType, storedKey, compiledQuery, recipeShape, queryCommand))
                 {
                     Interlocked.Increment(ref _recipePublishes);

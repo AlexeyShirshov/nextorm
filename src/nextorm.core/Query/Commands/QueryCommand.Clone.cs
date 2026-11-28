@@ -62,7 +62,7 @@ public partial class QueryCommand
             preparedTarget.LookupPartitions = copyAll ? prepared.LookupPartitions : null;
             preparedTarget.ShapeScanned = prepared.ShapeScanned;
             preparedTarget.HasUnkeyedTupleInValues = prepared.HasUnkeyedTupleInValues;
-            preparedTarget.HasUnkeyedScalarInValues = prepared.HasUnkeyedScalarInValues;
+            preparedTarget.HasUnkeyedSqlShape = prepared.HasUnkeyedSqlShape;
             preparedTarget.OuterRefs = prepared.OuterRefs;
             preparedTarget.OuterRefBindings = prepared.OuterRefBindings;
             preparedTarget.BoxedResultType = prepared.BoxedResultType;

@@ -270,14 +270,6 @@ public partial class QueryCommand
             // the planner suppresses the call-local cache instead of reusing a stale plan.
             cmd.HasUnkeyedTupleInValues = ScanUnkeyedTupleInValues(cmd);
 
-            // A scalar (non-tuple) captured value list has the same shape-follows-the-collection property.
-            // Its WHERE/PREWHERE shape is folded into the plan key, but a list in HAVING, a JOIN ON, a
-            // SELECT column, a nested subquery or a descendant condition swapped into a shared command is
-            // not keyed, so flag the command for the planner's call-local cache suppression.
-            cmd.HasUnkeyedScalarInValues = ScanUnkeyedScalarInValues(cmd);
-
-            cmd._isPrepared = true;
-            cmd.HasEverPrepared = true;
             cmd._selectList = selectList ?? [];
             var preparedColumns = cmd.Prepared;
             preparedColumns.GroupingList = groupingList ?? [];
@@ -288,6 +280,9 @@ public partial class QueryCommand
             preparedColumns.PerParentPartitionColumns = perParentPartitionColumns ?? [];
             cmd._srcType = srcType;
             cmd._from = from;
+            cmd.HasUnkeyedSqlShape = ScanUnkeyedSqlShape(cmd);
+            cmd._isPrepared = true;
+            cmd.HasEverPrepared = true;
 
             cmd.ColumnsPlanHash = columnsPlanHash == 7 ? 0 : columnsPlanHash;
             cmd.JoinPlanHash = joinPlanHash == 7 ? 0 : joinPlanHash;
@@ -3550,25 +3545,16 @@ public partial class QueryCommand
         }
 
         /// <summary>
-        /// Scans every clause whose captured-collection shape is <b>not</b> folded into the plan key for a
-        /// scalar (non-tuple) <c>IN</c>/<c>Contains</c> and returns <see langword="true"/> when one exists.
-        /// It mirrors <see cref="ScanUnkeyedTupleInValues(QueryCommand)"/> over the SELECT projection, HAVING, JOIN
-        /// conditions and sources, GROUP BY, ORDER BY, ARRAY JOIN, LIMIT BY / DISTINCT ON / extreme-row
-        /// selectors, named windows, outer references, FROM sources, set-operation operands, CTE bodies and
-        /// referenced subqueries. Unlike the tuple scan, a <b>descendant</b> command's WHERE/PREWHERE is
-        /// also scanned: a scalar list captured there is not re-keyed when the query is swapped into the
-        /// context-shared <c>Any</c>/<c>Count</c> command, so the owner must flag it. The root's own
-        /// WHERE/PREWHERE is excluded because its shape is folded into its own plan key. A false positive
-        /// only forgoes caching (harmless); a false negative would reuse a plan rendered for another
-        /// collection shape (a wrong result).
+        /// Scans the rendered query graph for computed column names and scalar value lists that
+        /// change its SQL without changing the plan key.
         /// </summary>
-        internal static bool ScanUnkeyedScalarInValues(QueryCommand cmd)
+        internal static bool ScanUnkeyedSqlShape(QueryCommand cmd)
         {
             var visited = _unkeyedScanVisited ??= new HashSet<QueryCommand>(ReferenceEqualityComparer.Instance);
             visited.Clear();
             try
             {
-                return ScanUnkeyedScalarInValues(cmd, visited, true);
+                return ScanUnkeyedSqlShape(cmd, visited, true);
             }
             finally
             {
@@ -3576,34 +3562,43 @@ public partial class QueryCommand
             }
         }
 
-        private static bool ScanUnkeyedScalarInValues(QueryCommand cmd, HashSet<QueryCommand> visited, bool isRoot)
+        private static bool ScanUnkeyedSqlShape(QueryCommand cmd, HashSet<QueryCommand> visited, bool isRoot)
         {
             if (!visited.Add(cmd))
                 return false;
 
-            // A descendant's condition belongs to the owner's rendered statement: the swap into a shared
-            // command does not re-key the owner from the referenced query's WHERE shape, so scan it. The
-            // root's own WHERE/PREWHERE is shape-keyed and deliberately excluded.
-            if (!isRoot && HasUnkeyedScalarInCondition(cmd))
+            // The root's WHERE/PREWHERE keys scalar list shapes, but never computed identifiers.
+            // A descendant's conditions are rendered into the owner without re-keying either shape.
+            if (HasUnkeyedCondition(cmd, includeScalarInValues: !isRoot))
                 return true;
 
-            if (cmd._exp is { } projection && InValues.ContainsScalarInValues(projection))
+            if (cmd._exp is { } projection && InValues.ContainsUnkeyedSqlShape(projection))
                 return true;
 
-            if (cmd._having is { } having && InValues.ContainsScalarInValues(having))
+            if (cmd._having is { } having && InValues.ContainsUnkeyedSqlShape(having))
                 return true;
 
-            if (cmd._groupExp is { } grouping && InValues.ContainsScalarInValues(grouping))
+            if (cmd._groupExp is { } grouping && InValues.ContainsUnkeyedSqlShape(grouping))
                 return true;
+
+            if (cmd.EffectiveHaving is { } effectiveHaving && InValues.ContainsUnkeyedSqlShape(effectiveHaving))
+                return true;
+
+            if (cmd.EffectiveGroupingKeys is { } effectiveKeys)
+            {
+                for (var i = 0; i < effectiveKeys.Count; i++)
+                    if (InValues.ContainsUnkeyedSqlShape(effectiveKeys[i]))
+                        return true;
+            }
 
             if (cmd._joins is { } joins)
             {
                 for (var i = 0; i < joins.Length; i++)
                 {
-                    if (joins[i].JoinCondition is { } joinCondition && InValues.ContainsScalarInValues(joinCondition))
+                    if (joins[i].JoinCondition is { } joinCondition && InValues.ContainsUnkeyedSqlShape(joinCondition))
                         return true;
 
-                    if (ScanUnkeyedScalarInFrom(joins[i].From, visited))
+                    if (ScanUnkeyedSqlShapeInFrom(joins[i].From, visited))
                         return true;
                 }
             }
@@ -3613,10 +3608,10 @@ public partial class QueryCommand
             {
                 for (var i = 0; i < sorting.Length; i++)
                 {
-                    if (sorting[i].SortExpression is { } sortExpression && InValues.ContainsScalarInValues(sortExpression))
+                    if (sorting[i].SortExpression is { } sortExpression && InValues.ContainsUnkeyedSqlShape(sortExpression))
                         return true;
 
-                    if (sorting[i].PreparedExpression is { } preparedExpression && InValues.ContainsScalarInValues(preparedExpression))
+                    if (sorting[i].PreparedExpression is { } preparedExpression && InValues.ContainsUnkeyedSqlShape(preparedExpression))
                         return true;
                 }
             }
@@ -3626,7 +3621,7 @@ public partial class QueryCommand
             {
                 for (var i = 0; i < preparedArrayJoin.Length; i++)
                 {
-                    if (InValues.ContainsScalarInValues(preparedArrayJoin[i]))
+                    if (InValues.ContainsUnkeyedSqlShape(preparedArrayJoin[i]))
                         return true;
                 }
             }
@@ -3634,26 +3629,29 @@ public partial class QueryCommand
             {
                 for (var i = 0; i < arrayJoins.Length; i++)
                 {
-                    if (InValues.ContainsScalarInValues(arrayJoins[i]))
+                    if (InValues.ContainsUnkeyedSqlShape(arrayJoins[i]))
                         return true;
                 }
             }
 
-            if (cmd.LimitBy?.Expression is { } limitBy && InValues.ContainsScalarInValues(limitBy))
+            if (cmd.LimitBy?.Expression is { } limitBy && InValues.ContainsUnkeyedSqlShape(limitBy))
                 return true;
 
-            if (cmd.DistinctOn?.Expression is { } distinctOn && InValues.ContainsScalarInValues(distinctOn))
+            if (cmd.DistinctOn?.Expression is { } distinctOn && InValues.ContainsUnkeyedSqlShape(distinctOn))
+                return true;
+
+            if (cmd.PerParentPartition is { } partition && InValues.ContainsUnkeyedSqlShape(partition))
                 return true;
 
             if (cmd.ExtremeRow is { } extremeRow)
             {
-                if (InValues.ContainsScalarInValues(extremeRow.ValueSelector))
+                if (InValues.ContainsUnkeyedSqlShape(extremeRow.ValueSelector))
                     return true;
 
-                if (extremeRow.GroupBy is { } extremeGroupBy && InValues.ContainsScalarInValues(extremeGroupBy))
+                if (extremeRow.GroupBy is { } extremeGroupBy && InValues.ContainsUnkeyedSqlShape(extremeGroupBy))
                     return true;
 
-                if (extremeRow.Projection is { } extremeProjection && InValues.ContainsScalarInValues(extremeProjection))
+                if (extremeRow.Projection is { } extremeProjection && InValues.ContainsUnkeyedSqlShape(extremeProjection))
                     return true;
             }
 
@@ -3666,13 +3664,13 @@ public partial class QueryCommand
 
                     for (var p = 0; p < window.PartitionBy.Count; p++)
                     {
-                        if (InValues.ContainsScalarInValues(window.PartitionBy[p]))
+                        if (InValues.ContainsUnkeyedSqlShape(window.PartitionBy[p]))
                             return true;
                     }
 
                     for (var o = 0; o < window.OrderBy.Count; o++)
                     {
-                        if (InValues.ContainsScalarInValues(window.OrderBy[o].Expression))
+                        if (InValues.ContainsUnkeyedSqlShape(window.OrderBy[o].Expression))
                             return true;
                     }
                 }
@@ -3683,18 +3681,18 @@ public partial class QueryCommand
             {
                 for (var i = 0; i < outerRefs.Count; i++)
                 {
-                    if (InValues.ContainsScalarInValues(outerRefs[i]))
+                    if (InValues.ContainsUnkeyedSqlShape(outerRefs[i]))
                         return true;
                 }
             }
 
             // A derived table / PIVOT inner source / TVF argument renders inline in this statement.
-            if (ScanUnkeyedScalarInFrom(cmd._from, visited))
+            if (ScanUnkeyedSqlShapeInFrom(cmd._from, visited))
                 return true;
 
             // A set-operation operand renders with this statement's provider and its own plan key does
             // not fold the captured-collection shape.
-            if (cmd._union is { } union && ScanUnkeyedScalarInValues(union, visited, false))
+            if (cmd._union is { } union && ScanUnkeyedSqlShape(union, visited, false))
                 return true;
 
             // Hoisted CTE bodies render in the same statement.
@@ -3702,10 +3700,10 @@ public partial class QueryCommand
             {
                 for (var i = 0; i < ctes.Count; i++)
                 {
-                    if (ScanUnkeyedScalarInValues(ctes[i].Query, visited, false))
+                    if (ScanUnkeyedSqlShape(ctes[i].Query, visited, false))
                         return true;
 
-                    if (ctes[i].Mutation is { Source: { } mutationSource } && ScanUnkeyedScalarInValues(mutationSource, visited, false))
+                    if (ctes[i].Mutation is { Source: { } mutationSource } && ScanUnkeyedSqlShape(mutationSource, visited, false))
                         return true;
                 }
             }
@@ -3717,7 +3715,7 @@ public partial class QueryCommand
             {
                 for (var i = 0; i < referenced.Count; i++)
                 {
-                    if (ScanUnkeyedScalarInValues(referenced[i], visited, false))
+                    if (ScanUnkeyedSqlShape(referenced[i], visited, false))
                         return true;
                 }
             }
@@ -3726,72 +3724,70 @@ public partial class QueryCommand
         }
 
         /// <summary>
-        /// True when a descendant command's own WHERE/PREWHERE (raw or prepared) contains a scalar captured
-        /// collection. Scanning both forms is conservative: after preparation the query parameter may no
-        /// longer be a <see cref="ParameterExpression"/>, so the raw lambda remains the reliable probe.
+        /// Checks both raw and prepared conditions; preparation can rewrite nodes and inject filters.
         /// </summary>
-        private static bool HasUnkeyedScalarInCondition(QueryCommand cmd)
-            => (cmd._condition is { } condition && InValues.ContainsScalarInValues(condition))
-            || (cmd._preWhere is { } preWhere && InValues.ContainsScalarInValues(preWhere))
-            || (cmd.PreparedCondition is { } preparedCondition && InValues.ContainsScalarInValues(preparedCondition))
-            || (cmd.PreparedPreWhere is { } preparedPreWhere && InValues.ContainsScalarInValues(preparedPreWhere));
+        private static bool HasUnkeyedCondition(QueryCommand cmd, bool includeScalarInValues)
+            => (cmd._condition is { } condition && InValues.ContainsUnkeyedSqlShape(condition, includeScalarInValues))
+            || (cmd._preWhere is { } preWhere && InValues.ContainsUnkeyedSqlShape(preWhere, includeScalarInValues))
+            || (cmd.PreparedCondition is { } preparedCondition && !ReferenceEquals(preparedCondition, cmd._condition)
+                && InValues.ContainsUnkeyedSqlShape(preparedCondition, includeScalarInValues))
+            || (cmd.PreparedPreWhere is { } preparedPreWhere && !ReferenceEquals(preparedPreWhere, cmd._preWhere)
+                && InValues.ContainsUnkeyedSqlShape(preparedPreWhere, includeScalarInValues));
 
         /// <summary>
-        /// Scans a FROM source's rendered subqueries, commands and arguments for an unkeyed scalar value
-        /// list, recursing through nested sources and including their WHERE/PREWHERE conditions (the owner
-        /// does not re-key from a derived source's shape on a shared-command swap).
+        /// Scans a FROM source's rendered subqueries, commands and arguments for unkeyed SQL shape.
         /// </summary>
-        private static bool ScanUnkeyedScalarInFrom(FromExpression? from, HashSet<QueryCommand> visited)
+        private static bool ScanUnkeyedSqlShapeInFrom(FromExpression? from, HashSet<QueryCommand> visited)
         {
             if (from is null)
                 return false;
 
-            if (from.SubQuery is { } subQuery && ScanUnkeyedScalarInValues(subQuery, visited, false))
+            if (from.SubQuery is { } subQuery && ScanUnkeyedSqlShape(subQuery, visited, false))
                 return true;
 
-            if (from.ColumnShape is { } columnShape && ScanUnkeyedScalarInValues(columnShape, visited, false))
+            if (from.ColumnShape is { } columnShape && ScanUnkeyedSqlShape(columnShape, visited, false))
                 return true;
 
-            if (from.TemporarySource is { } tempTable && ScanUnkeyedScalarInValues(tempTable.Source, visited, false))
+            if (from.TemporarySource is { } tempTable && ScanUnkeyedSqlShape(tempTable.Source, visited, false))
                 return true;
 
             if (from.LinqSource is { } linqSource)
             {
-                if (ScanUnkeyedScalarInValues(linqSource.OuterCommand, visited, false))
+                if (ScanUnkeyedSqlShape(linqSource.OuterCommand, visited, false))
                     return true;
 
-                if (linqSource.InnerCommand is { } innerCommand && ScanUnkeyedScalarInValues(innerCommand, visited, false))
+                if (linqSource.InnerCommand is { } innerCommand && ScanUnkeyedSqlShape(innerCommand, visited, false))
                     return true;
 
-                if (linqSource.CollectionSelector is { } collectionSelector && InValues.ContainsScalarInValues(collectionSelector))
+                if (linqSource.CollectionSelector is { } collectionSelector && InValues.ContainsUnkeyedSqlShape(collectionSelector))
                     return true;
 
-                if (linqSource.ResultSelector is { } resultSelector && InValues.ContainsScalarInValues(resultSelector))
+                if (linqSource.ResultSelector is { } resultSelector && InValues.ContainsUnkeyedSqlShape(resultSelector))
                     return true;
 
-                if (linqSource.OuterKeySelector is { } outerKeySelector && InValues.ContainsScalarInValues(outerKeySelector))
+                if (linqSource.OuterKeySelector is { } outerKeySelector && InValues.ContainsUnkeyedSqlShape(outerKeySelector))
                     return true;
 
-                if (linqSource.InnerKeySelector is { } innerKeySelector && InValues.ContainsScalarInValues(innerKeySelector))
+                if (linqSource.InnerKeySelector is { } innerKeySelector && InValues.ContainsUnkeyedSqlShape(innerKeySelector))
                     return true;
             }
 
-            if (from.XmlNodes is { } xmlNodes && InValues.ContainsScalarInValues(xmlNodes.Operand))
+            if (from.XmlNodes is { } xmlNodes && InValues.ContainsUnkeyedSqlShape(xmlNodes.Operand))
                 return true;
 
             if (from.Pivot is { } pivot)
             {
-                if (pivot.AggregateColumn is { } aggregateColumn && InValues.ContainsScalarInValues(aggregateColumn))
+                if (pivot.AggregateColumn is { } aggregateColumn && InValues.ContainsUnkeyedSqlShape(aggregateColumn))
                     return true;
 
-                if (pivot.ForColumn is { } forColumn && InValues.ContainsScalarInValues(forColumn))
+                if (pivot.ForColumn is { } forColumn && InValues.ContainsUnkeyedSqlShape(forColumn))
                     return true;
 
-                if (ScanUnkeyedScalarInFrom(pivot.Inner, visited))
+                if (ScanUnkeyedSqlShapeInFrom(pivot.Inner, visited))
                     return true;
             }
 
-            if (from.TableFunction is { } tableFunction && InValues.ContainsScalarInValues(tableFunction.Call))
+            if (from.TableFunction is { } tableFunction && InValues.ContainsUnkeyedSqlShape(tableFunction.Call))
                 return true;
 
             return false;
@@ -5071,7 +5067,8 @@ public partial class QueryCommand
             scan.ScanCommand(cmd);
             hash = scan.IdentitiesHash;
             closures = capture ? scan.Snapshot() : null;
-            return !scan.HasCapturedCommand && !scan.HasUnsupportedConstant && !scan.HasUnpublishableValueList;
+            return !scan.HasCapturedCommand && !scan.HasUnsupportedConstant
+                && !scan.HasUnpublishableValueList && !scan.HasComputedColumnName;
         }
         finally
         {
@@ -5091,6 +5088,7 @@ public partial class QueryCommand
         private ScanMember _member;
         internal bool HasCapturedCommand { get; private set; }
         internal bool HasUnsupportedConstant { get; private set; }
+        internal bool HasComputedColumnName { get; private set; }
 
         /// <summary>
         /// Whether the scanned graph carries a collection shape that needs fresh preparation:
@@ -5110,6 +5108,7 @@ public partial class QueryCommand
             IdentitiesHash = 0;
             HasCapturedCommand = false;
             HasUnsupportedConstant = false;
+            HasComputedColumnName = false;
             HasUnpublishableValueList = false;
             _member = ScanMember.Other;
         }
@@ -5118,7 +5117,7 @@ public partial class QueryCommand
 
         internal void Scan(Expression? expression)
         {
-            if (HasCapturedCommand || expression is null) return;
+            if (HasCapturedCommand || HasComputedColumnName || expression is null) return;
             Visit(expression);
         }
 
@@ -5187,6 +5186,13 @@ public partial class QueryCommand
 
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
+            // The raw descriptor only sees the expression's shape and closure identity.
+            if (TableAliasAccessors.HasComputedColumnName(node))
+            {
+                HasComputedColumnName = true;
+                return node;
+            }
+
             if (!HasUnpublishableValueList)
             {
                 if (_member == ScanMember.Condition && InValues.IsAnyValueListSource(node))

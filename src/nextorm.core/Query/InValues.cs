@@ -63,10 +63,9 @@ internal readonly struct InValuesPartition
 /// </summary>
 internal static class InValues
 {
-    // The unkeyed captured-collection scans call these probes several times per preparation. The
-    // visitors are stateless apart from Found, so keep one of each per thread instead of allocating.
+    // Preparation calls these probes several times per query. Reuse one of each per thread.
     [ThreadStatic] private static TupleInValuesProbe? _tupleInValuesProbe;
-    [ThreadStatic] private static ScalarInValuesProbe? _scalarInValuesProbe;
+    [ThreadStatic] private static UnkeyedSqlShapeProbe? _unkeyedSqlShapeProbe;
     [ThreadStatic] private static AnyInValuesProbe? _anyInValuesProbe;
     [ThreadStatic] private static UnkeyedInValuesProbe? _unkeyedInValuesProbe;
 
@@ -117,19 +116,13 @@ internal static class InValues
     }
 
     /// <summary>
-    /// Metadata-only probe: true when <paramref name="expression"/> contains a scalar-valued
-    /// <c>IN</c>/<c>Contains</c> node whose rendered SQL follows the captured collection's shape. It
-    /// never evaluates or enumerates the collection. The probe mirrors the scalar branch of
-    /// <see cref="InValuesTranslator.TranslateInValues"/>: the element type must not be the tuple family
-    /// (that path is handled by <see cref="ContainsTupleInValues"/>), <c>string.Contains</c> is rejected by
-    /// <see cref="TryGetArguments"/>, and an inline <see cref="NewArrayExpression"/> is deliberately
-    /// excluded because its values are part of the expression shape and never suppressed the cache.
+    /// Metadata-only probe for computed column names and, when requested, scalar value lists
+    /// whose captured collection shape is not represented in the plan key.
     /// </summary>
-    internal static bool ContainsScalarInValues(Expression expression)
+    internal static bool ContainsUnkeyedSqlShape(Expression expression, bool includeScalarInValues = true)
     {
-        // Same scratch-probe discipline as ContainsTupleInValues: one stateless visitor per thread.
-        var probe = _scalarInValuesProbe ??= new ScalarInValuesProbe();
-        probe.Reset();
+        var probe = _unkeyedSqlShapeProbe ??= new UnkeyedSqlShapeProbe();
+        probe.Reset(includeScalarInValues);
         probe.Visit(expression);
         return probe.Found;
     }
@@ -292,21 +285,29 @@ internal static class InValues
         => type != typeof(string)
             && (type.IsArray || typeof(IEnumerable).IsAssignableFrom(type));
 
-    private sealed class ScalarInValuesProbe : ExpressionVisitor
+    private sealed class UnkeyedSqlShapeProbe : ExpressionVisitor
     {
+        private bool _includeScalarInValues;
         public bool Found { get; private set; }
 
-        public void Reset() => Found = false;
+        public void Reset(bool includeScalarInValues)
+        {
+            Found = false;
+            _includeScalarInValues = includeScalarInValues;
+        }
 
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
-            if (!Found
-                && TryGetArguments(node, out _, out var valuesExp, out var elementType, out _)
-                && !TypeFacts.IsTupleFamily(elementType)
-                && valuesExp is not NewArrayExpression)
-                Found = true;
+            if (Found)
+                return node;
 
-            return base.VisitMethodCall(node);
+            Found = TableAliasAccessors.HasComputedColumnName(node)
+                || (_includeScalarInValues
+                    && TryGetArguments(node, out _, out var valuesExp, out var elementType, out _)
+                    && !TypeFacts.IsTupleFamily(elementType)
+                    && valuesExp is not NewArrayExpression);
+
+            return Found ? node : base.VisitMethodCall(node);
         }
     }
 

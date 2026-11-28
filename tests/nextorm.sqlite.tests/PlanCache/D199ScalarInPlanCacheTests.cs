@@ -338,7 +338,7 @@ public class D199ScalarInPlanCacheTests
 
             var select = e.Select(x => new long[] { 1, 3 }.Contains(x.Id));
             var select1 = Prepare(ctx, select);
-            select.HasUnkeyedScalarInValues.Should().BeFalse(
+            select.HasUnkeyedSqlShape.Should().BeFalse(
                 "an inline array is part of the expression shape and must not trigger call-local suppression");
             select.Cache.Should().BeTrue();
             ctx.ToList(select1).Should().Equal(true, false, true);
@@ -349,7 +349,7 @@ public class D199ScalarInPlanCacheTests
 
             var where = e.Where(x => new long[] { 1, 3 }.Contains(x.Id)).Select(x => x.Id);
             var where1 = Prepare(ctx, where);
-            where.HasUnkeyedScalarInValues.Should().BeFalse(
+            where.HasUnkeyedSqlShape.Should().BeFalse(
                 "an inline array in WHERE is keyed and stays cacheable");
             where.Cache.Should().BeTrue();
             ctx.ToList(where1).OrderBy(x => x).Should().Equal(1L, 3L);
@@ -429,31 +429,31 @@ public class D199ScalarInPlanCacheTests
 
             var command = HavingFieldScalar(e);
             Prepare(ctx, command);
-            command.HasUnkeyedScalarInValues.Should().BeTrue(
+            command.HasUnkeyedSqlShape.Should().BeTrue(
                 "a captured scalar list in HAVING is not folded into the plan key");
             command.Cache.Should().BeTrue();
 
             var clone = command.Clone();
-            clone.HasUnkeyedScalarInValues.Should().BeTrue(
+            clone.HasUnkeyedSqlShape.Should().BeTrue(
                 "a clone copies the computed unkeyed scalar flag");
             clone.Cache.Should().BeTrue("a clone copies the persistent cache policy");
 
             command.ResetPreparation();
-            command.HasUnkeyedScalarInValues.Should().BeFalse(
+            command.HasUnkeyedSqlShape.Should().BeFalse(
                 "ResetPreparation clears the unkeyed scalar flag");
             Prepare(ctx, command);
-            command.HasUnkeyedScalarInValues.Should().BeTrue(
+            command.HasUnkeyedSqlShape.Should().BeTrue(
                 "re-preparation recomputes the unkeyed scalar flag from the current command graph");
             command.Cache.Should().BeTrue();
 
             // unkeyed shared command -> ordinary replacement restores cache-hit capability
             var unkeyed = ctx.From<IComplexEntity>().Where(x => _values.Contains(x.Id)).Any();
             unkeyed.Should().BeTrue();
-            ctx.AnyCommand!.Value.HasUnkeyedScalarInValues.Should().BeTrue(
+            ctx.AnyCommand!.Value.HasUnkeyedSqlShape.Should().BeTrue(
                 "the shared Any command is flagged for the referenced scalar WHERE");
 
             var ordinaryFirst = PrepareSharedAny(ctx);
-            ctx.AnyCommand.Value.HasUnkeyedScalarInValues.Should().BeFalse(
+            ctx.AnyCommand.Value.HasUnkeyedSqlShape.Should().BeFalse(
                 "replacing the referenced query with an ordinary WHERE recomputes the flag");
             var ordinarySecond = PrepareSharedAny(ctx);
             ReferenceEquals(ordinaryFirst, ordinarySecond).Should().BeTrue(
